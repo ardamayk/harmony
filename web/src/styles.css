@@ -292,11 +292,11 @@ body::after {
   .library-search-card {
     left: var(--library-search-center, 50%);
     width: var(--library-search-width, min(52rem, calc(100vw - 2rem)));
-    transform-origin: center bottom;
+    transform-origin: top center;
   }
   @keyframes library-search-enter {
-    from { opacity: 0; transform: translateY(1rem) scaleY(0.94); }
-    to { opacity: 1; transform: translateY(0) scaleY(1); }
+    from { opacity: 0; transform: translateX(var(--library-search-offset, 0)) translateY(0.75rem) scale(0.98); }
+    to { opacity: 1; transform: translateX(var(--library-search-offset, 0)) translateY(0) scale(1); }
   }
   @media (prefers-reduced-motion: no-preference) {
     .library-search-card[data-state='open'] {
