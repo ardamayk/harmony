@@ -301,7 +301,20 @@ body::after {
   @media (prefers-reduced-motion: no-preference) {
     .library-search-card[data-state='open'] {
       animation: library-search-enter 220ms cubic-bezier(0.22, 0.8, 0.24, 1);
+      /* ponytail: JS height measurement exists only to drive this transition; drop
+         both once `interpolate-size: allow-keywords` is supported everywhere. */
       transition: height 220ms cubic-bezier(0.22, 0.8, 0.24, 1);
+    }
+    /* Height growth animates the card shell only; content inside stays pinned
+       (no text re-sliding) and the results viewport never shows a scrollbar
+       mid-animation. `overflow-anchor: none` stops Chrome's scroll anchoring
+       from nudging the rows while the viewport height animates. */
+    .library-search-card :where([role='listbox']) {
+      scrollbar-width: none;
+      overflow-anchor: none;
+    }
+    .library-search-card :where([role='listbox'])::-webkit-scrollbar {
+      display: none;
     }
   }
 
