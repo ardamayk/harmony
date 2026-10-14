@@ -67,8 +67,8 @@ export function useCoverAccent({
 function defaultLoadImage(url: string): Promise<HTMLImageElement> {
 	return new Promise((resolve, reject) => {
 		const image = new Image();
-		// Needed for an untainted canvas; the server and the desktop cover
-		// scheme both answer with CORS headers.
+		// Needed for an untainted canvas; the server and the desktop media
+		// proxy both answer with CORS headers.
 		image.crossOrigin = "anonymous";
 		image.onload = () => resolve(image);
 		image.onerror = () => reject(new Error("cover could not be loaded"));

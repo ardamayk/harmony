@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
-const { convertFileSrcMock, invokeMock, listenMock } = vi.hoisted(() => ({
-	convertFileSrcMock: vi.fn(),
+const { invokeMock, listenMock } = vi.hoisted(() => ({
 	invokeMock: vi.fn(),
 	listenMock: vi.fn(),
 }));
@@ -10,7 +9,6 @@ vi.mock("@tauri-apps/api/core", () => ({
 	Channel: class {
 		onmessage = (_message: unknown) => {};
 	},
-	convertFileSrc: convertFileSrcMock,
 	invoke: invokeMock,
 }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: listenMock }));
@@ -19,7 +17,6 @@ import {
 	cancelDesktopImportUpload,
 	desktopFetch,
 	desktopUploadImportFile,
-	getCoverBaseUrl,
 	getMediaProxyBaseUrl,
 	getServerConnection,
 	initializeMediaProxy,
@@ -35,15 +32,7 @@ import {
 describe("desktop bridge", () => {
 	beforeEach(() => {
 		invokeMock.mockReset();
-		convertFileSrcMock.mockReset();
 		listenMock.mockReset();
-	});
-
-	it("builds a platform-compatible cover protocol base", () => {
-		convertFileSrcMock.mockReturnValue("http://earthly-media.localhost/");
-
-		expect(getCoverBaseUrl()).toBe("http://earthly-media.localhost");
-		expect(convertFileSrcMock).toHaveBeenCalledWith("", "earthly-media");
 	});
 
 	it("exposes renderer connection commands", async () => {

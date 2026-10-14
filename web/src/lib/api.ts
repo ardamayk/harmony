@@ -1,7 +1,6 @@
 import { createApiClient } from "@repo/api-client";
 import {
 	desktopFetch,
-	getCoverBaseUrl,
 	getMediaProxyBaseUrl,
 	isDesktopClient,
 	listenForQueueEvents,
@@ -11,8 +10,7 @@ import { getApiBaseUrl } from "#/env";
 const isDesktop = isDesktopClient();
 export const apiClient = createApiClient({
 	baseUrl: isDesktop ? "" : getApiBaseUrl(),
-	mediaBaseUrl: isDesktop ? getCoverBaseUrl : undefined,
-	streamBaseUrl: isDesktop ? getMediaProxyBaseUrl : undefined,
+	mediaBaseUrl: isDesktop ? getMediaProxyBaseUrl : undefined,
 	queueEventSubscriber: isDesktop ? listenForQueueEvents : undefined,
 	transport: isDesktop ? desktopFetch : undefined,
 });

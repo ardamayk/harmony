@@ -4,7 +4,7 @@ use crate::connection::{
 use axum::Router;
 use axum::body::Body;
 use axum::extract::State;
-use axum::http::{Request, Response, StatusCode};
+use axum::http::{Method, Request, Response, StatusCode};
 use axum::routing::any;
 use std::collections::BTreeMap;
 use std::net::TcpListener as StdTcpListener;
@@ -118,6 +118,7 @@ async fn forward_media_request(
     state: &ProxyState,
     request: Request<Body>,
 ) -> Result<Response<Body>, ConnectionError> {
+    ensure_read_method(request.method())?;
     let relative_url = proxy_relative_url(request.uri(), &state.token)?;
     let headers = request
         .headers()
@@ -307,6 +308,18 @@ fn media_proxy_port() -> u16 {
     0
 }
 
+/// Media, covers, and artwork are only ever read; mutations stay behind the
+/// renderer's authenticated bridge.
+fn ensure_read_method(method: &Method) -> Result<(), ConnectionError> {
+    if matches!(*method, Method::GET | Method::HEAD) {
+        return Ok(());
+    }
+    Err(ConnectionError::new(
+        ConnectionErrorCode::InvalidRequest,
+        "Desktop media proxy only serves GET and HEAD requests.",
+    ))
+}
+
 fn proxy_relative_url(uri: &axum::http::Uri, token: &str) -> Result<String, ConnectionError> {
     let prefix = format!("/{token}");
     let path = uri.path().strip_prefix(&prefix).ok_or_else(|| {
@@ -331,8 +344,26 @@ fn is_media_path(path: &str) -> bool {
     (path.starts_with("/api/v1/tracks/") && path.ends_with("/stream"))
         || (path.starts_with("/api/v1/radio/stations/") && path.ends_with("/stream"))
         || (path.starts_with("/api/v1/radio/preview/") && path.ends_with("/stream"))
-        // Album covers: MPRIS clients fetch the art URL outside the webview.
-        || (path.starts_with("/api/v1/library/albums/") && path.ends_with("/cover"))
+        || is_image_path(path)
+}
+
+/// Album covers and Managed Import artwork. The webview loads them from here
+/// because WebKitGTK 2.54 refuses custom-scheme images on an http:// page, and
+/// MPRIS clients fetch the cover art URL outside the webview.
+fn is_image_path(path: &str) -> bool {
+    match path.split('/').collect::<Vec<_>>().as_slice() {
+        ["", "api", "v1", "library", "albums", album_id, "cover"] => !album_id.is_empty(),
+        [
+            "",
+            "api",
+            "v1",
+            "import-batches",
+            batch_id,
+            "artwork",
+            artwork_id,
+        ] => !batch_id.is_empty() && !artwork_id.is_empty(),
+        _ => false,
+    }
 }
 
 fn create_proxy_token() -> Result<String, ConnectionError> {
@@ -383,10 +414,11 @@ fn proxy_state_error() -> ConnectionError {
 
 #[cfg(test)]
 mod tests {
-    use super::{MediaProxy, proxy_relative_url};
+    use super::{MediaProxy, ensure_read_method, proxy_relative_url};
     use crate::connection::{HttpBridge, ServerOrigin};
     use axum::Router;
     use axum::body::Body;
+    use axum::http::Method;
     use axum::http::{Request, Response, StatusCode};
     use axum::routing::any;
     use futures_util::StreamExt;
@@ -426,21 +458,30 @@ mod tests {
     }
 
     #[test]
-    fn proxy_serves_album_covers_for_mpris_but_rejects_other_library_paths() {
-        // MPRIS clients fetch mpris:artUrl outside the webview, so covers are
-        // the one non-stream path the proxy answers.
-        let cover = "/token/api/v1/library/albums/album-1/cover"
-            .parse()
-            .expect("cover URI");
-        assert_eq!(
-            proxy_relative_url(&cover, "token").expect("cover path allowed"),
-            "/api/v1/library/albums/album-1/cover"
-        );
+    fn proxy_serves_covers_and_import_artwork_but_rejects_other_library_paths() {
+        for (allowed, forwarded) in [
+            (
+                "/token/api/v1/library/albums/album-1/cover",
+                "/api/v1/library/albums/album-1/cover",
+            ),
+            (
+                "/token/api/v1/import-batches/batch-1/artwork/cover-1",
+                "/api/v1/import-batches/batch-1/artwork/cover-1",
+            ),
+        ] {
+            let uri = allowed.parse().expect("URI");
+            assert_eq!(
+                proxy_relative_url(&uri, "token").expect("image path allowed"),
+                forwarded
+            );
+        }
 
         for rejected in [
             "/token/api/v1/library/albums/album-1",
             "/token/api/v1/library/tracks/track-1",
             "/token/api/v1/library/albums",
+            "/token/api/v1/import-batches/batch-1",
+            "/token/api/v1/import-batches/batch-1/artwork/",
         ] {
             let uri = rejected.parse().expect("URI");
             assert!(
@@ -451,9 +492,20 @@ mod tests {
     }
 
     #[test]
+    fn proxy_only_forwards_reads() {
+        for allowed in [Method::GET, Method::HEAD] {
+            assert!(ensure_read_method(&allowed).is_ok(), "{allowed}");
+        }
+        for rejected in [Method::POST, Method::PUT, Method::PATCH, Method::DELETE] {
+            assert!(ensure_read_method(&rejected).is_err(), "{rejected}");
+        }
+    }
+
+    #[test]
     fn desktop_csp_allows_only_the_dedicated_media_proxy_origin() {
         let config = include_str!("../tauri.conf.json");
 
+        assert!(config.contains("img-src 'self' http://127.0.0.1:43129 data:"));
         assert!(config.contains("http://127.0.0.1:43129"));
         assert!(!config.contains("http://127.0.0.1:*"));
     }

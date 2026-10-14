@@ -1,11 +1,10 @@
 import type { QueueEvent } from "@repo/api-client";
-import { Channel, convertFileSrc, invoke } from "@tauri-apps/api/core";
+import { Channel, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 const CONNECTION_CHANGED_EVENT = "server-connection-changed";
 const QUEUE_EVENTS_ERROR_EVENT = "desktop-queue-events-error";
 const QUEUE_INVALIDATED_EVENT = "desktop-queue-invalidated";
-const COVER_PROTOCOL = "earthly-media";
 let mediaProxyBaseUrl: string | null = null;
 
 export type ServerConnection = {
@@ -153,10 +152,6 @@ export function getMediaProxyBaseUrl(): string {
 		throw new Error("Desktop media proxy is not initialized");
 	}
 	return mediaProxyBaseUrl;
-}
-
-export function getCoverBaseUrl(): string {
-	return convertFileSrc("", COVER_PROTOCOL).replace(/\/$/, "");
 }
 
 export function listenForServerConnectionChanges(

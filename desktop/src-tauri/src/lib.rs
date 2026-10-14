@@ -55,7 +55,6 @@ use processing::{
 use queue_events::QueueEventService;
 use serde::Serialize;
 use serde_json::Value;
-use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, RwLock};
 use tauri::{Emitter, Manager, State, WindowEvent};
 use tauri_plugin_dialog::{DialogExt, FilePath};
@@ -70,17 +69,6 @@ const PLAYBACK_STATE_EVENT: &str = "desktop-playback-state";
 const CONNECTION_CHANGED_EVENT: &str = "server-connection-changed";
 const QUEUE_EVENTS_ERROR_EVENT: &str = "desktop-queue-events-error";
 const QUEUE_INVALIDATED_EVENT: &str = "desktop-queue-invalidated";
-const COVER_PROTOCOL: &str = "earthly-media";
-const COVER_REQUEST_HEADERS: &[&str] = &["accept", "authorization", "range"];
-const COVER_RESPONSE_HEADERS: &[&str] = &[
-    "accept-ranges",
-    "cache-control",
-    "content-length",
-    "content-range",
-    "content-type",
-    "etag",
-    "last-modified",
-];
 
 struct AppState {
     playback: PlaybackController,
@@ -994,107 +982,6 @@ impl DesktopPlaybackShell for TauriDesktopPlaybackShell<'_> {
     }
 }
 
-fn cover_http_request(
-    request: &tauri::http::Request<Vec<u8>>,
-) -> Result<HttpRequest, ConnectionError> {
-    let path = request.uri().path();
-    let segments = path.split('/').collect::<Vec<_>>();
-    let is_cover_path = match segments.as_slice() {
-        ["", "api", "v1", "library", "albums", album_id, "cover"] => !album_id.is_empty(),
-        [
-            "",
-            "api",
-            "v1",
-            "import-batches",
-            batch_id,
-            "artwork",
-            artwork_id,
-        ] => !batch_id.is_empty() && !artwork_id.is_empty(),
-        _ => false,
-    };
-    if !is_cover_path || !matches!(request.method().as_str(), "GET" | "HEAD") {
-        return Err(ConnectionError::new(
-            ConnectionErrorCode::InvalidRequest,
-            "Desktop cover protocol only serves album cover and import artwork GET and HEAD requests.",
-        ));
-    }
-    let headers = request
-        .headers()
-        .iter()
-        .filter(|(name, _)| COVER_REQUEST_HEADERS.contains(&name.as_str()))
-        .filter_map(|(name, value)| {
-            value
-                .to_str()
-                .ok()
-                .map(|value| (name.as_str().to_owned(), value.to_owned()))
-        })
-        .collect::<BTreeMap<_, _>>();
-    let url = match request.uri().query() {
-        Some(query) => format!("{path}?{query}"),
-        None => path.to_owned(),
-    };
-    Ok(HttpRequest {
-        method: request.method().as_str().to_owned(),
-        url,
-        headers,
-        body: None,
-    })
-}
-
-async fn cover_protocol_response(
-    bridge: Arc<HttpBridge>,
-    origin: Arc<RwLock<Option<ServerOrigin>>>,
-    request: tauri::http::Request<Vec<u8>>,
-) -> tauri::http::Response<Vec<u8>> {
-    let result = async {
-        let request = cover_http_request(&request)?;
-        let origin = origin
-            .read()
-            .map_err(|_| state_error())?
-            .clone()
-            .ok_or_else(|| {
-                ConnectionError::new(
-                    ConnectionErrorCode::InvalidOrigin,
-                    "Configure a Music Server before requesting desktop covers.",
-                )
-            })?;
-        bridge.send(&origin, request).await
-    }
-    .await;
-
-    match result {
-        Ok(response) => {
-            let mut builder = tauri::http::Response::builder().status(response.status);
-            for (name, value) in response.headers {
-                if COVER_RESPONSE_HEADERS.contains(&name.as_str()) {
-                    builder = builder.header(name, value);
-                }
-            }
-            // The renderer samples covers on a canvas for the accent colour;
-            // without this the cross-scheme image would taint the canvas.
-            builder = builder.header("access-control-allow-origin", "*");
-            builder.body(response.body).unwrap_or_default()
-        }
-        Err(error) => tauri::http::Response::builder()
-            .status(protocol_error_status(error.code))
-            .header("content-type", "text/plain; charset=utf-8")
-            .body(error.message.into_bytes())
-            .unwrap_or_default(),
-    }
-}
-
-fn protocol_error_status(code: ConnectionErrorCode) -> u16 {
-    match code {
-        ConnectionErrorCode::InvalidOrigin | ConnectionErrorCode::InvalidRequest => 400,
-        ConnectionErrorCode::Unreachable => 502,
-        ConnectionErrorCode::ProxyUnavailable => 503,
-        ConnectionErrorCode::InvalidResponse
-        | ConnectionErrorCode::ResponseTooLarge
-        | ConnectionErrorCode::CapabilityMismatch
-        | ConnectionErrorCode::Storage => 500,
-    }
-}
-
 pub fn run() -> tauri::Result<()> {
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
@@ -1105,14 +992,6 @@ pub fn run() -> tauri::Result<()> {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .on_window_event(handle_main_window_close)
-        .register_asynchronous_uri_scheme_protocol(COVER_PROTOCOL, |context, request, responder| {
-            let state = context.app_handle().state::<AppState>();
-            let bridge = state.bridge.clone();
-            let origin = state.origin.clone();
-            tauri::async_runtime::spawn(async move {
-                responder.respond(cover_protocol_response(bridge, origin, request).await);
-            });
-        })
         .setup(|app| {
             let config_directory = app.path().app_config_dir()?;
             let adaptive_system_rate = AdaptiveSystemRateController::recover_startup_if_marked(
@@ -1309,7 +1188,7 @@ pub fn run() -> tauri::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{cover_http_request, validate_external_url, validate_playback_source};
+    use super::{validate_external_url, validate_playback_source};
 
     #[test]
     fn external_links_accept_only_web_urls() {
@@ -1320,69 +1199,6 @@ mod tests {
         assert!(validate_external_url("not a url").is_err());
     }
     use serde_json::json;
-
-    #[test]
-    fn cover_protocol_discards_custom_authority_and_preserves_path() {
-        let request = tauri::http::Request::builder()
-            .uri("earthly-media://attacker.example/api/v1/library/albums/album-1/cover?size=large")
-            .body(Vec::new())
-            .expect("cover request");
-
-        let forwarded = cover_http_request(&request).expect("allowed cover request");
-
-        assert_eq!(
-            forwarded.url,
-            "/api/v1/library/albums/album-1/cover?size=large"
-        );
-    }
-
-    #[test]
-    fn cover_protocol_allows_import_artwork_get_and_head() {
-        for method in ["GET", "HEAD"] {
-            let request = tauri::http::Request::builder()
-                .method(method)
-                .uri("earthly-media://localhost/api/v1/import-batches/batch-1/artwork/cover-1")
-                .body(Vec::new())
-                .expect("import artwork request");
-            let forwarded = cover_http_request(&request).expect("allowed import artwork");
-            assert_eq!(
-                forwarded.url,
-                "/api/v1/import-batches/batch-1/artwork/cover-1"
-            );
-            assert_eq!(forwarded.method, method);
-        }
-    }
-
-    #[test]
-    fn cover_protocol_rejects_import_mutations_and_unrelated_paths() {
-        for (method, path) in [
-            ("PUT", "/api/v1/import-batches/batch-1/artwork/cover-1"),
-            ("GET", "/api/v1/import-batches/batch-1"),
-            ("GET", "/api/v1/import-batches//artwork/cover-1"),
-            ("GET", "/api/v1/import-batches/batch-1/artwork/"),
-            (
-                "GET",
-                "/api/v1/import-batches/batch-1/artwork/cover-1/extra",
-            ),
-        ] {
-            let request = tauri::http::Request::builder()
-                .method(method)
-                .uri(format!("earthly-media://localhost{path}"))
-                .body(Vec::new())
-                .expect("invalid import artwork request");
-            assert!(cover_http_request(&request).is_err(), "{method} {path}");
-        }
-    }
-
-    #[test]
-    fn cover_protocol_rejects_track_streams() {
-        let request = tauri::http::Request::builder()
-            .uri("earthly-media://localhost/api/v1/tracks/track-1/stream")
-            .body(Vec::new())
-            .expect("track request");
-
-        assert!(cover_http_request(&request).is_err());
-    }
 
     #[test]
     fn native_playback_rejects_urls_outside_private_media_proxy() {

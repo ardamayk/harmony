@@ -6,7 +6,7 @@ import { ImportAlbumReview } from "./-import-album-review";
 vi.mock("#/lib/api", () => ({
 	apiClient: {
 		getManagedImportArtworkUrl: (batchId: string, artworkId: string) =>
-			`earthly-media://localhost/api/v1/import-batches/${batchId}/artwork/${artworkId}`,
+			`http://127.0.0.1:43129/token/api/v1/import-batches/${batchId}/artwork/${artworkId}`,
 	},
 }));
 
@@ -67,7 +67,7 @@ describe("import album review", () => {
 		renderReview();
 		const image = screen.getByRole("img", { name: "Embedded cover 1" });
 		expect(image.getAttribute("src")).toBe(
-			"earthly-media://localhost/api/v1/import-batches/batch-1/artwork/cover-1",
+			"http://127.0.0.1:43129/token/api/v1/import-batches/batch-1/artwork/cover-1",
 		);
 		fireEvent.error(image);
 		expect(screen.getByRole("status").textContent).toContain(
