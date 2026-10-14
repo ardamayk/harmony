@@ -112,3 +112,20 @@ jobs:
       - run: mise run desktop:test:mpv
       - run: mise run desktop:test:import-parity
       - run: mise run build
+
+  # Stable required checks for the main ruleset: each reports its jobs as one result.
+  fast-gate:
+    name: PR / Fast Gate
+    if: always()
+    needs: [web, server, desktop]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo '${{ toJSON(needs) }}' | jq -e 'all(.[]; .result == "success")'
+
+  integration-gate:
+    name: PR / Integration Gate
+    if: always()
+    needs: [e2e]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo '${{ toJSON(needs) }}' | jq -e 'all(.[]; .result == "success")'
