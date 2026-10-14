@@ -1,5 +1,7 @@
 package managedimport
 
+import "github.com/ardam/navidrome-replacement/server/internal/modules/library"
+
 const (
 	TRACK_REPLACEMENT_CONFIRMATION_HEADER = "X-Track-Replacement"
 	MAX_TRACK_REPLACEMENT_BODY_BYTES      = 4 * 1024
@@ -107,4 +109,50 @@ type replacementJournal struct {
 	IsArtworkCreated      bool
 	PreviousAlbumID       string
 	RecoveryReason        string
+}
+
+// replacementTarget is the current state of the Managed Track a Track Replacement will overwrite.
+type replacementTarget struct {
+	TrackID        string
+	Title          string
+	Artists        []string
+	AlbumArtists   []string
+	Album          string
+	Year           int
+	Genres         []string
+	TrackNo        int
+	TrackTotal     int
+	DiscNo         int
+	DiscTotal      int
+	DurationMs     int
+	Format         string
+	Container      string
+	Codec          string
+	SampleRateHz   int
+	ChannelCount   int
+	BitDepth       int
+	BitrateKbps    int
+	SizeBytes      int64
+	AlbumID        string
+	AlbumKey       string
+	FilePath       string
+	RelativePath   string
+	ContentSHA256  string
+	TrackRevision  int
+	SourceRevision int
+	ArtworkPath    string
+	ArtworkSHA256  string
+	ArtworkType    string
+	IsSoleTrack    bool
+	Playlists      []TrackDeletionPlaylistReference
+	Queues         []TrackDeletionQueueReference
+}
+
+type replacementCommitData struct {
+	Job        importJob
+	Target     replacementTarget
+	Identity   commitIdentity
+	Placement  replacementPlacement
+	Inspection library.MediaInspection
+	AlbumKey   string
 }

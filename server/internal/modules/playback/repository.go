@@ -130,7 +130,7 @@ func (r *Repository) mutate(ctx context.Context, userID, expectedRevision string
 	defer func() { _ = tx.Rollback() }()
 	q := r.q.WithTx(tx)
 
-	if err := q.EnsureQueueState(ctx, userID); err != nil {
+	if err = q.EnsureQueueState(ctx, userID); err != nil {
 		return err
 	}
 	advanced, err := q.AdvanceQueueRevision(ctx, db.AdvanceQueueRevisionParams{UserID: userID, ExpectedRevision: expectedRevision})

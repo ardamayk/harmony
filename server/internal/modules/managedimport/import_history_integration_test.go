@@ -228,7 +228,7 @@ func TestCancelRejectedOnlyBatchClosesWithoutConflict(t *testing.T) {
 }
 
 func TestCanceledBatchClientFileIDCannotBeReused(t *testing.T) {
-	store := managedimport.NewStore(testutil.OpenMigratedDB(t))
+	store := managedimport.NewRepository(testutil.OpenMigratedDB(t))
 	batch, err := store.CreateBatch(t.Context(), managedimport.BatchOptions{})
 	if err != nil {
 		t.Fatalf("create Import Batch: %v", err)
@@ -247,7 +247,7 @@ func TestCanceledBatchClientFileIDCannotBeReused(t *testing.T) {
 }
 
 func TestPrunedFailedStandaloneHistoryIsNotRecreatedOnDeletion(t *testing.T) {
-	store := managedimport.NewStore(testutil.OpenMigratedDB(t))
+	store := managedimport.NewRepository(testutil.OpenMigratedDB(t))
 	failedJob, err := store.CreateJob(t.Context(), "", "")
 	if err != nil {
 		t.Fatalf("create failed standalone Import Job: %v", err)

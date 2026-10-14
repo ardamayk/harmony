@@ -420,7 +420,7 @@ func TestManagedImportRetainsStagingPathWhenExactCleanupFails(t *testing.T) {
 	fixture := readStrictFLACFixture(t)
 	importOneFLAC(t, router, fixture, "existing.flac")
 	inspector := &blockingCompletedInspector{completedPath: make(chan string), release: make(chan struct{})}
-	service := managedimport.NewService(managedimport.NewStore(database), managedimport.NewStorage(storagePath, managedimport.StorageLimits{FileBytes: 1 << 20, BatchBytes: 2 << 20}), inspector)
+	service := managedimport.NewService(managedimport.NewRepository(database), managedimport.NewStorage(storagePath, managedimport.StorageLimits{FileBytes: 1 << 20, BatchBytes: 2 << 20}), inspector)
 	job, err := service.CreateJob(context.Background(), "", "")
 	if err != nil {
 		t.Fatalf("create duplicate job: %v", err)
@@ -768,7 +768,7 @@ func TestManagedImportBatchCountsRejectedUploadBytes(t *testing.T) {
 
 func TestManagedImportBatchReservesConcurrentUploadBytesAtomically(t *testing.T) {
 	database := testutil.OpenMigratedDB(t)
-	store := managedimport.NewStore(database)
+	store := managedimport.NewRepository(database)
 	ctx := context.Background()
 	batch, err := store.CreateBatch(ctx, managedimport.BatchOptions{})
 	if err != nil {
@@ -969,7 +969,7 @@ func TestManagedImportBatchRetriesInterruptedUploadInSameJob(t *testing.T) {
 func TestManagedImportInterruptedUploadPreservesSiblingStaging(t *testing.T) {
 	database := testutil.OpenMigratedDB(t)
 	storage := managedimport.NewStorage(t.TempDir(), managedimport.StorageLimits{FileBytes: 1 << 20, BatchBytes: 2 << 20})
-	service := managedimport.NewService(managedimport.NewStore(database), storage, library.NewMediaInspector())
+	service := managedimport.NewService(managedimport.NewRepository(database), storage, library.NewMediaInspector())
 	batch, err := service.CreateBatch(context.Background(), managedimport.BatchOptions{})
 	if err != nil {
 		t.Fatalf("create interrupted upload batch: %v", err)
@@ -1080,7 +1080,7 @@ func TestManagedImportBatchLeavesCanceledConfirmationResumable(t *testing.T) {
 	storage := managedimport.NewStorage(t.TempDir(), managedimport.StorageLimits{FileBytes: 1 << 20, BatchBytes: 2 << 20})
 	ctx, cancel := context.WithCancel(context.Background())
 	inspector := &cancelOnConfirmationInspector{delegate: library.NewMediaInspector(), cancel: cancel}
-	service := managedimport.NewService(managedimport.NewStore(database), storage, inspector)
+	service := managedimport.NewService(managedimport.NewRepository(database), storage, inspector)
 	batch, err := service.CreateBatch(context.Background(), managedimport.BatchOptions{})
 	if err != nil {
 		t.Fatalf("create canceled confirmation batch: %v", err)
@@ -1431,7 +1431,7 @@ func TestInactiveCleanupCancelsStalledUploadAfterFifteenMinutes(t *testing.T) {
 	database := testutil.OpenMigratedDB(t)
 	managedStoragePath := t.TempDir()
 	service := managedimport.NewService(
-		managedimport.NewStore(database),
+		managedimport.NewRepository(database),
 		managedimport.NewStorage(managedStoragePath, managedimport.StorageLimits{FileBytes: 1 << 20, BatchBytes: 2 << 20}),
 		inspector,
 	)
@@ -1482,7 +1482,7 @@ func TestManagedImportCancellationWaitsForSuccessfulConfirmation(t *testing.T) {
 	}
 	database := testutil.OpenMigratedDB(t)
 	service := managedimport.NewService(
-		managedimport.NewStore(database),
+		managedimport.NewRepository(database),
 		managedimport.NewStorage(t.TempDir(), managedimport.StorageLimits{FileBytes: 1 << 20, BatchBytes: 2 << 20}),
 		inspector,
 	)

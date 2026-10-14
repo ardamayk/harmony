@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/ardam/navidrome-replacement/server/internal/modules/library"
+	"github.com/ardam/navidrome-replacement/server/internal/modules/managedimport/db"
 	"github.com/ardam/navidrome-replacement/server/internal/searchdata"
 	"github.com/google/uuid"
 )
@@ -95,66 +96,47 @@ func openCreditRepairDatabase(ctx context.Context, path string, writable bool) (
 	return database, nil
 }
 
-func rejectPendingCreditRepair(ctx context.Context, database queryRower) error {
-	var pending bool
-	err := database.QueryRowContext(ctx, `SELECT
- EXISTS(SELECT 1 FROM managed_import_commit_journal WHERE phase NOT IN ('completed', 'rolled_back')) OR
- EXISTS(SELECT 1 FROM managed_track_replacements WHERE phase NOT IN ('completed', 'rolled_back')) OR
- EXISTS(SELECT 1 FROM permanent_track_deletions)`).Scan(&pending)
+func rejectPendingCreditRepair(ctx context.Context, q *db.Queries) error {
+	pending, err := q.HasPendingFileOperations(ctx)
 	if err != nil {
 		return fmt.Errorf("check pending file operations: %w", err)
 	}
-	if pending {
+	if deref(pending) {
 		return errors.New("pending file operation journal; recover with the Music Server before repair")
 	}
 	return nil
 }
 
-func readCreditRepairSnapshot(ctx context.Context, queryer historyQueryer) (snapshot creditRepairSnapshot, returnErr error) {
-	rows, err := queryer.QueryContext(ctx, `SELECT t.id, t.album_id, t.artist_name, t.file_path, t.revision, t.size_bytes,
- t.missing_at IS NOT NULL OR t.is_pending_commit = 1,
- COALESCE(s.id,''), COALESCE(s.source_kind,''), COALESCE(s.file_path,''), COALESCE(s.content_sha256,''), COALESCE(s.revision,0), COALESCE(s.size_bytes,0),
- (SELECT json_group_array(json_object('ID',id,'Name',name,'Position',position)) FROM
- (SELECT a.id,a.name,c.position FROM track_artists c JOIN artists a ON a.id=c.artist_id WHERE c.track_id=t.id ORDER BY c.position))
- FROM tracks t LEFT JOIN track_sources s ON s.track_id=t.id ORDER BY t.id`)
+func readCreditRepairSnapshot(ctx context.Context, q *db.Queries) (creditRepairSnapshot, error) {
+	var snapshot creditRepairSnapshot
+	trackRows, err := q.ListRepairTracks(ctx)
 	if err != nil {
 		return snapshot, err
 	}
-	defer func(rows *sql.Rows) { returnErr = errors.Join(returnErr, rows.Close()) }(rows)
-	for rows.Next() {
-		var track repairTrack
-		var credits string
-		if err = rows.Scan(&track.ID, &track.AlbumID, &track.ArtistName, &track.Path, &track.Revision, &track.Size, &track.Hidden, &track.SourceID, &track.SourceKind, &track.SourcePath, &track.Hash, &track.SourceRevision, &track.SourceSize, &credits); err != nil {
-			return snapshot, err
+	for _, row := range trackRows {
+		track := repairTrack{
+			ID: row.ID, AlbumID: row.AlbumID, ArtistName: row.ArtistName, Path: row.FilePath,
+			Revision: row.Revision, Size: row.SizeBytes, Hidden: row.Hidden != 0,
+			SourceID: row.SourceID, SourceKind: row.SourceKind, SourcePath: row.SourcePath, Hash: row.SourceHash,
+			SourceRevision: row.SourceRevision, SourceSize: row.SourceSize,
 		}
-		if err = json.Unmarshal([]byte(credits), &track.Credits); err != nil {
+		if err = json.Unmarshal([]byte(row.Credits), &track.Credits); err != nil {
 			return snapshot, err
 		}
 		snapshot.Tracks = append(snapshot.Tracks, track)
 	}
-	if err = errors.Join(rows.Err(), rows.Close()); err != nil {
-		return snapshot, err
-	}
-	rows, err = queryer.QueryContext(ctx, `SELECT b.id,b.title,b.artist_id,COALESCE(b.identity_key,''),b.revision,
- (SELECT json_group_array(json_object('ID',id,'Name',name,'Position',position)) FROM
- (SELECT a.id,a.name,c.position FROM album_artists c JOIN artists a ON a.id=c.artist_id WHERE c.album_id=b.id ORDER BY c.position))
- FROM albums b ORDER BY b.id`)
+	albumRows, err := q.ListRepairAlbums(ctx)
 	if err != nil {
 		return snapshot, err
 	}
-	defer func() { returnErr = errors.Join(returnErr, rows.Close()) }()
-	for rows.Next() {
-		var album repairAlbum
-		var credits string
-		if err = rows.Scan(&album.ID, &album.Title, &album.ArtistID, &album.Key, &album.Revision, &credits); err != nil {
-			return snapshot, err
-		}
-		if err = json.Unmarshal([]byte(credits), &album.Credits); err != nil {
+	for _, row := range albumRows {
+		album := repairAlbum{ID: row.ID, Title: row.Title, ArtistID: row.ArtistID, Key: row.IdentityKey, Revision: row.Revision}
+		if err := json.Unmarshal([]byte(row.Credits), &album.Credits); err != nil {
 			return snapshot, err
 		}
 		snapshot.Albums = append(snapshot.Albums, album)
 	}
-	return snapshot, rows.Err()
+	return snapshot, nil
 }
 
 // PreviewArtistCreditRepair reads only authoritative managed files. It never migrates
@@ -193,10 +175,11 @@ func PreviewArtistCreditRepair(ctx context.Context, databasePath, managedRoot st
 		return report, err
 	}
 	defer func() { returnErr = errors.Join(returnErr, rollbackTransaction(transaction, "artist credit preview")) }()
-	if err = rejectPendingCreditRepair(ctx, transaction); err != nil {
+	readQueries := db.New(transaction)
+	if err = rejectPendingCreditRepair(ctx, readQueries); err != nil {
 		return report, err
 	}
-	report.snapshot, err = readCreditRepairSnapshot(ctx, transaction)
+	report.snapshot, err = readCreditRepairSnapshot(ctx, readQueries)
 	if err != nil {
 		return report, err
 	}
@@ -307,7 +290,7 @@ func (report *ArtistCreditRepairReport) Apply(ctx context.Context, backupPath st
 		return err
 	}
 	defer func() { returnErr = errors.Join(returnErr, database.Close()) }()
-	if err = rejectPendingCreditRepair(ctx, database); err != nil {
+	if err = rejectPendingCreditRepair(ctx, db.New(database)); err != nil {
 		return err
 	}
 	if strings.TrimSpace(backupPath) == "" {
@@ -345,10 +328,11 @@ func (report *ArtistCreditRepairReport) Apply(ctx context.Context, backupPath st
 		return err
 	}
 	defer func() { returnErr = errors.Join(returnErr, rollbackTransaction(transaction, "artist credit repair")) }()
-	if err = rejectPendingCreditRepair(ctx, transaction); err != nil {
+	q := db.New(transaction)
+	if err = rejectPendingCreditRepair(ctx, q); err != nil {
 		return err
 	}
-	current, err := readCreditRepairSnapshot(ctx, transaction)
+	current, err := readCreditRepairSnapshot(ctx, q)
 	if err != nil {
 		return err
 	}
@@ -361,17 +345,17 @@ func (report *ArtistCreditRepairReport) Apply(ctx context.Context, backupPath st
 		if !ok {
 			continue
 		}
-		ids, err := upsertRepairArtists(ctx, transaction, names)
+		ids, err := upsertRepairArtists(ctx, q, names)
 		if err != nil {
 			return err
 		}
-		if _, err := transaction.ExecContext(ctx, `DELETE FROM track_artists WHERE track_id = ?`, track.ID); err != nil {
+		if err := q.DeleteTrackArtists(ctx, track.ID); err != nil {
 			return err
 		}
-		if err := insertTrackArtistCredits(ctx, transaction, track.ID, names, ids); err != nil {
+		if err := insertTrackArtistCredits(ctx, q, track.ID, names, ids); err != nil {
 			return err
 		}
-		if _, err := transaction.ExecContext(ctx, `UPDATE tracks SET artist_name = ?, revision = revision + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, strings.Join(names, ", "), track.ID); err != nil {
+		if err := q.SetTrackArtistName(ctx, db.SetTrackArtistNameParams{ArtistName: strings.Join(names, ", "), ID: track.ID}); err != nil {
 			return err
 		}
 		for _, credit := range track.Credits {
@@ -383,17 +367,20 @@ func (report *ArtistCreditRepairReport) Apply(ctx context.Context, backupPath st
 		if !ok {
 			continue
 		}
-		ids, err := upsertRepairArtists(ctx, transaction, names)
+		ids, err := upsertRepairArtists(ctx, q, names)
 		if err != nil {
 			return err
 		}
-		if _, err := transaction.ExecContext(ctx, `DELETE FROM album_artists WHERE album_id = ?`, album.ID); err != nil {
+		if err := q.DeleteAlbumArtists(ctx, album.ID); err != nil {
 			return err
 		}
-		if err := insertAlbumArtistCredits(ctx, transaction, album.ID, names, ids); err != nil {
+		if err := insertAlbumArtistCredits(ctx, q, album.ID, names, ids); err != nil {
 			return err
 		}
-		if _, err := transaction.ExecContext(ctx, `UPDATE albums SET artist_id = ?, identity_key = ?, revision = revision + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, ids[normalizeIdentity(names[0])], report.albumKeys[album.ID], album.ID); err != nil {
+		albumKey := report.albumKeys[album.ID]
+		if err := q.SetAlbumArtistIdentity(ctx, db.SetAlbumArtistIdentityParams{
+			ArtistID: ids[normalizeIdentity(names[0])], IdentityKey: &albumKey, ID: album.ID,
+		}); err != nil {
 			return err
 		}
 		oldArtists = append(oldArtists, album.ArtistID)
@@ -403,13 +390,13 @@ func (report *ArtistCreditRepairReport) Apply(ctx context.Context, backupPath st
 	}
 	// Existing cleanup checks relationships; protect the legacy primary-artist FK too.
 	for _, id := range oldArtists {
-		var referenced bool
-		if err := transaction.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM albums WHERE artist_id = ?)`, id).Scan(&referenced); err != nil {
+		referenced, err := q.IsAlbumPrimaryArtist(ctx, id)
+		if err != nil {
 			return err
 		}
 		if !referenced {
-			if err := deleteUnreferencedArtists(ctx, transaction, []string{id}); err != nil {
-				return err
+			if err := q.DeleteArtistIfUnreferenced(ctx, id); err != nil {
+				return fmt.Errorf("delete unreferenced Artist after Track Replacement: %w", err)
 			}
 		}
 	}
@@ -420,11 +407,11 @@ func (report *ArtistCreditRepairReport) Apply(ctx context.Context, backupPath st
 	return nil
 }
 
-func upsertRepairArtists(ctx context.Context, transaction *sql.Tx, names []string) (map[string]string, error) {
+func upsertRepairArtists(ctx context.Context, q *db.Queries, names []string) (map[string]string, error) {
 	ids := map[string]string{}
 	for _, name := range names {
 		key := normalizeIdentity(name)
-		id, err := upsertArtist(ctx, transaction, name, key, "")
+		id, err := upsertArtist(ctx, q, name, key, "")
 		if err != nil {
 			return nil, err
 		}

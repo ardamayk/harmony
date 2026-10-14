@@ -51,7 +51,7 @@ func TestTrackReplacementRechecksCapacityBeforeCommitAndKeepsOldTrack(t *testing
 
 	testutil.AssertErrorCode(t, exhausted, http.StatusInsufficientStorage, "insufficient_storage")
 	assertSingleCanonicalAudio(t, managedStoragePath, original)
-	storedJob, err := module.service.store.GetJob(context.Background(), job.ID)
+	storedJob, err := module.service.repo.GetJob(context.Background(), job.ID)
 	if err != nil || storedJob.Status != STATUS_AWAITING_CONFIRMATION {
 		t.Fatalf("job after exhausted commit = %+v, error = %v", storedJob, err)
 	}
@@ -118,7 +118,7 @@ func TestModuleStartRecoversPendingCommitJournalInOneRestartPass(t *testing.T) {
 			if pendingJournals != 0 {
 				t.Fatalf("pending commit journals after restart = %d", pendingJournals)
 			}
-			storedJob, getErr := module.service.store.GetJob(context.Background(), job.ID)
+			storedJob, getErr := module.service.repo.GetJob(context.Background(), job.ID)
 			if phase == COMMIT_PHASE_DATABASE_COMMITTED || phase == COMMIT_PHASE_CLEANED {
 				if getErr != nil || storedJob.Status != STATUS_COMMITTED || tracks.Total != 1 {
 					t.Fatalf("committed recovery: job = %+v (%v), tracks = %d", storedJob, getErr, tracks.Total)

@@ -49,3 +49,9 @@ sql:
       go:
         <<: *go
         out: internal/modules/library/db
+  - <<: *module
+    queries: internal/modules/managedimport/queries
+    gen:
+      go:
+        <<: *go
+        out: internal/modules/managedimport/db

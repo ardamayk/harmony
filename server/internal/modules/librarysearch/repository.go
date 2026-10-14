@@ -46,7 +46,7 @@ func (r *Repository) LoadIndex(ctx context.Context, userID string, reuse func(re
 	if err != nil {
 		return nil, 0, fmt.Errorf("read Library Search fields: %w", err)
 	}
-	if err := tx.Commit(); err != nil {
+	if err = tx.Commit(); err != nil {
 		return nil, 0, err
 	}
 	index, err := buildIndex(sources, texts)

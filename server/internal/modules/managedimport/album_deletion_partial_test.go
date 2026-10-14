@@ -19,7 +19,7 @@ func TestAlbumDeletionStopsAtFirstFailureAndReportsBothLists(t *testing.T) {
 	second := SeedManagedAlbumTrackForTest(t, database, root, "album-1", "artist-1", "track-2", 2, "Second")
 	third := SeedManagedAlbumTrackForTest(t, database, root, "album-1", "artist-1", "track-3", 3, "Third")
 	storage := newStorage(root, StorageLimits{FileBytes: 1 << 20, BatchBytes: 1 << 20}, unlimitedStorageCapacity)
-	service := NewService(NewStore(database), storage, nil)
+	service := NewService(NewRepository(database), storage, nil)
 	service.albumDeletionTrackHook = func(trackID string) error {
 		if trackID == "track-2" {
 			return errors.New("injected failure before the second Track")

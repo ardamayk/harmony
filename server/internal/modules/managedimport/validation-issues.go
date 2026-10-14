@@ -1,7 +1,6 @@
 package managedimport
 
 import (
-	"database/sql/driver"
 	"encoding/json"
 	"fmt"
 
@@ -10,34 +9,24 @@ import (
 
 type ValidationIssues []library.InspectionIssue
 
-func (issues ValidationIssues) Value() (driver.Value, error) {
+// encode stores issues as the JSON array kept in validation_issues columns.
+func (issues ValidationIssues) encode() (string, error) {
 	if issues == nil {
 		return "[]", nil
 	}
 	data, err := json.Marshal(issues)
 	if err != nil {
-		return nil, fmt.Errorf("encode import validation issues: %w", err)
+		return "", fmt.Errorf("encode import validation issues: %w", err)
 	}
 	return string(data), nil
 }
 
-func (issues *ValidationIssues) Scan(value any) error {
-	var data []byte
-	switch stored := value.(type) {
-	case string:
-		data = []byte(stored)
-	case []byte:
-		data = stored
-	case nil:
-		*issues = nil
-		return nil
-	default:
-		return fmt.Errorf("read import validation issues: unexpected database type %T", value)
+func decodeValidationIssues(stored string) (ValidationIssues, error) {
+	var issues ValidationIssues
+	if err := json.Unmarshal([]byte(stored), &issues); err != nil {
+		return nil, fmt.Errorf("decode import validation issues: %w", err)
 	}
-	if err := json.Unmarshal(data, issues); err != nil {
-		return fmt.Errorf("decode import validation issues: %w", err)
-	}
-	return nil
+	return issues, nil
 }
 
 func (validationErr *ValidationError) validationIssues() ValidationIssues {

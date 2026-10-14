@@ -90,7 +90,7 @@ func (s *Service) RemoveTrack(ctx context.Context, userID, playlistID, trackID s
 	if err != nil {
 		return PlaylistDetail{}, err
 	}
-	if err := s.repo.RemoveTrack(ctx, playlistID, trackID); err != nil {
+	if err = s.repo.RemoveTrack(ctx, playlistID, trackID); err != nil {
 		return PlaylistDetail{}, err
 	}
 	if detail.IsDefault {

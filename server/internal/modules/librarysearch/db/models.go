@@ -111,6 +111,41 @@ type LibrarySearchText struct {
 	RulesVersion int64
 }
 
+type LibraryTrackRead struct {
+	ID                    string
+	Title                 string
+	ArtistName            string
+	AlbumID               string
+	AlbumTitle            string
+	TrackNo               *int64
+	DiscNo                int64
+	TrackTotal            *int64
+	DiscTotal             *int64
+	DurationMs            int64
+	Format                string
+	SizeBytes             int64
+	Genre                 string
+	SampleRateHz          int64
+	BitDepth              int64
+	ChannelCount          int64
+	BitrateBps            int64
+	Codec                 *string
+	Container             *string
+	SampleFormat          *string
+	FilePath              string
+	ReplaygainTrackGainDb *float64
+	ReplaygainTrackPeak   *float64
+	ReplaygainAlbumGainDb *float64
+	ReplaygainAlbumPeak   *float64
+	TitleSort             string
+	FileMtime             int64
+	ContentSha256         *string
+	IdentityKey           *string
+	Revision              int64
+	CreatedAt             time.Time
+	UpdatedAt             time.Time
+}
+
 type ManagedImportArtwork struct {
 	BatchID       string
 	ID            string

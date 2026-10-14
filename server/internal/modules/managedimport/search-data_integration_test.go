@@ -5,10 +5,11 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"github.com/ardam/navidrome-replacement/server/internal/api/gen"
 	"net/http"
 	"net/url"
 	"testing"
+
+	"github.com/ardam/navidrome-replacement/server/internal/api/gen"
 
 	"github.com/ardam/navidrome-replacement/server/internal/modules/managedimport"
 	"github.com/ardam/navidrome-replacement/server/internal/searchdata"

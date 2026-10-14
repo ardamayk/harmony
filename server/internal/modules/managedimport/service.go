@@ -18,7 +18,7 @@ import (
 )
 
 type Service struct {
-	store            *Store
+	repo             *Repository
 	storage          *Storage
 	inspector        library.MediaInspector
 	uploadLocksMu    sync.Mutex
@@ -70,9 +70,9 @@ func (reader *uploadActivityReader) Read(buffer []byte) (int, error) {
 	return read, err
 }
 
-func NewService(store *Store, storage *Storage, inspector library.MediaInspector) *Service {
+func NewService(repo *Repository, storage *Storage, inspector library.MediaInspector) *Service {
 	return &Service{
-		store:         store,
+		repo:          repo,
 		storage:       storage,
 		inspector:     inspector,
 		uploadLocks:   make(map[string]*uploadLock),
@@ -90,15 +90,15 @@ func (service *Service) CreateJob(ctx context.Context, batchID, clientFileID str
 		managedImportBatchConfirmationMu.Lock()
 		defer managedImportBatchConfirmationMu.Unlock()
 	}
-	return service.store.CreateJob(ctx, batchID, clientFileID)
+	return service.repo.CreateJob(ctx, batchID, clientFileID)
 }
 
 func (service *Service) CreateBatch(ctx context.Context, options BatchOptions) (Batch, error) {
-	return service.store.CreateBatch(ctx, options)
+	return service.repo.CreateBatch(ctx, options)
 }
 
 func (service *Service) GetBatch(ctx context.Context, batchID string) (Batch, error) {
-	batch, err := service.store.GetBatch(ctx, batchID)
+	batch, err := service.repo.GetBatch(ctx, batchID)
 	if err == nil {
 		service.addBatchProgress(&batch)
 		err = service.populateAlbumPreviews(ctx, &batch)
@@ -107,11 +107,11 @@ func (service *Service) GetBatch(ctx context.Context, batchID string) (Batch, er
 }
 
 func (service *Service) ListHistory(ctx context.Context) (HistoryList, error) {
-	return service.store.ListHistory(ctx)
+	return service.repo.ListHistory(ctx)
 }
 
 func (service *Service) GetJob(ctx context.Context, jobID string) (Job, error) {
-	job, err := service.store.GetJob(ctx, jobID)
+	job, err := service.repo.GetJob(ctx, jobID)
 	if err != nil {
 		return Job{}, err
 	}
@@ -129,14 +129,14 @@ func (service *Service) CancelBatch(ctx context.Context, batchID string) error {
 func (service *Service) cancelBatch(ctx context.Context, batchID string, updatedBefore *time.Time) error {
 	managedImportBatchConfirmationMu.Lock()
 	defer managedImportBatchConfirmationMu.Unlock()
-	batch, err := service.store.GetBatch(ctx, batchID)
+	batch, err := service.repo.GetBatch(ctx, batchID)
 	if err != nil {
 		return err
 	}
 	if batch.Status == BATCH_STATUS_COMPLETED {
 		return ErrInvalidState
 	}
-	jobs, err := service.store.ListBatchJobs(ctx, batchID)
+	jobs, err := service.repo.ListBatchJobs(ctx, batchID)
 	if err != nil {
 		return err
 	}
@@ -148,19 +148,19 @@ func (service *Service) cancelBatch(ctx context.Context, batchID string, updated
 	unlockUploads := service.lockUploads(jobs)
 	defer unlockUploads()
 	if updatedBefore != nil {
-		isEligible, eligibilityErr := service.store.IsBatchUncommittedBefore(ctx, batchID, *updatedBefore)
+		isEligible, eligibilityErr := service.repo.IsBatchUncommittedBefore(ctx, batchID, *updatedBefore)
 		if eligibilityErr != nil || !isEligible {
 			return eligibilityErr
 		}
 	}
-	jobs, err = service.store.ListBatchJobs(ctx, batchID)
+	jobs, err = service.repo.ListBatchJobs(ctx, batchID)
 	if err != nil {
 		return err
 	}
 	if err := service.removeUncommittedStaging(jobs); err != nil {
 		return err
 	}
-	return service.store.DeleteBatch(ctx, batchID)
+	return service.repo.DeleteBatch(ctx, batchID)
 }
 
 func (service *Service) CancelJob(ctx context.Context, jobID string) error {
@@ -174,12 +174,12 @@ func (service *Service) CancelJob(ctx context.Context, jobID string) error {
 func (service *Service) cancelJob(ctx context.Context, jobID string, updatedBefore *time.Time) error {
 	managedImportBatchConfirmationMu.Lock()
 	defer managedImportBatchConfirmationMu.Unlock()
-	job, err := service.store.GetJob(ctx, jobID)
+	job, err := service.repo.GetJob(ctx, jobID)
 	if err != nil {
 		return err
 	}
 	if job.BatchID != "" {
-		batchStatus, statusErr := service.store.GetBatchStatus(ctx, job.BatchID)
+		batchStatus, statusErr := service.repo.GetBatchStatus(ctx, job.BatchID)
 		if statusErr != nil {
 			return statusErr
 		}
@@ -195,25 +195,25 @@ func (service *Service) cancelJob(ctx context.Context, jobID string, updatedBefo
 	unlockUpload := service.lockUpload(jobID)
 	defer unlockUpload()
 	if updatedBefore != nil {
-		isEligible, eligibilityErr := service.store.IsStandaloneJobUncommittedBefore(ctx, jobID, *updatedBefore)
+		isEligible, eligibilityErr := service.repo.IsStandaloneJobUncommittedBefore(ctx, jobID, *updatedBefore)
 		if eligibilityErr != nil || !isEligible {
 			return eligibilityErr
 		}
 	}
-	job, err = service.store.GetJob(ctx, jobID)
+	job, err = service.repo.GetJob(ctx, jobID)
 	if err != nil {
 		return err
 	}
 	if job.Status == STATUS_COMMITTED {
 		return ErrInvalidState
 	}
-	if _, hasReplacement, journalErr := service.store.FindIncompleteReplacementJournal(ctx, jobID); journalErr != nil || hasReplacement {
+	if _, hasReplacement, journalErr := service.repo.FindIncompleteReplacementJournal(ctx, jobID); journalErr != nil || hasReplacement {
 		return errors.Join(journalErr, ErrInvalidState)
 	}
 	if err := service.removeUncommittedStaging([]importJob{job}); err != nil {
 		return err
 	}
-	return service.store.DeleteJob(ctx, jobID)
+	return service.repo.DeleteJob(ctx, jobID)
 }
 
 func (service *Service) lockUploads(jobs []importJob) func() {
@@ -331,7 +331,7 @@ func (service *Service) CleanupRestart(ctx context.Context) error {
 func (service *Service) RecoverCommits(ctx context.Context) error {
 	managedImportCommitMu.Lock()
 	defer managedImportCommitMu.Unlock()
-	journals, err := service.store.ListIncompleteCommitJournals(ctx)
+	journals, err := service.repo.ListIncompleteCommitJournals(ctx)
 	if err != nil {
 		return err
 	}
@@ -347,7 +347,7 @@ func (service *Service) RecoverCommits(ctx context.Context) error {
 func (service *Service) recoverCommit(ctx context.Context, journal commitJournal) error {
 	placement, err := service.storage.placementFromJournal(journal)
 	if err != nil {
-		reasonErr := service.store.RecordCommitRecoveryReason(ctx, journal.ID, "unsafe journaled storage path")
+		reasonErr := service.repo.RecordCommitRecoveryReason(ctx, journal.ID, "unsafe journaled storage path")
 		return errors.Join(err, reasonErr)
 	}
 	switch journal.Phase {
@@ -365,55 +365,55 @@ func (service *Service) rollbackUncommittedJournal(ctx context.Context, journal 
 	_, canonicalErr := os.Stat(journal.AudioFilePath)
 	if canonicalErr == nil {
 		if err := service.storage.Rollback(placement); err != nil {
-			reasonErr := service.store.RecordCommitRecoveryReason(ctx, journal.ID, reason+"; canonical rollback failed")
+			reasonErr := service.repo.RecordCommitRecoveryReason(ctx, journal.ID, reason+"; canonical rollback failed")
 			return errors.Join(err, reasonErr)
 		}
 	} else if !errors.Is(canonicalErr, os.ErrNotExist) {
-		reasonErr := service.store.RecordCommitRecoveryReason(ctx, journal.ID, reason+"; canonical state unreadable")
+		reasonErr := service.repo.RecordCommitRecoveryReason(ctx, journal.ID, reason+"; canonical state unreadable")
 		return errors.Join(canonicalErr, reasonErr)
 	} else if err := service.storage.CleanupPreparedPlacement(placement); err != nil {
-		reasonErr := service.store.RecordCommitRecoveryReason(ctx, journal.ID, reason+"; prepared placement cleanup failed")
+		reasonErr := service.repo.RecordCommitRecoveryReason(ctx, journal.ID, reason+"; prepared placement cleanup failed")
 		return errors.Join(err, reasonErr)
 	}
-	return service.store.RollbackCommitJournal(ctx, journal.ID, reason)
+	return service.repo.RollbackCommitJournal(ctx, journal.ID, reason)
 }
 
 func (service *Service) completePendingJournal(ctx context.Context, journal commitJournal, placement placedFiles) error {
 	if err := service.storage.VerifyPlacement(placement, journal.AudioSHA256, journal.ArtworkSHA256); err != nil {
 		reason := fmt.Sprintf("restart rolled back commit because canonical verification failed: %v", err)
-		databaseErr := service.store.RollbackPendingCommit(ctx, journal, reason)
+		databaseErr := service.repo.RollbackPendingCommit(ctx, journal, reason)
 		if databaseErr != nil {
 			return databaseErr
 		}
 		storageErr := service.storage.Rollback(placement)
 		if storageErr != nil {
-			reasonErr := service.store.RecordCommitRecoveryReason(ctx, journal.ID, reason+"; filesystem rollback failed")
+			reasonErr := service.repo.RecordCommitRecoveryReason(ctx, journal.ID, reason+"; filesystem rollback failed")
 			return errors.Join(storageErr, reasonErr)
 		}
-		return service.store.RollbackCommitJournal(ctx, journal.ID, reason)
+		return service.repo.RollbackCommitJournal(ctx, journal.ID, reason)
 	}
 	if journal.Phase == COMMIT_PHASE_DATABASE_COMMITTED {
 		if err := service.storage.CleanupPlacement(placement); err != nil {
 			return err
 		}
-		if err := service.store.UpdateCommitPhase(ctx, journal.ID, COMMIT_PHASE_CLEANED); err != nil {
+		if err := service.repo.UpdateCommitPhase(ctx, journal.ID, COMMIT_PHASE_CLEANED); err != nil {
 			return err
 		}
 	}
-	job, err := service.store.GetJob(ctx, journal.JobID)
+	job, err := service.repo.GetJob(ctx, journal.JobID)
 	if err != nil {
 		return err
 	}
-	_, err = service.store.FinalizeCommit(ctx, job, journal.TrackID, journal.ID)
+	_, err = service.repo.FinalizeCommit(ctx, job, journal.TrackID, journal.ID)
 	return err
 }
 
 func (service *Service) cleanupUncommitted(ctx context.Context, updatedBefore *time.Time) error {
-	batchIDs, err := service.store.ListUncommittedBatchIDs(ctx, updatedBefore)
+	batchIDs, err := service.repo.ListUncommittedBatchIDs(ctx, updatedBefore)
 	if err != nil {
 		return fmt.Errorf("list uncommitted Managed Import Batches: %w", err)
 	}
-	jobIDs, err := service.store.ListUncommittedStandaloneJobIDs(ctx, updatedBefore)
+	jobIDs, err := service.repo.ListUncommittedStandaloneJobIDs(ctx, updatedBefore)
 	if err != nil {
 		return fmt.Errorf("list uncommitted Managed Import Jobs: %w", err)
 	}
@@ -471,7 +471,7 @@ func (service *Service) Upload(ctx context.Context, jobID, originalFilename stri
 		return Preview{}, service.handleUploadFailure(ctx, job, originalFilename, "", err)
 	}
 	if job.BatchID != "" {
-		err = service.store.ReserveBatchUpload(ctx, job.ID, upload.Size, service.storage.batchLimit)
+		err = service.repo.ReserveBatchUpload(ctx, job.ID, upload.Size, service.storage.batchLimit)
 		if err != nil {
 			return Preview{}, service.handleUploadFailure(ctx, job, originalFilename, upload.Path, err)
 		}
@@ -531,7 +531,7 @@ func (service *Service) batchUploadReader(ctx context.Context, job importJob, bo
 	return &batchReservationReader{
 		source: body,
 		reserve: func(uploadSize int64) error {
-			return service.store.ReserveBatchUpload(ctx, job.ID, uploadSize, service.storage.batchLimit)
+			return service.repo.ReserveBatchUpload(ctx, job.ID, uploadSize, service.storage.batchLimit)
 		},
 	}
 }
@@ -565,11 +565,11 @@ func (service *Service) reserveBatchUpload(ctx context.Context, job importJob, c
 	if err != nil {
 		return err
 	}
-	return service.store.ReserveBatchUpload(ctx, job.ID, reservationSize, service.storage.batchLimit)
+	return service.repo.ReserveBatchUpload(ctx, job.ID, reservationSize, service.storage.batchLimit)
 }
 
 func (service *Service) getUploadingJob(ctx context.Context, jobID string) (importJob, error) {
-	job, err := service.store.GetJob(ctx, jobID)
+	job, err := service.repo.GetJob(ctx, jobID)
 	if err != nil || job.Status != STATUS_UPLOADING {
 		if err == nil {
 			err = ErrInvalidState
@@ -579,7 +579,7 @@ func (service *Service) getUploadingJob(ctx context.Context, jobID string) (impo
 	if job.BatchID == "" {
 		return job, nil
 	}
-	batchStatus, err := service.store.GetBatchStatus(ctx, job.BatchID)
+	batchStatus, err := service.repo.GetBatchStatus(ctx, job.BatchID)
 	if err != nil {
 		return importJob{}, err
 	}
@@ -612,7 +612,7 @@ func (service *Service) validateStagedUpload(ctx context.Context, job importJob,
 }
 
 func (service *Service) persistPreview(ctx context.Context, job importJob, originalFilename string, upload stagedUpload, inspection library.MediaInspection) (Preview, error) {
-	classification, candidates, err := service.store.ClassifyDuplicate(ctx, inspection)
+	classification, candidates, err := service.repo.ClassifyDuplicate(ctx, inspection)
 	if err != nil {
 		return Preview{}, service.handleUploadFailure(ctx, job, originalFilename, upload.Path, err)
 	}
@@ -627,7 +627,7 @@ func (service *Service) persistPreview(ctx context.Context, job importJob, origi
 	preview.File.SizeBytes = upload.Size
 	preview.DuplicateClassification = classification
 	preview.DuplicateCandidates = candidates
-	preview.MatchingTracks, err = service.store.positionCandidates(ctx, inspection.Metadata, job.ReplaceTrackID)
+	preview.MatchingTracks, err = service.repo.positionCandidates(ctx, inspection.Metadata, job.ReplaceTrackID)
 	if err != nil {
 		return Preview{}, service.handleUploadFailure(ctx, job, originalFilename, upload.Path, err)
 	}
@@ -641,7 +641,7 @@ func (service *Service) persistPreview(ctx context.Context, job importJob, origi
 		preview.Replacement = &state.Preview
 	}
 	if job.BatchID != "" && inspection.AlbumArtwork.SHA256 != "" {
-		if err = service.store.saveArtwork(ctx, job.BatchID, job.ID, job.ID, albumPreviewKey(preview.File), inspection.AlbumArtwork); err != nil {
+		if err = service.repo.saveArtwork(ctx, job.BatchID, job.ID, job.ID, albumPreviewKey(preview.File), inspection.AlbumArtwork); err != nil {
 			return Preview{}, service.handleUploadFailure(ctx, job, originalFilename, upload.Path, err)
 		}
 	}
@@ -650,7 +650,7 @@ func (service *Service) persistPreview(ctx context.Context, job importJob, origi
 		return Preview{}, service.handleUploadFailure(ctx, job, originalFilename, upload.Path, fmt.Errorf("encode Import Preview: %w", err))
 	}
 	if classification == DUPLICATE_EXACT {
-		markErr := service.store.MarkExactDuplicate(ctx, job.ID, originalFilename, upload.Path, upload.SHA256, string(previewBytes), candidates[0].TrackID, upload.Size)
+		markErr := service.repo.MarkExactDuplicate(ctx, job.ID, originalFilename, upload.Path, upload.SHA256, string(previewBytes), candidates[0].TrackID, upload.Size)
 		if markErr != nil {
 			return Preview{}, service.handleUploadFailure(ctx, job, originalFilename, upload.Path, markErr)
 		}
@@ -658,7 +658,7 @@ func (service *Service) persistPreview(ctx context.Context, job importJob, origi
 		if removeErr != nil {
 			return Preview{}, removeErr
 		}
-		if clearErr := service.store.ClearStagedFile(ctx, job.ID); clearErr != nil {
+		if clearErr := service.repo.ClearStagedFile(ctx, job.ID); clearErr != nil {
 			return Preview{}, clearErr
 		}
 		return preview, nil
@@ -666,7 +666,7 @@ func (service *Service) persistPreview(ctx context.Context, job importJob, origi
 	if preflightErr := service.preflightCommit(upload.Size, inspection); preflightErr != nil {
 		return Preview{}, service.handleUploadFailure(ctx, job, originalFilename, upload.Path, preflightErr)
 	}
-	markedJob, err := service.store.MarkPreview(ctx, job.ID, originalFilename, upload.Path, upload.SHA256, string(previewBytes), upload.Size, service.storage.batchLimit)
+	markedJob, err := service.repo.MarkPreview(ctx, job.ID, originalFilename, upload.Path, upload.SHA256, string(previewBytes), upload.Size, service.storage.batchLimit)
 	if err != nil {
 		return service.recoverPreviewFailure(ctx, job, originalFilename, upload.Path, err, inspection)
 	}
@@ -681,7 +681,7 @@ func (service *Service) recoverPreviewFailure(ctx context.Context, originalJob i
 	}
 	recoveryCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), VALIDATION_CLEANUP_TIMEOUT)
 	defer cancel()
-	job, getErr := service.store.GetJob(recoveryCtx, originalJob.ID)
+	job, getErr := service.repo.GetJob(recoveryCtx, originalJob.ID)
 	if getErr == nil && job.Status == STATUS_AWAITING_CONFIRMATION {
 		var preview Preview
 		if err := json.Unmarshal([]byte(job.PreviewJSON), &preview); err != nil {
@@ -724,7 +724,7 @@ func (service *Service) validateAlbumPositionsExcluding(ctx context.Context, job
 }
 
 func (service *Service) requiresDiscNumber(ctx context.Context, jobID string, metadata library.NormalizedMediaMetadata, excludedTrackID string) (bool, error) {
-	requiresDiscNumber, err := service.store.AlbumRequiresDiscNumber(ctx, metadata, excludedTrackID)
+	requiresDiscNumber, err := service.repo.AlbumRequiresDiscNumber(ctx, metadata, excludedTrackID)
 	if err != nil || requiresDiscNumber {
 		return requiresDiscNumber, err
 	}
@@ -732,7 +732,7 @@ func (service *Service) requiresDiscNumber(ctx context.Context, jobID string, me
 }
 
 func (service *Service) awaitingSiblingRequiresDiscNumber(ctx context.Context, jobID string, metadata library.NormalizedMediaMetadata) (bool, error) {
-	paths, err := service.store.AwaitingPreviewPaths(ctx, jobID)
+	paths, err := service.repo.AwaitingPreviewPaths(ctx, jobID)
 	if err != nil {
 		return false, err
 	}
@@ -755,7 +755,7 @@ func isMultiDisc(metadata library.NormalizedMediaMetadata) bool {
 }
 
 func (service *Service) validateExistingAlbumTotals(ctx context.Context, metadata library.NormalizedMediaMetadata, excludedTrackID string) error {
-	field, err := service.store.AlbumPositionTotalConflict(ctx, metadata, excludedTrackID)
+	field, err := service.repo.AlbumPositionTotalConflict(ctx, metadata, excludedTrackID)
 	if err != nil {
 		return err
 	}
@@ -777,7 +777,7 @@ func (service *Service) Confirm(ctx context.Context, jobID string, revision int)
 func (service *Service) ConfirmWithDecision(ctx context.Context, jobID string, revision int, decision DuplicateAction) (Result, error) {
 	managedImportBatchConfirmationMu.Lock()
 	defer managedImportBatchConfirmationMu.Unlock()
-	job, err := service.store.GetJob(ctx, jobID)
+	job, err := service.repo.GetJob(ctx, jobID)
 	if err != nil {
 		return Result{}, err
 	}
@@ -797,24 +797,24 @@ func (service *Service) confirmJob(ctx context.Context, job importJob, revision 
 func (service *Service) confirmJobWithEdition(ctx context.Context, job importJob, revision int, decision DuplicateAction, isSeparateEdition bool) (Result, error) {
 	managedImportCommitMu.Lock()
 	defer managedImportCommitMu.Unlock()
-	job, err := service.store.GetJob(ctx, job.ID)
+	job, err := service.repo.GetJob(ctx, job.ID)
 	if err != nil {
 		return Result{}, err
 	}
-	replacementJournal, hasReplacement, err := service.store.FindIncompleteReplacementJournal(ctx, job.ID)
+	pendingReplacement, hasReplacement, err := service.repo.FindIncompleteReplacementJournal(ctx, job.ID)
 	if err != nil {
 		return Result{}, err
 	}
 	if hasReplacement {
-		if err = service.recoverReplacement(ctx, replacementJournal); err != nil {
+		if err = service.recoverReplacement(ctx, pendingReplacement); err != nil {
 			return Result{}, err
 		}
-		job, err = service.store.GetJob(ctx, job.ID)
+		job, err = service.repo.GetJob(ctx, job.ID)
 		if err != nil {
 			return Result{}, err
 		}
 	}
-	journal, hasJournal, err := service.store.FindIncompleteCommitJournal(ctx, job.ID)
+	journal, hasJournal, err := service.repo.FindIncompleteCommitJournal(ctx, job.ID)
 	if err != nil {
 		return Result{}, err
 	}
@@ -822,7 +822,7 @@ func (service *Service) confirmJobWithEdition(ctx context.Context, job importJob
 		if recoveryErr := service.recoverCommit(ctx, journal); recoveryErr != nil {
 			return Result{}, recoveryErr
 		}
-		job, err = service.store.GetJob(ctx, job.ID)
+		job, err = service.repo.GetJob(ctx, job.ID)
 		if err != nil {
 			return Result{}, err
 		}
@@ -871,7 +871,7 @@ func (service *Service) confirmAwaitingJob(ctx context.Context, job importJob, d
 			Err:    errors.New("staged file hash changed after Import Preview"),
 		}
 	}
-	classification, _, err := service.store.ClassifyDuplicate(ctx, inspection)
+	classification, _, err := service.repo.ClassifyDuplicate(ctx, inspection)
 	if err != nil {
 		return Result{}, err
 	}
@@ -881,7 +881,7 @@ func (service *Service) confirmAwaitingJob(ctx context.Context, job importJob, d
 	if isSeparateEdition {
 		inspection.Metadata.AlbumIdentityKey = separateAlbumIdentityKey(job, inspection.Metadata)
 	}
-	candidates, err := service.store.positionCandidates(ctx, inspection.Metadata, "")
+	candidates, err := service.repo.positionCandidates(ctx, inspection.Metadata, "")
 	if err != nil {
 		return Result{}, err
 	}
@@ -903,7 +903,7 @@ func (service *Service) confirmAwaitingJob(ctx context.Context, job importJob, d
 			return Result{}, ErrRevisionConflict
 		}
 		job.ReplaceTrackID = candidates[0].TrackID
-		if _, err = service.store.database.ExecContext(ctx, `UPDATE managed_import_jobs SET replace_track_id = ? WHERE id = ?`, job.ReplaceTrackID, job.ID); err != nil {
+		if err = service.repo.SetJobReplaceTarget(ctx, job.ID, job.ReplaceTrackID); err != nil {
 			return Result{}, err
 		}
 		state, err := service.buildReplacementState(ctx, job, inspection, job.StagedFilePath)
@@ -937,7 +937,7 @@ func separateAlbumIdentityKey(job importJob, metadata library.NormalizedMediaMet
 func (service *Service) rejectExactDuplicate(ctx context.Context, job importJob) error {
 	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), VALIDATION_CLEANUP_TIMEOUT)
 	defer cancel()
-	if err := service.store.MarkConfirmationExactDuplicate(cleanupCtx, job.ID); err != nil {
+	if err := service.repo.MarkConfirmationExactDuplicate(cleanupCtx, job.ID); err != nil {
 		return errors.Join(ErrExactDuplicate, err)
 	}
 	return service.finishExactDuplicateCleanup(cleanupCtx, job)
@@ -947,7 +947,7 @@ func (service *Service) finishExactDuplicateCleanup(ctx context.Context, job imp
 	if err := service.storage.RemoveStaged(job.StagedFilePath); err != nil {
 		return errors.Join(ErrExactDuplicate, err)
 	}
-	if err := service.store.ClearStagedFile(ctx, job.ID); err != nil {
+	if err := service.repo.ClearStagedFile(ctx, job.ID); err != nil {
 		return errors.Join(ErrExactDuplicate, err)
 	}
 	return ErrExactDuplicate
@@ -960,7 +960,7 @@ func (service *Service) ConfirmBatch(ctx context.Context, batchID string, confir
 	if err != nil {
 		return Batch{}, err
 	}
-	batch, err := service.store.GetBatch(ctx, batchID)
+	batch, err := service.repo.GetBatch(ctx, batchID)
 	if err != nil {
 		return Batch{}, err
 	}
@@ -970,7 +970,7 @@ func (service *Service) ConfirmBatch(ctx context.Context, batchID string, confir
 		}
 		return batch, nil
 	}
-	jobs, err := service.store.ListBatchJobs(ctx, batchID)
+	jobs, err := service.repo.ListBatchJobs(ctx, batchID)
 	if err != nil {
 		return Batch{}, err
 	}
@@ -988,7 +988,7 @@ func (service *Service) ConfirmBatch(ctx context.Context, batchID string, confir
 	if err != nil {
 		return Batch{}, err
 	}
-	jobs, err = service.store.ListBatchJobs(ctx, batchID)
+	jobs, err = service.repo.ListBatchJobs(ctx, batchID)
 	if err != nil {
 		return Batch{}, err
 	}
@@ -1040,7 +1040,7 @@ func (service *Service) startOrResumeBatch(ctx context.Context, batch Batch, rev
 	if batch.Status != BATCH_STATUS_UPLOADING {
 		return ErrInvalidState
 	}
-	return service.store.StartBatchConfirmation(ctx, batch.ID, revision, selectedIDs)
+	return service.repo.StartBatchConfirmation(ctx, batch.ID, revision, selectedIDs)
 }
 
 func (service *Service) confirmBatchJobs(ctx context.Context, jobs []importJob) error {
@@ -1055,9 +1055,9 @@ func (service *Service) confirmBatchJobs(ctx context.Context, jobs []importJob) 
 				return err
 			}
 			if plan.SkipExact && job.ContentSHA256 != "" {
-				var exists bool
-				if err := service.store.database.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM track_sources WHERE content_sha256 = ?)`, job.ContentSHA256).Scan(&exists); err != nil {
-					return fmt.Errorf("check skipped import hash: %w", err)
+				exists, err := service.repo.ContentHashExists(ctx, job.ContentSHA256)
+				if err != nil {
+					return err
 				}
 				if exists {
 					outcome, code, reason = OUTCOME_REJECTED, ERROR_CODE_EXACT_DUPLICATE, "identical file already exists in the library"
@@ -1083,7 +1083,7 @@ func (service *Service) confirmBatchJobs(ctx context.Context, jobs []importJob) 
 
 func (service *Service) handleBatchConfirmationError(ctx context.Context, job importJob, confirmationErr error) error {
 	if errors.Is(confirmationErr, ErrExactDuplicate) {
-		persistedJob, err := service.store.GetJob(ctx, job.ID)
+		persistedJob, err := service.repo.GetJob(ctx, job.ID)
 		if err != nil {
 			return errors.Join(confirmationErr, err)
 		}
@@ -1095,21 +1095,21 @@ func (service *Service) handleBatchConfirmationError(ctx context.Context, job im
 	if ctx.Err() != nil {
 		return errors.Join(confirmationErr, ctx.Err())
 	}
-	persistedJob, err := service.store.GetJob(ctx, job.ID)
+	persistedJob, err := service.repo.GetJob(ctx, job.ID)
 	if err != nil {
 		return errors.Join(confirmationErr, err)
 	}
 	if persistedJob.Status == STATUS_COMMITTED {
 		return nil
 	}
-	_, hasJournal, journalErr := service.store.FindIncompleteCommitJournal(ctx, job.ID)
+	_, hasJournal, journalErr := service.repo.FindIncompleteCommitJournal(ctx, job.ID)
 	if journalErr != nil {
 		return errors.Join(confirmationErr, journalErr)
 	}
 	if hasJournal {
 		return confirmationErr
 	}
-	_, hasReplacement, replacementErr := service.store.FindIncompleteReplacementJournal(ctx, job.ID)
+	_, hasReplacement, replacementErr := service.repo.FindIncompleteReplacementJournal(ctx, job.ID)
 	if replacementErr != nil {
 		return errors.Join(confirmationErr, replacementErr)
 	}
@@ -1125,14 +1125,14 @@ func (service *Service) handleBatchConfirmationError(ctx context.Context, job im
 }
 
 func (service *Service) completeBatch(ctx context.Context, batchID string) (Batch, error) {
-	if err := service.store.CompleteBatch(ctx, batchID); err != nil {
-		batch, getErr := service.store.GetBatch(ctx, batchID)
+	if err := service.repo.CompleteBatch(ctx, batchID); err != nil {
+		batch, getErr := service.repo.GetBatch(ctx, batchID)
 		if getErr == nil && batch.Status == BATCH_STATUS_COMPLETED {
 			return batch, nil
 		}
 		return Batch{}, errors.Join(err, getErr)
 	}
-	return service.store.GetBatch(ctx, batchID)
+	return service.repo.GetBatch(ctx, batchID)
 }
 
 func (service *Service) finishUncommittedBatchFile(ctx context.Context, job importJob, outcome ImportOutcome, errorCode, reason string) error {
@@ -1149,7 +1149,7 @@ func (service *Service) finishUncommittedBatchFile(ctx context.Context, job impo
 	if outcome == OUTCOME_FAILED && errorCode == "" {
 		errorCode = "commit_failed"
 	}
-	return service.store.MarkBatchFileOutcome(cleanupCtx, job.ID, outcome, errorCode, reason)
+	return service.repo.MarkBatchFileOutcome(cleanupCtx, job.ID, outcome, errorCode, reason)
 }
 
 func (service *Service) preflightCommit(stagedBytes int64, inspection library.MediaInspection) error {
@@ -1172,7 +1172,7 @@ func (service *Service) commit(ctx context.Context, job importJob, inspection li
 }
 
 func (service *Service) prepareCommit(ctx context.Context, job importJob, inspection library.MediaInspection, albumKey string) (commitIdentity, commitJournal, error) {
-	identity, resolveErr := service.store.ResolveCommitIdentity(ctx, inspection.Metadata, albumKey)
+	identity, resolveErr := service.repo.ResolveCommitIdentity(ctx, inspection.Metadata, albumKey)
 	if resolveErr != nil {
 		return commitIdentity{}, commitJournal{}, resolveErr
 	}
@@ -1186,7 +1186,7 @@ func (service *Service) prepareCommit(ctx context.Context, job importJob, inspec
 		ArtworkFilePath: plannedPlacement.ArtworkPath, AudioSHA256: inspection.FileSHA256,
 		ArtworkSHA256: inspection.AlbumArtwork.SHA256,
 	}
-	if err := service.store.CreateCommitJournal(ctx, journal); err != nil {
+	if err := service.repo.CreateCommitJournal(ctx, journal); err != nil {
 		return commitIdentity{}, commitJournal{}, err
 	}
 	if err := service.afterCommitPhase(COMMIT_PHASE_PREPARED); err != nil {
@@ -1198,14 +1198,14 @@ func (service *Service) prepareCommit(ctx context.Context, job importJob, inspec
 func (service *Service) placeAndVerifyCommit(ctx context.Context, job importJob, inspection library.MediaInspection, identity commitIdentity, journal commitJournal) (placedFiles, error) {
 	placement, placementErr := service.storage.Place(job.StagedFilePath, inspection, identity, func() error {
 		journal.IsArtworkCreated = true
-		return service.store.MarkCommitArtworkCreated(ctx, journal.ID)
+		return service.repo.MarkCommitArtworkCreated(ctx, journal.ID)
 	})
 	if placementErr != nil {
-		journalErr := service.store.RollbackCommitJournal(context.WithoutCancel(ctx), journal.ID, "canonical placement failed")
+		journalErr := service.repo.RollbackCommitJournal(context.WithoutCancel(ctx), journal.ID, "canonical placement failed")
 		return placedFiles{}, errors.Join(placementErr, journalErr)
 	}
 	journal.IsArtworkCreated = placement.artworkCreated
-	if err := service.store.MarkCommitPlaced(ctx, journal.ID, placement.artworkCreated); err != nil {
+	if err := service.repo.MarkCommitPlaced(ctx, journal.ID, placement.artworkCreated); err != nil {
 		return placedFiles{}, err
 	}
 	if err := service.afterCommitPhase(COMMIT_PHASE_PLACED); err != nil {
@@ -1214,7 +1214,7 @@ func (service *Service) placeAndVerifyCommit(ctx context.Context, job importJob,
 	if err := service.storage.VerifyPlacement(placement, journal.AudioSHA256, journal.ArtworkSHA256); err != nil {
 		return placedFiles{}, errors.Join(err, service.rollbackFilesystemCommit(ctx, journal, placement, "canonical verification failed"))
 	}
-	if err := service.store.UpdateCommitPhase(ctx, journal.ID, COMMIT_PHASE_VERIFIED); err != nil {
+	if err := service.repo.UpdateCommitPhase(ctx, journal.ID, COMMIT_PHASE_VERIFIED); err != nil {
 		return placedFiles{}, err
 	}
 	if err := service.afterCommitPhase(COMMIT_PHASE_VERIFIED); err != nil {
@@ -1231,12 +1231,12 @@ func (service *Service) persistAndFinalizeCommit(ctx context.Context, job import
 		Inspection: inspection,
 		AlbumKey:   albumKey,
 	}
-	commitErr := service.store.CommitPending(ctx, data, journal.ID)
+	commitErr := service.repo.CommitPending(ctx, data, journal.ID)
 	if commitErr == nil && service.commitResultHook != nil {
 		commitErr = service.commitResultHook()
 	}
 	if commitErr != nil {
-		persisted, journalErr := service.store.GetCommitJournal(context.WithoutCancel(ctx), journal.ID)
+		persisted, journalErr := service.repo.GetCommitJournal(context.WithoutCancel(ctx), journal.ID)
 		if journalErr != nil {
 			return Result{}, errors.Join(commitErr, journalErr)
 		}
@@ -1251,13 +1251,13 @@ func (service *Service) persistAndFinalizeCommit(ctx context.Context, job import
 	if err := service.storage.CleanupPlacement(placement); err != nil {
 		return Result{}, err
 	}
-	if err := service.store.UpdateCommitPhase(ctx, journal.ID, COMMIT_PHASE_CLEANED); err != nil {
+	if err := service.repo.UpdateCommitPhase(ctx, journal.ID, COMMIT_PHASE_CLEANED); err != nil {
 		return Result{}, err
 	}
 	if err := service.afterCommitPhase(COMMIT_PHASE_CLEANED); err != nil {
 		return Result{}, err
 	}
-	return service.store.FinalizeCommit(ctx, job, identity.TrackID, journal.ID)
+	return service.repo.FinalizeCommit(ctx, job, identity.TrackID, journal.ID)
 }
 
 func (service *Service) afterCommitPhase(phase commitPhase) error {
@@ -1270,10 +1270,10 @@ func (service *Service) afterCommitPhase(phase commitPhase) error {
 func (service *Service) rollbackFilesystemCommit(ctx context.Context, journal commitJournal, placement placedFiles, reason string) error {
 	rollbackErr := service.storage.Rollback(placement)
 	if rollbackErr != nil {
-		reasonErr := service.store.RecordCommitRecoveryReason(context.WithoutCancel(ctx), journal.ID, reason+"; filesystem rollback failed")
+		reasonErr := service.repo.RecordCommitRecoveryReason(context.WithoutCancel(ctx), journal.ID, reason+"; filesystem rollback failed")
 		return errors.Join(rollbackErr, reasonErr)
 	}
-	journalErr := service.store.RollbackCommitJournal(context.WithoutCancel(ctx), journal.ID, reason)
+	journalErr := service.repo.RollbackCommitJournal(context.WithoutCancel(ctx), journal.ID, reason)
 	return journalErr
 }
 
@@ -1288,7 +1288,7 @@ func (service *Service) failUpload(ctx context.Context, job importJob, originalF
 	}
 	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), VALIDATION_CLEANUP_TIMEOUT)
 	defer cancel()
-	return errors.Join(uploadErr, service.storage.RemoveStaged(stagedPath), service.store.MarkFailed(cleanupCtx, job.ID, originalFilename, errorCode, errorField, reason, issues))
+	return errors.Join(uploadErr, service.storage.RemoveStaged(stagedPath), service.repo.MarkFailed(cleanupCtx, job.ID, originalFilename, errorCode, errorField, reason, issues))
 }
 
 func (service *Service) markUploadInterrupted(ctx context.Context, job importJob, originalFilename, stagedPath string, uploadErr error) error {
@@ -1298,7 +1298,7 @@ func (service *Service) markUploadInterrupted(ctx context.Context, job importJob
 	if stagedPath != "" {
 		cleanupErr = service.storage.RemoveStaged(stagedPath)
 	}
-	transitionErr := service.store.MarkUploadInterrupted(cleanupCtx, job.ID, originalFilename)
+	transitionErr := service.repo.MarkUploadInterrupted(cleanupCtx, job.ID, originalFilename)
 	return errors.Join(ErrUploadInterrupted, uploadErr, cleanupErr, transitionErr)
 }
 
@@ -1309,7 +1309,7 @@ func (service *Service) markRejected(ctx context.Context, job importJob, origina
 	errorCode, reason := failureDetails(uploadErr)
 	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), VALIDATION_CLEANUP_TIMEOUT)
 	defer cancel()
-	return service.store.MarkFailed(cleanupCtx, job.ID, originalFilename, errorCode, "file", reason)
+	return service.repo.MarkFailed(cleanupCtx, job.ID, originalFilename, errorCode, "file", reason)
 }
 
 func failureDetails(err error) (string, string) {
@@ -1357,7 +1357,7 @@ func (service *Service) validationProgressReporter(ctx context.Context, jobID st
 		if lastPersistedPercent >= 0 && !isMilestone {
 			return nil
 		}
-		if err := service.store.UpdateValidationProgress(ctx, jobID, progress.Percent); err != nil {
+		if err := service.repo.UpdateValidationProgress(ctx, jobID, progress.Percent); err != nil {
 			return err
 		}
 		lastPersistedPercent = progress.Percent

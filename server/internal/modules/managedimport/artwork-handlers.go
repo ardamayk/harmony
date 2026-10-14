@@ -52,7 +52,7 @@ func (handlers *Handlers) UploadArtwork(writer http.ResponseWriter, request *htt
 		return
 	}
 	id := "upload-" + albumKey
-	if err := handlers.service.store.saveArtwork(request.Context(), batchID, id, "", albumKey, artwork); err != nil {
+	if err := handlers.service.repo.saveArtwork(request.Context(), batchID, id, "", albumKey, artwork); err != nil {
 		handleError(writer, request, err)
 		return
 	}
@@ -60,7 +60,7 @@ func (handlers *Handlers) UploadArtwork(writer http.ResponseWriter, request *htt
 }
 
 func (handlers *Handlers) GetArtwork(writer http.ResponseWriter, request *http.Request) {
-	artwork, err := handlers.service.store.loadArtwork(request.Context(), chi.URLParam(request, "batchId"), chi.URLParam(request, "artworkId"))
+	artwork, err := handlers.service.repo.loadArtwork(request.Context(), chi.URLParam(request, "batchId"), chi.URLParam(request, "artworkId"))
 	if err != nil {
 		handleError(writer, request, err)
 		return

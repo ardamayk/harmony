@@ -2,7 +2,6 @@ package managedimport
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -71,7 +70,7 @@ func (service *Service) prepareBatchPlans(ctx context.Context, batch Batch, jobs
 	if err := validatePlannedDiscNumbers(jobs, plans); err != nil {
 		return err
 	}
-	return service.store.saveImportPlans(ctx, batch, plans)
+	return service.repo.saveImportPlans(ctx, batch, plans)
 }
 
 func (service *Service) resolveAlbumPlans(ctx context.Context, batch Batch, decisions []AlbumDecision) (map[string]importPlan, error) {
@@ -163,7 +162,7 @@ func resolveAlbumPlan(batchID, baseKey string, album AlbumPreview, decision Albu
 }
 
 func (service *Service) planTrack(ctx context.Context, file PreviewFile, plan importPlan, decision DuplicateDecision) (importPlan, error) {
-	candidates, err := service.store.positionCandidates(ctx, metadataFromPreview(file, plan.AlbumKey), "")
+	candidates, err := service.repo.positionCandidates(ctx, metadataFromPreview(file, plan.AlbumKey), "")
 	if err != nil {
 		return plan, err
 	}
@@ -192,48 +191,6 @@ func metadataFromPreview(file PreviewFile, albumKey string) library.NormalizedMe
 func albumPositionConflict() error {
 	reason := "another title occupies this Album position; resolve the conflict or choose a separate Album"
 	return &ValidationError{Code: ERROR_CODE_ALBUM_POSITION_CONFLICT, Field: "TRACKNUMBER", Reason: reason, Err: errors.New(reason)}
-}
-
-func (store *Store) positionCandidates(ctx context.Context, metadata library.NormalizedMediaMetadata, excludedTrackID string) ([]DuplicateCandidate, error) {
-	ids, err := store.findDuplicatesByPosition(ctx, metadata, excludedTrackID)
-	if err != nil {
-		return nil, err
-	}
-	return store.readDuplicateCandidates(ctx, ids)
-}
-
-func (store *Store) saveImportPlans(ctx context.Context, batch Batch, plans map[string]importPlan) (returnErr error) {
-	transaction, err := store.database.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if err := rollbackTransaction(transaction, "import planning"); err != nil {
-			returnErr = errors.Join(returnErr, err)
-		}
-	}()
-	var revision int
-	if err := transaction.QueryRowContext(ctx, `SELECT revision FROM managed_import_batches WHERE id = ? AND status = 'uploading'`, batch.ID).Scan(&revision); err != nil {
-		return err
-	}
-	if revision != batch.Revision {
-		return ErrRevisionConflict
-	}
-	for jobID, plan := range plans {
-		encoded, err := json.Marshal(plan)
-		if err != nil {
-			return err
-		}
-		result, err := transaction.ExecContext(ctx, `UPDATE managed_import_jobs SET import_plan_json = ?, replace_track_id = NULLIF(?, '')
-            WHERE id = ? AND batch_id = ? AND status = 'awaiting_confirmation'`, string(encoded), plan.TargetID, jobID, batch.ID)
-		if err != nil {
-			return err
-		}
-		if err := requireMutation(result); err != nil {
-			return err
-		}
-	}
-	return transaction.Commit()
 }
 
 func validatePlannedDiscNumbers(jobs []importJob, plans map[string]importPlan) error {

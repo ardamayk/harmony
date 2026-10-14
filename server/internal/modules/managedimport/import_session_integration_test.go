@@ -98,7 +98,7 @@ func TestImportLivenessPreservesPreviewRevisionAndCannotReviveCanceledBatch(t *t
 func TestImportHeartbeatKeepsReadyPreviewUntilClientLeaseExpires(t *testing.T) {
 	database := testutil.OpenMigratedDB(t)
 	storage := managedimport.NewStorage(t.TempDir(), managedimport.StorageLimits{FileBytes: 1024 * 1024, BatchBytes: 2 * 1024 * 1024})
-	service := managedimport.NewService(managedimport.NewStore(database), storage, library.NewMediaInspector())
+	service := managedimport.NewService(managedimport.NewRepository(database), storage, library.NewMediaInspector())
 	handlers := managedimport.NewHandlers(service)
 	router := chi.NewRouter()
 	router.Post("/api/v1/import-batches", handlers.CreateBatch)
