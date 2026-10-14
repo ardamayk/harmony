@@ -43,3 +43,9 @@ sql:
       go:
         <<: *go
         out: internal/modules/librarysearch/db
+  - <<: *module
+    queries: internal/modules/library/queries.sql
+    gen:
+      go:
+        <<: *go
+        out: internal/modules/library/db

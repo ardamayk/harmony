@@ -208,7 +208,7 @@ type WaveformRecord struct {
 	SourceModifiedAt int64
 }
 
-type waveformStore interface {
+type waveformRepository interface {
 	GetTrackWaveformSource(ctx context.Context, trackID string) (WaveformSource, error)
 	GetTrackWaveform(ctx context.Context, trackID string) (WaveformRecord, bool, error)
 	PutTrackWaveform(ctx context.Context, trackID string, record WaveformRecord) error
@@ -217,7 +217,7 @@ type waveformStore interface {
 // WaveformService serves cached peaks and generates missing ones once per
 // Track at a time, answering "pending" when generation outlasts a request.
 type WaveformService struct {
-	store        waveformStore
+	repo         waveformRepository
 	generate     WaveformGenerator
 	available    bool
 	pendingAfter time.Duration
@@ -225,9 +225,9 @@ type WaveformService struct {
 	semaphore    chan struct{}
 }
 
-func NewWaveformService(store waveformStore, generate WaveformGenerator, available bool) *WaveformService {
+func NewWaveformService(repo waveformRepository, generate WaveformGenerator, available bool) *WaveformService {
 	return &WaveformService{
-		store:        store,
+		repo:         repo,
 		generate:     generate,
 		available:    available,
 		pendingAfter: waveformPendingAfter,
@@ -239,7 +239,7 @@ func (s *WaveformService) Get(ctx context.Context, trackID string) (TrackWavefor
 	if s == nil || !s.available {
 		return TrackWaveform{}, ErrWaveformUnavailable
 	}
-	source, err := s.store.GetTrackWaveformSource(ctx, trackID)
+	source, err := s.repo.GetTrackWaveformSource(ctx, trackID)
 	if err != nil {
 		return TrackWaveform{}, err
 	}
@@ -251,7 +251,7 @@ func (s *WaveformService) Get(ctx context.Context, trackID string) (TrackWavefor
 		return TrackWaveform{}, fmt.Errorf("stat waveform source: %w", err)
 	}
 	identity := WaveformRecord{SourceSizeBytes: info.Size(), SourceModifiedAt: info.ModTime().Unix()}
-	cached, found, err := s.store.GetTrackWaveform(ctx, trackID)
+	cached, found, err := s.repo.GetTrackWaveform(ctx, trackID)
 	if err != nil {
 		return TrackWaveform{}, err
 	}
@@ -269,7 +269,7 @@ func (s *WaveformService) Get(ctx context.Context, trackID string) (TrackWavefor
 			return nil, err
 		}
 		identity.Peaks = peaks
-		if err := s.store.PutTrackWaveform(context.Background(), trackID, identity); err != nil {
+		if err := s.repo.PutTrackWaveform(context.Background(), trackID, identity); err != nil {
 			return nil, err
 		}
 		return peaks, nil

@@ -10,19 +10,19 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-type Handlers struct {
+type Handler struct {
 	service *Service
 	// nil until the module enables waveforms; the handler then answers 503.
 	waveforms *WaveformService
 }
 
-func NewHandlers(service *Service) *Handlers {
-	return &Handlers{service: service}
+func NewHandler(service *Service) *Handler {
+	return &Handler{service: service}
 }
 
 // GetTrackWaveform answers cached peaks, 202 while they are being generated,
 // 404 for unknown tracks or missing files, and 503 without ffmpeg.
-func (h *Handlers) GetTrackWaveform(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) GetTrackWaveform(w http.ResponseWriter, r *http.Request) {
 	trackID := chi.URLParam(r, "trackId")
 	waveform, err := h.waveforms.Get(r.Context(), trackID)
 	switch {
@@ -43,7 +43,7 @@ func (h *Handlers) GetTrackWaveform(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *Handlers) ListArtists(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) ListArtists(w http.ResponseWriter, r *http.Request) {
 	limit, offset := pagination(r)
 	q := r.URL.Query().Get("q")
 	result, err := h.service.ListArtists(r.Context(), limit, offset, q)
@@ -54,7 +54,7 @@ func (h *Handlers) ListArtists(w http.ResponseWriter, r *http.Request) {
 	respond.JSON(w, http.StatusOK, result)
 }
 
-func (h *Handlers) ListAlbums(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) ListAlbums(w http.ResponseWriter, r *http.Request) {
 	limit, offset := pagination(r)
 	q := r.URL.Query().Get("q")
 	artistID := r.URL.Query().Get("artistId")
@@ -66,7 +66,7 @@ func (h *Handlers) ListAlbums(w http.ResponseWriter, r *http.Request) {
 	respond.JSON(w, http.StatusOK, result)
 }
 
-func (h *Handlers) GetAlbumCover(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) GetAlbumCover(w http.ResponseWriter, r *http.Request) {
 	albumID := chi.URLParam(r, "albumId")
 	mime, data, err := h.service.GetAlbumCover(r.Context(), albumID)
 	if errors.Is(err, ErrNotFound) {
@@ -83,7 +83,7 @@ func (h *Handlers) GetAlbumCover(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(data)
 }
 
-func (h *Handlers) GetAlbum(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) GetAlbum(w http.ResponseWriter, r *http.Request) {
 	albumID := chi.URLParam(r, "albumId")
 	result, err := h.service.GetAlbum(r.Context(), albumID)
 	if errors.Is(err, ErrNotFound) {
@@ -97,7 +97,7 @@ func (h *Handlers) GetAlbum(w http.ResponseWriter, r *http.Request) {
 	respond.JSON(w, http.StatusOK, result)
 }
 
-func (h *Handlers) ListTracks(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) ListTracks(w http.ResponseWriter, r *http.Request) {
 	limit, offset := pagination(r)
 	q := r.URL.Query().Get("q")
 	result, err := h.service.ListTracks(r.Context(), limit, offset, r.URL.Query().Get("artistId"), q)
@@ -108,7 +108,7 @@ func (h *Handlers) ListTracks(w http.ResponseWriter, r *http.Request) {
 	respond.JSON(w, http.StatusOK, result)
 }
 
-func (h *Handlers) GetTrack(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) GetTrack(w http.ResponseWriter, r *http.Request) {
 	trackID := chi.URLParam(r, "trackId")
 	result, err := h.service.GetTrack(r.Context(), trackID)
 	if errors.Is(err, ErrNotFound) {
@@ -122,7 +122,7 @@ func (h *Handlers) GetTrack(w http.ResponseWriter, r *http.Request) {
 	respond.JSON(w, http.StatusOK, result)
 }
 
-func (h *Handlers) GetTrackLyrics(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) GetTrackLyrics(w http.ResponseWriter, r *http.Request) {
 	trackID := chi.URLParam(r, "trackId")
 	result, err := h.service.GetTrackLyrics(r.Context(), trackID)
 	if errors.Is(err, ErrNotFound) {

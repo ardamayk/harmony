@@ -52,7 +52,7 @@ func TestRecoverCommitAtEveryDurablePhase(t *testing.T) {
 				t.Fatalf("confirm at phase %q error = %v", phase, confirmErr)
 			}
 
-			libraryStore := library.NewStore(database)
+			libraryStore := library.NewRepository(database)
 			trackID := commitTrackID(t, database, job.ID)
 			if _, err := libraryStore.GetTrack(context.Background(), trackID); !errors.Is(err, library.ErrNotFound) {
 				t.Fatalf("pending Track visible at phase %q: %v", phase, err)
@@ -99,7 +99,7 @@ func TestRecoverCommitAtEveryDurablePhase(t *testing.T) {
 				if storedJob.Status != STATUS_COMMITTED {
 					t.Fatalf("job status after completing recovery = %q", storedJob.Status)
 				}
-				track, err := library.NewStore(database).GetTrack(context.Background(), storedJob.TrackID)
+				track, err := library.NewRepository(database).GetTrack(context.Background(), storedJob.TrackID)
 				if err != nil {
 					t.Fatalf("get recovered Track: %v", err)
 				}
@@ -205,7 +205,7 @@ func TestRecoverCorruptPendingCanonicalTrackRollsBackWithReason(t *testing.T) {
 			if storedJob.Status != STATUS_AWAITING_CONFIRMATION {
 				t.Fatalf("rolled-back job status = %q", storedJob.Status)
 			}
-			if _, err := library.NewStore(database).GetTrack(context.Background(), commitTrackID(t, database, job.ID)); !errors.Is(err, library.ErrNotFound) {
+			if _, err := library.NewRepository(database).GetTrack(context.Background(), commitTrackID(t, database, job.ID)); !errors.Is(err, library.ErrNotFound) {
 				t.Fatalf("corrupt pending Track visible after recovery: %v", err)
 			}
 			var recoveredPhase commitPhase
@@ -284,7 +284,7 @@ func TestCleanupRestartCompletesPendingDatabaseCommitWithoutDeletingContent(t *t
 	if err != nil {
 		t.Fatalf("get completed job: %v", err)
 	}
-	track, err := library.NewStore(database).GetTrack(context.Background(), storedJob.TrackID)
+	track, err := library.NewRepository(database).GetTrack(context.Background(), storedJob.TrackID)
 	if err != nil {
 		t.Fatalf("get completed Track: %v", err)
 	}

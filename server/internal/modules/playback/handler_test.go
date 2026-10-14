@@ -21,10 +21,10 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-func setupPlaybackHandlers(t *testing.T) (*Handler, *Service, *library.Store, *sql.DB) {
+func setupPlaybackHandlers(t *testing.T) (*Handler, *Service, *library.Repository, *sql.DB) {
 	t.Helper()
 	db := testutil.OpenMigratedDB(t)
-	libStore := library.NewStore(db)
+	libStore := library.NewRepository(db)
 	libSvc := library.NewService(libStore)
 	pbStore := newTestService(db, libStore)
 	return NewHandler(pbStore, libSvc, NewQueueEventBroker()), pbStore, libStore, db
@@ -352,7 +352,7 @@ func TestTrackHeadRouteChecksExistingAndMissingAudio(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, trackID := testutil.SeedManagedTrack(t, database, testutil.ManagedTrackSpec{FilePath: filePath})
-	tracks := library.NewService(library.NewStore(database))
+	tracks := library.NewService(library.NewRepository(database))
 	router := chi.NewRouter()
 	NewModule(database, tracks).RegisterRoutes(router)
 	server := httptest.NewServer(router)

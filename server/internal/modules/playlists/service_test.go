@@ -33,7 +33,7 @@ func (f fakeTrackAccess) GetTrackFilePath(_ context.Context, trackID string) (st
 func setupPlaylistService(t *testing.T) (*Service, *sql.DB) {
 	t.Helper()
 	db := testutil.OpenMigratedDB(t)
-	return NewService(NewRepository(db), library.NewStore(db)), db
+	return NewService(NewRepository(db), library.NewRepository(db)), db
 }
 
 func setupPlaylistServiceWithTrackAccess(t *testing.T, tracks map[string]library.Track) *Service {

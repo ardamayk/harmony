@@ -13,11 +13,11 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-func setupHandlerFixture(t *testing.T) (*Handlers, *sql.DB) {
+func setupHandlerFixture(t *testing.T) (*Handler, *sql.DB) {
 	t.Helper()
 	db := openMemoryDB(t)
-	store := NewStore(db)
-	return NewHandlers(NewService(store)), db
+	store := NewRepository(db)
+	return NewHandler(NewService(store)), db
 }
 
 func seedTrack(t *testing.T, db *sql.DB) (albumID, trackID string) {

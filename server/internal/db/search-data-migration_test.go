@@ -35,7 +35,7 @@ func TestSearchDataUpgradeBackfillsExistingLibrary(t *testing.T) {
 	if document.Fields[0].Text.Folded != "dont stop live" {
 		t.Fatalf("backfilled title: %+v", document)
 	}
-	track, err := library.NewStore(database).GetTrack(context.Background(), trackID)
+	track, err := library.NewRepository(database).GetTrack(context.Background(), trackID)
 	if err != nil {
 		t.Fatal(err)
 	}

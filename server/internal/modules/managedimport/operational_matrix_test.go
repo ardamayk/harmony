@@ -106,7 +106,7 @@ func TestModuleStartRecoversPendingCommitJournalInOneRestartPass(t *testing.T) {
 				t.Fatalf("repeat restart Managed Import module: %v", err)
 			}
 
-			libraryStore := library.NewStore(database)
+			libraryStore := library.NewRepository(database)
 			tracks, err := libraryStore.ListTracks(context.Background(), 100, 0, "", "")
 			if err != nil {
 				t.Fatalf("list Tracks after restart: %v", err)
