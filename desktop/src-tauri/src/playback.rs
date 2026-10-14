@@ -1274,7 +1274,8 @@ impl PlaybackController {
         let Some(next_source) = next_source else {
             return Ok(current);
         };
-        let is_new_source = source.is_some();
+        // mpv goes idle when the last Track ends, so playing again reloads it.
+        let is_new_source = source.is_some() || current.status == PlaybackStatus::Ended;
         let should_fade_in = !is_new_source
             && current.status == PlaybackStatus::Paused
             && self.transition_fade_ms.load(Ordering::Acquire) > 0;
@@ -5838,6 +5839,41 @@ mod tests {
         );
         drop(controller);
         assert!(is_shutdown.load(Ordering::Acquire));
+    }
+
+    #[test]
+    fn play_after_the_queue_ends_reloads_the_finished_track_from_the_start() {
+        let (event_sender, event_receiver) = std::sync::mpsc::channel();
+        let loaded_url = Arc::new(Mutex::new(None));
+        let process = FakeMpvProcess {
+            loaded_url: loaded_url.clone(),
+            is_shutdown: Arc::new(AtomicBool::new(false)),
+            load_error: None,
+        };
+        let controller = PlaybackController::start(Box::new(process), event_receiver, |_| {});
+        let playback_url = "http://127.0.0.1:43129/token/api/v1/tracks/track-1/stream";
+        let source = json!({
+            "type": "track",
+            "track": { "id": "track-1", "title": "Track 1", "durationMs": 120000 },
+            "playbackUrl": playback_url
+        });
+
+        controller.play(Some(source)).expect("play Track");
+        event_sender
+            .send(MpvEvent::Time(119.9))
+            .expect("time event");
+        event_sender.send(MpvEvent::Ended).expect("ended event");
+        wait_for_state(&controller, |state| state.status == PlaybackStatus::Ended);
+        // mpv is idle once the last Track ends; unpausing alone plays nothing.
+        *loaded_url.lock().expect("loaded URL") = None;
+        let replayed = controller.play(None).expect("play the ended Track again");
+
+        assert_eq!(
+            loaded_url.lock().expect("loaded URL").as_deref(),
+            Some(playback_url)
+        );
+        assert_eq!(replayed.status, PlaybackStatus::Playing);
+        assert_eq!(replayed.current_time, 0.0);
     }
 
     #[test]
