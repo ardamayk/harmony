@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vp dev",
-    "build": "vp build",
-    "preview": "vp preview"
+    "dev": "bun --bun vp dev",
+    "build": "bun --bun vp build",
+    "preview": "bun --bun vp preview"
   },
   "dependencies": {
     "react": "^19.2.0",

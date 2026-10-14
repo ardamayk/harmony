@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-vp staged
+bun --bun vp staged
 
 if ! git diff --cached --quiet -- \
 	packages/contracts/openapi.yaml \

@@ -6,11 +6,11 @@
     "#/*": "./src/*"
   },
   "scripts": {
-    "dev": "vp dev --port 3000",
-    "build": "vp build",
-    "preview": "vp preview",
+    "dev": "bun --bun vp dev --port 3000",
+    "build": "bun --bun vp build",
+    "preview": "bun --bun vp preview",
     "generate-routes": "tsr generate",
-    "test": "vp test",
+    "test": "bun --bun vp test",
     "test:e2e": "playwright test && playwright test --config playwright.production.config.ts",
     "test:integration": "playwright test e2e/radio-hls-proxy.spec.ts --config=playwright.hls.config.ts",
     "typecheck": "tsc --noEmit"

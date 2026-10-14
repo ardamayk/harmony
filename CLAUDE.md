@@ -12,7 +12,7 @@ packages/docs                     ← MDX product docs → /docs
 server/migrations                 ← goose migrations; also the sqlc schema
 ```
 
-Run everything through `mise run <task>` (`mise tasks` lists them). TypeScript tooling is bun + Vite+ (`vp check`, `vp test`); see ADR 0023.
+Run everything through `mise run <task>` (`mise tasks` lists them). TypeScript tooling is bun + Vite+; run Vite+ on the Bun runtime as `bun --bun vp …` (`bun --bun vp check`, `bun --bun vp test`), never bare `vp`, which runs on Node; see ADR 0023.
 
 ## Music Server modules
 

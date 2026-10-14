@@ -69,7 +69,11 @@ run = "bun run --cwd desktop build:sidecar:prepared"
 
 [tasks.format]
 description = "Format TypeScript, Go, and Rust sources"
-run = ["vp fmt", "cd server && go fmt ./...", "bun run --cwd desktop format"]
+run = [
+	"bun --bun vp fmt",
+	"cd server && go fmt ./...",
+	"bun run --cwd desktop format",
+]
 
 [tasks.check]
 description = "Format, lint, and type-check every language"
@@ -77,7 +81,7 @@ depends = ["web:check", "server:check", "desktop:check"]
 
 [tasks."web:check"]
 description = "Oxfmt, Oxlint, and type checks for the TypeScript workspace"
-run = "vp check"
+run = "bun --bun vp check"
 
 [tasks."server:check"]
 description = "gofmt and golangci-lint for the Music Server"
@@ -102,7 +106,7 @@ depends = ["web:test", "server:test", "desktop:test"]
 
 [tasks."web:test"]
 description = "Run Web Client, shared UI, and API client unit tests"
-run = "vp run --filter web --filter @repo/ui --filter @repo/api-client test"
+run = "bun --bun vp run --filter web --filter @repo/ui --filter @repo/api-client test"
 
 [tasks."server:test"]
 description = "Run Music Server tests"

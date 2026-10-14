@@ -7,7 +7,7 @@
     "packages/*"
   ],
   "scripts": {
-    "prepare": "vp config --hooks --no-agent",
+    "prepare": "bun --bun vp config --hooks --no-agent",
     "dev": "mise run dev",
     "build": "mise run build",
     "check": "mise run check",

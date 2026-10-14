@@ -51,7 +51,7 @@ Mise is the canonical interface for development and CI tasks. Run `mise run ci` 
 
 ### Git hooks
 
-`bun install` enables the Vite+ Git hooks. Pre-commit runs `vp staged` on staged TypeScript, JSON, Go, and Rust sources, and OpenAPI drift verification only when generation inputs are staged.
+`bun install` enables the Vite+ Git hooks. Pre-commit runs `bun --bun vp staged` on staged TypeScript, JSON, Go, and Rust sources, and OpenAPI drift verification only when generation inputs are staged.
 
 These hooks provide bypassable local feedback; CI is authoritative. Pass `--no-verify` to `git commit` or `git push` when needed. Hook installation is disabled in CI and production dependency installs. When `graphify-out/` exists, Graphify post-commit and branch-switch updates run if `graphify` is available on `PATH`; otherwise they intentionally do nothing.
 
