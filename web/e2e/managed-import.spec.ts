@@ -304,7 +304,7 @@ test("Tracks plus action imports a mixed valid and invalid batch through preview
 
 	const tracks = await listRunTracks(request);
 	expect(tracks.map((track) => track.title).sort()).toEqual([ALPHA, BETA]);
-	expect(newStagingFiles(stagingBefore)).toEqual([]);
+	await expect.poll(() => newStagingFiles(stagingBefore)).toEqual([]);
 });
 
 test("Import Preview skips identical bytes and separates a conflicting Album edition", async ({

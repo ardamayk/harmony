@@ -9,7 +9,7 @@ export default defineConfig({
 	// HTML report plus traces, screenshots, and retry data (issue #79).
 	retries: process.env.CI ? 1 : 0,
 	// Import journeys inspect the same server staging directory.
-	workers: process.env.CI ? 1 : undefined,
+	workers: 1,
 	reporter: process.env.CI ? [["list"], ["html", { open: "never" }]] : "list",
 	use: {
 		baseURL: process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000",
