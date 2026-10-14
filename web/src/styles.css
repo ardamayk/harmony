@@ -580,31 +580,38 @@ button,
 	background: color-mix(in oklab, var(--header-bg) 84%, transparent 16%);
 }
 
+/* The bars run for as long as a Track plays, so they animate transform only:
+ * animating height relayouts and repaints the page on every display frame.
+ * Scales are relative to each bar's resting height (6px, 10px, 8px). */
 @keyframes queue-equalizer-first {
 	from {
-		height: 4px;
+		transform: scaleY(0.667);
 	}
 	to {
-		height: 14px;
+		transform: scaleY(2.333);
 	}
 }
 
 @keyframes queue-equalizer-second {
 	from {
-		height: 12px;
+		transform: scaleY(1.2);
 	}
 	to {
-		height: 5px;
+		transform: scaleY(0.5);
 	}
 }
 
 @keyframes queue-equalizer-third {
 	from {
-		height: 7px;
+		transform: scaleY(0.875);
 	}
 	to {
-		height: 15px;
+		transform: scaleY(1.875);
 	}
+}
+
+.queue-equalizer > * {
+	transform-origin: bottom;
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -616,5 +623,10 @@ button,
 	}
 	.queue-equalizer[data-playing="true"] > :nth-child(3) {
 		animation: queue-equalizer-third 1s ease-in-out infinite alternate;
+	}
+	/* A closed Queue drawer is only visibility: hidden, which keeps CSS
+	 * animations ticking for the whole listening session. */
+	[data-queue-drawer][data-state="closed"] .queue-equalizer > * {
+		animation: none;
 	}
 }
