@@ -17,12 +17,14 @@ export default defineConfig({
 		screenshot: "only-on-failure",
 	},
 	projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+	// Always start fresh servers on the isolated E2E database and storage: a
+	// running development server would receive the test imports instead.
 	webServer: [
 		{
 			command: "go run ./cmd/server",
 			timeout: 120_000,
 			url: "http://localhost:8090/api/v1/health",
-			reuseExistingServer: !process.env.CI,
+			reuseExistingServer: false,
 			cwd: "../server",
 			// Pass the same isolated path to the server and staging assertions.
 			env: {
@@ -35,7 +37,7 @@ export default defineConfig({
 			command: "bun run dev",
 			timeout: 120_000,
 			url: "http://localhost:3000",
-			reuseExistingServer: !process.env.CI,
+			reuseExistingServer: false,
 		},
 	],
 });
