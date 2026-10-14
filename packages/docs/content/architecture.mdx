@@ -17,6 +17,10 @@ packages/docs/content/*.mdx
 web/src
   -> web/dist
   -> server/internal/staticassets/web
+
+server/migrations (goose) + server/internal/modules/*/queries.sql
+  -> sqlc
+  -> server/internal/modules/*/db
 ```
 
 ## Server modules
@@ -24,10 +28,15 @@ web/src
 Domain routes are registered through `server/internal/modules`.
 
 - `library`: artists, albums, tracks, covers (read-only; the server never scans a folder)
+- `librarysearch`: Library Search ranking over the prepared search data
 - `managedimport`: Managed Import uploads, validation, Import Preview, commit, Permanent Track Deletion, Track Replacement
 - `playback`: queue and range streaming
-- `preferences`: theme and layout preferences
+- `playlists`: playlists and the default Favorites playlist
+- `preferences`: theme, layout, and playback preferences
+- `radio`: saved stations, Radio Browser search, stream proxy
 - `docs`: MDX docs, Swagger UI, OpenAPI YAML
+
+Inside a module, `handler.go` handles HTTP, `service.go` owns the domain rules, and `repository.go` is the only database access, built on sqlc-generated queries in the module's `db` package.
 
 Each module implements:
 
