@@ -1,6 +1,6 @@
 import type { LibrarySearchResult } from "@repo/api-client";
 import { AlbumArt, toast, usePlayback } from "@repo/ui";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import {
 	ArrowDown,
@@ -131,6 +131,9 @@ export function LibrarySearchDialog({
 				? apiClient.searchLibrary(debouncedQuery, true)
 				: apiClient.searchLibrary(debouncedQuery),
 		enabled: canShowResults,
+		// Keep the previous result set rendered while a new query loads so rows
+		// don't unmount and re-slide with every keystroke.
+		placeholderData: keepPreviousData,
 		retry: false,
 	});
 
@@ -258,7 +261,9 @@ export function LibrarySearchDialog({
 
 	const scrollActiveResult = useCallback(() => {
 		const listbox = listboxRef.current;
-		if (!listbox || !activeResult) return;
+		// Only keyboard navigation scrolls: auto-scrolling on every result swap
+		// makes rows slide while the card height animates.
+		if (!listbox || !activeKey || !activeResult) return;
 		const option = document.getElementById(
 			optionId(listboxId, activeResult.key),
 		);
@@ -270,7 +275,7 @@ export function LibrarySearchDialog({
 		} else if (row.bottom > viewport.bottom) {
 			listbox.scrollTop += row.bottom - viewport.bottom;
 		}
-	}, [activeResult, listboxId]);
+	}, [activeKey, activeResult, listboxId]);
 	useEffect(scrollActiveResult, [scrollActiveResult]);
 
 	const onInputKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -319,7 +324,7 @@ export function LibrarySearchDialog({
 					}}
 					onCloseAutoFocus={returnFocus.restore}
 					aria-describedby={undefined}
-					className="library-search-card fixed top-1/2 z-50 flex max-h-[min(85dvh,56rem)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-border bg-popover text-popover-foreground shadow-[0_24px_80px_-20px_var(--player-shadow)] outline-none"
+					className="library-search-card fixed top-[calc(23dvh)] z-50 flex max-h-[min(85dvh,56rem)] -translate-x-1/2 flex-col overflow-hidden rounded-2xl border border-border bg-popover text-popover-foreground shadow-[0_24px_80px_-20px_var(--player-shadow)] outline-none"
 				>
 					<DialogPrimitive.Title className="sr-only">
 						Search your library

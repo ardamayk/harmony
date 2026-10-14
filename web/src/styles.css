@@ -292,16 +292,29 @@ body::after {
   .library-search-card {
     left: var(--library-search-center, 50%);
     width: var(--library-search-width, min(52rem, calc(100vw - 2rem)));
-    transform-origin: center bottom;
+    transform-origin: top center;
   }
   @keyframes library-search-enter {
-    from { opacity: 0; transform: translateY(1rem) scaleY(0.94); }
-    to { opacity: 1; transform: translateY(0) scaleY(1); }
+    from { opacity: 0; transform: translateX(var(--library-search-offset, 0)) translateY(0.75rem) scale(0.98); }
+    to { opacity: 1; transform: translateX(var(--library-search-offset, 0)) translateY(0) scale(1); }
   }
   @media (prefers-reduced-motion: no-preference) {
     .library-search-card[data-state='open'] {
       animation: library-search-enter 220ms cubic-bezier(0.22, 0.8, 0.24, 1);
+      /* ponytail: JS height measurement exists only to drive this transition; drop
+         both once `interpolate-size: allow-keywords` is supported everywhere. */
       transition: height 220ms cubic-bezier(0.22, 0.8, 0.24, 1);
+    }
+    /* Height growth animates the card shell only; content inside stays pinned
+       (no text re-sliding) and the results viewport never shows a scrollbar
+       mid-animation. `overflow-anchor: none` stops Chrome's scroll anchoring
+       from nudging the rows while the viewport height animates. */
+    .library-search-card :where([role='listbox']) {
+      scrollbar-width: none;
+      overflow-anchor: none;
+    }
+    .library-search-card :where([role='listbox'])::-webkit-scrollbar {
+      display: none;
     }
   }
 
