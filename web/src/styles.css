@@ -1,587 +1,620 @@
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Manrope:wght@400;500;600;700;800&display=swap');
-@import 'tailwindcss';
+@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Manrope:wght@400;500;600;700;800&display=swap");
+@import "tailwindcss";
 @source '../../packages/ui/src';
 @plugin '@tailwindcss/typography';
 
-@import 'tw-animate-css';
-@import './themes/palettes.css';
-@import './themes/layers.css';
-@import './themes/semantic.css';
+@import "tw-animate-css";
+@import "./themes/palettes.css";
+@import "./themes/layers.css";
+@import "./themes/semantic.css";
 
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --radius: 0.625rem;
-  /* Horizontal inset shared by the Top Nav, page content and Player Bar;
+	--radius: 0.625rem;
+	/* Horizontal inset shared by the Top Nav, page content and Player Bar;
      wide on large screens, ordinary page padding on small ones. Mirrored by
      SHELL_INSET_CLASS in packages/ui/src/layout/shell-metrics.ts. */
-  --shell-inset: clamp(1.5rem, 12vw, 17rem);
+	--shell-inset: clamp(1.5rem, 12vw, 17rem);
 }
 
 html[data-theme-preset] {
-  --foam: color-mix(in srgb, var(--background) 88%, var(--theme-4) 12%);
-  --surface: color-mix(in srgb, var(--card) 78%, var(--theme-3) 22%);
-  --surface-strong: color-mix(in srgb, var(--card) 90%, var(--theme-4) 10%);
-  --line: color-mix(in srgb, var(--border) 88%, transparent);
-  --inset-glint: color-mix(in srgb, var(--heading) 8%, transparent);
-  --header-bg: color-mix(in srgb, var(--background) 86%, var(--theme-3) 14%);
-  --chip-bg: color-mix(in srgb, var(--card) 88%, var(--theme-4) 12%);
-  --chip-line: var(--border);
-  --link-bg-hover: color-mix(in srgb, var(--accent) 65%, transparent);
+	--foam: color-mix(in srgb, var(--background) 88%, var(--theme-4) 12%);
+	--surface: color-mix(in srgb, var(--card) 78%, var(--theme-3) 22%);
+	--surface-strong: color-mix(in srgb, var(--card) 90%, var(--theme-4) 10%);
+	--line: color-mix(in srgb, var(--border) 88%, transparent);
+	--inset-glint: color-mix(in srgb, var(--heading) 8%, transparent);
+	--header-bg: color-mix(in srgb, var(--background) 86%, var(--theme-3) 14%);
+	--chip-bg: color-mix(in srgb, var(--card) 88%, var(--theme-4) 12%);
+	--chip-line: var(--border);
+	--link-bg-hover: color-mix(in srgb, var(--accent) 65%, transparent);
 }
 
 @theme inline {
-  --font-sans: 'Manrope', ui-sans-serif, system-ui, sans-serif;
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-caption: var(--caption);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-destructive: var(--destructive);
-  --color-destructive-foreground: var(--destructive-foreground);
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-ring: var(--ring);
-  --color-chart-1: var(--chart-1);
-  --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-  --color-sidebar: var(--sidebar);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-sidebar-heading: var(--sidebar-heading);
-  --color-heading: var(--heading);
-  --color-queue: var(--queue);
-  --color-queue-foreground: var(--queue-foreground);
-  --color-player: var(--player);
-  --color-player-foreground: var(--player-foreground);
+	--font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
+	--color-background: var(--background);
+	--color-foreground: var(--foreground);
+	--color-card: var(--card);
+	--color-card-foreground: var(--card-foreground);
+	--color-popover: var(--popover);
+	--color-popover-foreground: var(--popover-foreground);
+	--color-primary: var(--primary);
+	--color-primary-foreground: var(--primary-foreground);
+	--color-secondary: var(--secondary);
+	--color-secondary-foreground: var(--secondary-foreground);
+	--color-muted: var(--muted);
+	--color-muted-foreground: var(--muted-foreground);
+	--color-caption: var(--caption);
+	--color-accent: var(--accent);
+	--color-accent-foreground: var(--accent-foreground);
+	--color-destructive: var(--destructive);
+	--color-destructive-foreground: var(--destructive-foreground);
+	--color-border: var(--border);
+	--color-input: var(--input);
+	--color-ring: var(--ring);
+	--color-chart-1: var(--chart-1);
+	--color-chart-2: var(--chart-2);
+	--color-chart-3: var(--chart-3);
+	--color-chart-4: var(--chart-4);
+	--color-chart-5: var(--chart-5);
+	--radius-sm: calc(var(--radius) - 4px);
+	--radius-md: calc(var(--radius) - 2px);
+	--radius-lg: var(--radius);
+	--radius-xl: calc(var(--radius) + 4px);
+	--color-sidebar: var(--sidebar);
+	--color-sidebar-foreground: var(--sidebar-foreground);
+	--color-sidebar-primary: var(--sidebar-primary);
+	--color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+	--color-sidebar-accent: var(--sidebar-accent);
+	--color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+	--color-sidebar-border: var(--sidebar-border);
+	--color-sidebar-ring: var(--sidebar-ring);
+	--color-sidebar-heading: var(--sidebar-heading);
+	--color-heading: var(--heading);
+	--color-queue: var(--queue);
+	--color-queue-foreground: var(--queue-foreground);
+	--color-player: var(--player);
+	--color-player-foreground: var(--player-foreground);
 }
 
 html,
 body,
 #root {
-  height: 100dvh;
-  min-height: 100dvh;
-  width: 100%;
+	height: 100dvh;
+	min-height: 100dvh;
+	width: 100%;
 }
 
 #root {
-  display: flex;
-  flex-direction: column;
+	display: flex;
+	flex-direction: column;
 }
 
 #app {
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
-  height: 100%;
-  min-height: 0;
-  width: 100%;
-  overflow: hidden;
+	display: flex;
+	flex: 1 1 auto;
+	flex-direction: column;
+	height: 100%;
+	min-height: 0;
+	width: 100%;
+	overflow: hidden;
 }
 
 #app > * {
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
-  min-height: 0;
-  min-width: 0;
+	display: flex;
+	flex: 1 1 auto;
+	flex-direction: column;
+	min-height: 0;
+	min-width: 0;
 }
 
 body {
-  margin: 0;
-  font-family: var(--font-sans);
-  overflow: hidden;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+	margin: 0;
+	font-family: var(--font-sans);
+	overflow: hidden;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
 }
 
 body::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: -1;
-  opacity: 0.22;
-  background:
-    radial-gradient(circle at 20% 15%, var(--hero-a), transparent 34%),
-    radial-gradient(circle at 78% 26%, var(--hero-b), transparent 42%),
-    radial-gradient(circle at 42% 82%, color-mix(in srgb, var(--primary) 16%, transparent), transparent 36%);
+	content: "";
+	position: fixed;
+	inset: 0;
+	pointer-events: none;
+	z-index: -1;
+	opacity: 0.22;
+	background:
+		radial-gradient(circle at 20% 15%, var(--hero-a), transparent 34%),
+		radial-gradient(circle at 78% 26%, var(--hero-b), transparent 42%),
+		radial-gradient(
+			circle at 42% 82%,
+			color-mix(in srgb, var(--primary) 16%, transparent),
+			transparent 36%
+		);
 }
 
 body::after {
-  content: '';
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: -1;
-  opacity: 0.1;
-  background-image:
-    linear-gradient(color-mix(in srgb, var(--foreground) 8%, transparent) 1px, transparent 1px),
-    linear-gradient(90deg, color-mix(in srgb, var(--foreground) 6%, transparent) 1px, transparent 1px);
-  background-size: 28px 28px;
-  mask-image: radial-gradient(circle at 50% 30%, black, transparent 78%);
+	content: "";
+	position: fixed;
+	inset: 0;
+	pointer-events: none;
+	z-index: -1;
+	opacity: 0.1;
+	background-image:
+		linear-gradient(
+			color-mix(in srgb, var(--foreground) 8%, transparent) 1px,
+			transparent 1px
+		),
+		linear-gradient(
+			90deg,
+			color-mix(in srgb, var(--foreground) 6%, transparent) 1px,
+			transparent 1px
+		);
+	background-size: 28px 28px;
+	mask-image: radial-gradient(circle at 50% 30%, black, transparent 78%);
 }
 
 @layer utilities {
-  .text-caption {
-    color: var(--caption);
-  }
+	.text-caption {
+		color: var(--caption);
+	}
 }
 
 @layer components {
-  /* Vertical volume slider: a horizontal range rotated -90deg (works in every
+	/* Vertical volume slider: a horizontal range rotated -90deg (works in every
      engine, unlike writing-mode on range inputs), thin track, line-shaped thumb. */
-  .player-volume-slider {
-    -webkit-appearance: none;
-    appearance: none;
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    /* Track length = popover inner height (h-32 minus py-3). */
-    width: 104px;
-    height: 16px;
-    margin: 0;
-    transform: translate(-50%, -50%) rotate(-90deg);
-    background: transparent;
-    cursor: pointer;
-    --_fill: var(--player-control-primary);
-    --_track: color-mix(in srgb, var(--player-foreground) 25%, transparent);
-    --_track-bg: linear-gradient(
-      to right,
-      var(--_fill) 0 var(--volume-level, 100%),
-      var(--_track) var(--volume-level, 100%) 100%
-    );
-  }
-  .player-volume-slider::-webkit-slider-runnable-track {
-    height: 4px;
-    border-radius: 9999px;
-    background: var(--_track-bg);
-  }
-  .player-volume-slider::-moz-range-track {
-    height: 4px;
-    border-radius: 9999px;
-    background: var(--_track-bg);
-  }
-  .player-volume-slider::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 3px;
-    height: 16px;
-    margin-top: -6px;
-    border: 0;
-    border-radius: 9999px;
-    background: var(--player-control-primary);
-  }
-  .player-volume-slider::-moz-range-thumb {
-    width: 3px;
-    height: 16px;
-    border: 0;
-    border-radius: 9999px;
-    background: var(--player-control-primary);
-  }
-  .player-volume-slider:focus-visible {
-    outline: none;
-  }
+	.player-volume-slider {
+		-webkit-appearance: none;
+		appearance: none;
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		/* Track length = popover inner height (h-32 minus py-3). */
+		width: 104px;
+		height: 16px;
+		margin: 0;
+		transform: translate(-50%, -50%) rotate(-90deg);
+		background: transparent;
+		cursor: pointer;
+		--_fill: var(--player-control-primary);
+		--_track: color-mix(in srgb, var(--player-foreground) 25%, transparent);
+		--_track-bg: linear-gradient(
+			to right,
+			var(--_fill) 0 var(--volume-level, 100%),
+			var(--_track) var(--volume-level, 100%) 100%
+		);
+	}
+	.player-volume-slider::-webkit-slider-runnable-track {
+		height: 4px;
+		border-radius: 9999px;
+		background: var(--_track-bg);
+	}
+	.player-volume-slider::-moz-range-track {
+		height: 4px;
+		border-radius: 9999px;
+		background: var(--_track-bg);
+	}
+	.player-volume-slider::-webkit-slider-thumb {
+		-webkit-appearance: none;
+		appearance: none;
+		width: 3px;
+		height: 16px;
+		margin-top: -6px;
+		border: 0;
+		border-radius: 9999px;
+		background: var(--player-control-primary);
+	}
+	.player-volume-slider::-moz-range-thumb {
+		width: 3px;
+		height: 16px;
+		border: 0;
+		border-radius: 9999px;
+		background: var(--player-control-primary);
+	}
+	.player-volume-slider:focus-visible {
+		outline: none;
+	}
 
-  /* Every Player Bar control shares one keyboard focus ring. */
-  [data-player-control]:focus-visible {
-    outline: none;
-    box-shadow: 0 0 0 2px
-      color-mix(in srgb, var(--player-control-primary) 40%, transparent);
-  }
+	/* Every Player Bar control shares one keyboard focus ring. */
+	[data-player-control]:focus-visible {
+		outline: none;
+		box-shadow: 0 0 0 2px
+			color-mix(in srgb, var(--player-control-primary) 40%, transparent);
+	}
 
-  /* Seek bar: thin filled track; the thumb only appears on hover / focus. */
-  .player-seek-slider {
-    -webkit-appearance: none;
-    appearance: none;
-    height: 16px;
-    margin: 0;
-    background: transparent;
-    cursor: pointer;
-    --_fill: var(--player-live-progress);
-    --_track: color-mix(in srgb, var(--player-foreground) 22%, transparent);
-    --_track-bg: linear-gradient(
-      to right,
-      var(--_fill) 0 var(--seek-level, 0%),
-      var(--_track) var(--seek-level, 0%) 100%
-    );
-  }
-  .player-seek-slider:disabled {
-    cursor: default;
-  }
-  .player-seek-slider::-webkit-slider-runnable-track {
-    height: 4px;
-    border-radius: 9999px;
-    background: var(--_track-bg);
-  }
-  .player-seek-slider::-moz-range-track {
-    height: 4px;
-    border-radius: 9999px;
-    background: var(--_track-bg);
-  }
-  .player-seek-slider::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 12px;
-    height: 12px;
-    margin-top: -4px;
-    border: 0;
-    border-radius: 9999px;
-    background: var(--player-live-progress);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--player) 85%, transparent);
-    opacity: 0;
-    transform: scale(0.6);
-    transition: opacity 120ms ease, transform 120ms ease;
-  }
-  .player-seek-slider::-moz-range-thumb {
-    width: 12px;
-    height: 12px;
-    border: 0;
-    border-radius: 9999px;
-    background: var(--player-live-progress);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--player) 85%, transparent);
-    opacity: 0;
-    transform: scale(0.6);
-    transition: opacity 120ms ease, transform 120ms ease;
-  }
-  .player-seek-slider:not(:disabled):hover::-webkit-slider-thumb,
-  .player-seek-slider:not(:disabled):focus-visible::-webkit-slider-thumb,
-  .player-seek-slider:not(:disabled):active::-webkit-slider-thumb {
-    opacity: 1;
-    transform: scale(1);
-  }
-  .player-seek-slider:not(:disabled):hover::-moz-range-thumb,
-  .player-seek-slider:not(:disabled):focus-visible::-moz-range-thumb,
-  .player-seek-slider:not(:disabled):active::-moz-range-thumb {
-    opacity: 1;
-    transform: scale(1);
-  }
-  .player-seek-slider:focus-visible {
-    outline: none;
-  }
-  /* With waveform bars drawn behind it, the track itself stays invisible so
+	/* Seek bar: thin filled track; the thumb only appears on hover / focus. */
+	.player-seek-slider {
+		-webkit-appearance: none;
+		appearance: none;
+		height: 16px;
+		margin: 0;
+		background: transparent;
+		cursor: pointer;
+		--_fill: var(--player-live-progress);
+		--_track: color-mix(in srgb, var(--player-foreground) 22%, transparent);
+		--_track-bg: linear-gradient(
+			to right,
+			var(--_fill) 0 var(--seek-level, 0%),
+			var(--_track) var(--seek-level, 0%) 100%
+		);
+	}
+	.player-seek-slider:disabled {
+		cursor: default;
+	}
+	.player-seek-slider::-webkit-slider-runnable-track {
+		height: 4px;
+		border-radius: 9999px;
+		background: var(--_track-bg);
+	}
+	.player-seek-slider::-moz-range-track {
+		height: 4px;
+		border-radius: 9999px;
+		background: var(--_track-bg);
+	}
+	.player-seek-slider::-webkit-slider-thumb {
+		-webkit-appearance: none;
+		appearance: none;
+		width: 12px;
+		height: 12px;
+		margin-top: -4px;
+		border: 0;
+		border-radius: 9999px;
+		background: var(--player-live-progress);
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--player) 85%, transparent);
+		opacity: 0;
+		transform: scale(0.6);
+		transition:
+			opacity 120ms ease,
+			transform 120ms ease;
+	}
+	.player-seek-slider::-moz-range-thumb {
+		width: 12px;
+		height: 12px;
+		border: 0;
+		border-radius: 9999px;
+		background: var(--player-live-progress);
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--player) 85%, transparent);
+		opacity: 0;
+		transform: scale(0.6);
+		transition:
+			opacity 120ms ease,
+			transform 120ms ease;
+	}
+	.player-seek-slider:not(:disabled):hover::-webkit-slider-thumb,
+	.player-seek-slider:not(:disabled):focus-visible::-webkit-slider-thumb,
+	.player-seek-slider:not(:disabled):active::-webkit-slider-thumb {
+		opacity: 1;
+		transform: scale(1);
+	}
+	.player-seek-slider:not(:disabled):hover::-moz-range-thumb,
+	.player-seek-slider:not(:disabled):focus-visible::-moz-range-thumb,
+	.player-seek-slider:not(:disabled):active::-moz-range-thumb {
+		opacity: 1;
+		transform: scale(1);
+	}
+	.player-seek-slider:focus-visible {
+		outline: none;
+	}
+	/* With waveform bars drawn behind it, the track itself stays invisible so
      the bars carry the played/unplayed colouring. */
-  .player-seek-slider--waveform::-webkit-slider-runnable-track {
-    background: transparent;
-  }
-  .player-seek-slider--waveform::-moz-range-track {
-    background: transparent;
-  }
+	.player-seek-slider--waveform::-webkit-slider-runnable-track {
+		background: transparent;
+	}
+	.player-seek-slider--waveform::-moz-range-track {
+		background: transparent;
+	}
 
-  .library-search-card {
-    left: var(--library-search-center, 50%);
-    width: var(--library-search-width, min(52rem, calc(100vw - 2rem)));
-    transform-origin: top center;
-  }
-  @keyframes library-search-enter {
-    from { opacity: 0; transform: translateX(var(--library-search-offset, 0)) translateY(0.75rem) scale(0.98); }
-    to { opacity: 1; transform: translateX(var(--library-search-offset, 0)) translateY(0) scale(1); }
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    .library-search-card[data-state='open'] {
-      animation: library-search-enter 220ms cubic-bezier(0.22, 0.8, 0.24, 1);
-      /* ponytail: JS height measurement exists only to drive this transition; drop
+	.library-search-card {
+		left: var(--library-search-center, 50%);
+		width: var(--library-search-width, min(52rem, calc(100vw - 2rem)));
+		transform-origin: top center;
+	}
+	@keyframes library-search-enter {
+		from {
+			opacity: 0;
+			transform: translateX(var(--library-search-offset, 0)) translateY(0.75rem)
+				scale(0.98);
+		}
+		to {
+			opacity: 1;
+			transform: translateX(var(--library-search-offset, 0)) translateY(0)
+				scale(1);
+		}
+	}
+	@media (prefers-reduced-motion: no-preference) {
+		.library-search-card[data-state="open"] {
+			animation: library-search-enter 220ms cubic-bezier(0.22, 0.8, 0.24, 1);
+			/* ponytail: JS height measurement exists only to drive this transition; drop
          both once `interpolate-size: allow-keywords` is supported everywhere. */
-      transition: height 220ms cubic-bezier(0.22, 0.8, 0.24, 1);
-    }
-    /* Height growth animates the card shell only; content inside stays pinned
+			transition: height 220ms cubic-bezier(0.22, 0.8, 0.24, 1);
+		}
+		/* Height growth animates the card shell only; content inside stays pinned
        (no text re-sliding) and the results viewport never shows a scrollbar
        mid-animation. `overflow-anchor: none` stops Chrome's scroll anchoring
        from nudging the rows while the viewport height animates. */
-    .library-search-card :where([role='listbox']) {
-      scrollbar-width: none;
-      overflow-anchor: none;
-    }
-    .library-search-card :where([role='listbox'])::-webkit-scrollbar {
-      display: none;
-    }
-  }
+		.library-search-card :where([role="listbox"]) {
+			scrollbar-width: none;
+			overflow-anchor: none;
+		}
+		.library-search-card :where([role="listbox"])::-webkit-scrollbar {
+			display: none;
+		}
+	}
 
-  /* Full-screen Lyrics view rising from the player bar. */
-  @keyframes lyrics-view-enter {
-    from {
-      transform: translate3d(0, 100%, 0);
-      opacity: 0.6;
-    }
-    to {
-      transform: translate3d(0, 0, 0);
-      opacity: 1;
-    }
-  }
-  .lyrics-view-enter {
-    animation: lyrics-view-enter 320ms cubic-bezier(0.22, 0.8, 0.24, 1) both;
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .lyrics-view-enter {
-      animation: none;
-    }
-  }
+	/* Full-screen Lyrics view rising from the player bar. */
+	@keyframes lyrics-view-enter {
+		from {
+			transform: translate3d(0, 100%, 0);
+			opacity: 0.6;
+		}
+		to {
+			transform: translate3d(0, 0, 0);
+			opacity: 1;
+		}
+	}
+	.lyrics-view-enter {
+		animation: lyrics-view-enter 320ms cubic-bezier(0.22, 0.8, 0.24, 1) both;
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.lyrics-view-enter {
+			animation: none;
+		}
+	}
 
-  /* Player Bar track transitions: the new cover fades in over the old one,
+	/* Player Bar track transitions: the new cover fades in over the old one,
      the title slides up, and the play/pause glyph pops. Every animation is
      guarded so reduced-motion users get an instant swap. */
-  @keyframes player-cover-crossfade {
-    from {
-      opacity: 0;
-    }
-    to {
-      opacity: 1;
-    }
-  }
-  @keyframes player-title-slide {
-    from {
-      opacity: 0;
-      transform: translate3d(0, 0.35rem, 0);
-    }
-    to {
-      opacity: 1;
-      transform: translate3d(0, 0, 0);
-    }
-  }
-  @keyframes player-glyph-pop {
-    from {
-      transform: scale(0.6);
-      opacity: 0.4;
-    }
-    to {
-      transform: scale(1);
-      opacity: 1;
-    }
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    .player-cover-enter {
-      animation: player-cover-crossfade 260ms ease-out both;
-    }
-    .player-title-enter {
-      animation: player-title-slide 220ms cubic-bezier(0.22, 0.8, 0.24, 1) both;
-    }
-    .player-glyph-enter {
-      animation: player-glyph-pop 160ms ease-out both;
-    }
-  }
+	@keyframes player-cover-crossfade {
+		from {
+			opacity: 0;
+		}
+		to {
+			opacity: 1;
+		}
+	}
+	@keyframes player-title-slide {
+		from {
+			opacity: 0;
+			transform: translate3d(0, 0.35rem, 0);
+		}
+		to {
+			opacity: 1;
+			transform: translate3d(0, 0, 0);
+		}
+	}
+	@keyframes player-glyph-pop {
+		from {
+			transform: scale(0.6);
+			opacity: 0.4;
+		}
+		to {
+			transform: scale(1);
+			opacity: 1;
+		}
+	}
+	@media (prefers-reduced-motion: no-preference) {
+		.player-cover-enter {
+			animation: player-cover-crossfade 260ms ease-out both;
+		}
+		.player-title-enter {
+			animation: player-title-slide 220ms cubic-bezier(0.22, 0.8, 0.24, 1) both;
+		}
+		.player-glyph-enter {
+			animation: player-glyph-pop 160ms ease-out both;
+		}
+	}
 }
 
 @layer base {
-  a {
-    color: inherit;
-    text-decoration-color: color-mix(in srgb, currentColor 40%, transparent);
-    text-decoration-thickness: 1px;
-    text-underline-offset: 2px;
-    transition: background-color 180ms ease, color 180ms ease, border-color 180ms ease,
-      transform 180ms ease;
-  }
+	a {
+		color: inherit;
+		text-decoration-color: color-mix(in srgb, currentColor 40%, transparent);
+		text-decoration-thickness: 1px;
+		text-underline-offset: 2px;
+		transition:
+			background-color 180ms ease,
+			color 180ms ease,
+			border-color 180ms ease,
+			transform 180ms ease;
+	}
 
-  a:hover {
-    color: var(--heading);
-  }
+	a:hover {
+		color: var(--heading);
+	}
 
-  /* Readable text never uses mid-palette slots (theme-3/4). */
-  p,
-  span,
-  li,
-  td,
-  th,
-  label {
-    color: inherit;
-  }
+	/* Readable text never uses mid-palette slots (theme-3/4). */
+	p,
+	span,
+	li,
+	td,
+	th,
+	label {
+		color: inherit;
+	}
 
-  * {
-    @apply border-border outline-ring/50;
-  }
+	* {
+		@apply border-border outline-ring/50;
+	}
 
-  body {
-    background-color: var(--background);
-    color: var(--foreground);
-    background-image:
-      radial-gradient(900px 500px at -5% -5%, var(--hero-a), transparent 55%),
-      radial-gradient(800px 480px at 105% -5%, var(--hero-b), transparent 55%);
-  }
+	body {
+		background-color: var(--background);
+		color: var(--foreground);
+		background-image:
+			radial-gradient(900px 500px at -5% -5%, var(--hero-a), transparent 55%),
+			radial-gradient(800px 480px at 105% -5%, var(--hero-b), transparent 55%);
+	}
 
-  h1,
-  h2,
-  h3,
-  h4,
-  h5,
-  h6 {
-    color: var(--heading);
-  }
+	h1,
+	h2,
+	h3,
+	h4,
+	h5,
+	h6 {
+		color: var(--heading);
+	}
 }
 
 code {
-  font-size: 0.9em;
-  border: 1px solid var(--line);
-  background: color-mix(in oklab, var(--surface-strong) 82%, white 18%);
-  border-radius: 7px;
-  padding: 2px 7px;
+	font-size: 0.9em;
+	border: 1px solid var(--line);
+	background: color-mix(in oklab, var(--surface-strong) 82%, white 18%);
+	border-radius: 7px;
+	padding: 2px 7px;
 }
 
 pre code {
-  border: 0;
-  background: transparent;
-  padding: 0;
-  border-radius: 0;
-  font-size: inherit;
-  color: inherit;
+	border: 0;
+	background: transparent;
+	padding: 0;
+	border-radius: 0;
+	font-size: inherit;
+	color: inherit;
 }
 
 .prose pre {
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--card);
-  color: var(--card-foreground);
+	border: 1px solid var(--line);
+	border-radius: 12px;
+	background: var(--card);
+	color: var(--card-foreground);
 }
 
 .page-wrap {
-  width: min(1080px, calc(100% - 2rem));
-  margin-inline: auto;
+	width: min(1080px, calc(100% - 2rem));
+	margin-inline: auto;
 }
 
 .display-title {
-  font-family: 'Fraunces', Georgia, serif;
+	font-family: "Fraunces", Georgia, serif;
 }
 
 .island-shell {
-  border: 1px solid var(--line);
-  background: linear-gradient(165deg, var(--surface-strong), var(--surface));
-  box-shadow:
-    0 1px 0 var(--inset-glint) inset,
-    0 22px 44px rgba(30, 90, 72, 0.1),
-    0 6px 18px rgba(23, 58, 64, 0.08);
-  backdrop-filter: blur(4px);
+	border: 1px solid var(--line);
+	background: linear-gradient(165deg, var(--surface-strong), var(--surface));
+	box-shadow:
+		0 1px 0 var(--inset-glint) inset,
+		0 22px 44px rgba(30, 90, 72, 0.1),
+		0 6px 18px rgba(23, 58, 64, 0.08);
+	backdrop-filter: blur(4px);
 }
 
 .feature-card {
-  background: linear-gradient(165deg, color-mix(in oklab, var(--surface-strong) 93%, white 7%), var(--surface));
-  box-shadow:
-    0 1px 0 var(--inset-glint) inset,
-    0 18px 34px rgba(30, 90, 72, 0.1),
-    0 4px 14px rgba(23, 58, 64, 0.06);
+	background: linear-gradient(
+		165deg,
+		color-mix(in oklab, var(--surface-strong) 93%, white 7%),
+		var(--surface)
+	);
+	box-shadow:
+		0 1px 0 var(--inset-glint) inset,
+		0 18px 34px rgba(30, 90, 72, 0.1),
+		0 4px 14px rgba(23, 58, 64, 0.06);
 }
 
 .feature-card:hover {
-  transform: translateY(-2px);
-  border-color: color-mix(in oklab, var(--lagoon-deep) 35%, var(--line));
+	transform: translateY(-2px);
+	border-color: color-mix(in oklab, var(--lagoon-deep) 35%, var(--line));
 }
 
 button,
 .island-shell {
-  transition: background-color 180ms ease, color 180ms ease, border-color 180ms ease,
-    transform 180ms ease;
+	transition:
+		background-color 180ms ease,
+		color 180ms ease,
+		border-color 180ms ease,
+		transform 180ms ease;
 }
 
 .island-kicker {
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  font-weight: 700;
-  font-size: 0.69rem;
-  color: var(--kicker);
+	letter-spacing: 0.16em;
+	text-transform: uppercase;
+	font-weight: 700;
+	font-size: 0.69rem;
+	color: var(--kicker);
 }
 
 .nav-link {
-  position: relative;
-  text-decoration: none;
-  color: var(--sea-ink-soft);
+	position: relative;
+	text-decoration: none;
+	color: var(--sea-ink-soft);
 }
 
 .nav-link::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  bottom: -8px;
-  width: 100%;
-  height: 2px;
-  transform: scaleX(0);
-  transform-origin: left;
-  background: linear-gradient(90deg, var(--primary), var(--accent));
-  transition: transform 170ms ease;
+	content: "";
+	position: absolute;
+	left: 0;
+	bottom: -8px;
+	width: 100%;
+	height: 2px;
+	transform: scaleX(0);
+	transform-origin: left;
+	background: linear-gradient(90deg, var(--primary), var(--accent));
+	transition: transform 170ms ease;
 }
 
 .nav-link:hover,
 .nav-link.is-active {
-  color: var(--sea-ink);
+	color: var(--sea-ink);
 }
 
 .nav-link:hover::after,
 .nav-link.is-active::after {
-  transform: scaleX(1);
+	transform: scaleX(1);
 }
 
 .rise-in {
-  animation: rise-in 700ms cubic-bezier(0.16, 1, 0.3, 1) both;
+	animation: rise-in 700ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 @keyframes rise-in {
-  from {
-    opacity: 0;
-    transform: translateY(12px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+	from {
+		opacity: 0;
+		transform: translateY(12px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
 }
 
 .site-footer {
-  border-top: 1px solid var(--line);
-  background: color-mix(in oklab, var(--header-bg) 84%, transparent 16%);
+	border-top: 1px solid var(--line);
+	background: color-mix(in oklab, var(--header-bg) 84%, transparent 16%);
 }
 
 @keyframes queue-equalizer-first {
-  from {
-    height: 4px;
-  }
-  to {
-    height: 14px;
-  }
+	from {
+		height: 4px;
+	}
+	to {
+		height: 14px;
+	}
 }
 
 @keyframes queue-equalizer-second {
-  from {
-    height: 12px;
-  }
-  to {
-    height: 5px;
-  }
+	from {
+		height: 12px;
+	}
+	to {
+		height: 5px;
+	}
 }
 
 @keyframes queue-equalizer-third {
-  from {
-    height: 7px;
-  }
-  to {
-    height: 15px;
-  }
+	from {
+		height: 7px;
+	}
+	to {
+		height: 15px;
+	}
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .queue-equalizer[data-playing="true"] > :nth-child(1) {
-    animation: queue-equalizer-first 0.9s ease-in-out infinite alternate;
-  }
-  .queue-equalizer[data-playing="true"] > :nth-child(2) {
-    animation: queue-equalizer-second 0.8s ease-in-out infinite alternate;
-  }
-  .queue-equalizer[data-playing="true"] > :nth-child(3) {
-    animation: queue-equalizer-third 1s ease-in-out infinite alternate;
-  }
+	.queue-equalizer[data-playing="true"] > :nth-child(1) {
+		animation: queue-equalizer-first 0.9s ease-in-out infinite alternate;
+	}
+	.queue-equalizer[data-playing="true"] > :nth-child(2) {
+		animation: queue-equalizer-second 0.8s ease-in-out infinite alternate;
+	}
+	.queue-equalizer[data-playing="true"] > :nth-child(3) {
+		animation: queue-equalizer-third 1s ease-in-out infinite alternate;
+	}
 }

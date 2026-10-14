@@ -1,16 +1,16 @@
-FROM node:24.13.1-alpine AS frontend-builder
+FROM oven/bun:1.4.2-alpine AS frontend-builder
 WORKDIR /src
-ENV EARTHLY_STORAGE_MODE=ci
-RUN apk add --no-cache bash
-COPY go.work package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
+RUN apk add --no-cache bash nodejs
+COPY package.json bun.lock vite.config.ts ./
 COPY server ./server
 COPY packages ./packages
 COPY web ./web
+COPY desktop/package.json ./desktop/package.json
 COPY scripts ./scripts
-RUN corepack enable && corepack prepare pnpm@10.12.1 --activate
-RUN pnpm install --frozen-lockfile --ignore-scripts
-RUN pnpm turbo run build --filter=web --filter=@repo/docs \
-    && chmod +x scripts/sync-static.sh && ./scripts/sync-static.sh
+RUN bun install --frozen-lockfile --ignore-scripts
+RUN bun run --cwd web build \
+    && bun run --cwd packages/docs build \
+    && bash scripts/sync-static.sh
 
 FROM golang:1.26.6-alpine AS builder
 WORKDIR /src

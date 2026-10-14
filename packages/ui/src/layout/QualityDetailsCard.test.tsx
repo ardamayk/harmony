@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import type { ProcessingState } from "../playback/processing";
 import type { PlaybackTelemetry } from "../playback/telemetry";
 import { buildQualityDetailRows } from "./QualityDetailsCard";

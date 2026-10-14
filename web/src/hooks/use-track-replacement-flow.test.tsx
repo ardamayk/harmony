@@ -6,7 +6,7 @@ import type {
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { useTrackReplacementFlow } from "./use-track-replacement-flow";
 
 const createTrackReplacement = vi.fn();

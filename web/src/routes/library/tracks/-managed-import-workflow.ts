@@ -152,13 +152,13 @@ export function useManagedImportWorkflow({
 		state.batch?.status === "confirming";
 	const canConfirm = Boolean(
 		state.batch &&
-			state.batch.status !== "confirming" &&
-			!isBusy &&
-			!isCompleted &&
-			state.entries.some(
-				(entry) => entry.state === "accepted" && entry.selected,
-			) &&
-			reviewProblems.length === 0,
+		state.batch.status !== "confirming" &&
+		!isBusy &&
+		!isCompleted &&
+		state.entries.some(
+			(entry) => entry.state === "accepted" && entry.selected,
+		) &&
+		reviewProblems.length === 0,
 	);
 
 	const { updateEntry } = state;
@@ -170,8 +170,8 @@ export function useManagedImportWorkflow({
 					entry.key === key
 						? { ...entry, selected, hasSelectionOverride: true }
 						: selected &&
-								chosen &&
-								importPositionKey(entry) === importPositionKey(chosen)
+							  chosen &&
+							  importPositionKey(entry) === importPositionKey(chosen)
 							? { ...entry, selected: false, hasSelectionOverride: true }
 							: entry,
 				);

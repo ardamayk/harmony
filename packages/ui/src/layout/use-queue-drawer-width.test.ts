@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import {
 	calculateLibrarySearchBounds,
 	calculateQueueDrawerWidth,
@@ -47,18 +47,17 @@ describe("calculateQueueDrawerWidth", () => {
 		{ shellWidth: 1134, columns: 3, panelWidth: 288 },
 		{ shellWidth: 1133, columns: 2, panelWidth: 549 },
 		{ shellWidth: 1024, columns: 2, panelWidth: 440 },
-	])("fits $columns columns without overlap at shell width $shellWidth", ({
-		shellWidth,
-		columns,
-		panelWidth,
-	}) => {
-		const width = calculateQueueDrawerWidth(shellWidth, 24, 16);
-		expect(width).toBe(panelWidth);
-		expect(width).toBeGreaterThanOrEqual(288);
-		const cardsRight = 24 + columns * 250 + (columns - 1) * 12;
-		const drawerLeft = shellWidth - 24 - width;
-		expect(drawerLeft - cardsRight).toBe(24);
-	});
+	])(
+		"fits $columns columns without overlap at shell width $shellWidth",
+		({ shellWidth, columns, panelWidth }) => {
+			const width = calculateQueueDrawerWidth(shellWidth, 24, 16);
+			expect(width).toBe(panelWidth);
+			expect(width).toBeGreaterThanOrEqual(288);
+			const cardsRight = 24 + columns * 250 + (columns - 1) * 12;
+			const drawerLeft = shellWidth - 24 - width;
+			expect(drawerLeft - cardsRight).toBe(24);
+		},
+	);
 
 	it.each([
 		{ shellWidth: 1023, expected: 288 },
@@ -66,12 +65,12 @@ describe("calculateQueueDrawerWidth", () => {
 		{ shellWidth: 320, expected: 272 },
 		{ shellWidth: 48, expected: 0 },
 		{ shellWidth: 40, expected: 0 },
-	])("caps the narrow fallback to available space at $shellWidth", ({
-		shellWidth,
-		expected,
-	}) => {
-		expect(calculateQueueDrawerWidth(shellWidth, 24, 16)).toBe(expected);
-	});
+	])(
+		"caps the narrow fallback to available space at $shellWidth",
+		({ shellWidth, expected }) => {
+			expect(calculateQueueDrawerWidth(shellWidth, 24, 16)).toBe(expected);
+		},
+	);
 
 	it("respects rem-based card gaps, minimum width and margins with a larger root font", () => {
 		const panelWidth = calculateQueueDrawerWidth(2150, 24, 20);

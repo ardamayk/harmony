@@ -15,7 +15,14 @@ import {
 	waitFor,
 } from "@testing-library/react";
 import { useState } from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+	afterEach,
+	beforeEach,
+	describe,
+	expect,
+	it,
+	vi,
+} from "vite-plus/test";
 import { ImportSessionProvider } from "#/components/import-session-provider";
 import { TracksPage } from "./-tracks-page";
 import { Route } from "./index";

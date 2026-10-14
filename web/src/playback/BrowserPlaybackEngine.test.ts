@@ -1,5 +1,12 @@
 import { playbackEngineContract, trackSource } from "@repo/ui/playback/testing";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+	afterEach,
+	beforeEach,
+	describe,
+	expect,
+	it,
+	vi,
+} from "vite-plus/test";
 import {
 	BrowserPlaybackEngine,
 	type BrowserPlaybackMedia,
@@ -144,38 +151,37 @@ describe("BrowserPlaybackEngine", () => {
 		vi.unstubAllGlobals();
 	});
 
-	it.each([
-		"off",
-		"once",
-		"loop",
-	] as const)("consumes stop-after-current without queue advancement or repetition in %s repeat mode", async (repeatMode) => {
-		const engine = new BrowserPlaybackEngine({ createMedia: () => media });
-		await engine.play(trackSource);
-		while (engine.getState().repeatMode !== repeatMode) {
-			engine.cycleRepeatMode();
-		}
-		engine.setStopAfterCurrent(true);
-		const listener = vi.fn();
-		engine.subscribe(listener);
-		media.currentTime = 120;
-		media.dispatchEvent(new Event("timeupdate"));
-		listener.mockClear();
-		media.paused = true;
+	it.each(["off", "once", "loop"] as const)(
+		"consumes stop-after-current without queue advancement or repetition in %s repeat mode",
+		async (repeatMode) => {
+			const engine = new BrowserPlaybackEngine({ createMedia: () => media });
+			await engine.play(trackSource);
+			while (engine.getState().repeatMode !== repeatMode) {
+				engine.cycleRepeatMode();
+			}
+			engine.setStopAfterCurrent(true);
+			const listener = vi.fn();
+			engine.subscribe(listener);
+			media.currentTime = 120;
+			media.dispatchEvent(new Event("timeupdate"));
+			listener.mockClear();
+			media.paused = true;
 
-		media.dispatchEvent(new Event("ended"));
+			media.dispatchEvent(new Event("ended"));
 
-		expect(listener).toHaveBeenCalledExactlyOnceWith(
-			expect.objectContaining({
-				status: "paused",
-				stopAfterCurrent: false,
-				source: trackSource,
-				currentTime: 120,
-				repeatMode,
-			}),
-		);
-		expect(media.play).toHaveBeenCalledOnce();
-		engine.destroy();
-	});
+			expect(listener).toHaveBeenCalledExactlyOnceWith(
+				expect.objectContaining({
+					status: "paused",
+					stopAfterCurrent: false,
+					source: trackSource,
+					currentTime: 120,
+					repeatMode,
+				}),
+			);
+			expect(media.play).toHaveBeenCalledOnce();
+			engine.destroy();
+		},
+	);
 
 	it("publishes the buffered range end on progress events", async () => {
 		const engine = new BrowserPlaybackEngine({ createMedia: () => media });

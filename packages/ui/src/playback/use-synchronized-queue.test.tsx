@@ -5,7 +5,7 @@ import {
 	type QueueItemSource,
 } from "@repo/api-client";
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vite-plus/test";
 import {
 	type PlaybackQueueApi,
 	useSynchronizedQueue,
@@ -56,52 +56,54 @@ const latestQueue: Queue = {
 };
 
 describe("useSynchronizedQueue", () => {
-	it.each([
-		"append",
-		"replace",
-	] as const)("preserves source across a revision conflict on %s", async (operation) => {
-		const api = createQueueApi();
-		const source: QueueItemSource = {
-			kind: "album",
-			albumId: "album-1",
-			albumTitle: "Album",
-			artistName: "Artist",
-		};
-		vi.mocked(api.getQueue)
-			.mockResolvedValueOnce(firstQueue)
-			.mockResolvedValueOnce({ ...firstQueue, revision: "fresh" });
-		const mutate =
-			operation === "append" ? api.appendQueueItem : api.replaceQueue;
-		vi.mocked(mutate)
-			.mockRejectedValueOnce(
-				new ApiError(409, {
-					error: "Queue changed",
-					code: "queue_revision_conflict",
-					message: "Queue changed",
-				}),
-			)
-			.mockResolvedValueOnce(latestQueue);
-		const { result } = renderHook(() => useSynchronizedQueue(api));
-		await waitFor(() => expect(result.current.queue).toEqual(firstQueue.items));
-		await act(async () => {
-			if (operation === "append")
-				await result.current.appendQueueItem("track-2", source);
-			else
-				await result.current.replaceQueue(["track-2"], {
-					retryOnConflict: true,
-					source,
-				});
-		});
-		const tracks = operation === "append" ? "track-2" : ["track-2"];
-		expect(mutate).toHaveBeenNthCalledWith(
-			1,
-			tracks,
-			firstQueue.revision,
-			source,
-		);
-		expect(mutate).toHaveBeenNthCalledWith(2, tracks, "fresh", source);
-		expect(result.current.queue).toEqual(latestQueue.items);
-	});
+	it.each(["append", "replace"] as const)(
+		"preserves source across a revision conflict on %s",
+		async (operation) => {
+			const api = createQueueApi();
+			const source: QueueItemSource = {
+				kind: "album",
+				albumId: "album-1",
+				albumTitle: "Album",
+				artistName: "Artist",
+			};
+			vi.mocked(api.getQueue)
+				.mockResolvedValueOnce(firstQueue)
+				.mockResolvedValueOnce({ ...firstQueue, revision: "fresh" });
+			const mutate =
+				operation === "append" ? api.appendQueueItem : api.replaceQueue;
+			vi.mocked(mutate)
+				.mockRejectedValueOnce(
+					new ApiError(409, {
+						error: "Queue changed",
+						code: "queue_revision_conflict",
+						message: "Queue changed",
+					}),
+				)
+				.mockResolvedValueOnce(latestQueue);
+			const { result } = renderHook(() => useSynchronizedQueue(api));
+			await waitFor(() =>
+				expect(result.current.queue).toEqual(firstQueue.items),
+			);
+			await act(async () => {
+				if (operation === "append")
+					await result.current.appendQueueItem("track-2", source);
+				else
+					await result.current.replaceQueue(["track-2"], {
+						retryOnConflict: true,
+						source,
+					});
+			});
+			const tracks = operation === "append" ? "track-2" : ["track-2"];
+			expect(mutate).toHaveBeenNthCalledWith(
+				1,
+				tracks,
+				firstQueue.revision,
+				source,
+			);
+			expect(mutate).toHaveBeenNthCalledWith(2, tracks, "fresh", source);
+			expect(result.current.queue).toEqual(latestQueue.items);
+		},
+	);
 
 	it("refetches after revision gaps and ignores duplicate or older events", async () => {
 		let notifyQueueEvent: ((event: QueueEvent) => void) | undefined;

@@ -2,7 +2,7 @@ import type { PlaybackSessionState, PlaybackSource } from "@repo/ui";
 import { DEFAULT_PLAYBACK_SESSION_STATE } from "@repo/ui";
 import { render, screen } from "@testing-library/react";
 import { createElement, StrictMode, useEffect, useState } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { DesktopPlaybackEngine } from "./DesktopPlaybackEngine";
 import {
 	disposeSharedPlaybackEngine,

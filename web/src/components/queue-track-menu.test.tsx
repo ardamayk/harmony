@@ -7,7 +7,14 @@ import {
 	screen,
 	waitFor,
 } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+	afterEach,
+	beforeEach,
+	describe,
+	expect,
+	it,
+	vi,
+} from "vite-plus/test";
 import { QueueTrackMenu } from "./queue-track-menu";
 
 const mocks = vi.hoisted(() => ({
@@ -117,47 +124,46 @@ describe("QueueTrackMenu", () => {
 		expect(mocks.playRow).not.toHaveBeenCalled();
 	});
 
-	it.each([
-		"pointer",
-		"F10",
-		"ContextMenu",
-	])("opens the row context menu via %s and removes the queue item", async (method) => {
-		renderMenu();
-		const row = document.querySelector("li");
-		if (!row) throw new Error("Missing queue row");
-		row.focus();
-		if (method === "pointer") fireEvent.contextMenu(row);
-		else fireEvent.keyDown(row, { key: method, shiftKey: method === "F10" });
-		fireEvent.click(
-			await screen.findByRole("menuitem", { name: "Remove from queue" }),
-		);
-		expect(mocks.removeFromQueue).toHaveBeenCalledWith("queue-second-copy");
-		expect(mocks.playRow).not.toHaveBeenCalled();
-	});
-
-	it.each([
-		"pointer",
-		" ",
-	])("opens the visible trigger via %s without playing the row", async (method) => {
-		renderMenu();
-		const trigger = screen.getByRole("button", {
-			name: "Queue actions for Track one",
-		});
-		if (method === "pointer") {
-			fireEvent(
-				trigger,
-				new MouseEvent("pointerdown", { bubbles: true, button: 0 }),
+	it.each(["pointer", "F10", "ContextMenu"])(
+		"opens the row context menu via %s and removes the queue item",
+		async (method) => {
+			renderMenu();
+			const row = document.querySelector("li");
+			if (!row) throw new Error("Missing queue row");
+			row.focus();
+			if (method === "pointer") fireEvent.contextMenu(row);
+			else fireEvent.keyDown(row, { key: method, shiftKey: method === "F10" });
+			fireEvent.click(
+				await screen.findByRole("menuitem", { name: "Remove from queue" }),
 			);
-			fireEvent.click(trigger);
-		} else {
-			trigger.focus();
-			fireEvent.keyDown(trigger, { key: method });
-		}
-		expect(
-			await screen.findByRole("menuitem", { name: "Play next" }),
-		).toBeTruthy();
-		expect(mocks.playRow).not.toHaveBeenCalled();
-	});
+			expect(mocks.removeFromQueue).toHaveBeenCalledWith("queue-second-copy");
+			expect(mocks.playRow).not.toHaveBeenCalled();
+		},
+	);
+
+	it.each(["pointer", " "])(
+		"opens the visible trigger via %s without playing the row",
+		async (method) => {
+			renderMenu();
+			const trigger = screen.getByRole("button", {
+				name: "Queue actions for Track one",
+			});
+			if (method === "pointer") {
+				fireEvent(
+					trigger,
+					new MouseEvent("pointerdown", { bubbles: true, button: 0 }),
+				);
+				fireEvent.click(trigger);
+			} else {
+				trigger.focus();
+				fireEvent.keyDown(trigger, { key: method });
+			}
+			expect(
+				await screen.findByRole("menuitem", { name: "Play next" }),
+			).toBeTruthy();
+			expect(mocks.playRow).not.toHaveBeenCalled();
+		},
+	);
 
 	it("adds to a playlist and invalidates host playlist queries", async () => {
 		const queryClient = renderMenu();
@@ -196,42 +202,46 @@ describe("QueueTrackMenu", () => {
 		expect(mocks.playRow).not.toHaveBeenCalled();
 	});
 
-	it.each([
-		"dropdown",
-		"context",
-	])("chooses an exact credit from the %s artist menu", async (mode) => {
-		renderMenu({
-			...item,
-			track: {
-				...item.track,
-				artistName: "Artist one & Guest / Band",
-				artists: [
-					...item.track.artists,
-					{ id: "guest-id", name: "Guest / Band" },
-				],
-			},
-		});
-		if (mode === "dropdown") openDropdown();
-		else
-			fireEvent.contextMenu(screen.getByRole("button", { name: "Track one" }));
-		const trigger = await screen.findByRole("menuitem", {
-			name: "Go to artist",
-		});
-		trigger.focus();
-		fireEvent.keyDown(trigger, { key: "ArrowRight" });
-		expect(mocks.navigate).not.toHaveBeenCalled();
-		expect(
-			await screen.findByRole("menuitem", { name: "Artist one" }),
-		).toBeTruthy();
-		const guest = await screen.findByRole("menuitem", { name: "Guest / Band" });
-		guest.focus();
-		fireEvent.keyDown(guest, { key: "Enter" });
-		expect(mocks.navigate).toHaveBeenCalledWith({
-			to: "/library/tracks",
-			search: { artistId: "guest-id" },
-		});
-		expect(mocks.playRow).not.toHaveBeenCalled();
-	});
+	it.each(["dropdown", "context"])(
+		"chooses an exact credit from the %s artist menu",
+		async (mode) => {
+			renderMenu({
+				...item,
+				track: {
+					...item.track,
+					artistName: "Artist one & Guest / Band",
+					artists: [
+						...item.track.artists,
+						{ id: "guest-id", name: "Guest / Band" },
+					],
+				},
+			});
+			if (mode === "dropdown") openDropdown();
+			else
+				fireEvent.contextMenu(
+					screen.getByRole("button", { name: "Track one" }),
+				);
+			const trigger = await screen.findByRole("menuitem", {
+				name: "Go to artist",
+			});
+			trigger.focus();
+			fireEvent.keyDown(trigger, { key: "ArrowRight" });
+			expect(mocks.navigate).not.toHaveBeenCalled();
+			expect(
+				await screen.findByRole("menuitem", { name: "Artist one" }),
+			).toBeTruthy();
+			const guest = await screen.findByRole("menuitem", {
+				name: "Guest / Band",
+			});
+			guest.focus();
+			fireEvent.keyDown(guest, { key: "Enter" });
+			expect(mocks.navigate).toHaveBeenCalledWith({
+				to: "/library/tracks",
+				search: { artistId: "guest-id" },
+			});
+			expect(mocks.playRow).not.toHaveBeenCalled();
+		},
+	);
 
 	it.each(
 		[
@@ -240,18 +250,19 @@ describe("QueueTrackMenu", () => {
 			[{ id: "", name: "Artist one" }],
 			[{ id: "legacy-artist:Artist one", name: "Artist one" }],
 		].map((artists) => ({ artists })),
-	)("disables artist navigation without real credit IDs ($artists)", async ({
-		artists,
-	}) => {
-		renderMenu({ ...item, track: { ...item.track, artists } } as QueueItem);
-		openDropdown();
-		const action = await screen.findByRole("menuitem", {
-			name: "Go to artist",
-		});
-		expect(action.getAttribute("aria-disabled")).toBe("true");
-		fireEvent.click(action);
-		expect(mocks.navigate).not.toHaveBeenCalled();
-	});
+	)(
+		"disables artist navigation without real credit IDs ($artists)",
+		async ({ artists }) => {
+			renderMenu({ ...item, track: { ...item.track, artists } } as QueueItem);
+			openDropdown();
+			const action = await screen.findByRole("menuitem", {
+				name: "Go to artist",
+			});
+			expect(action.getAttribute("aria-disabled")).toBe("true");
+			fireEvent.click(action);
+			expect(mocks.navigate).not.toHaveBeenCalled();
+		},
+	);
 
 	it("reports action failures", async () => {
 		const error = new Error("queue unavailable");

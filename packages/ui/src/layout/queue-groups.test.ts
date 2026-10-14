@@ -1,5 +1,5 @@
 import type { QueueItem } from "@repo/api-client";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { findCurrentQueueIndex } from "./queue-groups";
 
 const track = {

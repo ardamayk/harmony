@@ -1,15 +1,12 @@
 import mdx from "@mdx-js/rollup";
 import react from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
+import { defineConfig, lazyPlugins } from "vite-plus";
 
 export default defineConfig({
-	cacheDir: process.env.EARTHLY_VITE_CACHE
-		? `${process.env.EARTHLY_VITE_CACHE}/docs`
-		: undefined,
 	base: "/docs/",
-	plugins: [{ enforce: "pre", ...mdx() }, react()],
+	plugins: lazyPlugins(() => [{ enforce: "pre", ...mdx() }, react()]),
 	build: {
-		outDir: process.env.EARTHLY_DOCS_DIST ?? "dist",
+		outDir: "dist",
 		emptyOutDir: true,
 	},
 });

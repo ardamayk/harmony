@@ -3,7 +3,7 @@ import tailwindcss from "@tailwindcss/vite";
 import { devtools } from "@tanstack/devtools-vite";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import viteReact, { reactCompilerPreset } from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
+import { defineConfig, lazyPlugins } from "vite-plus";
 
 const LAZY_HLS_CHUNK_SIZE_WARNING_LIMIT_KB = 550;
 const DEFAULT_API_PROXY_TARGET = "http://localhost:8090";
@@ -19,13 +19,10 @@ const proxyRoutes = {
 };
 
 const config = defineConfig({
-	cacheDir: process.env.EARTHLY_VITE_CACHE
-		? `${process.env.EARTHLY_VITE_CACHE}/web`
-		: undefined,
 	resolve: { tsconfigPaths: true },
 	build: {
 		chunkSizeWarningLimit: LAZY_HLS_CHUNK_SIZE_WARNING_LIMIT_KB,
-		outDir: process.env.EARTHLY_WEB_DIST ?? "dist",
+		outDir: "dist",
 		emptyOutDir: true,
 	},
 	server: {
@@ -33,13 +30,13 @@ const config = defineConfig({
 		proxy: proxyRoutes,
 	},
 	preview: { proxy: proxyRoutes },
-	plugins: [
+	plugins: lazyPlugins(() => [
 		devtools(),
 		tailwindcss(),
 		tanstackRouter({ target: "react", autoCodeSplitting: true }),
 		viteReact(),
 		babel({ presets: [reactCompilerPreset()] }),
-	],
+	]),
 });
 
 export default config;

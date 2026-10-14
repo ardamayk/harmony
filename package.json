@@ -1,47 +1,39 @@
 {
   "name": "navidrome-replacement",
   "private": true,
+  "workspaces": [
+    "desktop",
+    "web",
+    "packages/*"
+  ],
   "scripts": {
-    "build": "mise run build",
-    "desktop:build": "mise run desktop:build",
-    "desktop:dev": "mise run desktop:dev",
+    "prepare": "vp config --hooks --no-agent",
     "dev": "mise run dev",
-    "format": "mise run format",
-    "format:check": "mise run format:check",
-    "lint": "mise run lint",
-    "prepare": "node .husky/install.mjs",
-    "typecheck": "mise run typecheck",
-    "test": "mise run test",
-    "test:unit": "mise run workspace:test",
-    "test:core": "mise run workspace:test ::: server:test",
-    "test:desktop": "mise run desktop:test",
-    "test:e2e": "mise run web:test:e2e",
-    "test:e2e:hls": "mise run server:test:hls",
-    "test:git-hooks": "mise run git-hooks:test",
-    "test:main-workflows": "mise run main-workflows:test",
-    "test:clean-room": "mise run clean-room:test",
-    "test:openapi-generation": "node --test scripts/test-openapi-generation.mjs",
-    "test:workspace-tasks": "node --test scripts/test-workspace-tasks.mjs",
-    "generate": "mise run generate",
-    "generate:check": "mise run generate:check",
+    "build": "mise run build",
     "check": "mise run check",
-    "start": "mise run start"
+    "test": "mise run test",
+    "generate": "mise run generate"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.4.5",
-    "husky": "9.1.7",
-    "lint-staged": "16.2.7",
-    "turbo": "^2.5.4"
+    "vite": "catalog:",
+    "vite-plus": "catalog:"
   },
-  "packageManager": "pnpm@10.12.1",
+  "overrides": {
+    "browserslist": "4.28.8",
+    "nanoid": "3.3.18",
+    "postcss": "8.5.26",
+    "vite": "catalog:"
+  },
   "engines": {
     "node": ">=22"
   },
-  "pnpm": {
-    "overrides": {
-      "browserslist": "4.28.8",
-      "nanoid": "3.3.18",
-      "postcss": "8.5.26"
-    }
-  }
+  "packageManager": "bun@1.4.2",
+  "catalog": {
+    "vite": "npm:@voidzero-dev/vite-plus-core@1.1.0",
+    "vite-plus": "1.1.0"
+  },
+  "trustedDependencies": [
+    "esbuild",
+    "lightningcss"
+  ]
 }

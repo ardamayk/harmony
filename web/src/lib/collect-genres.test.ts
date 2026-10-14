@@ -1,5 +1,5 @@
 import type { Track, TrackList } from "@repo/api-client";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vite-plus/test";
 import { collectGenres, fetchGenreTracks } from "./collect-genres";
 
 function createTrack(index: number, genres = ["Shared"]): Track {
@@ -53,9 +53,10 @@ describe("fetchGenreTracks", () => {
 	});
 
 	it("rejects an incomplete empty page instead of looping or truncating", async () => {
-		const load = vi.fn(
-			async (): Promise<TrackList> => ({ items: [], total: 1 }),
-		);
+		const load = vi.fn(async (): Promise<TrackList> => ({
+			items: [],
+			total: 1,
+		}));
 		await expect(fetchGenreTracks(load)).rejects.toThrow("pagination ended");
 		expect(load).toHaveBeenCalledTimes(1);
 	});

@@ -1,6 +1,6 @@
 import type { Artist } from "@repo/api-client";
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { ArtistGrid } from "./artist-grid";
 
 describe("ArtistGrid", () => {

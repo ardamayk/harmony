@@ -1,5 +1,0 @@
-#!/usr/bin/env bash
-set -euo pipefail
-kind=build
-[[ "${1:-}" != test ]] || kind=go-test
-exec bash "$(dirname -- "${BASH_SOURCE[0]}")/../run-with-storage.sh" "$kind" "${EARTHLY_REAL_GO:?Go tool path is missing; run through Mise}" "$@"

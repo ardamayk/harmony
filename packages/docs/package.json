@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "bash ../../scripts/run-with-storage.sh build vite",
-    "build": "bash ../../scripts/run-with-storage.sh docs-build vite build",
-    "preview": "bash ../../scripts/run-with-storage.sh build vite preview"
+    "dev": "vp dev",
+    "build": "vp build",
+    "preview": "vp preview"
   },
   "dependencies": {
     "react": "^19.2.0",
@@ -19,6 +19,7 @@
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^6.0.1",
     "typescript": "^6.0.2",
-    "vite": "^8.0.0"
+    "vite": "catalog:",
+    "vite-plus": "catalog:"
   }
 }

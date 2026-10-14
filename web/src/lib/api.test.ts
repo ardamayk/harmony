@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 const { desktopFetchMock, listenForQueueEventsMock, unlistenQueueEventsMock } =
 	vi.hoisted(() => ({
@@ -69,6 +69,9 @@ describe("desktop API client", () => {
 function serverHealthResponse(capabilities: string[]) {
 	return new Response(
 		JSON.stringify({ status: "ok", version: "0.1.0", capabilities }),
-		{ status: 200, headers: { "Content-Type": "application/json" } },
+		{
+			status: 200,
+			headers: { "Content-Type": "application/json" },
+		},
 	);
 }

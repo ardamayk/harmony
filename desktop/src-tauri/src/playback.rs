@@ -457,10 +457,7 @@ fn resolve_mpv_binary() -> PathBuf {
             eprintln!("Packaged mpv lookup failed: current executable is unknown: {error}")
         }
     }
-    let development_binary = std::env::var_os("EARTHLY_MPV_DIRECTORY")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("binaries"))
-        .join("mpv");
+    let development_binary = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("binaries/mpv");
     if development_binary.is_file() {
         return development_binary;
     }
@@ -651,11 +648,7 @@ fn create_private_ipc_directory() -> Result<PathBuf, String> {
         .iter()
         .map(|byte| format!("{byte:02x}"))
         .collect::<String>();
-    // Managed test storage can exceed the Unix socket pathname limit.
-    let temporary_directory = std::env::var_os("EARTHLY_TMP_ALIAS")
-        .map(PathBuf::from)
-        .unwrap_or_else(std::env::temp_dir);
-    let path = temporary_directory.join(format!("earthly-audio-mpv-{name}"));
+    let path = std::env::temp_dir().join(format!("earthly-audio-mpv-{name}"));
     fs::create_dir(&path)
         .map_err(|error| format!("Private mpv IPC directory could not be created: {error}"))?;
     fs::set_permissions(&path, fs::Permissions::from_mode(0o700))

@@ -1,7 +1,7 @@
 import type { PlaybackSessionState, PlaybackSource } from "@repo/ui";
 import { DEFAULT_PLAYBACK_SESSION_STATE } from "@repo/ui";
 import { clearMocks, mockIPC } from "@tauri-apps/api/mocks";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { createPlaybackEngine } from "./create-playback-engine";
 import { DesktopPlaybackEngine } from "./DesktopPlaybackEngine";
 

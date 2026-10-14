@@ -1,5 +1,12 @@
 import { act, cleanup, render, screen } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+	afterEach,
+	beforeEach,
+	describe,
+	expect,
+	it,
+	vi,
+} from "vite-plus/test";
 import { clearCoverAccentCache, useCoverAccent } from "./use-cover-accent";
 
 vi.mock("../lib/cover-accent", async (importOriginal) => {

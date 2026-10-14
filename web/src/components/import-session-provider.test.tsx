@@ -6,7 +6,7 @@ import {
 	screen,
 	waitFor,
 } from "@testing-library/react";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vite-plus/test";
 import { ImportSessionProvider } from "./import-session-provider";
 
 vi.mock("@repo/ui", () => ({ clearTrackWaveformCache: vi.fn() }));

@@ -39,9 +39,7 @@ const BETA_REMASTER = `${RUN_ID} Beta Remaster`;
 // Paths must match the webServer env in playwright.config.ts, which the Go
 // server resolves relative to its own working directory (../server).
 const SERVER_DIR = fileURLToPath(new URL("../../server", import.meta.url));
-const MANAGED_STORAGE_DIR =
-	process.env.MANAGED_IMPORT_TEST_STORAGE_PATH ??
-	path.join(SERVER_DIR, "data/e2e-managed");
+const MANAGED_STORAGE_DIR = path.join(SERVER_DIR, "data/e2e-managed");
 const FIXTURE_DIR = path.join(tmpdir(), `managed-import-${RUN_ID}`);
 
 const STREAM_PATTERN = /\/api\/v1\/tracks\/[^/]+\/stream/;
@@ -437,7 +435,9 @@ test("committed Tracks appear in library views and stream bit-for-bit", async ({
 	await page.goto("/library/albums");
 	await expect(
 		page.getByRole("link").filter({ hasText: ALBUM }).first(),
-	).toBeVisible({ timeout: 15_000 });
+	).toBeVisible({
+		timeout: 15_000,
+	});
 
 	await gotoTracks(page);
 	const streamResponse = page.waitForResponse(

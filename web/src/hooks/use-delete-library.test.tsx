@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, renderHook } from "@testing-library/react";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vite-plus/test";
 import { useDeleteAlbum, useDeleteTrack } from "./use-delete-library";
 
 vi.mock("#/lib/api", () => ({
@@ -26,28 +26,28 @@ vi.mock("@tanstack/react-router", () => ({
 }));
 afterEach(cleanup);
 
-it.each([
-	useDeleteTrack,
-	useDeleteAlbum,
-])("invalidates search after deletion even when playback refresh fails (%#)", async (useDelete) => {
-	const client = new QueryClient({
-		defaultOptions: { queries: { retry: false } },
-	});
-	const key = ["library", "search", "deleted"];
-	client.setQueryData(key, { tracks: [] });
-	const { result } = renderHook(() => useDelete(), {
-		wrapper: ({ children }) => (
-			<QueryClientProvider client={client}>{children}</QueryClientProvider>
-		),
-	});
-	await act(async () => {
-		await result.current
-			.mutateAsync({
-				trackId: "deleted",
-				albumId: "album",
-				confirmationToken: "confirmed",
-			})
-			.catch(() => {});
-	});
-	expect(client.getQueryState(key)?.isInvalidated).toBe(true);
-});
+it.each([useDeleteTrack, useDeleteAlbum])(
+	"invalidates search after deletion even when playback refresh fails (%#)",
+	async (useDelete) => {
+		const client = new QueryClient({
+			defaultOptions: { queries: { retry: false } },
+		});
+		const key = ["library", "search", "deleted"];
+		client.setQueryData(key, { tracks: [] });
+		const { result } = renderHook(() => useDelete(), {
+			wrapper: ({ children }) => (
+				<QueryClientProvider client={client}>{children}</QueryClientProvider>
+			),
+		});
+		await act(async () => {
+			await result.current
+				.mutateAsync({
+					trackId: "deleted",
+					albumId: "album",
+					confirmationToken: "confirmed",
+				})
+				.catch(() => {});
+		});
+		expect(client.getQueryState(key)?.isInvalidated).toBe(true);
+	},
+);

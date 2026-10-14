@@ -1,0 +1,114 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 3 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  LINUX_NATIVE_PACKAGES: >-
+    build-essential ffmpeg libayatana-appindicator3-dev libass-dev
+    libavcodec-dev libavfilter-dev libavformat-dev libavutil-dev libplacebo-dev
+    librsvg2-dev libssl-dev libswresample-dev libswscale-dev
+    libwebkit2gtk-4.1-dev libxdo-dev meson ninja-build pkg-config
+
+jobs:
+  web:
+    name: Web (check, unit tests, generated drift)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2
+      - run: bun install --frozen-lockfile
+      - run: mise run web:check
+      - run: mise run web:test
+      - run: mise run generate:check
+
+  server:
+    name: Music Server (check, tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - run: mise run server:check
+      - run: mise run server:test
+
+  desktop:
+    name: Desktop Client (check, tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends $LINUX_NATIVE_PACKAGES
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            desktop/src-tauri/target
+          key: cargo-${{ runner.os }}-${{ hashFiles('desktop/src-tauri/Cargo.lock') }}
+          restore-keys: cargo-${{ runner.os }}-
+      - run: bun install --frozen-lockfile
+      - run: mise run desktop:check
+      - run: mise run desktop:test
+
+  e2e:
+    name: Web E2E
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - run: bun install --frozen-lockfile
+      - run: cd web && bun x playwright install chromium --with-deps
+      - run: mise run web:test:e2e
+      - if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: playwright-report
+          path: web/playwright-report
+          retention-days: 14
+
+  # Slow, network- and hardware-adjacent checks: main, weekly, or on demand.
+  integration:
+    name: Integration (HLS, pinned mpv, import parity, release build)
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    env:
+      EARTHLY_AUDIO_MPV_PATH: ${{ runner.temp }}/earthly-audio-mpv/mpv
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends $LINUX_NATIVE_PACKAGES
+      - id: mpv
+        run: echo "version=$(tr -d '\r\n' < desktop/src-tauri/mpv-version.txt)" >> "$GITHUB_OUTPUT"
+      - id: mpv-cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ runner.temp }}/earthly-audio-mpv
+          key: mpv-${{ runner.os }}-${{ steps.mpv.outputs.version }}-${{ hashFiles('scripts/build-pinned-mpv.sh') }}
+      - if: steps.mpv-cache.outputs.cache-hit != 'true'
+        run: bash scripts/build-pinned-mpv.sh
+      - run: (cd "$RUNNER_TEMP/earthly-audio-mpv" && sha256sum --check mpv.sha256)
+      - run: bun install --frozen-lockfile
+      - run: cd web && bun x playwright install chromium --with-deps
+      - run: mise run server:test:hls
+      - run: mise run desktop:test:mpv
+      - run: mise run desktop:test:import-parity
+      - run: mise run build

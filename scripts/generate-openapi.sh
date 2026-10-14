@@ -38,7 +38,7 @@ if [[ -n "${OPENAPI_TYPESCRIPT_BIN:-}" ]]; then
 		"$CONTRACT_ROOT/openapi.yaml" \
 		-o "$OUTPUT_ROOT/packages/api-client/src/generated/schema.ts"
 else
-	pnpm --dir "$REPOSITORY_ROOT/packages/contracts" exec openapi-typescript \
+	(cd "$REPOSITORY_ROOT/packages/contracts" && bun x openapi-typescript \
 		"$CONTRACT_ROOT/openapi.yaml" \
-		-o "$OUTPUT_ROOT/packages/api-client/src/generated/schema.ts"
+		-o "$OUTPUT_ROOT/packages/api-client/src/generated/schema.ts")
 fi

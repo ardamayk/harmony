@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 const { convertFileSrcMock, invokeMock, listenMock } = vi.hoisted(() => ({
 	convertFileSrcMock: vi.fn(),
@@ -94,7 +94,9 @@ describe("desktop bridge", () => {
 
 		expect(invokeMock).toHaveBeenCalledWith(
 			"desktop_release_import_selections",
-			{ selectionIds: ["opaque-1", "opaque-2"] },
+			{
+				selectionIds: ["opaque-1", "opaque-2"],
+			},
 		);
 	});
 

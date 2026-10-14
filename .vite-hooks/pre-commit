@@ -1,14 +1,12 @@
 #!/bin/sh
 set -eu
 
-pnpm exec lint-staged --config lint-staged.config.mjs
+vp staged
 
 if ! git diff --cached --quiet -- \
 	packages/contracts/openapi.yaml \
 	packages/contracts/oapi-codegen.yaml \
-	packages/contracts/package.json \
 	scripts/generate-openapi.sh \
-	scripts/check-openapi-generation.sh \
-	scripts/check-staged-generation.sh; then
+	scripts/check-openapi-generation.sh; then
 	bash scripts/check-staged-generation.sh
 fi

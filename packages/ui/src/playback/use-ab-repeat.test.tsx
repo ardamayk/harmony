@@ -1,6 +1,6 @@
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { useEffect, useState } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import type { PlaybackSessionState, PlaybackSource } from "./PlaybackEngine";
 import { InMemoryPlaybackEngine } from "./testing/InMemoryPlaybackEngine";
 import { useAbRepeat } from "./use-ab-repeat";

@@ -684,7 +684,7 @@ function isHlsStream(url: string) {
 function canPlayNativeHls(media: BrowserPlaybackMedia) {
 	return Boolean(
 		media.canPlayType("application/vnd.apple.mpegurl") ||
-			media.canPlayType("application/x-mpegurl"),
+		media.canPlayType("application/x-mpegurl"),
 	);
 }
 
