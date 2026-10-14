@@ -1,6 +1,6 @@
 import type { AlbumDetail, AlbumList } from "@repo/api-client";
 import { QueryClient } from "@tanstack/react-query";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vite-plus/test";
 import { invalidateLibraryCache } from "./invalidate-library-cache";
 
 describe("invalidateLibraryCache", () => {

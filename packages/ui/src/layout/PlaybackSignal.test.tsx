@@ -5,7 +5,7 @@ import {
 	screen,
 	within,
 } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { type PlaybackOutputControls, PlaybackSignal } from "./PlaybackSignal";
 
 function createControls(): PlaybackOutputControls {

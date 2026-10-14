@@ -1,4 +1,4 @@
-export const MINI_PLAYER_PATH = "/mini";
+const MINI_PLAYER_PATH = "/mini";
 
 /**
  * The mini player window loads the app at /mini and must render without the

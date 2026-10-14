@@ -6,43 +6,214 @@
 		<link rel="icon" href="data:," />
 		<title>PROTOTYPE — Collection-card polish proposals</title>
 		<style>
-			:root { color: #f7f1ff; background: #11052d; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
-			* { box-sizing: border-box; }
-			body { min-width: 320px; min-height: 100vh; margin: 0; background: radial-gradient(circle at 50% 0, rgb(108 58 174 / 18%), transparent 36%), #11052d; }
-			header { padding: 42px clamp(22px, 6vw, 84px) 28px; border-bottom: 1px solid #73335f; background: rgb(22 6 59 / 82%); }
-			header strong { color: #f1c64a; font-size: 11px; letter-spacing: .12em; }
-			h1 { max-width: 860px; margin: 12px 0 8px; font-family: Georgia, serif; font-size: clamp(30px, 5vw, 54px); line-height: 1; }
-			header p { max-width: 760px; margin: 0; color: #c6b8d8; font-size: 14px; line-height: 1.55; }
-			main { padding: 28px clamp(22px, 6vw, 84px) 64px; }
-			.baseline { max-width: 1100px; margin: 0 0 22px; padding: 13px 15px; border: 1px solid #704d91; border-radius: 9px; color: #d7cbe7; background: #221341; font-size: 12px; }
-			.grid { display: grid; max-width: 1300px; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; }
-			.card { position: relative; min-height: 190px; padding: 20px; overflow: hidden; border: 1px solid #74405f; border-radius: 12px; color: #f8f3ff; background: linear-gradient(145deg, #302151, #20123d); box-shadow: 0 14px 34px rgb(5 0 20 / 18%); transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease; }
-			.card:hover, .card:focus-visible { border-color: #c468a3; outline: none; box-shadow: 0 20px 46px rgb(5 0 20 / 38%); transform: translateY(-2px); }
-			.number { display: flex; width: 32px; height: 32px; align-items: center; justify-content: center; border-radius: 9px; color: #211334; background: #f1c64a; font-weight: 800; }
-			h2 { margin: 18px 0 7px; font-size: 17px; }
-			.card p { margin: 0 0 20px; color: #bfb1d2; font-size: 12px; line-height: 1.5; }
-			.open { position: absolute; right: 18px; bottom: 16px; color: #e2b95a; font-size: 12px; font-weight: 700; }
-			footer { padding: 0 clamp(22px, 6vw, 84px) 34px; color: #9485aa; font-size: 11px; }
+			:root {
+				color: #f7f1ff;
+				background: #11052d;
+				font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+			}
+			* {
+				box-sizing: border-box;
+			}
+			body {
+				min-width: 320px;
+				min-height: 100vh;
+				margin: 0;
+				background:
+					radial-gradient(
+						circle at 50% 0,
+						rgb(108 58 174 / 18%),
+						transparent 36%
+					),
+					#11052d;
+			}
+			header {
+				padding: 42px clamp(22px, 6vw, 84px) 28px;
+				border-bottom: 1px solid #73335f;
+				background: rgb(22 6 59 / 82%);
+			}
+			header strong {
+				color: #f1c64a;
+				font-size: 11px;
+				letter-spacing: 0.12em;
+			}
+			h1 {
+				max-width: 860px;
+				margin: 12px 0 8px;
+				font-family: Georgia, serif;
+				font-size: clamp(30px, 5vw, 54px);
+				line-height: 1;
+			}
+			header p {
+				max-width: 760px;
+				margin: 0;
+				color: #c6b8d8;
+				font-size: 14px;
+				line-height: 1.55;
+			}
+			main {
+				padding: 28px clamp(22px, 6vw, 84px) 64px;
+			}
+			.baseline {
+				max-width: 1100px;
+				margin: 0 0 22px;
+				padding: 13px 15px;
+				border: 1px solid #704d91;
+				border-radius: 9px;
+				color: #d7cbe7;
+				background: #221341;
+				font-size: 12px;
+			}
+			.grid {
+				display: grid;
+				max-width: 1300px;
+				grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+				gap: 14px;
+			}
+			.card {
+				position: relative;
+				min-height: 190px;
+				padding: 20px;
+				overflow: hidden;
+				border: 1px solid #74405f;
+				border-radius: 12px;
+				color: #f8f3ff;
+				background: linear-gradient(145deg, #302151, #20123d);
+				box-shadow: 0 14px 34px rgb(5 0 20 / 18%);
+				transition:
+					transform 180ms ease,
+					border-color 180ms ease,
+					box-shadow 180ms ease;
+			}
+			.card:hover,
+			.card:focus-visible {
+				border-color: #c468a3;
+				outline: none;
+				box-shadow: 0 20px 46px rgb(5 0 20 / 38%);
+				transform: translateY(-2px);
+			}
+			.number {
+				display: flex;
+				width: 32px;
+				height: 32px;
+				align-items: center;
+				justify-content: center;
+				border-radius: 9px;
+				color: #211334;
+				background: #f1c64a;
+				font-weight: 800;
+			}
+			h2 {
+				margin: 18px 0 7px;
+				font-size: 17px;
+			}
+			.card p {
+				margin: 0 0 20px;
+				color: #bfb1d2;
+				font-size: 12px;
+				line-height: 1.5;
+			}
+			.open {
+				position: absolute;
+				right: 18px;
+				bottom: 16px;
+				color: #e2b95a;
+				font-size: 12px;
+				font-weight: 700;
+			}
+			footer {
+				padding: 0 clamp(22px, 6vw, 84px) 34px;
+				color: #9485aa;
+				font-size: 11px;
+			}
 		</style>
 	</head>
 	<body>
 		<header>
 			<strong>PROTOTYPE — THROWAWAY</strong>
 			<h1>Collection-card polish proposals</h1>
-			<p>Seven isolated experiments around the accepted adaptive cover stack. Open each page, switch between Baseline and Proposal, and judge one decision at a time.</p>
+			<p>
+				Seven isolated experiments around the accepted adaptive cover stack.
+				Open each page, switch between Baseline and Proposal, and judge one
+				decision at a time.
+			</p>
 		</header>
 		<main>
-			<div class="baseline">Shared baseline: 1 cover = 100%; 2 = 70/30; 3 = 60/20/20; 4 = 50/20/15/15. Hovered artwork expands across the artwork area.</div>
+			<div class="baseline">
+				Shared baseline: 1 cover = 100%; 2 = 70/30; 3 = 60/20/20; 4 =
+				50/20/15/15. Hovered artwork expands across the artwork area.
+			</div>
 			<div class="grid">
-				<a class="card" href="collection-cover-polish-hover-hierarchy.prototype.html"><span class="number">1</span><h2>Simplified hover hierarchy</h2><p>Make cover expansion the dominant response; reduce card lift, underline, and competing motion.</p><span class="open">Open prototype →</span></a>
-				<a class="card" href="collection-cover-polish-seams.prototype.html"><span class="number">2</span><h2>Refined cover seams</h2><p>Compare quieter dividers, directional depth, and cleaner inner corner treatment.</p><span class="open">Open prototype →</span></a>
-				<a class="card" href="collection-cover-polish-stable-selection.prototype.html"><span class="number">3</span><h2>Stable cover identity</h2><p>Simulate refreshes and compare rotating artwork with deterministic collection identity.</p><span class="open">Open prototype →</span></a>
-				<a class="card" href="collection-cover-polish-motion.prototype.html"><span class="number">4</span><h2>Refined cover motion</h2><p>Try hover intent, premium easing, subtle image treatment, and reduced motion.</p><span class="open">Open prototype →</span></a>
-				<a class="card" href="collection-cover-polish-focus.prototype.html"><span class="number">5</span><h2>Keyboard focus</h2><p>Use Tab and Enter to evaluate focus clarity without making decorative art interactive.</p><span class="open">Open prototype →</span></a>
-				<a class="card" href="collection-cover-polish-typography.prototype.html"><span class="number">6</span><h2>Calmer title hierarchy</h2><p>Compare the current card copy with a tighter scrim and quieter metadata treatment.</p><span class="open">Open prototype →</span></a>
-				<a class="card" href="collection-cover-polish-loading.prototype.html"><span class="number">7</span><h2>Cover loading polish</h2><p>Replay image arrival to compare abrupt rendering with placeholder, fade, and fallback.</p><span class="open">Open prototype →</span></a>
+				<a
+					class="card"
+					href="collection-cover-polish-hover-hierarchy.prototype.html"
+					><span class="number">1</span>
+					<h2>Simplified hover hierarchy</h2>
+					<p>
+						Make cover expansion the dominant response; reduce card lift,
+						underline, and competing motion.
+					</p>
+					<span class="open">Open prototype →</span></a
+				>
+				<a class="card" href="collection-cover-polish-seams.prototype.html"
+					><span class="number">2</span>
+					<h2>Refined cover seams</h2>
+					<p>
+						Compare quieter dividers, directional depth, and cleaner inner
+						corner treatment.
+					</p>
+					<span class="open">Open prototype →</span></a
+				>
+				<a
+					class="card"
+					href="collection-cover-polish-stable-selection.prototype.html"
+					><span class="number">3</span>
+					<h2>Stable cover identity</h2>
+					<p>
+						Simulate refreshes and compare rotating artwork with deterministic
+						collection identity.
+					</p>
+					<span class="open">Open prototype →</span></a
+				>
+				<a class="card" href="collection-cover-polish-motion.prototype.html"
+					><span class="number">4</span>
+					<h2>Refined cover motion</h2>
+					<p>
+						Try hover intent, premium easing, subtle image treatment, and
+						reduced motion.
+					</p>
+					<span class="open">Open prototype →</span></a
+				>
+				<a class="card" href="collection-cover-polish-focus.prototype.html"
+					><span class="number">5</span>
+					<h2>Keyboard focus</h2>
+					<p>
+						Use Tab and Enter to evaluate focus clarity without making
+						decorative art interactive.
+					</p>
+					<span class="open">Open prototype →</span></a
+				>
+				<a class="card" href="collection-cover-polish-typography.prototype.html"
+					><span class="number">6</span>
+					<h2>Calmer title hierarchy</h2>
+					<p>
+						Compare the current card copy with a tighter scrim and quieter
+						metadata treatment.
+					</p>
+					<span class="open">Open prototype →</span></a
+				>
+				<a class="card" href="collection-cover-polish-loading.prototype.html"
+					><span class="number">7</span>
+					<h2>Cover loading polish</h2>
+					<p>
+						Replay image arrival to compare abrupt rendering with placeholder,
+						fade, and fallback.
+					</p>
+					<span class="open">Open prototype →</span></a
+				>
 			</div>
 		</main>
-		<footer>These files are visual decision tools, not production implementation.</footer>
+		<footer>
+			These files are visual decision tools, not production implementation.
+		</footer>
 	</body>
 </html>

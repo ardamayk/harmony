@@ -26,14 +26,14 @@ type replacementState struct {
 }
 
 func (service *Service) CreateReplacementJob(ctx context.Context, trackID string) (Job, error) {
-	if _, err := loadReplacementTarget(ctx, service.store.database, service.storage, trackID); err != nil {
+	if _, err := service.repo.LoadReplacementTarget(ctx, service.storage, trackID); err != nil {
 		return Job{}, err
 	}
-	return service.store.CreateReplacementJob(ctx, trackID)
+	return service.repo.CreateReplacementJob(ctx, trackID)
 }
 
 func (service *Service) buildReplacementState(ctx context.Context, job importJob, inspection library.MediaInspection, stagedPath string) (replacementState, error) {
-	target, err := loadReplacementTarget(ctx, service.store.database, service.storage, job.ReplaceTrackID)
+	target, err := service.repo.LoadReplacementTarget(ctx, service.storage, job.ReplaceTrackID)
 	if err != nil {
 		return replacementState{}, err
 	}
@@ -43,7 +43,7 @@ func (service *Service) buildReplacementState(ctx context.Context, job importJob
 	}
 	metadata := inspection.Metadata
 	albumKey := albumIdentityKey(metadata)
-	identity, err := service.store.ResolveReplacementIdentity(ctx, metadata, albumKey, target.TrackID)
+	identity, err := service.repo.ResolveReplacementIdentity(ctx, metadata, albumKey, target.TrackID)
 	if err != nil {
 		return replacementState{}, err
 	}
@@ -69,7 +69,7 @@ func (service *Service) buildReplacementState(ctx context.Context, job importJob
 }
 
 func (service *Service) validateReplacementPositions(ctx context.Context, jobID string, metadata library.NormalizedMediaMetadata, trackID string) error {
-	occupants, err := service.store.findDuplicatesByPosition(ctx, metadata, trackID)
+	occupants, err := service.repo.findDuplicatesByPosition(ctx, metadata, trackID)
 	if err != nil {
 		return err
 	}
@@ -86,7 +86,7 @@ func (service *Service) replacementLibraryChange(ctx context.Context, target rep
 		ReplacementAlbumID: identity.AlbumID,
 		MovesAlbum:         identity.AlbumID != target.AlbumID,
 	}
-	albumExists, err := service.store.AlbumExists(ctx, albumKey)
+	albumExists, err := service.repo.AlbumExists(ctx, albumKey)
 	if err != nil {
 		return change, err
 	}
@@ -95,13 +95,13 @@ func (service *Service) replacementLibraryChange(ctx context.Context, target rep
 		change.ReplacementAlbumID = ""
 	}
 	change.RemovesEmptyAlbum = change.MovesAlbum && target.IsSoleTrack
-	if change.RemovesEmptyArtists, err = service.store.OrphanedArtistNames(ctx, target, metadata, change.RemovesEmptyAlbum); err != nil {
+	if change.RemovesEmptyArtists, err = service.repo.OrphanedArtistNames(ctx, target, metadata, change.RemovesEmptyAlbum); err != nil {
 		return change, err
 	}
-	if change.CreatesArtists, err = service.store.MissingArtistNames(ctx, append(append([]string{}, metadata.AlbumArtists...), metadata.Artists...)); err != nil {
+	if change.CreatesArtists, err = service.repo.MissingArtistNames(ctx, append(append([]string{}, metadata.AlbumArtists...), metadata.Artists...)); err != nil {
 		return change, err
 	}
-	change.CreatesGenres, err = service.store.MissingGenreNames(ctx, metadata.Genres)
+	change.CreatesGenres, err = service.repo.MissingGenreNames(ctx, metadata.Genres)
 	return change, err
 }
 
@@ -238,14 +238,14 @@ func (service *Service) ConfirmReplacement(ctx context.Context, jobID string, co
 }
 
 func (service *Service) recoveredReplacementJob(ctx context.Context, jobID string) (importJob, error) {
-	job, err := service.store.GetJob(ctx, jobID)
+	job, err := service.repo.GetJob(ctx, jobID)
 	if err != nil {
 		return importJob{}, err
 	}
 	if job.ReplaceTrackID == "" {
 		return importJob{}, ErrNotReplacementJob
 	}
-	journal, hasJournal, err := service.store.FindIncompleteReplacementJournal(ctx, job.ID)
+	journal, hasJournal, err := service.repo.FindIncompleteReplacementJournal(ctx, job.ID)
 	if err != nil {
 		return importJob{}, err
 	}
@@ -255,12 +255,12 @@ func (service *Service) recoveredReplacementJob(ctx context.Context, jobID strin
 	if err := service.recoverReplacement(ctx, journal); err != nil {
 		return importJob{}, err
 	}
-	return service.store.GetJob(ctx, jobID)
+	return service.repo.GetJob(ctx, jobID)
 }
 
 func (service *Service) replayedReplacementResult(ctx context.Context, job importJob) (TrackReplacementResult, error) {
 	result := TrackReplacementResult{JobID: job.ID, Status: job.Status, Revision: job.Revision, TrackID: job.TrackID, DeletedFiles: 1}
-	journal, err := service.store.LatestReplacementJournalForJob(ctx, job.ID)
+	journal, err := service.repo.LatestReplacementJournalForJob(ctx, job.ID)
 	if err != nil {
 		return TrackReplacementResult{}, err
 	}
@@ -279,7 +279,7 @@ func (service *Service) prepareReplacementConfirmation(ctx context.Context, job 
 		reason := "staged file changed after Import Preview"
 		return replacementState{}, &ValidationError{Code: "staged_file_changed", Field: "file", Reason: reason, Err: errors.New(reason)}
 	}
-	exactTrackID, err := service.store.FindExactDuplicateTrackID(ctx, inspection.FileSHA256)
+	exactTrackID, err := service.repo.FindExactDuplicateTrackID(ctx, inspection.FileSHA256)
 	if err != nil {
 		return replacementState{}, err
 	}
@@ -306,12 +306,12 @@ func (service *Service) commitReplacement(ctx context.Context, job importJob, st
 		return TrackReplacementResult{}, err
 	}
 	data := replacementCommitData{Job: job, Target: state.Target, Identity: state.Identity, Placement: placement, Inspection: state.Inspection, AlbumKey: state.AlbumKey}
-	invalidations, commitErr := service.store.CommitReplacement(ctx, data, journal.ID)
+	invalidations, commitErr := service.repo.CommitReplacement(ctx, data, journal.ID)
 	if commitErr == nil && service.commitResultHook != nil {
 		commitErr = service.commitResultHook()
 	}
 	if commitErr != nil {
-		persisted, journalErr := service.store.GetReplacementJournal(context.WithoutCancel(ctx), journal.ID)
+		persisted, journalErr := service.repo.GetReplacementJournal(context.WithoutCancel(ctx), journal.ID)
 		if journalErr != nil {
 			return TrackReplacementResult{}, errors.Join(commitErr, journalErr)
 		}
@@ -342,7 +342,7 @@ func (service *Service) prepareReplacementJournal(ctx context.Context, job impor
 	if previousArtwork != "" {
 		journal.PreviousArtworkSHA256 = state.Target.ArtworkSHA256
 	}
-	if err := service.store.CreateReplacementJournal(ctx, journal); err != nil {
+	if err := service.repo.CreateReplacementJournal(ctx, journal); err != nil {
 		return replacementJournal{}, err
 	}
 	return journal, service.afterReplacementPhase(REPLACEMENT_PHASE_PREPARED)
@@ -350,10 +350,10 @@ func (service *Service) prepareReplacementJournal(ctx context.Context, job impor
 
 func (service *Service) placeAndVerifyReplacement(ctx context.Context, journal replacementJournal, state replacementState) (replacementPlacement, error) {
 	placement, placeErr := service.storage.PlaceReplacement(state.Placement, state.Inspection, state.Identity, func() error {
-		return service.store.MarkReplacementArtworkCreated(ctx, journal.ID)
+		return service.repo.MarkReplacementArtworkCreated(ctx, journal.ID)
 	})
 	if placeErr != nil {
-		journalErr := service.store.RollbackReplacementJournal(context.WithoutCancel(ctx), journal.ID, "pending placement failed")
+		journalErr := service.repo.RollbackReplacementJournal(context.WithoutCancel(ctx), journal.ID, "pending placement failed")
 		return replacementPlacement{}, errors.Join(placeErr, journalErr)
 	}
 	if err := service.advanceReplacementPhase(ctx, journal, placement, REPLACEMENT_PHASE_PREPARED, REPLACEMENT_PHASE_PLACED); err != nil {
@@ -384,7 +384,7 @@ func (service *Service) swapAndStreamReplacement(ctx context.Context, journal re
 // advanceReplacementPhase journals a durable phase and then runs the injected phase hook. A hook failure
 // simulates a crash right after that phase: the journal is left for recovery instead of being rolled back.
 func (service *Service) advanceReplacementPhase(ctx context.Context, journal replacementJournal, placement replacementPlacement, from, to replacementPhase) error {
-	if err := service.store.UpdateReplacementPhase(ctx, journal.ID, from, to); err != nil {
+	if err := service.repo.UpdateReplacementPhase(ctx, journal.ID, from, to); err != nil {
 		return errors.Join(err, service.rollbackReplacementFiles(ctx, journal, placement, "journal update failed"))
 	}
 	return service.afterReplacementPhase(to)
@@ -400,10 +400,10 @@ func (service *Service) afterReplacementPhase(phase replacementPhase) error {
 func (service *Service) rollbackReplacementFiles(ctx context.Context, journal replacementJournal, placement replacementPlacement, reason string) error {
 	recoveryCtx := context.WithoutCancel(ctx)
 	if err := service.storage.RollbackReplacement(placement); err != nil {
-		reasonErr := service.store.RecordReplacementRecoveryReason(recoveryCtx, journal.ID, reason+"; filesystem rollback failed")
+		reasonErr := service.repo.RecordReplacementRecoveryReason(recoveryCtx, journal.ID, reason+"; filesystem rollback failed")
 		return errors.Join(err, reasonErr)
 	}
-	return service.store.RollbackReplacementJournal(recoveryCtx, journal.ID, reason)
+	return service.repo.RollbackReplacementJournal(recoveryCtx, journal.ID, reason)
 }
 
 // completeReplacement runs without the request deadline: the database already made the replacement authoritative,
@@ -412,10 +412,10 @@ func (service *Service) completeReplacement(ctx context.Context, job importJob, 
 	completionCtx := context.WithoutCancel(ctx)
 	deletedFiles, removeErr := service.storage.CompleteReplacementFiles(completionCtx, journal, placement)
 	if removeErr != nil {
-		reasonErr := service.store.RecordReplacementRecoveryReason(completionCtx, journal.ID, "previous file cleanup failed: "+removeErr.Error())
+		reasonErr := service.repo.RecordReplacementRecoveryReason(completionCtx, journal.ID, "previous file cleanup failed: "+removeErr.Error())
 		return TrackReplacementResult{}, errors.Join(removeErr, reasonErr)
 	}
-	result, err := service.store.FinalizeReplacement(completionCtx, job, journal.ID)
+	result, err := service.repo.FinalizeReplacement(completionCtx, job, journal.ID)
 	if err != nil {
 		return TrackReplacementResult{}, err
 	}
@@ -427,7 +427,7 @@ func (service *Service) completeReplacement(ctx context.Context, job importJob, 
 func (service *Service) RecoverPendingTrackReplacements(ctx context.Context) error {
 	managedImportCommitMu.Lock()
 	defer managedImportCommitMu.Unlock()
-	journals, err := service.store.ListIncompleteReplacementJournals(ctx)
+	journals, err := service.repo.ListIncompleteReplacementJournals(ctx)
 	if err != nil {
 		return err
 	}
@@ -443,13 +443,13 @@ func (service *Service) RecoverPendingTrackReplacements(ctx context.Context) err
 func (service *Service) recoverReplacement(ctx context.Context, journal replacementJournal) error {
 	placement, err := service.storage.replacementPlacementFromJournal(journal)
 	if err != nil {
-		return errors.Join(err, service.store.RecordReplacementRecoveryReason(ctx, journal.ID, "unsafe journaled storage path"))
+		return errors.Join(err, service.repo.RecordReplacementRecoveryReason(ctx, journal.ID, "unsafe journaled storage path"))
 	}
 	switch journal.Phase {
 	case REPLACEMENT_PHASE_PREPARED, REPLACEMENT_PHASE_PLACED, REPLACEMENT_PHASE_VERIFIED, REPLACEMENT_PHASE_SWAPPED:
 		return service.rollbackReplacementFiles(ctx, journal, placement, fmt.Sprintf("restart rolled back replacement from %s phase", journal.Phase))
 	case REPLACEMENT_PHASE_DATABASE_COMMITTED:
-		job, err := service.store.GetJob(ctx, journal.JobID)
+		job, err := service.repo.GetJob(ctx, journal.JobID)
 		if err != nil {
 			return err
 		}

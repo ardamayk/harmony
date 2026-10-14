@@ -77,17 +77,6 @@ func mergeGenres(genres ...[]string) []string {
 	return out
 }
 
-func encodeGenres(genres []string) string {
-	if len(genres) == 0 {
-		return "[]"
-	}
-	data, err := json.Marshal(genres)
-	if err != nil {
-		return "[]"
-	}
-	return string(data)
-}
-
 func decodeGenres(raw string) []string {
 	raw = strings.TrimSpace(raw)
 	if raw == "" || raw == "[]" {

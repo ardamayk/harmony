@@ -21,7 +21,7 @@ func NewModule(database *sql.DB, configuration config.Config, inspector library.
 }
 
 func newModule(database *sql.DB, configuration config.Config, inspector library.MediaInspector, capacity storageCapacity, queueEvents ...QueueInvalidationPublisher) *Module {
-	store := NewStore(database)
+	repo := NewRepository(database)
 	fileLimit := configuration.ManagedImportFileLimitBytes
 	if fileLimit <= 0 {
 		fileLimit = config.DEFAULT_MANAGED_IMPORT_FILE_LIMIT_BYTES
@@ -35,7 +35,7 @@ func newModule(database *sql.DB, configuration config.Config, inspector library.
 		FileBytes:    fileLimit,
 		BatchBytes:   batchLimit,
 	}, capacity)
-	service := NewService(store, storage, inspector)
+	service := NewService(repo, storage, inspector)
 	if len(queueEvents) > 0 {
 		service.queueEvents = queueEvents[0]
 	}

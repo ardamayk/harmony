@@ -20,5 +20,5 @@ func (service *Service) HeartbeatBatch(ctx context.Context, batchID string) erro
 	// rechecks eligibility. Liveness never changes the preview revision.
 	managedImportBatchConfirmationMu.Lock()
 	defer managedImportBatchConfirmationMu.Unlock()
-	return service.store.HeartbeatBatch(ctx, batchID)
+	return service.repo.HeartbeatBatch(ctx, batchID)
 }

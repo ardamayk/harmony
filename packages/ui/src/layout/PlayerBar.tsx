@@ -1024,6 +1024,7 @@ function AddToPlaylistMenuItem({
 				<div
 					className="absolute top-0 left-full z-50 ml-1 w-56 rounded-md border border-border bg-popover p-2 text-popover-foreground shadow-lg"
 					role="menu"
+					tabIndex={-1}
 					aria-label="Add to playlist"
 					onMouseEnter={onOpen}
 					onMouseLeave={onClose}

@@ -34,7 +34,7 @@ func seedLibrary(t *testing.T, database *sql.DB) {
 func TestDocumentsReflectStoredNamesAndStructuredCredits(t *testing.T) {
 	database := testutil.OpenMigratedDB(t)
 	seedLibrary(t, database)
-	document, err := searchdata.NewStore(database).GetDocument(context.Background(), "track", "track", "listener")
+	document, err := searchdata.NewRepository(database).GetDocument(context.Background(), "track", "track", "listener")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,11 +54,11 @@ func TestDocumentsReflectStoredNamesAndStructuredCredits(t *testing.T) {
 		t.Fatalf("version: %+v", document)
 	}
 	for _, kind := range []string{"album", "artist", "genre", "playlist"} {
-		if _, readErr := searchdata.NewStore(database).GetDocument(context.Background(), kind, kind, "listener"); readErr != nil {
+		if _, readErr := searchdata.NewRepository(database).GetDocument(context.Background(), kind, kind, "listener"); readErr != nil {
 			t.Fatalf("%s: %v", kind, readErr)
 		}
 	}
-	_, err = searchdata.NewStore(database).GetDocument(context.Background(), "playlist", "playlist", "other")
+	_, err = searchdata.NewRepository(database).GetDocument(context.Background(), "playlist", "playlist", "other")
 	if !errors.Is(err, sql.ErrNoRows) {
 		t.Fatalf("playlist ownership: %v", err)
 	}
@@ -67,7 +67,7 @@ func TestDocumentsReflectStoredNamesAndStructuredCredits(t *testing.T) {
 func TestDocumentsFollowMetadataRelationshipsAndVisibility(t *testing.T) {
 	database := testutil.OpenMigratedDB(t)
 	seedLibrary(t, database)
-	store := searchdata.NewStore(database)
+	store := searchdata.NewRepository(database)
 	ctx := context.Background()
 	execute(t, database, `UPDATE artists SET name = 'Beyonce' WHERE id = 'artist'`)
 	document, err := store.GetDocument(ctx, "track", "track", "listener")
@@ -124,7 +124,7 @@ func TestStoredVersionRecognition(t *testing.T) {
 	for _, testCase := range cases {
 		t.Run(testCase.title, func(t *testing.T) {
 			execute(t, database, `UPDATE tracks SET title = ? WHERE id = 'track'`, testCase.title)
-			document, err := searchdata.NewStore(database).GetDocument(context.Background(), "track", "track", "listener")
+			document, err := searchdata.NewRepository(database).GetDocument(context.Background(), "track", "track", "listener")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -142,7 +142,7 @@ func TestStoredVersionRecognition(t *testing.T) {
 func TestRebuildPreservesSourceDataAndRollsBackOnFailure(t *testing.T) {
 	database := testutil.OpenMigratedDB(t)
 	seedLibrary(t, database)
-	store := searchdata.NewStore(database)
+	store := searchdata.NewRepository(database)
 	ctx := context.Background()
 	before, err := store.GetDocument(ctx, "track", "track", "listener")
 	if err != nil {

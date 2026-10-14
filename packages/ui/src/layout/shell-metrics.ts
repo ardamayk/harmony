@@ -23,7 +23,7 @@ export const PLAYER_BAR_INSET_PX = 16;
 /** Width of the Queue Drawer. */
 export const QUEUE_DRAWER_WIDTH = "var(--queue-drawer-width, 18rem)";
 /** Space between the open Queue Drawer and the content, nav and Player Bar. */
-export const QUEUE_DRAWER_GAP = "1.5rem";
+const QUEUE_DRAWER_GAP = "1.5rem";
 /** Margin between the Top Nav and the Queue Drawer's top edge. */
 const QUEUE_DRAWER_TOP_GAP = "1rem";
 

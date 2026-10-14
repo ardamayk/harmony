@@ -7,7 +7,14 @@ import {
 	screen,
 	within,
 } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+	afterEach,
+	beforeEach,
+	describe,
+	expect,
+	it,
+	vi,
+} from "vite-plus/test";
 import {
 	type PlaybackApi,
 	PlaybackProvider,
@@ -595,62 +602,62 @@ describe("PlayerBar", () => {
 		).toBeNull();
 	});
 
-	it.each([
-		"Up next",
-		"Next",
-	] as const)("advances to the next Queue item using %s", async (control) => {
-		const nextTrack = { ...track, id: "track-2", title: "Track 2" };
-		const twoItemApi: PlaybackApi = {
-			...api,
-			getQueue: vi.fn(async () => ({
-				items: [
-					{ id: "item-1", trackId: track.id, position: 0, track },
-					{
-						id: "item-2",
-						trackId: nextTrack.id,
-						position: 1,
-						track: nextTrack,
-					},
-				],
-				revision: "1",
-			})),
-		};
-		const engine = new InMemoryPlaybackEngine();
-		render(
-			<LayoutProvider initialPreferences={defaultPreferences}>
-				<PlaybackProvider api={twoItemApi} engine={engine}>
-					<PlaybackStarter />
-					<PlayerBar />
-				</PlaybackProvider>
-			</LayoutProvider>,
-		);
-		await act(async () => {});
-		await act(async () => {
-			screen.getByRole("button", { name: "Start track" }).click();
-		});
-
-		expect(screen.queryByTestId("up-next")).toBeNull();
-		const toggleQueue = screen.getByRole("button", {
-			name: "Toggle queue panel",
-		});
-		fireEvent.click(toggleQueue);
-		expect(screen.getByTestId("up-next")).toBeTruthy();
-		fireEvent.click(toggleQueue);
-		expect(screen.queryByTestId("up-next")).toBeNull();
-		fireEvent.click(toggleQueue);
-		const upNext = screen.getByTestId("up-next");
-		expect(upNext.textContent).toContain("Track 2");
-		await act(async () => {
-			fireEvent.click(
-				control === "Up next"
-					? upNext
-					: screen.getByRole("button", { name: "Next" }),
+	it.each(["Up next", "Next"] as const)(
+		"advances to the next Queue item using %s",
+		async (control) => {
+			const nextTrack = { ...track, id: "track-2", title: "Track 2" };
+			const twoItemApi: PlaybackApi = {
+				...api,
+				getQueue: vi.fn(async () => ({
+					items: [
+						{ id: "item-1", trackId: track.id, position: 0, track },
+						{
+							id: "item-2",
+							trackId: nextTrack.id,
+							position: 1,
+							track: nextTrack,
+						},
+					],
+					revision: "1",
+				})),
+			};
+			const engine = new InMemoryPlaybackEngine();
+			render(
+				<LayoutProvider initialPreferences={defaultPreferences}>
+					<PlaybackProvider api={twoItemApi} engine={engine}>
+						<PlaybackStarter />
+						<PlayerBar />
+					</PlaybackProvider>
+				</LayoutProvider>,
 			);
-		});
-		expect(engine.getState().source).toMatchObject({
-			track: { id: "track-2" },
-		});
-	});
+			await act(async () => {});
+			await act(async () => {
+				screen.getByRole("button", { name: "Start track" }).click();
+			});
+
+			expect(screen.queryByTestId("up-next")).toBeNull();
+			const toggleQueue = screen.getByRole("button", {
+				name: "Toggle queue panel",
+			});
+			fireEvent.click(toggleQueue);
+			expect(screen.getByTestId("up-next")).toBeTruthy();
+			fireEvent.click(toggleQueue);
+			expect(screen.queryByTestId("up-next")).toBeNull();
+			fireEvent.click(toggleQueue);
+			const upNext = screen.getByTestId("up-next");
+			expect(upNext.textContent).toContain("Track 2");
+			await act(async () => {
+				fireEvent.click(
+					control === "Up next"
+						? upNext
+						: screen.getByRole("button", { name: "Next" }),
+				);
+			});
+			expect(engine.getState().source).toMatchObject({
+				track: { id: "track-2" },
+			});
+		},
+	);
 
 	it("keeps Space controlling playback after pointer queue toggles", async () => {
 		const { engine } = renderPlayerBar();
@@ -703,52 +710,53 @@ describe("PlayerBar", () => {
 		{ length: 3, currentIndex: 1, badge: "1" },
 		{ length: 2, currentIndex: 1, badge: "0" },
 		{ length: 12, currentIndex: 0, badge: "9+" },
-	])("shows upcoming badge $badge for a duplicate queue track", async ({
-		length,
-		currentIndex,
-		badge,
-	}) => {
-		const items = Array.from({ length }, (_, index) => ({
-			id: `item-${index}`,
-			trackId: track.id,
-			position: index,
-			track,
-		}));
-		const engine = new InMemoryPlaybackEngine();
-		render(
-			<LayoutProvider
-				initialPreferences={{
-					...defaultPreferences,
-					layout: {
-						...defaultPreferences.layout,
-						collapsed: { left: false, right: true },
-					},
-				}}
-			>
-				<PlaybackProvider
-					api={{ ...api, getQueue: async () => ({ items, revision: "1" }) }}
-					engine={engine}
-				>
-					<PlayerBar />
-				</PlaybackProvider>
-			</LayoutProvider>,
-		);
-		await act(async () => {
-			await engine.play({
-				type: "track",
+	])(
+		"shows upcoming badge $badge for a duplicate queue track",
+		async ({ length, currentIndex, badge }) => {
+			const items = Array.from({ length }, (_, index) => ({
+				id: `item-${index}`,
+				trackId: track.id,
+				position: index,
 				track,
-				queueItemId: items[currentIndex].id,
-				playbackUrl: "/stream/track-1",
+			}));
+			const engine = new InMemoryPlaybackEngine();
+			render(
+				<LayoutProvider
+					initialPreferences={{
+						...defaultPreferences,
+						layout: {
+							...defaultPreferences.layout,
+							collapsed: { left: false, right: true },
+						},
+					}}
+				>
+					<PlaybackProvider
+						api={{ ...api, getQueue: async () => ({ items, revision: "1" }) }}
+						engine={engine}
+					>
+						<PlayerBar />
+					</PlaybackProvider>
+				</LayoutProvider>,
+			);
+			await act(async () => {
+				await engine.play({
+					type: "track",
+					track,
+					queueItemId: items[currentIndex].id,
+					playbackUrl: "/stream/track-1",
+				});
 			});
-		});
-		const toggle = screen.getByRole("button", { name: "Toggle queue panel" });
-		expect(toggle.textContent).toBe(badge);
-		expect(toggle.getAttribute("aria-expanded")).toBe("false");
-		fireEvent.click(toggle);
-		expect(toggle.textContent).toBe("");
-		expect(toggle.getAttribute("aria-expanded")).toBe("true");
-		expect(toggle.className).toContain("text-[var(--player-control-primary)]");
-	});
+			const toggle = screen.getByRole("button", { name: "Toggle queue panel" });
+			expect(toggle.textContent).toBe(badge);
+			expect(toggle.getAttribute("aria-expanded")).toBe("false");
+			fireEvent.click(toggle);
+			expect(toggle.textContent).toBe("");
+			expect(toggle.getAttribute("aria-expanded")).toBe("true");
+			expect(toggle.className).toContain(
+				"text-[var(--player-control-primary)]",
+			);
+		},
+	);
 
 	it("opens the Now Playing view from the cover and closes it with Escape", async () => {
 		renderPlayerBar();
@@ -987,23 +995,24 @@ describe("PlayerBar", () => {
 		{ artists: [] },
 		{ artists: [{ id: "", name: "Artist" }] },
 		{ artists: [{ id: "legacy-artist:Artist", name: "Artist" }] },
-	])("disables Go to artist without real credit IDs ($artists)", async ({
-		artists,
-	}) => {
-		const { engine } = renderPlayerBar();
-		await act(async () =>
-			engine.play({
-				type: "track",
-				playbackUrl: "/stream/track-1",
-				track: { ...track, artists } as typeof track,
-			}),
-		);
-		fireEvent.click(screen.getByRole("button", { name: "Track actions" }));
-		const action = screen.getByRole("menuitem", { name: "Go to artist" });
-		expect(action).toHaveProperty("disabled", true);
-		fireEvent.click(action);
-		expect(navigate).not.toHaveBeenCalled();
-	});
+	])(
+		"disables Go to artist without real credit IDs ($artists)",
+		async ({ artists }) => {
+			const { engine } = renderPlayerBar();
+			await act(async () =>
+				engine.play({
+					type: "track",
+					playbackUrl: "/stream/track-1",
+					track: { ...track, artists } as typeof track,
+				}),
+			);
+			fireEvent.click(screen.getByRole("button", { name: "Track actions" }));
+			const action = screen.getByRole("menuitem", { name: "Go to artist" });
+			expect(action).toHaveProperty("disabled", true);
+			fireEvent.click(action);
+			expect(navigate).not.toHaveBeenCalled();
+		},
+	);
 
 	it("opens a hover submenu for add to playlist and toggles membership", async () => {
 		const onPlaylistMutated = vi.fn();
@@ -1109,33 +1118,33 @@ describe("PlayerBar", () => {
 		}
 	});
 
-	it.each([
-		"Album ensemble",
-		"Artist",
-	])("shows separate Artist and Album Artist details (%s)", async (albumArtist) => {
-		const { engine } = renderPlayerBar();
-		await act(async () =>
-			engine.play({
-				type: "track",
-				playbackUrl: "/stream/track-1",
-				track: {
-					...track,
-					albumArtists: [{ id: "album-artist", name: albumArtist }],
-				},
-			}),
-		);
-		fireEvent.click(screen.getByRole("button", { name: "Track actions" }));
-		fireEvent.click(screen.getByRole("menuitem", { name: "Details" }));
-		const dialog = within(screen.getByRole("dialog", { name: "Track 1" }));
-		expect(dialog.getByText("Album Artist").parentElement?.textContent).toBe(
-			`Album Artist${albumArtist}`,
-		);
-		expect(
-			dialog
-				.getAllByText("Artist")
-				.some((node) => node.parentElement?.textContent === "ArtistArtist"),
-		).toBe(true);
-	});
+	it.each(["Album ensemble", "Artist"])(
+		"shows separate Artist and Album Artist details (%s)",
+		async (albumArtist) => {
+			const { engine } = renderPlayerBar();
+			await act(async () =>
+				engine.play({
+					type: "track",
+					playbackUrl: "/stream/track-1",
+					track: {
+						...track,
+						albumArtists: [{ id: "album-artist", name: albumArtist }],
+					},
+				}),
+			);
+			fireEvent.click(screen.getByRole("button", { name: "Track actions" }));
+			fireEvent.click(screen.getByRole("menuitem", { name: "Details" }));
+			const dialog = within(screen.getByRole("dialog", { name: "Track 1" }));
+			expect(dialog.getByText("Album Artist").parentElement?.textContent).toBe(
+				`Album Artist${albumArtist}`,
+			);
+			expect(
+				dialog
+					.getAllByText("Artist")
+					.some((node) => node.parentElement?.textContent === "ArtistArtist"),
+			).toBe(true);
+		},
+	);
 
 	it("opens a track info modal from the actions menu", async () => {
 		renderPlayerBar();

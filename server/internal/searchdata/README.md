@@ -4,7 +4,7 @@ This package implements the normalized-data spec. It prepares data for the
 matching/ranking module; it does not add a Library Search HTTP endpoint or change
 existing browse filters.
 
-`PrepareQuery` prepares one incoming query. `Store.GetDocument` exposes prepared
+`PrepareQuery` prepares one incoming query. `Repository.GetDocument` exposes prepared
 primary and related fields with stable identities and ordered credits. Playlist
 reads require the owning user ID. Hidden/pending Tracks and their otherwise
 unreferenced Albums, Artists, and Genres are excluded. Track-only Artists remain

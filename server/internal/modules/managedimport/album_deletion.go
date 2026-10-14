@@ -3,10 +3,8 @@ package managedimport
 import (
 	"context"
 	"crypto/sha256"
-	"database/sql"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 )
 
@@ -58,7 +56,7 @@ type albumDeletionState struct {
 }
 
 func (service *Service) PreviewAlbumDeletion(ctx context.Context, albumID string) (AlbumDeletionPreview, error) {
-	state, err := loadAlbumDeletionState(ctx, service.store.database, service.storage, albumID)
+	state, err := service.repo.LoadAlbumDeletion(ctx, service.storage, albumID)
 	if err != nil {
 		return AlbumDeletionPreview{}, err
 	}
@@ -74,7 +72,7 @@ func (service *Service) PreviewAlbumDeletion(ctx context.Context, albumID string
 // because deleting a sibling changes what the next one means (for example
 // which Track carries the final album artwork).
 func (service *Service) DeleteAlbum(ctx context.Context, request AlbumDeletionRequest) (AlbumDeletionResult, error) {
-	state, err := loadAlbumDeletionState(ctx, service.store.database, service.storage, request.AlbumID)
+	state, err := service.repo.LoadAlbumDeletion(ctx, service.storage, request.AlbumID)
 	if err != nil {
 		return AlbumDeletionResult{}, err
 	}
@@ -90,7 +88,7 @@ func (service *Service) DeleteAlbum(ctx context.Context, request AlbumDeletionRe
 		}
 		var trackState trackDeletionState
 		if deleteErr == nil {
-			trackState, deleteErr = loadTrackDeletionState(ctx, service.store.database, service.storage, track.TrackID)
+			trackState, deleteErr = service.repo.LoadTrackDeletion(ctx, service.storage, track.TrackID)
 		}
 		if deleteErr == nil {
 			deleted, deleteErr = service.DeleteTrack(ctx, TrackDeletionRequest{TrackID: track.TrackID, ConfirmationToken: trackState.Preview.ConfirmationToken})
@@ -103,80 +101,6 @@ func (service *Service) DeleteAlbum(ctx context.Context, request AlbumDeletionRe
 		result.DeletedFiles += deleted.DeletedFiles
 	}
 	return result, nil
-}
-
-func loadAlbumDeletionState(ctx context.Context, queryer deletionQueryer, storage *Storage, albumID string) (albumDeletionState, error) {
-	var state albumDeletionState
-	var albumRevision int
-	err := queryer.QueryRowContext(ctx, `SELECT title, revision FROM albums WHERE id = ?`, albumID).Scan(&state.Preview.AlbumTitle, &albumRevision)
-	if errors.Is(err, sql.ErrNoRows) {
-		return albumDeletionState{}, ErrAlbumNotFound
-	}
-	if err != nil {
-		return albumDeletionState{}, fmt.Errorf("load Album deletion: %w", err)
-	}
-	trackIDs, err := listAlbumDeletionTrackIDs(ctx, queryer, albumID)
-	if err != nil {
-		return albumDeletionState{}, err
-	}
-	if len(trackIDs) == 0 {
-		return albumDeletionState{}, ErrAlbumNotFound
-	}
-	state.Preview.AlbumID = albumID
-	state.Preview.Tracks = make([]AlbumDeletionTrack, 0, len(trackIDs))
-	state.Preview.PlaylistReferences = []TrackDeletionPlaylistReference{}
-	state.Preview.QueueReferences = []TrackDeletionQueueReference{}
-	playlistSeen := map[string]bool{}
-	queueItems := map[string]int{}
-	queueOrder := []string{}
-	for _, trackID := range trackIDs {
-		trackState, loadErr := loadTrackDeletionState(ctx, queryer, storage, trackID)
-		if loadErr != nil {
-			return albumDeletionState{}, loadErr
-		}
-		state.Tracks = append(state.Tracks, trackState)
-		state.Preview.Tracks = append(state.Preview.Tracks, AlbumDeletionTrack{
-			TrackID: trackID, TrackTitle: trackState.Preview.TrackTitle, SizeBytes: trackState.Preview.ManagedFile.SizeBytes,
-		})
-		state.Preview.TotalSizeBytes += trackState.Preview.ManagedFile.SizeBytes
-		for _, playlist := range trackState.Preview.PlaylistReferences {
-			if !playlistSeen[playlist.ID] {
-				playlistSeen[playlist.ID] = true
-				state.Preview.PlaylistReferences = append(state.Preview.PlaylistReferences, playlist)
-			}
-		}
-		for _, queue := range trackState.Preview.QueueReferences {
-			if _, known := queueItems[queue.UserID]; !known {
-				queueOrder = append(queueOrder, queue.UserID)
-			}
-			queueItems[queue.UserID] += queue.ItemCount
-		}
-	}
-	for _, userID := range queueOrder {
-		state.Preview.QueueReferences = append(state.Preview.QueueReferences, TrackDeletionQueueReference{UserID: userID, ItemCount: queueItems[userID]})
-	}
-	state.Preview.TrackCount = len(state.Preview.Tracks)
-	state.Preview.ConfirmationToken, err = albumDeletionToken(albumID, albumRevision, state.Tracks)
-	return state, err
-}
-
-func listAlbumDeletionTrackIDs(ctx context.Context, queryer deletionQueryer, albumID string) (trackIDs []string, returnErr error) {
-	rows, err := queryer.QueryContext(ctx, `
-		SELECT id FROM tracks
-		WHERE album_id = ? AND missing_at IS NULL AND is_pending_commit = 0
-		ORDER BY COALESCE(disc_no, 1), track_no, title_sort, id`, albumID)
-	if err != nil {
-		return nil, fmt.Errorf("list Album Tracks for deletion: %w", err)
-	}
-	defer func() { returnErr = errors.Join(returnErr, closeDeletionRows(rows, "Album Tracks")) }()
-	for rows.Next() {
-		var trackID string
-		if err := rows.Scan(&trackID); err != nil {
-			return nil, fmt.Errorf("read Album Track for deletion: %w", err)
-		}
-		trackIDs = append(trackIDs, trackID)
-	}
-	return trackIDs, rows.Err()
 }
 
 // albumDeletionToken binds the confirmation to the album row and to every

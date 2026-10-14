@@ -77,7 +77,7 @@ func publishLatestQueueEvent(events chan QueueInvalidation, event QueueInvalidat
 	}
 }
 
-func (h *Handlers) StreamQueueEvents(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) StreamQueueEvents(w http.ResponseWriter, r *http.Request) {
 	userID, err := auth.CurrentUserID(r)
 	if err != nil {
 		respond.Error(w, http.StatusUnauthorized, "unauthorized", err.Error())
@@ -90,7 +90,7 @@ func (h *Handlers) StreamQueueEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	events, unsubscribe := h.queueEvents.Subscribe(userID)
 	defer unsubscribe()
-	queue, err := h.store.GetQueue(r.Context(), userID)
+	queue, err := h.service.GetQueue(r.Context(), userID)
 	if err != nil {
 		respond.Error(w, http.StatusInternalServerError, "internal_error", err.Error())
 		return
@@ -102,7 +102,7 @@ func (h *Handlers) StreamQueueEvents(w http.ResponseWriter, r *http.Request) {
 	h.streamQueueEvents(w, r, flusher, events)
 }
 
-func (h *Handlers) streamQueueEvents(w http.ResponseWriter, r *http.Request, flusher http.Flusher, events <-chan QueueInvalidation) {
+func (h *Handler) streamQueueEvents(w http.ResponseWriter, r *http.Request, flusher http.Flusher, events <-chan QueueInvalidation) {
 	keepAlive := time.NewTicker(queueEventKeepAlive)
 	defer keepAlive.Stop()
 	for {

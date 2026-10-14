@@ -1,0 +1,57 @@
+# sqlc reads the goose migrations as the schema and generates one typed
+# query package per module (internal/modules/<module>/db).
+# Regenerate with `mise run generate`.
+version: "2"
+sql:
+  - &module
+    engine: sqlite
+    schema: migrations
+    queries: internal/modules/playlists/queries.sql
+    gen:
+      go: &go
+        package: db
+        out: internal/modules/playlists/db
+        emit_empty_slices: true
+        emit_pointers_for_null_types: true
+  - <<: *module
+    queries: internal/modules/preferences/queries.sql
+    gen:
+      go:
+        <<: *go
+        out: internal/modules/preferences/db
+  - <<: *module
+    queries: internal/modules/radio/queries.sql
+    gen:
+      go:
+        <<: *go
+        out: internal/modules/radio/db
+  - <<: *module
+    queries: internal/modules/playback/queries.sql
+    gen:
+      go:
+        <<: *go
+        out: internal/modules/playback/db
+  - <<: *module
+    queries: internal/searchdata/queries.sql
+    gen:
+      go:
+        <<: *go
+        out: internal/searchdata/db
+  - <<: *module
+    queries: internal/modules/librarysearch/queries.sql
+    gen:
+      go:
+        <<: *go
+        out: internal/modules/librarysearch/db
+  - <<: *module
+    queries: internal/modules/library/queries.sql
+    gen:
+      go:
+        <<: *go
+        out: internal/modules/library/db
+  - <<: *module
+    queries: internal/modules/managedimport/queries
+    gen:
+      go:
+        <<: *go
+        out: internal/modules/managedimport/db

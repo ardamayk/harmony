@@ -30,7 +30,10 @@ function SortableWidget({ id, panel }: { id: string; panel: PanelSide }) {
 		transform,
 		transition,
 		isDragging,
-	} = useSortable({ id, data: { panel } });
+	} = useSortable({
+		id,
+		data: { panel },
+	});
 
 	const Widget = getWidgetComponent(id);
 	const title = widgetRegistry.find((w) => w.id === id)?.title ?? id;

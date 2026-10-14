@@ -17,7 +17,7 @@ func setupServiceDB(t *testing.T) (*Service, *sql.DB) {
 			t.Errorf("close database: %v", err)
 		}
 	})
-	return NewService(NewStore(db)), db
+	return NewService(NewRepository(db)), db
 }
 
 func TestServiceListTracksSearchesAlbumAndGenre(t *testing.T) {

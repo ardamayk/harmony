@@ -16,7 +16,7 @@ func TestGetTrackExposesEveryStoredColumn(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	track, err := NewStore(db).GetTrack(context.Background(), trackID)
+	track, err := NewRepository(db).GetTrack(context.Background(), trackID)
 	if err != nil {
 		t.Fatalf("GetTrack() error = %v", err)
 	}

@@ -33,8 +33,7 @@ type assembledServer struct {
 }
 
 func newAssembledServer(cfg config.Config, sqlDB *sql.DB, report dependencies.Report) assembledServer {
-	prefStore := preferences.NewStore(sqlDB)
-	prefModule := preferences.NewModule(prefStore)
+	prefModule := preferences.NewModule(sqlDB)
 	libModule := library.NewModule(sqlDB)
 	searchModule := librarysearch.NewModule(sqlDB)
 	libModule.EnableWaveforms(report.Has(dependencies.FFMPEG))

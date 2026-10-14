@@ -7,7 +7,14 @@ import {
 	waitFor,
 	within,
 } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+	afterEach,
+	beforeEach,
+	describe,
+	expect,
+	it,
+	vi,
+} from "vite-plus/test";
 import { TrackList } from "./track-list";
 
 const toggleFavorite = vi.fn();
@@ -173,23 +180,28 @@ describe("TrackList", () => {
 		},
 		{ kind: "playlist", playlistId: "p1", name: "Favorites" },
 		undefined,
-	])("uses individual queue actions without propagating collection provenance %j", async (source) => {
-		render(<TrackList tracks={[sampleTrack]} source={source} />);
-		const row = screen.getByRole("row", { name: /Welcome to New York/ });
-		fireEvent.contextMenu(row);
-		fireEvent.click(
-			await screen.findByRole("menuitem", { name: "Add to queue" }),
-		);
-		await waitFor(() =>
-			expect(addToQueue).toHaveBeenCalledExactlyOnceWith(sampleTrack.id),
-		);
-		fireEvent.contextMenu(row);
-		fireEvent.click(await screen.findByRole("menuitem", { name: "Play next" }));
-		await waitFor(() =>
-			expect(playNext).toHaveBeenCalledExactlyOnceWith(sampleTrack.id),
-		);
-		expect(playTrack).not.toHaveBeenCalled();
-	});
+	])(
+		"uses individual queue actions without propagating collection provenance %j",
+		async (source) => {
+			render(<TrackList tracks={[sampleTrack]} source={source} />);
+			const row = screen.getByRole("row", { name: /Welcome to New York/ });
+			fireEvent.contextMenu(row);
+			fireEvent.click(
+				await screen.findByRole("menuitem", { name: "Add to queue" }),
+			);
+			await waitFor(() =>
+				expect(addToQueue).toHaveBeenCalledExactlyOnceWith(sampleTrack.id),
+			);
+			fireEvent.contextMenu(row);
+			fireEvent.click(
+				await screen.findByRole("menuitem", { name: "Play next" }),
+			);
+			await waitFor(() =>
+				expect(playNext).toHaveBeenCalledExactlyOnceWith(sampleTrack.id),
+			);
+			expect(playTrack).not.toHaveBeenCalled();
+		},
+	);
 
 	it.each([
 		{
@@ -202,25 +214,24 @@ describe("TrackList", () => {
 			action: playNext,
 			message: "Failed to play track next",
 		},
-	])("reports a failed $label action with track context", async ({
-		label,
-		action,
-		message,
-	}) => {
-		const error = new Error("Network unavailable");
-		action.mockRejectedValueOnce(error);
-		const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
-		render(<TrackList tracks={[sampleTrack]} />);
-		fireEvent.contextMenu(
-			screen.getByRole("row", { name: /Welcome to New York/ }),
-		);
-		fireEvent.click(await screen.findByRole("menuitem", { name: label }));
-		await waitFor(() => expect(toastError).toHaveBeenCalledWith(message));
-		expect(warning).toHaveBeenCalledWith(message, {
-			trackId: sampleTrack.id,
-			error,
-		});
-	});
+	])(
+		"reports a failed $label action with track context",
+		async ({ label, action, message }) => {
+			const error = new Error("Network unavailable");
+			action.mockRejectedValueOnce(error);
+			const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+			render(<TrackList tracks={[sampleTrack]} />);
+			fireEvent.contextMenu(
+				screen.getByRole("row", { name: /Welcome to New York/ }),
+			);
+			fireEvent.click(await screen.findByRole("menuitem", { name: label }));
+			await waitFor(() => expect(toastError).toHaveBeenCalledWith(message));
+			expect(warning).toHaveBeenCalledWith(message, {
+				trackId: sampleTrack.id,
+				error,
+			});
+		},
+	);
 
 	it("renders non-album tracks with the artist line", () => {
 		const { container } = render(<TrackList tracks={[sampleTrack]} compact />);
@@ -479,37 +490,37 @@ describe("TrackList", () => {
 		expect(screen.queryByText("Delete track")).toBeNull();
 	});
 
-	it.each([
-		"Album ensemble",
-		"Taylor Swift",
-	])("shows independent Album Artist details (%s)", (albumArtist) => {
-		render(
-			<TrackList
-				tracks={[
-					{
-						...sampleTrack,
-						albumArtists: [
-							{ id: "album-artist", name: albumArtist },
-							{ id: "second", name: "Guest / Band" },
-						],
-					},
-				]}
-			/>,
-		);
-		fireEvent.contextMenu(
-			screen.getByRole("row", { name: /Welcome to New York/ }),
-		);
-		fireEvent.click(screen.getByText("Details"));
-		const dialog = within(
-			screen.getByRole("dialog", { name: "Welcome to New York" }),
-		);
-		expect(dialog.getByText("Artist").parentElement?.textContent).toBe(
-			"ArtistTaylor Swift",
-		);
-		expect(dialog.getByText("Album Artist").parentElement?.textContent).toBe(
-			`Album Artist${albumArtist}, Guest / Band`,
-		);
-	});
+	it.each(["Album ensemble", "Taylor Swift"])(
+		"shows independent Album Artist details (%s)",
+		(albumArtist) => {
+			render(
+				<TrackList
+					tracks={[
+						{
+							...sampleTrack,
+							albumArtists: [
+								{ id: "album-artist", name: albumArtist },
+								{ id: "second", name: "Guest / Band" },
+							],
+						},
+					]}
+				/>,
+			);
+			fireEvent.contextMenu(
+				screen.getByRole("row", { name: /Welcome to New York/ }),
+			);
+			fireEvent.click(screen.getByText("Details"));
+			const dialog = within(
+				screen.getByRole("dialog", { name: "Welcome to New York" }),
+			);
+			expect(dialog.getByText("Artist").parentElement?.textContent).toBe(
+				"ArtistTaylor Swift",
+			);
+			expect(dialog.getByText("Album Artist").parentElement?.textContent).toBe(
+				`Album Artist${albumArtist}, Guest / Band`,
+			);
+		},
+	);
 
 	it("renders metadata details and delete actions in the context menu", () => {
 		render(<TrackList tracks={[sampleTrack]} />);

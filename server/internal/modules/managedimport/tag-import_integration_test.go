@@ -3,11 +3,12 @@ package managedimport_test
 import (
 	"bytes"
 	"encoding/json"
-	"github.com/ardam/navidrome-replacement/server/internal/modules/managedimport"
-	"github.com/ardam/navidrome-replacement/server/internal/testutil"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/ardam/navidrome-replacement/server/internal/modules/managedimport"
+	"github.com/ardam/navidrome-replacement/server/internal/testutil"
 )
 
 func TestTagImportAcceptsOptionalGenreAndArtwork(t *testing.T) {

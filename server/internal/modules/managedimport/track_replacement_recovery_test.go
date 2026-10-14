@@ -151,7 +151,7 @@ func prepareReplacementFixture(t *testing.T) replacementFixture {
 	if preview.Replacement == nil {
 		t.Fatalf("replacement preview missing: %+v", preview)
 	}
-	persistedJob, err := module.service.store.GetJob(context.Background(), job.ID)
+	persistedJob, err := module.service.repo.GetJob(context.Background(), job.ID)
 	if err != nil {
 		t.Fatalf("load replacement job: %v", err)
 	}
@@ -183,7 +183,7 @@ func assertReplacementRolledBack(t *testing.T, fixture replacementFixture) {
 	if err != nil || !bytes.Equal(staged, fixture.upgrade) {
 		t.Fatalf("staged replacement should be restored for retry (error = %v)", err)
 	}
-	job, err := fixture.service.store.GetJob(context.Background(), fixture.job.ID)
+	job, err := fixture.service.repo.GetJob(context.Background(), fixture.job.ID)
 	if err != nil || job.Status != STATUS_AWAITING_CONFIRMATION {
 		t.Fatalf("job after rollback = %+v (error = %v)", job, err)
 	}
@@ -204,7 +204,7 @@ func assertReplacementCompleted(t *testing.T, fixture replacementFixture) {
 	if err != nil || !bytes.Equal(stored, fixture.upgrade) || contentSHA256 != sha256Hex(fixture.upgrade) {
 		t.Fatalf("replacement is not authoritative after completion (error = %v)", err)
 	}
-	job, err := fixture.service.store.GetJob(context.Background(), fixture.job.ID)
+	job, err := fixture.service.repo.GetJob(context.Background(), fixture.job.ID)
 	if err != nil || job.Status != STATUS_COMMITTED || job.Outcome != OUTCOME_REPLACED || job.TrackID != fixture.trackID {
 		t.Fatalf("job after replacement = %+v (error = %v)", job, err)
 	}

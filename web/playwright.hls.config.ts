@@ -1,5 +1,4 @@
 import { defineConfig, devices } from "@playwright/test";
-import { getTestArtifacts } from "./testing/storage";
 
 export default defineConfig({
 	testDir: "./e2e",
@@ -8,7 +7,7 @@ export default defineConfig({
 	// CI diagnostics for the Integration Gate: one retry, and on failure an
 	// HTML report plus traces and screenshots (issue #79).
 	retries: process.env.CI ? 1 : 0,
-	...getTestArtifacts("hls"),
+	reporter: process.env.CI ? [["list"], ["html", { open: "never" }]] : "list",
 	use: {
 		baseURL: "http://127.0.0.1:3417",
 		trace: "retain-on-failure",
@@ -19,7 +18,7 @@ export default defineConfig({
 		},
 	},
 	webServer: {
-		command: "pnpm exec vite dev --host 127.0.0.1 --port 3417 --strictPort",
+		command: "vp dev --host 127.0.0.1 --port 3417 --strictPort",
 		url: "http://127.0.0.1:3417/e2e/fixtures/hls.html",
 		reuseExistingServer: false,
 	},

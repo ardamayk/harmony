@@ -52,7 +52,7 @@ func TestRecoverCommitAtEveryDurablePhase(t *testing.T) {
 				t.Fatalf("confirm at phase %q error = %v", phase, confirmErr)
 			}
 
-			libraryStore := library.NewStore(database)
+			libraryStore := library.NewRepository(database)
 			trackID := commitTrackID(t, database, job.ID)
 			if _, err := libraryStore.GetTrack(context.Background(), trackID); !errors.Is(err, library.ErrNotFound) {
 				t.Fatalf("pending Track visible at phase %q: %v", phase, err)
@@ -78,7 +78,7 @@ func TestRecoverCommitAtEveryDurablePhase(t *testing.T) {
 				t.Fatalf("close database before recovery: %v", err)
 			}
 			database = openCommitRecoveryDatabase(t, databasePath)
-			restarted := NewService(NewStore(database), storage, recoveryInspector{inspection: inspection})
+			restarted := NewService(NewRepository(database), storage, recoveryInspector{inspection: inspection})
 			if err := restarted.RecoverCommits(context.Background()); err != nil {
 				t.Fatalf("recover phase %q: %v", phase, err)
 			}
@@ -86,12 +86,12 @@ func TestRecoverCommitAtEveryDurablePhase(t *testing.T) {
 				t.Fatalf("close database after recovery: %v", err)
 			}
 			database = openCommitRecoveryDatabase(t, databasePath)
-			restarted = NewService(NewStore(database), storage, recoveryInspector{inspection: inspection})
+			restarted = NewService(NewRepository(database), storage, recoveryInspector{inspection: inspection})
 			if err := restarted.RecoverCommits(context.Background()); err != nil {
 				t.Fatalf("repeat recovery phase %q: %v", phase, err)
 			}
 
-			storedJob, err := restarted.store.GetJob(context.Background(), job.ID)
+			storedJob, err := restarted.repo.GetJob(context.Background(), job.ID)
 			if err != nil {
 				t.Fatalf("get recovered job: %v", err)
 			}
@@ -99,7 +99,7 @@ func TestRecoverCommitAtEveryDurablePhase(t *testing.T) {
 				if storedJob.Status != STATUS_COMMITTED {
 					t.Fatalf("job status after completing recovery = %q", storedJob.Status)
 				}
-				track, err := library.NewStore(database).GetTrack(context.Background(), storedJob.TrackID)
+				track, err := library.NewRepository(database).GetTrack(context.Background(), storedJob.TrackID)
 				if err != nil {
 					t.Fatalf("get recovered Track: %v", err)
 				}
@@ -133,7 +133,7 @@ func TestRecoverPreparedJournalAfterPlacementGapRemovesCanonicalOrphans(t *testi
 	storageRoot := t.TempDir()
 	storage := newStorage(storageRoot, StorageLimits{FileBytes: 1024, BatchBytes: 1024}, unlimitedStorageCapacity)
 	service, job, inspection := prepareCommitRecoveryJob(t, database, storage)
-	identity, resolveErr := service.store.ResolveCommitIdentity(context.Background(), inspection.Metadata)
+	identity, resolveErr := service.repo.ResolveCommitIdentity(context.Background(), inspection.Metadata)
 	if resolveErr != nil {
 		t.Fatalf("resolve commit identity: %v", resolveErr)
 	}
@@ -147,12 +147,12 @@ func TestRecoverPreparedJournalAfterPlacementGapRemovesCanonicalOrphans(t *testi
 		ArtworkFilePath: planned.ArtworkPath, AudioSHA256: inspection.FileSHA256,
 		ArtworkSHA256: inspection.AlbumArtwork.SHA256,
 	}
-	if err := service.store.CreateCommitJournal(context.Background(), journal); err != nil {
+	if err := service.repo.CreateCommitJournal(context.Background(), journal); err != nil {
 		t.Fatalf("create prepared journal: %v", err)
 	}
 	if _, err := storage.Place(job.StagedFilePath, inspection, identity, func() error {
 		journal.IsArtworkCreated = true
-		return service.store.MarkCommitArtworkCreated(context.Background(), journal.ID)
+		return service.repo.MarkCommitArtworkCreated(context.Background(), journal.ID)
 	}); err != nil {
 		t.Fatalf("place before journal transition: %v", err)
 	}
@@ -160,7 +160,7 @@ func TestRecoverPreparedJournalAfterPlacementGapRemovesCanonicalOrphans(t *testi
 	if err := service.RecoverCommits(context.Background()); err != nil {
 		t.Fatalf("recover placement gap: %v", err)
 	}
-	storedJob, err := service.store.GetJob(context.Background(), job.ID)
+	storedJob, err := service.repo.GetJob(context.Background(), job.ID)
 	if err != nil {
 		t.Fatalf("get recovered job: %v", err)
 	}
@@ -194,18 +194,18 @@ func TestRecoverCorruptPendingCanonicalTrackRollsBackWithReason(t *testing.T) {
 				t.Fatalf("corrupt canonical Track: %v", err)
 			}
 
-			restarted := NewService(NewStore(database), storage, recoveryInspector{inspection: inspection})
+			restarted := NewService(NewRepository(database), storage, recoveryInspector{inspection: inspection})
 			if err := restarted.RecoverCommits(context.Background()); err != nil {
 				t.Fatalf("recover corrupt canonical Track: %v", err)
 			}
-			storedJob, err := restarted.store.GetJob(context.Background(), job.ID)
+			storedJob, err := restarted.repo.GetJob(context.Background(), job.ID)
 			if err != nil {
 				t.Fatalf("get rolled-back job: %v", err)
 			}
 			if storedJob.Status != STATUS_AWAITING_CONFIRMATION {
 				t.Fatalf("rolled-back job status = %q", storedJob.Status)
 			}
-			if _, err := library.NewStore(database).GetTrack(context.Background(), commitTrackID(t, database, job.ID)); !errors.Is(err, library.ErrNotFound) {
+			if _, err := library.NewRepository(database).GetTrack(context.Background(), commitTrackID(t, database, job.ID)); !errors.Is(err, library.ErrNotFound) {
 				t.Fatalf("corrupt pending Track visible after recovery: %v", err)
 			}
 			var recoveredPhase commitPhase
@@ -224,7 +224,7 @@ func TestRecoverPreparedJournalPreservesPreexistingCanonicalArtwork(t *testing.T
 	database := testutil.OpenMigratedDB(t)
 	storage := newStorage(t.TempDir(), StorageLimits{FileBytes: 1024, BatchBytes: 1024}, unlimitedStorageCapacity)
 	service, job, inspection := prepareCommitRecoveryJob(t, database, storage)
-	identity, err := service.store.ResolveCommitIdentity(context.Background(), inspection.Metadata)
+	identity, err := service.repo.ResolveCommitIdentity(context.Background(), inspection.Metadata)
 	if err != nil {
 		t.Fatalf("resolve commit identity: %v", err)
 	}
@@ -244,7 +244,7 @@ func TestRecoverPreparedJournalPreservesPreexistingCanonicalArtwork(t *testing.T
 		ArtworkFilePath: planned.ArtworkPath, AudioSHA256: inspection.FileSHA256,
 		ArtworkSHA256: inspection.AlbumArtwork.SHA256,
 	}
-	if createErr := service.store.CreateCommitJournal(context.Background(), journal); createErr != nil {
+	if createErr := service.repo.CreateCommitJournal(context.Background(), journal); createErr != nil {
 		t.Fatalf("create prepared journal: %v", createErr)
 	}
 	if recoveryErr := service.RecoverCommits(context.Background()); recoveryErr != nil {
@@ -273,18 +273,18 @@ func TestCleanupRestartCompletesPendingDatabaseCommitWithoutDeletingContent(t *t
 		t.Fatalf("interrupt database commit: %v", err)
 	}
 
-	restarted := NewService(NewStore(database), storage, recoveryInspector{inspection: inspection})
+	restarted := NewService(NewRepository(database), storage, recoveryInspector{inspection: inspection})
 	if err := restarted.CleanupRestart(context.Background()); err != nil {
 		t.Fatalf("run restart cleanup: %v", err)
 	}
 	if err := restarted.CleanupRestart(context.Background()); err != nil {
 		t.Fatalf("repeat restart cleanup: %v", err)
 	}
-	storedJob, err := restarted.store.GetJob(context.Background(), job.ID)
+	storedJob, err := restarted.repo.GetJob(context.Background(), job.ID)
 	if err != nil {
 		t.Fatalf("get completed job: %v", err)
 	}
-	track, err := library.NewStore(database).GetTrack(context.Background(), storedJob.TrackID)
+	track, err := library.NewRepository(database).GetTrack(context.Background(), storedJob.TrackID)
 	if err != nil {
 		t.Fatalf("get completed Track: %v", err)
 	}
@@ -311,7 +311,7 @@ func TestConfirmBatchResumesDurableCommitAfterLaterError(t *testing.T) {
 	if _, err := service.ConfirmBatch(context.Background(), batch.ID, confirmation); !errors.Is(err, errInjectedCommitCrash) {
 		t.Fatalf("interrupt Batch database commit: %v", err)
 	}
-	persistedJob, err := service.store.GetJob(context.Background(), job.ID)
+	persistedJob, err := service.repo.GetJob(context.Background(), job.ID)
 	if err != nil {
 		t.Fatalf("get interrupted Batch job: %v", err)
 	}
@@ -337,7 +337,7 @@ func TestConfirmResumesWhenCommitResultIsAmbiguous(t *testing.T) {
 	if _, err := service.Confirm(context.Background(), job.ID, job.Revision); !errors.Is(err, errInjectedCommitCrash) {
 		t.Fatalf("ambiguous database commit result: %v", err)
 	}
-	journal, err := service.store.GetCommitJournal(context.Background(), commitJournalID(t, database, job.ID))
+	journal, err := service.repo.GetCommitJournal(context.Background(), commitJournalID(t, database, job.ID))
 	if err != nil {
 		t.Fatalf("get preserved commit journal: %v", err)
 	}
@@ -361,7 +361,7 @@ func TestConfirmResumesWhenCommitResultIsAmbiguous(t *testing.T) {
 func prepareCommitRecoveryJob(t *testing.T, database *sql.DB, storage *Storage) (*Service, importJob, library.MediaInspection) {
 	t.Helper()
 	content, inspection := commitRecoveryFixture()
-	store := NewStore(database)
+	store := NewRepository(database)
 	created, err := store.CreateJob(context.Background(), "", "")
 	if err != nil {
 		t.Fatalf("create job: %v", err)
@@ -397,12 +397,12 @@ func commitRecoveryFixture() ([]byte, library.MediaInspection) {
 func prepareBatchCommitRecoveryJob(t *testing.T, database *sql.DB, storage *Storage) (*Service, Batch, importJob, library.MediaInspection) {
 	t.Helper()
 	content, inspection := commitRecoveryFixture()
-	service := NewService(NewStore(database), storage, recoveryInspector{inspection: inspection})
-	batch, err := service.store.CreateBatch(context.Background(), BatchOptions{})
+	service := NewService(NewRepository(database), storage, recoveryInspector{inspection: inspection})
+	batch, err := service.repo.CreateBatch(context.Background(), BatchOptions{})
 	if err != nil {
 		t.Fatalf("create recovery Batch: %v", err)
 	}
-	created, err := service.store.CreateJob(context.Background(), batch.ID, "recovery-file")
+	created, err := service.repo.CreateJob(context.Background(), batch.ID, "recovery-file")
 	if err != nil {
 		t.Fatalf("create recovery Batch job: %v", err)
 	}
@@ -410,11 +410,11 @@ func prepareBatchCommitRecoveryJob(t *testing.T, database *sql.DB, storage *Stor
 	if err != nil {
 		t.Fatalf("stage recovery Batch upload: %v", err)
 	}
-	job, err := service.store.MarkPreview(context.Background(), created.ID, "track.flac", upload.Path, upload.SHA256, `{}`, upload.Size, 1024)
+	job, err := service.repo.MarkPreview(context.Background(), created.ID, "track.flac", upload.Path, upload.SHA256, `{}`, upload.Size, 1024)
 	if err != nil {
 		t.Fatalf("mark recovery Batch preview: %v", err)
 	}
-	batch, err = service.store.GetBatch(context.Background(), batch.ID)
+	batch, err = service.repo.GetBatch(context.Background(), batch.ID)
 	if err != nil {
 		t.Fatalf("get recovery Batch: %v", err)
 	}

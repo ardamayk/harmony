@@ -4,7 +4,7 @@ import type {
 	PlaybackSource,
 } from "@repo/ui";
 import { DEFAULT_PLAYBACK_SESSION_STATE } from "@repo/ui";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vite-plus/test";
 import { DesktopPlaybackEngine } from "./DesktopPlaybackEngine";
 
 const trackSource: PlaybackSource = {

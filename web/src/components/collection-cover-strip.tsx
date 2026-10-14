@@ -129,41 +129,6 @@ export function CollectionCoverStack({
 	);
 }
 
-export function CollectionCoverRowStack({
-	tracks,
-	className,
-}: {
-	tracks: Track[];
-	className?: string;
-}) {
-	const preview = useMemo(() => pickRandomUniqueAlbumTracks(tracks), [tracks]);
-	const offsets = [
-		"left-0",
-		"left-[3.75rem]",
-		"left-[7.5rem]",
-		"left-[11.25rem]",
-	];
-
-	return (
-		<div
-			data-testid="playlist-row-cover-stack"
-			className={cn("relative h-[7.5rem] w-[18.75rem] shrink-0", className)}
-		>
-			{preview.map((track, index) => (
-				<AlbumArt
-					key={`${track.albumId}-${track.id}`}
-					coverUrl={apiClient.getAlbumCoverUrl(track.albumId)}
-					title={track.title}
-					className={cn(
-						"absolute top-0 size-[7.5rem] rounded-md border border-background object-cover text-sm shadow-md",
-						offsets[index] ?? offsets.at(-1),
-					)}
-				/>
-			))}
-		</div>
-	);
-}
-
 function CollectionCoverCardArt({
 	track,
 	className,
@@ -269,20 +234,4 @@ export function pickStableUniqueAlbumTracks<
 		return 0;
 	});
 	return pickPreviewTracks(uniqueTracks, seed, limit);
-}
-
-export function CollectionCover({
-	track,
-	className,
-}: {
-	track: Track;
-	className?: string;
-}) {
-	return (
-		<AlbumArt
-			coverUrl={apiClient.getAlbumCoverUrl(track.albumId)}
-			title={track.title}
-			className={cn("shrink-0 rounded-md text-xs", className)}
-		/>
-	);
 }

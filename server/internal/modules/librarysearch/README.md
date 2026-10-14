@@ -43,7 +43,7 @@ Matching rules, in order of evaluation:
 - The Best Match is the top strong direct result across types and also leads
   its category. Every group holds at most five records, including Best Match.
 
-`handlers_test.go` is the acceptance seam: the shared
+`handler_test.go` is the acceptance seam: the shared
 `testutil.SeedLibrarySearchFixture` library served through the router with
 every response validated against the OpenAPI contract. The labeled
 `testutil.LibrarySearchRankingCases` expectations are reusable by the integrated

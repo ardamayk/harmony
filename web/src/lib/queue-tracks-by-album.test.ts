@@ -1,5 +1,5 @@
 import type { Album, Track } from "@repo/api-client";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vite-plus/test";
 import { queueTracksByAlbum } from "./queue-tracks-by-album";
 
 function makeTrack(id: string, albumId: string): Track {
@@ -82,23 +82,23 @@ describe("queueTracksByAlbum", () => {
 		expect(getAlbum).not.toHaveBeenCalled();
 	});
 
-	it.each([
-		"lookup",
-		"append",
-	])("stops and propagates a failed %s instead of skipping tracks", async (operation) => {
-		const error = new Error("Network unavailable");
-		const queueTracks = vi.fn().mockResolvedValue(undefined);
-		const getAlbum = vi.fn(loadAlbum);
-		if (operation === "lookup") getAlbum.mockRejectedValueOnce(error);
-		else queueTracks.mockRejectedValueOnce(error);
-		await expect(
-			queueTracksByAlbum(
-				[makeTrack("t1", "a"), makeTrack("t2", "b")],
-				queueTracks,
-				getAlbum,
-			),
-		).rejects.toBe(error);
-		expect(getAlbum).toHaveBeenCalledExactlyOnceWith("a");
-		expect(queueTracks).toHaveBeenCalledTimes(operation === "lookup" ? 0 : 1);
-	});
+	it.each(["lookup", "append"])(
+		"stops and propagates a failed %s instead of skipping tracks",
+		async (operation) => {
+			const error = new Error("Network unavailable");
+			const queueTracks = vi.fn().mockResolvedValue(undefined);
+			const getAlbum = vi.fn(loadAlbum);
+			if (operation === "lookup") getAlbum.mockRejectedValueOnce(error);
+			else queueTracks.mockRejectedValueOnce(error);
+			await expect(
+				queueTracksByAlbum(
+					[makeTrack("t1", "a"), makeTrack("t2", "b")],
+					queueTracks,
+					getAlbum,
+				),
+			).rejects.toBe(error);
+			expect(getAlbum).toHaveBeenCalledExactlyOnceWith("a");
+			expect(queueTracks).toHaveBeenCalledTimes(operation === "lookup" ? 0 : 1);
+		},
+	);
 });

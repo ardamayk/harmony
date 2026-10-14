@@ -5,10 +5,11 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"github.com/ardam/navidrome-replacement/server/internal/api/gen"
 	"net/http"
 	"net/url"
 	"testing"
+
+	"github.com/ardam/navidrome-replacement/server/internal/api/gen"
 
 	"github.com/ardam/navidrome-replacement/server/internal/modules/managedimport"
 	"github.com/ardam/navidrome-replacement/server/internal/searchdata"
@@ -48,14 +49,14 @@ func TestSearchDataFollowsHTTPImportReplacementAndDeletion(t *testing.T) {
 	assertStreamedBytes(t, router, trackID, replacement)
 	deleteSearchTrack(t, router, trackID)
 	assertSearchTrack(t, router, "sebnem inspection", "")
-	if _, err := searchdata.NewStore(database).GetDocument(context.Background(), "track", trackID, "user-1"); !errors.Is(err, sql.ErrNoRows) {
+	if _, err := searchdata.NewRepository(database).GetDocument(context.Background(), "track", trackID, "user-1"); !errors.Is(err, sql.ErrNoRows) {
 		t.Fatalf("deleted search record: %v", err)
 	}
 }
 
 func assertPreparedField(t *testing.T, database *sql.DB, trackID, name, original, folded string) {
 	t.Helper()
-	document, err := searchdata.NewStore(database).GetDocument(context.Background(), "track", trackID, "user-1")
+	document, err := searchdata.NewRepository(database).GetDocument(context.Background(), "track", trackID, "user-1")
 	if err != nil {
 		t.Fatal(err)
 	}

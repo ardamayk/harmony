@@ -1,6 +1,13 @@
 import type { QueueItem, Track } from "@repo/api-client";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+	afterEach,
+	beforeEach,
+	describe,
+	expect,
+	it,
+	vi,
+} from "vite-plus/test";
 import type { PlaybackSource } from "../playback/PlaybackEngine";
 import { UpNextPeek } from "./UpNextPeek";
 
@@ -123,15 +130,15 @@ describe("UpNextPeek", () => {
 		{ currentTrack: null, items: queue },
 		{ currentTrack: track, items: [] },
 		{ currentTrack: { ...track, id: "outside-queue" }, items: queue },
-	])("hides when no next queued track can be resolved: %j", ({
-		currentTrack,
-		items,
-	}) => {
-		setPlayback(null, currentTrack, items);
-		render(<UpNextPeek />);
-		expect(screen.queryByTestId("up-next")).toBeNull();
-		expect(mocks.playQueueIndex).not.toHaveBeenCalled();
-	});
+	])(
+		"hides when no next queued track can be resolved: %j",
+		({ currentTrack, items }) => {
+			setPlayback(null, currentTrack, items);
+			render(<UpNextPeek />);
+			expect(screen.queryByTestId("up-next")).toBeNull();
+			expect(mocks.playQueueIndex).not.toHaveBeenCalled();
+		},
+	);
 
 	it.each<PlaybackSource>([
 		{
@@ -159,10 +166,13 @@ describe("UpNextPeek", () => {
 			playbackUrl: "/radio/preview/catalog-1",
 			sourceUrl: "/live",
 		},
-	])("hides during $type even if a previous current track and queue remain", (source) => {
-		setPlayback(source);
-		render(<UpNextPeek />);
-		expect(screen.queryByTestId("up-next")).toBeNull();
-		expect(mocks.playQueueIndex).not.toHaveBeenCalled();
-	});
+	])(
+		"hides during $type even if a previous current track and queue remain",
+		(source) => {
+			setPlayback(source);
+			render(<UpNextPeek />);
+			expect(screen.queryByTestId("up-next")).toBeNull();
+			expect(mocks.playQueueIndex).not.toHaveBeenCalled();
+		},
+	);
 });

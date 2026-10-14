@@ -57,7 +57,7 @@ func OpenAndMigrate(ctx context.Context, databasePath string, migrationsDir stri
 		_ = sqlDB.Close()
 		return nil, fmt.Errorf("run migrations: %w", err)
 	}
-	if err := searchdata.NewStore(sqlDB).EnsureCurrent(ctx); err != nil {
+	if err := searchdata.NewRepository(sqlDB).EnsureCurrent(ctx); err != nil {
 		_ = sqlDB.Close()
 		return nil, fmt.Errorf("prepare Library Search data: %w", err)
 	}

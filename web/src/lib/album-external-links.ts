@@ -1,4 +1,4 @@
-export type AlbumExternalLink = {
+type AlbumExternalLink = {
 	id: string;
 	name: string;
 	/** Shown when no icon file is available yet */

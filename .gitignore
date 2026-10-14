@@ -1,7 +1,6 @@
 node_modules
 dist
 .output
-.turbo
 bin/
 *.db
 *.db-shm

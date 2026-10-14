@@ -23,7 +23,7 @@ func TestAlbumArtistGroupsFeaturedTrackUnderAlbumArtist(t *testing.T) {
 		Genres:      []string{"Synthpop"},
 	})
 
-	album, err := library.NewStore(db).GetAlbum(context.Background(), albumID)
+	album, err := library.NewRepository(db).GetAlbum(context.Background(), albumID)
 	if err != nil {
 		t.Fatal(err)
 	}

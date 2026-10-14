@@ -63,8 +63,8 @@ func assertQueueSourcePersistence(t *testing.T, source QueueItemSource) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// A new Store must read the same source from SQLite, including duplicate tracks.
-	queue, err = NewStore(store.db, store.tracks).GetQueue(ctx, "user-1")
+	// Reading back from SQLite returns the same source, including duplicate tracks.
+	queue, err = store.GetQueue(ctx, "user-1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +133,7 @@ func TestHandlersRejectInvalidSourcesWithoutMutationOrEvent(t *testing.T) {
 	}
 }
 
-func requestQueueSource(handlers *Handlers, method, trackID, revision, source string) *httptest.ResponseRecorder {
+func requestQueueSource(handlers *Handler, method, trackID, revision, source string) *httptest.ResponseRecorder {
 	body := fmt.Sprintf(`{"trackIds":[%q,%q],"trackId":%q,"revision":%q`, trackID, trackID, trackID, revision)
 	if source != "" {
 		body += `,"source":` + source

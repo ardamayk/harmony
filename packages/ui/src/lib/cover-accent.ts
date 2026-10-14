@@ -12,11 +12,10 @@ const MIN_SATURATION = 0.2;
 const MIN_LIGHTNESS = 0.12;
 const MAX_LIGHTNESS = 0.9;
 
-export const ACCENT_LIGHTNESS_RANGE: Record<AccentThemeMode, [number, number]> =
-	{
-		dark: [0.55, 0.7],
-		light: [0.3, 0.45],
-	};
+const ACCENT_LIGHTNESS_RANGE: Record<AccentThemeMode, [number, number]> = {
+	dark: [0.55, 0.7],
+	light: [0.3, 0.45],
+};
 
 export function rgbToHsl(r: number, g: number, b: number): Accent {
 	const red = r / 255;
@@ -80,7 +79,7 @@ export function clampAccent(accent: Accent, mode: AccentThemeMode): Accent {
 	};
 }
 
-export function accentToCss(accent: Accent): string {
+function accentToCss(accent: Accent): string {
 	return `hsl(${accent.h.toFixed(0)} ${(accent.s * 100).toFixed(0)}% ${(accent.l * 100).toFixed(0)}%)`;
 }
 

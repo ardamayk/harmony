@@ -1,5 +1,0 @@
-#!/usr/bin/env bash
-set -euo pipefail
-kind=desktop
-[[ "${1:-}" != test ]] || kind=test
-exec bash "$(dirname -- "${BASH_SOURCE[0]}")/../run-with-storage.sh" "$kind" "${EARTHLY_REAL_CARGO:?Cargo tool path is missing; run through Mise}" "$@"

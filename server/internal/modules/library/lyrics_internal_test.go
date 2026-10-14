@@ -14,7 +14,7 @@ import (
 
 func TestStoreGetTrackLyrics(t *testing.T) {
 	db := openMemoryDB(t)
-	store := NewStore(db)
+	store := NewRepository(db)
 	_, trackID := testutil.SeedManagedTrack(t, db, testutil.ManagedTrackSpec{Title: "Song", Artist: "Artist", Album: "Album"})
 
 	lyrics, err := store.GetTrackLyrics(context.Background(), trackID)

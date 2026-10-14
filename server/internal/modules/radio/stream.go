@@ -190,12 +190,12 @@ func splitArtistTitle(raw string) (artist string, title string) {
 type StreamProxy struct {
 	client     *http.Client
 	cache      *NowPlayingCache
-	store      *Store
+	stations   *Service
 	signingKey []byte
 	now        func() time.Time
 }
 
-func NewStreamProxy(store *Store, cache *NowPlayingCache) *StreamProxy {
+func NewStreamProxy(stations *Service, cache *NowPlayingCache) *StreamProxy {
 	client := &http.Client{
 		Transport: newSecureStreamTransport(),
 		Timeout:   0,
@@ -209,7 +209,7 @@ func NewStreamProxy(store *Store, cache *NowPlayingCache) *StreamProxy {
 	return &StreamProxy{
 		client:     client,
 		cache:      cache,
-		store:      store,
+		stations:   stations,
 		signingKey: generateHLSSigningKey(),
 		now:        time.Now,
 	}
@@ -346,7 +346,7 @@ func (p *StreamProxy) writeAudioStream(w http.ResponseWriter, r *http.Request, r
 	if metaint, err := strconv.Atoi(response.Header.Get("icy-metaint")); err == nil && metaint > 0 {
 		reader = NewICYReader(response.Body, metaint, func(now NowPlaying) {
 			p.cache.Set(station.ID, now)
-			_ = p.store.UpdateNowPlaying(r.Context(), station.ID, now)
+			_ = p.stations.UpdateNowPlaying(r.Context(), station.ID, now)
 		})
 		defer func() {
 			_ = reader.Close()

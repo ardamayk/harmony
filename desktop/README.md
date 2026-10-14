@@ -19,7 +19,6 @@ Build and run the release Desktop Client with the Music Server:
 ```bash
 mise run build
 mise run start
-# equivalent start command: pnpm start
 ```
 
 Force X11/XWayland or the shared-memory Wayland fallback when needed:

@@ -23,7 +23,7 @@ export function formatTrackCollectionDuration(ms: number): string {
 	return `${minutes}m`;
 }
 
-export function shuffleTrackCollection(tracks: Track[]): Track[] {
+function shuffleTrackCollection(tracks: Track[]): Track[] {
 	const next = [...tracks];
 	for (let i = next.length - 1; i > 0; i -= 1) {
 		const j = Math.floor(Math.random() * (i + 1));

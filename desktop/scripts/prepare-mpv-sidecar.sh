@@ -24,7 +24,7 @@ if [[ "${TARGET_TRIPLE}" != *-unknown-linux-gnu ]]; then
   exit 1
 fi
 
-BINARY_DIRECTORY="${EARTHLY_MPV_DIRECTORY:-${DESKTOP_DIRECTORY}/src-tauri/binaries}"
+BINARY_DIRECTORY="${DESKTOP_DIRECTORY}/src-tauri/binaries"
 TARGET_BINARY="${BINARY_DIRECTORY}/mpv-${TARGET_TRIPLE}"
 install -d -m 0755 "${BINARY_DIRECTORY}"
 install -m 0755 "${SOURCE_BINARY}" "${TARGET_BINARY}"

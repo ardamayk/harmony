@@ -18,7 +18,7 @@ export function defaultAlbumDecision(
 	};
 }
 
-export function importAlbumKey(entry: ImportFileEntry): string {
+function importAlbumKey(entry: ImportFileEntry): string {
 	return entry.preview?.file.albumKey ?? "";
 }
 

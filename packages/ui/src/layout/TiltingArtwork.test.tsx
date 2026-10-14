@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { TiltingArtwork } from "./TiltingArtwork";
 
 function renderArtwork(hasReducedMotion = false) {
@@ -47,20 +47,20 @@ describe("TiltingArtwork", () => {
 		expect(artwork.style.transform).toBe("rotateX(0deg) rotateY(0deg)");
 	});
 
-	it.each([
-		"pointerLeave",
-		"pointerCancel",
-	] as const)("resets perspective on %s", (event) => {
-		const { artwork, surface } = renderArtwork();
-		fireEvent.pointerMove(surface, {
-			pointerType: "mouse",
-			clientX: 300,
-			clientY: 100,
-		});
-		expect(artwork.style.transform).toBe("rotateX(12deg) rotateY(12deg)");
-		fireEvent[event](surface);
-		expect(artwork.style.transform).toBe("rotateX(0deg) rotateY(0deg)");
-	});
+	it.each(["pointerLeave", "pointerCancel"] as const)(
+		"resets perspective on %s",
+		(event) => {
+			const { artwork, surface } = renderArtwork();
+			fireEvent.pointerMove(surface, {
+				pointerType: "mouse",
+				clientX: 300,
+				clientY: 100,
+			});
+			expect(artwork.style.transform).toBe("rotateX(12deg) rotateY(12deg)");
+			fireEvent[event](surface);
+			expect(artwork.style.transform).toBe("rotateX(0deg) rotateY(0deg)");
+		},
+	);
 
 	it.each([
 		{ name: "reduced motion", hasReducedMotion: true, pointerType: "mouse" },

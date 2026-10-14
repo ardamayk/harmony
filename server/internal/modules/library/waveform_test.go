@@ -106,8 +106,8 @@ func TestFFmpegWaveformGeneratorReadsARealFile(t *testing.T) {
 }
 
 type waveformFixture struct {
-	handlers *Handlers
-	store    *Store
+	handlers *Handler
+	store    *Repository
 	service  *WaveformService
 	trackID  string
 	calls    atomic.Int32
@@ -116,7 +116,7 @@ type waveformFixture struct {
 func setupWaveform(t *testing.T, available bool, generate WaveformGenerator) *waveformFixture {
 	t.Helper()
 	db := testutil.OpenMigratedDB(t)
-	store := NewStore(db)
+	store := NewRepository(db)
 	filePath := filepath.Join(t.TempDir(), "track.flac")
 	if err := os.WriteFile(filePath, []byte("audio"), 0o600); err != nil {
 		t.Fatal(err)
@@ -131,7 +131,7 @@ func setupWaveform(t *testing.T, available bool, generate WaveformGenerator) *wa
 	}
 	fixture.service = NewWaveformService(store, counted, available)
 	fixture.service.pendingAfter = 50 * time.Millisecond
-	handlers := NewHandlers(NewService(store))
+	handlers := NewHandler(NewService(store))
 	handlers.waveforms = fixture.service
 	fixture.handlers = handlers
 	return fixture

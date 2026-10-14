@@ -5,7 +5,7 @@ import {
 	type RadioStation,
 } from "@repo/api-client";
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import {
 	type PlaybackApi,
 	PlaybackProvider,
@@ -720,36 +720,39 @@ describe("PlaybackProvider", () => {
 	it.each([
 		["once", 1],
 		["loop", 2],
-	] as const)("remote Queue clear overrides %s repeat after current Track", async (_repeatMode, repeatClicks) => {
-		const api = createApi();
-		vi.mocked(api.getQueue)
-			.mockResolvedValueOnce({ items: queueItems, revision: "1" })
-			.mockResolvedValueOnce({ items: [], revision: "2" });
-		const { engine } = renderPlayback(api);
-		await act(async () => {});
-		await act(async () =>
-			screen.getByRole("button", { name: "Track" }).click(),
-		);
-		await act(async () => {
-			for (let clickIndex = 0; clickIndex < repeatClicks; clickIndex += 1) {
-				screen.getByRole("button", { name: "Repeat" }).click();
-			}
-		});
+	] as const)(
+		"remote Queue clear overrides %s repeat after current Track",
+		async (_repeatMode, repeatClicks) => {
+			const api = createApi();
+			vi.mocked(api.getQueue)
+				.mockResolvedValueOnce({ items: queueItems, revision: "1" })
+				.mockResolvedValueOnce({ items: [], revision: "2" });
+			const { engine } = renderPlayback(api);
+			await act(async () => {});
+			await act(async () =>
+				screen.getByRole("button", { name: "Track" }).click(),
+			);
+			await act(async () => {
+				for (let clickIndex = 0; clickIndex < repeatClicks; clickIndex += 1) {
+					screen.getByRole("button", { name: "Repeat" }).click();
+				}
+			});
 
-		await notifyQueueEvent(api, {
-			revision: "2",
-			sequence: "2",
-			invalidates: ["queue"],
-		});
-		expect(engine.getState()).toMatchObject({
-			source: { type: "track", track: { id: "track-1" } },
-			status: "playing",
-			repeatMode: "off",
-		});
-		await act(async () => engine.finish());
+			await notifyQueueEvent(api, {
+				revision: "2",
+				sequence: "2",
+				invalidates: ["queue"],
+			});
+			expect(engine.getState()).toMatchObject({
+				source: { type: "track", track: { id: "track-1" } },
+				status: "playing",
+				repeatMode: "off",
+			});
+			await act(async () => engine.finish());
 
-		expect(engine.getState()).toMatchObject({ source: null, status: "idle" });
-	});
+			expect(engine.getState()).toMatchObject({ source: null, status: "idle" });
+		},
+	);
 
 	it("never applies Queue events to device-local Playback Session state", async () => {
 		const api = createApi();
@@ -805,18 +808,20 @@ describe("PlaybackProvider", () => {
 		);
 	});
 
-	it.each([
-		"Add to queue",
-		"Play next",
-	])("marks individual %s as user sourced", async (action) => {
-		const api = createApi();
-		renderPlayback(api);
-		await act(async () => {});
-		await act(async () => screen.getByRole("button", { name: action }).click());
-		expect(api.appendQueueItem).toHaveBeenCalledWith(track.id, "1", {
-			kind: "user",
-		});
-	});
+	it.each(["Add to queue", "Play next"])(
+		"marks individual %s as user sourced",
+		async (action) => {
+			const api = createApi();
+			renderPlayback(api);
+			await act(async () => {});
+			await act(async () =>
+				screen.getByRole("button", { name: action }).click(),
+			);
+			expect(api.appendQueueItem).toHaveBeenCalledWith(track.id, "1", {
+				kind: "user",
+			});
+		},
+	);
 
 	it("refetches and retries unambiguous append intent once", async () => {
 		const api = createApi();
@@ -909,30 +914,33 @@ describe("PlaybackProvider", () => {
 	it.each([
 		["replace", "Clear"],
 		["reorder", "Reorder"],
-	] as const)("does not auto-merge %s conflicts and exposes them", async (operation, buttonName) => {
-		const api = createApi();
-		vi.mocked(api.getQueue)
-			.mockResolvedValueOnce({ items: queueItems, revision: "1" })
-			.mockResolvedValueOnce({ items: queueItems, revision: "2" });
-		if (operation === "replace") {
-			vi.mocked(api.replaceQueue).mockRejectedValueOnce(queueConflict("2"));
-		} else {
-			vi.mocked(api.reorderQueue).mockRejectedValueOnce(queueConflict("2"));
-		}
-		renderPlayback(api);
+	] as const)(
+		"does not auto-merge %s conflicts and exposes them",
+		async (operation, buttonName) => {
+			const api = createApi();
+			vi.mocked(api.getQueue)
+				.mockResolvedValueOnce({ items: queueItems, revision: "1" })
+				.mockResolvedValueOnce({ items: queueItems, revision: "2" });
+			if (operation === "replace") {
+				vi.mocked(api.replaceQueue).mockRejectedValueOnce(queueConflict("2"));
+			} else {
+				vi.mocked(api.reorderQueue).mockRejectedValueOnce(queueConflict("2"));
+			}
+			renderPlayback(api);
 
-		await act(async () =>
-			screen.getByRole("button", { name: buttonName }).click(),
-		);
+			await act(async () =>
+				screen.getByRole("button", { name: buttonName }).click(),
+			);
 
-		const mutation =
-			operation === "replace" ? api.replaceQueue : api.reorderQueue;
-		expect(mutation).toHaveBeenCalledTimes(1);
-		expect(api.getQueue).toHaveBeenCalledTimes(2);
-		expect(screen.getByTestId("queue-conflict").textContent).toContain(
-			"changed",
-		);
-	});
+			const mutation =
+				operation === "replace" ? api.replaceQueue : api.reorderQueue;
+			expect(mutation).toHaveBeenCalledTimes(1);
+			expect(api.getQueue).toHaveBeenCalledTimes(2);
+			expect(screen.getByTestId("queue-conflict").textContent).toContain(
+				"changed",
+			);
+		},
+	);
 
 	it("keeps the latest server Queue after an ambiguous reorder conflict", async () => {
 		const api = createApi();
@@ -956,43 +964,48 @@ describe("PlaybackProvider", () => {
 		["append retry", "Append", true],
 		["remove retry", "Remove", true],
 		["already-satisfied remove", "Remove", false],
-	] as const)("clears stale conflict after %s", async (_scenario, buttonName, shouldRetry) => {
-		const api = createApi();
-		const latestItems = shouldRetry ? queueItems : [queueItems[1]];
-		vi.mocked(api.getQueue)
-			.mockResolvedValueOnce({ items: queueItems, revision: "1" })
-			.mockResolvedValueOnce({ items: queueItems, revision: "2" })
-			.mockResolvedValueOnce({ items: latestItems, revision: "3" });
-		vi.mocked(api.reorderQueue).mockRejectedValueOnce(queueConflict("2"));
-		if (buttonName === "Append") {
-			vi.mocked(api.appendQueueItem)
-				.mockRejectedValueOnce(queueConflict("3"))
-				.mockResolvedValueOnce({ items: queueItems, revision: "4" });
-		} else {
-			vi.mocked(api.removeQueueItem).mockRejectedValueOnce(queueConflict("3"));
-			if (shouldRetry) {
-				vi.mocked(api.removeQueueItem).mockResolvedValueOnce({
-					items: [queueItems[1]],
-					revision: "4",
-				});
+	] as const)(
+		"clears stale conflict after %s",
+		async (_scenario, buttonName, shouldRetry) => {
+			const api = createApi();
+			const latestItems = shouldRetry ? queueItems : [queueItems[1]];
+			vi.mocked(api.getQueue)
+				.mockResolvedValueOnce({ items: queueItems, revision: "1" })
+				.mockResolvedValueOnce({ items: queueItems, revision: "2" })
+				.mockResolvedValueOnce({ items: latestItems, revision: "3" });
+			vi.mocked(api.reorderQueue).mockRejectedValueOnce(queueConflict("2"));
+			if (buttonName === "Append") {
+				vi.mocked(api.appendQueueItem)
+					.mockRejectedValueOnce(queueConflict("3"))
+					.mockResolvedValueOnce({ items: queueItems, revision: "4" });
+			} else {
+				vi.mocked(api.removeQueueItem).mockRejectedValueOnce(
+					queueConflict("3"),
+				);
+				if (shouldRetry) {
+					vi.mocked(api.removeQueueItem).mockResolvedValueOnce({
+						items: [queueItems[1]],
+						revision: "4",
+					});
+				}
 			}
-		}
-		renderPlayback(api);
-		await act(async () => {});
+			renderPlayback(api);
+			await act(async () => {});
 
-		await act(async () =>
-			screen.getByRole("button", { name: "Reorder" }).click(),
-		);
-		expect(screen.getByTestId("queue-conflict").textContent).toContain(
-			"changed",
-		);
+			await act(async () =>
+				screen.getByRole("button", { name: "Reorder" }).click(),
+			);
+			expect(screen.getByTestId("queue-conflict").textContent).toContain(
+				"changed",
+			);
 
-		await act(async () =>
-			screen.getByRole("button", { name: buttonName }).click(),
-		);
+			await act(async () =>
+				screen.getByRole("button", { name: buttonName }).click(),
+			);
 
-		expect(screen.getByTestId("queue-conflict").textContent).toBe("");
-	});
+			expect(screen.getByTestId("queue-conflict").textContent).toBe("");
+		},
+	);
 });
 
 function queueConflict(revision: string) {

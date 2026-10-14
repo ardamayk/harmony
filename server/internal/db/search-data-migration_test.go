@@ -28,14 +28,14 @@ func TestSearchDataUpgradeBackfillsExistingLibrary(t *testing.T) {
 			t.Error(closeErr)
 		}
 	}()
-	document, err := searchdata.NewStore(database).GetDocument(context.Background(), "track", trackID, "user-1")
+	document, err := searchdata.NewRepository(database).GetDocument(context.Background(), "track", trackID, "user-1")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if document.Fields[0].Text.Folded != "dont stop live" {
 		t.Fatalf("backfilled title: %+v", document)
 	}
-	track, err := library.NewStore(database).GetTrack(context.Background(), trackID)
+	track, err := library.NewRepository(database).GetTrack(context.Background(), trackID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +48,7 @@ func TestSearchDataUpgradeBackfillsExistingLibrary(t *testing.T) {
 	if err := goose.Up(database, migrationsDir(t)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := searchdata.NewStore(database).GetDocument(context.Background(), "track", trackID, "user-1"); err != nil {
+	if _, err := searchdata.NewRepository(database).GetDocument(context.Background(), "track", trackID, "user-1"); err != nil {
 		t.Fatalf("reapplied migration: %v", err)
 	}
 }

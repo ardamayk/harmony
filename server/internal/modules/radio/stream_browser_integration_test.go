@@ -41,7 +41,7 @@ func TestBrowserHLSProxyIntegration(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	store := NewStore(testutil.OpenMigratedDB(t))
+	store := newTestService(testutil.OpenMigratedDB(t))
 	station, err := store.CreateStation(context.Background(), auth.DefaultUserID, StationCreate{
 		Name:      "Browser HLS Fixture",
 		StreamURL: fixtureUpstreamOrigin + "/master.m3u8",
@@ -52,7 +52,7 @@ func TestBrowserHLSProxyIntegration(t *testing.T) {
 	cache := NewNowPlayingCache()
 	proxy := NewStreamProxy(store, cache)
 	proxy.client.Transport = fixtureUpstreamTransport(t, upstream.URL)
-	handlers := NewHandlers(store, nil, proxy, cache)
+	handlers := NewHandler(store, nil, proxy, cache)
 	router := chi.NewRouter()
 	router.Use(hlsFixtureCORS)
 	router.Get("/api/v1/radio/stations/{stationId}/stream", handlers.StreamStation)
@@ -64,7 +64,7 @@ func TestBrowserHLSProxyIntegration(t *testing.T) {
 	// are written.
 	commandContext, cancel := context.WithTimeout(context.Background(), 180*time.Second)
 	defer cancel()
-	command := exec.CommandContext(commandContext, "pnpm", "exec", "playwright", "test", "e2e/radio-hls-proxy.spec.ts", "--config=playwright.hls.config.ts")
+	command := exec.CommandContext(commandContext, "bun", "x", "playwright", "test", "e2e/radio-hls-proxy.spec.ts", "--config=playwright.hls.config.ts")
 	command.Dir = filepath.Clean(filepath.Join("..", "..", "..", "..", "web"))
 	command.Env = append(os.Environ(),
 		"HLS_PROXY_URL="+musicServer.URL+"/api/v1/radio/stations/"+station.ID+"/stream",

@@ -22,9 +22,9 @@ For **Figma**, **Google Stitch**, or visual design work, start here:
 
 | Layer | Tech |
 |-------|------|
-| Server | Go, chi, SQLite, goose |
+| Server | Go, chi, SQLite, goose migrations, sqlc queries |
 | Web | React 19, TanStack Router, Vite, Tailwind 4, shadcn |
-| Monorepo | pnpm workspaces, Turborepo |
+| Monorepo | bun workspaces, Vite+ (`vp`: Oxlint, Oxfmt, Vitest, task runner), mise |
 | API | OpenAPI spec-first (`packages/contracts`) |
 | Docs | MDX (`packages/docs`) + Swagger UI (`/api/docs`) |
 
@@ -32,7 +32,7 @@ For **Figma**, **Google Stitch**, or visual design work, start here:
 
 ```bash
 mise install
-pnpm install
+bun install
 mise run generate   # OpenAPI codegen
 mise run dev    # Go :8090 + Vite :3000
 ```
@@ -57,19 +57,7 @@ Managed Import uses file tags locally. TITLE, ARTIST, ALBUMARTIST, ALBUM, and TR
 mise run build
 ```
 
-Mise is the canonical command interface. Use `mise run web:build`, `mise run server:build`, or `mise run desktop:build` for one artifact.
-
-Local Mise commands automatically use external, worktree-specific build and test output directories. Reusable caches remain shared; GitHub CI and clean-room verification retain their own storage policies. Existing outputs are not moved automatically.
-
-```bash
-mise run cache:status              # inspect paths and sizes
-mise run cache:setup               # optional pinned sccache installation
-mise run cache:migrate             # preview existing output migration
-mise run cache:migrate -- --apply  # apply the reviewed migration
-mise run cache:prune               # preview obsolete outputs
-```
-
-See [local storage and CI isolation](docs/development/local-storage.md) for layout, overrides, test artifacts, safe cleanup, and rollback.
+Mise is the canonical command interface. Use `mise run web:build`, `mise run server:build`, or `mise run desktop:build` for one artifact. `mise tasks` lists everything.
 
 ## Linux Desktop Client
 
@@ -83,7 +71,7 @@ Build and start the release Desktop Client:
 
 ```bash
 mise run build
-mise run start       # or: pnpm start
+mise run start
 ```
 
 The launcher automatically selects native Wayland with the NVIDIA explicit-sync workaround when required. Use `EARTHLY_AUDIO_DISPLAY_MODE=x11` to force X11/XWayland or `EARTHLY_AUDIO_DISPLAY_MODE=wayland-shm` for the slower shared-memory Wayland fallback. Docker Compose runs only the Music Server and does not launch the Desktop Client.
@@ -91,32 +79,21 @@ The launcher automatically selects native Wayland with the NVIDIA explicit-sync 
 ## Test
 
 ```bash
-mise run ci:fast          # static checks and unit tests
-mise run ci:integration   # Playwright, HLS, and pinned-mpv tests
-mise run ci:full          # fast + integration + production builds
-mise run --skip-tools ci:clean-room # full verification + container build with isolated empty caches
+mise run ci                # static checks, unit tests, generated-client drift (what PR CI runs)
+mise run ci:integration    # Playwright, HLS, and pinned-mpv tests
+mise run check             # vp check (Oxfmt + Oxlint + types), gofmt + golangci-lint, rustfmt + Clippy
+mise run test              # TypeScript, Go, and Rust unit tests
 ```
 
-`ci:clean-room` requires Docker with Buildx and the native dependencies used by the integration tests. Keep `--skip-tools` in the invocation so the outer Mise process does not install tools before cache isolation starts. The runner builds the verified pinned mpv executable, performs a forced frozen dependency install, runs the full verification contract, and constructs the container without regenerating committed clients. Go, Cargo, Turbo, pnpm, Playwright, Mise, and container-builder caches are redirected to temporary state that is removed on success, failure, or interruption; existing global developer caches are never deleted or rewritten.
+Targeted commands include `mise run web:test`, `mise run server:test`, and `mise run desktop:test`. Inside the TypeScript workspace, `vp check --fix`, `vp test`, and `vp run <task>` work directly.
 
-Classify pull-request validation from repository-owned path policy:
-
-```bash
-mise run ci:classify -- --base origin/main --head HEAD
-mise run ci:classify -- --base origin/main --head HEAD --format github
-```
-
-JSON is the default format. GitHub format emits stable `key=value` gate inputs.
-
-Targeted commands include `mise run web:test`, `mise run ui:test`, `mise run api-client:test`, `mise run server:test`, and `mise run desktop:test`. Root pnpm commands remain compatibility proxies; new development and CI automation should call Mise.
+CI is a single workflow (`.github/workflows/ci.yml`): web, server, desktop, and E2E jobs on every pull request; integration and release builds on `main`, weekly, or on demand.
 
 ## Git hooks
 
-`pnpm install` configures repository-managed Husky hooks for local development. Pre-commit formats and checks staged JavaScript, TypeScript, JSON, Go, and Rust source, preserving partial staging, and runs OpenAPI drift verification only when generation inputs are staged. Pre-push runs the complete `mise run ci:fast` policy.
+`bun install` installs the Vite+ hook dispatcher (`.vite-hooks/`). Pre-commit runs `vp staged` (Oxfmt/Oxlint on staged TypeScript and JSON, gofmt on Go, rustfmt check on Rust) and OpenAPI drift verification only when generation inputs are staged. Use `--no-verify` to bypass; CI remains authoritative.
 
-Hooks provide fast local feedback; CI remains authoritative. Use Git's `--no-verify` option when a hook must be bypassed. Hook installation is disabled in CI and production dependency installs.
-
-If `graphify-out/` exists and `graphify` is available on `PATH`, post-commit and branch-switch post-checkout hooks update the graph in the background. Missing Graphify is an intentional no-op; no machine-specific executable path is required.
+If `graphify-out/` exists and `graphify` is available on `PATH`, post-commit and branch-switch post-checkout hooks update the graph in the background.
 
 ## Developer docs
 

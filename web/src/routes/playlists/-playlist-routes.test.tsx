@@ -7,7 +7,14 @@ import {
 	waitFor,
 	within,
 } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+	afterEach,
+	beforeEach,
+	describe,
+	expect,
+	it,
+	vi,
+} from "vite-plus/test";
 import { PlaylistDetailContent } from "./-playlist-page";
 import { PlaylistsPage } from "./-playlists-page";
 
@@ -148,7 +155,10 @@ describe("playlist routes", () => {
 			);
 			expect(warning).toHaveBeenCalledWith(
 				"Failed to queue collection tracks",
-				{ trackIds: ["t1", "t2", "t3", "t4"], error },
+				{
+					trackIds: ["t1", "t2", "t3", "t4"],
+					error,
+				},
 			);
 			expect(mocks.queueTracks).toHaveBeenCalledTimes(1);
 		} finally {
@@ -324,7 +334,11 @@ describe("playlist routes", () => {
 		expect(mocks.playTrack).toHaveBeenCalledWith(
 			"t1",
 			["t1", "t2", "t3", "t4"],
-			{ kind: "playlist", playlistId: "p1", name: "Favorites" },
+			{
+				kind: "playlist",
+				playlistId: "p1",
+				name: "Favorites",
+			},
 		);
 
 		fireEvent.click(screen.getByRole("button", { name: "Shuffle" }));
@@ -337,7 +351,11 @@ describe("playlist routes", () => {
 		expect(mocks.playTrack).toHaveBeenLastCalledWith(
 			"t1",
 			["t1", "t2", "t3", "t4"],
-			{ kind: "playlist", playlistId: "p1", name: "Favorites" },
+			{
+				kind: "playlist",
+				playlistId: "p1",
+				name: "Favorites",
+			},
 		);
 
 		fireEvent.click(screen.getByRole("button", { name: "Queue" }));

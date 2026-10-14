@@ -10,7 +10,14 @@ import {
 	within,
 } from "@testing-library/react";
 import { useState } from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+	afterEach,
+	beforeEach,
+	describe,
+	expect,
+	it,
+	vi,
+} from "vite-plus/test";
 import { invalidatePlaylistCache } from "#/lib/playlist-query-cache";
 import { LibrarySearchDialog } from "./library-search-dialog";
 
@@ -356,68 +363,71 @@ describe("LibrarySearchDialog", () => {
 		expect(await screen.findByText(/matches “zzz”/)).toBeTruthy();
 	});
 
-	it.each([
-		"track",
-		"album",
-		"artist",
-		"genre",
-		"playlist",
-	] as const)("highlights a server-selected %s and keeps its category occurrence within five rows", async (type) => {
-		const best = {
-			type,
-			id: "best",
-			name: "Exact name",
-			match: "direct" as const,
-		};
-		const rows = Array.from({ length: 7 }, (_, i) => ({
-			...best,
-			id: `row-${i}`,
-			name: `Other ${i}`,
-		}));
-		mocks.searchLibrary.mockResolvedValue({
-			...empty,
-			bestMatch: best,
-			[`${type}s`]: [best, ...rows],
-		});
-		renderDialog();
-		fireEvent.change(screen.getByRole("combobox"), {
-			target: { value: "Exact name" },
-		});
-		const highlight = await screen.findByRole("group", { name: "Best Match" });
-		expect(
-			within(highlight).getByRole("option", { name: "Exact name" }),
-		).toBeTruthy();
-		const occurrences = screen.getAllByRole("option", { name: "Exact name" });
-		expect(occurrences).toHaveLength(2);
-		const options = screen.getAllByRole("option");
-		expect(options).toHaveLength(6);
-		expect(new Set(options.map((option) => option.id)).size).toBe(6);
-		expect(options[1]).toBe(occurrences[1]);
-		expect(screen.queryByText("Other 4")).toBeNull();
-		const input = screen.getByRole("combobox");
-		expect(input.getAttribute("aria-activedescendant")).toBe(occurrences[0].id);
-		fireEvent.keyDown(input, { key: "ArrowDown" });
-		expect(input.getAttribute("aria-activedescendant")).toBe(occurrences[1].id);
-		expect(screen.getAllByRole("option", { selected: true })).toEqual([
-			occurrences[1],
-		]);
-	});
+	it.each(["track", "album", "artist", "genre", "playlist"] as const)(
+		"highlights a server-selected %s and keeps its category occurrence within five rows",
+		async (type) => {
+			const best = {
+				type,
+				id: "best",
+				name: "Exact name",
+				match: "direct" as const,
+			};
+			const rows = Array.from({ length: 7 }, (_, i) => ({
+				...best,
+				id: `row-${i}`,
+				name: `Other ${i}`,
+			}));
+			mocks.searchLibrary.mockResolvedValue({
+				...empty,
+				bestMatch: best,
+				[`${type}s`]: [best, ...rows],
+			});
+			renderDialog();
+			fireEvent.change(screen.getByRole("combobox"), {
+				target: { value: "Exact name" },
+			});
+			const highlight = await screen.findByRole("group", {
+				name: "Best Match",
+			});
+			expect(
+				within(highlight).getByRole("option", { name: "Exact name" }),
+			).toBeTruthy();
+			const occurrences = screen.getAllByRole("option", { name: "Exact name" });
+			expect(occurrences).toHaveLength(2);
+			const options = screen.getAllByRole("option");
+			expect(options).toHaveLength(6);
+			expect(new Set(options.map((option) => option.id)).size).toBe(6);
+			expect(options[1]).toBe(occurrences[1]);
+			expect(screen.queryByText("Other 4")).toBeNull();
+			const input = screen.getByRole("combobox");
+			expect(input.getAttribute("aria-activedescendant")).toBe(
+				occurrences[0].id,
+			);
+			fireEvent.keyDown(input, { key: "ArrowDown" });
+			expect(input.getAttribute("aria-activedescendant")).toBe(
+				occurrences[1].id,
+			);
+			expect(screen.getAllByRole("option", { selected: true })).toEqual([
+				occurrences[1],
+			]);
+		},
+	);
 
-	it.each([
-		"corrected",
-		"related",
-	] as const)("does not invent Best Match for %s results", async (match) => {
-		mocks.searchLibrary.mockResolvedValue({
-			...empty,
-			tracks: [{ ...nemo, match }],
-		});
-		renderDialog();
-		fireEvent.change(screen.getByRole("combobox"), {
-			target: { value: "nmeo" },
-		});
-		await screen.findByText("Nemo");
-		expect(screen.queryByRole("group", { name: "Best Match" })).toBeNull();
-	});
+	it.each(["corrected", "related"] as const)(
+		"does not invent Best Match for %s results",
+		async (match) => {
+			mocks.searchLibrary.mockResolvedValue({
+				...empty,
+				tracks: [{ ...nemo, match }],
+			});
+			renderDialog();
+			fireEvent.change(screen.getByRole("combobox"), {
+				target: { value: "nmeo" },
+			});
+			await screen.findByText("Nemo");
+			expect(screen.queryByRole("group", { name: "Best Match" })).toBeNull();
+		},
+	);
 
 	it.each([
 		["artist", { to: "/library/tracks", search: { artistId: "selected" } }],
@@ -426,18 +436,21 @@ describe("LibrarySearchDialog", () => {
 			"playlist",
 			{ to: "/playlists/$playlistId", params: { playlistId: "selected" } },
 		],
-	] as const)("navigates the selected %s using original metadata", async (type, destination) => {
-		mocks.searchLibrary.mockResolvedValue({
-			...empty,
-			bestMatch: { type, id: "selected", name: "İzmir", match: "direct" },
-		});
-		renderDialog();
-		fireEvent.change(screen.getByRole("combobox"), {
-			target: { value: "izmir" },
-		});
-		fireEvent.click(await screen.findByRole("option", { name: "İzmir" }));
-		expect(mocks.navigate).toHaveBeenCalledWith(destination);
-	});
+	] as const)(
+		"navigates the selected %s using original metadata",
+		async (type, destination) => {
+			mocks.searchLibrary.mockResolvedValue({
+				...empty,
+				bestMatch: { type, id: "selected", name: "İzmir", match: "direct" },
+			});
+			renderDialog();
+			fireEvent.change(screen.getByRole("combobox"), {
+				target: { value: "izmir" },
+			});
+			fireEvent.click(await screen.findByRole("option", { name: "İzmir" }));
+			expect(mocks.navigate).toHaveBeenCalledWith(destination);
+		},
+	);
 
 	it("waits 200 ms, ignores punctuation, and searches one-character names", async () => {
 		vi.useFakeTimers({ shouldAdvanceTime: false });
@@ -578,39 +591,39 @@ describe("LibrarySearchDialog", () => {
 		document.documentElement.scrollTop = 0;
 	});
 
-	it.each([
-		"button",
-		"shortcut",
-	])("restores focus to the %s opener after Escape", async (opener) => {
-		function SearchHarness() {
-			const [open, setOpen] = useState(false);
-			return (
-				<>
-					<button type="button" onClick={() => setOpen(true)}>
-						Open search
-					</button>
-					<LibrarySearchDialog open={open} onOpenChange={setOpen} />
-				</>
+	it.each(["button", "shortcut"])(
+		"restores focus to the %s opener after Escape",
+		async (opener) => {
+			function SearchHarness() {
+				const [open, setOpen] = useState(false);
+				return (
+					<>
+						<button type="button" onClick={() => setOpen(true)}>
+							Open search
+						</button>
+						<LibrarySearchDialog open={open} onOpenChange={setOpen} />
+					</>
+				);
+			}
+			const client = new QueryClient();
+			render(
+				<QueryClientProvider client={client}>
+					<SearchHarness />
+				</QueryClientProvider>,
 			);
-		}
-		const client = new QueryClient();
-		render(
-			<QueryClientProvider client={client}>
-				<SearchHarness />
-			</QueryClientProvider>,
-		);
-		const button = screen.getByRole("button", { name: "Open search" });
-		button.focus();
-		if (opener === "button") fireEvent.click(button);
-		else fireEvent.keyDown(button, { key: "k", ctrlKey: true });
-		const input = screen.getByRole("combobox");
-		expect(document.activeElement).toBe(input);
-		fireEvent.keyDown(input, { key: "Escape" });
-		await act(async () => {
-			await vi.advanceTimersByTimeAsync(1);
-		});
-		await waitFor(() => expect(document.activeElement).toBe(button));
-	});
+			const button = screen.getByRole("button", { name: "Open search" });
+			button.focus();
+			if (opener === "button") fireEvent.click(button);
+			else fireEvent.keyDown(button, { key: "k", ctrlKey: true });
+			const input = screen.getByRole("combobox");
+			expect(document.activeElement).toBe(input);
+			fireEvent.keyDown(input, { key: "Escape" });
+			await act(async () => {
+				await vi.advanceTimersByTimeAsync(1);
+			});
+			await waitFor(() => expect(document.activeElement).toBe(button));
+		},
+	);
 
 	it("opens with Ctrl+K or / and ignores / while typing elsewhere", () => {
 		const onOpenChange = vi.fn();

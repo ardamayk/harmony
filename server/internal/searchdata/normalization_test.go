@@ -32,7 +32,7 @@ func TestStoredNamesUseTheQueryNormalizationRules(t *testing.T) {
 	for _, testCase := range testutil.LibrarySearchNormalizationCases() {
 		t.Run(testCase.Input, func(t *testing.T) {
 			execute(t, database, `UPDATE tracks SET title = ? WHERE id = 'track'`, testCase.Input)
-			document, err := searchdata.NewStore(database).GetDocument(context.Background(), "track", "track", "listener")
+			document, err := searchdata.NewRepository(database).GetDocument(context.Background(), "track", "track", "listener")
 			if err != nil {
 				t.Fatal(err)
 			}

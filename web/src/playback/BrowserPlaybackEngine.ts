@@ -43,7 +43,7 @@ type BrowserHlsFactory = {
 type BrowserHlsFactoryLoader = () => Promise<BrowserHlsFactory>;
 
 /** The subset of navigator.mediaSession the engine drives; injectable for tests. */
-export interface BrowserMediaSession {
+interface BrowserMediaSession {
 	metadata: MediaMetadata | null;
 	playbackState: MediaSessionPlaybackState;
 	setActionHandler(
@@ -629,7 +629,7 @@ type MediaMetadataFields = {
 	artwork: { src: string }[];
 };
 
-export function mediaMetadataFor(source: PlaybackSource): MediaMetadataFields {
+function mediaMetadataFor(source: PlaybackSource): MediaMetadataFields {
 	if (source.type === "track") {
 		return {
 			title: source.track.title,
@@ -684,7 +684,7 @@ function isHlsStream(url: string) {
 function canPlayNativeHls(media: BrowserPlaybackMedia) {
 	return Boolean(
 		media.canPlayType("application/vnd.apple.mpegurl") ||
-			media.canPlayType("application/x-mpegurl"),
+		media.canPlayType("application/x-mpegurl"),
 	);
 }
 
@@ -704,7 +704,7 @@ function sanitizeReconnectErrorMessage(error: unknown) {
  * End of the buffered range that contains the playhead, or the furthest
  * range end when none does; null when the media exposes no ranges.
  */
-export function bufferedEndFor(
+function bufferedEndFor(
 	media: Pick<BrowserPlaybackMedia, "buffered">,
 	currentTime: number,
 ): number | null {

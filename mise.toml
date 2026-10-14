@@ -1,342 +1,145 @@
-[settings]
-# Keep storage wrappers ahead of user PATH additions for raw mise exec commands.
-activate_aggressive = true
+[tools]
+go = "1.26.9"
+node = "24"
+bun = "1.4.2"
+golangci-lint = "2.12.2"
+sqlc = "1.31.1"
 
 [env]
-_.source = { path = "scripts/storage-env.sh", tools = true }
+# Use the workspace-pinned Vite+ (`vp`) and other local binaries.
+_.path = ["{{config_root}}/node_modules/.bin"]
 
-[tools]
-go = "1.26.6"
-node = "24"
-pnpm = "10.12.1"
-golangci-lint = "2.12.2"
+# --- Development -------------------------------------------------------------
 
 [tasks.dev]
-description = "Run the normal Music Server and Web Client development environment"
-depends = ["web:dev"]
-run = ":"
-
-[tasks."web:dev"]
 description = "Run the Music Server and Web Client in development mode"
-run = "./scripts/run-with-music-server.sh development pnpm --dir web dev"
+run = "./scripts/run-with-music-server.sh development bun run --cwd web dev"
 
 [tasks."desktop:dev"]
 description = "Run the Music Server and Desktop Client in development mode"
-run = "./scripts/run-with-music-server.sh development pnpm --dir desktop desktop:dev"
-
-[tasks.build]
-description = "Build the Web Client, Music Server, and Desktop Client"
-depends = ["server:build", "desktop:build"]
-run = ":"
-
-[tasks."server:build"]
-description = "Build the Music Server binary with embedded Web Client assets"
-depends = ["web:build", "docs:build"]
-run = "bash scripts/run-with-storage.sh server-build node scripts/build-server.mjs"
-
-[tasks."desktop:build"]
-description = "Build the release Desktop Client with pinned mpv"
-depends = ["web:build"]
-run = "pnpm --filter @repo/desktop build:sidecar:prepared"
+run = "./scripts/run-with-music-server.sh development bun run --cwd desktop dev"
 
 [tasks.start]
 description = "Run the built Music Server and release Desktop Client"
 run = """
 #!/usr/bin/env bash
 set -euo pipefail
-[[ -x "${EARTHLY_SERVER_BINARY:-bin/server}" ]] || { echo "Missing bin/server; run 'mise run build' first." >&2; exit 1; }
-[[ -x "${CARGO_TARGET_DIR:-desktop/src-tauri/target}/release/earthly-audio-desktop" ]] || { echo "Missing Desktop Client; run 'mise run build' first." >&2; exit 1; }
-./scripts/run-with-music-server.sh built pnpm --dir desktop start
+[[ -x bin/server ]] || { echo "Missing bin/server; run 'mise run build' first." >&2; exit 1; }
+./scripts/run-with-music-server.sh built bun run --cwd desktop start
 """
 
+# --- Code generation ---------------------------------------------------------
+
 [tasks.generate]
-description = "Regenerate committed OpenAPI clients"
-run = "bash scripts/generate-openapi.sh"
+description = "Regenerate committed OpenAPI clients and sqlc query packages"
+run = ["bash scripts/generate-openapi.sh", "cd server && sqlc generate"]
 
 [tasks."generate:check"]
-description = "Verify committed OpenAPI clients are current"
-run = "bash scripts/check-openapi-generation.sh"
+description = "Verify committed OpenAPI clients and sqlc query packages are current"
+run = ["bash scripts/check-openapi-generation.sh", "cd server && sqlc diff"]
 
-[tasks.format]
-description = "Format the workspace, Music Server, and Desktop Client"
-depends = ["workspace:format", "server:format", "desktop:format"]
-run = ":"
+# --- Build -------------------------------------------------------------------
 
-[tasks."format:check"]
-description = "Verify formatting across the workspace, Music Server, and Desktop Client"
-depends = ["workspace:format:check", "server:format:check", "desktop:format:check"]
-run = ":"
-
-[tasks.lint]
-description = "Lint the workspace, Music Server, and Desktop Client"
-depends = ["workspace:lint", "server:lint", "desktop:lint"]
-run = ":"
-
-[tasks.typecheck]
-description = "Type-check the TypeScript workspace"
-depends = ["workspace:typecheck"]
-run = ":"
-
-[tasks.check]
-description = "Run static checks across the workspace, Music Server, and Desktop Client"
-depends = ["workspace:check", "workspace:typecheck", "server:check", "desktop:check"]
-run = ":"
-
-[tasks.test]
-description = "Run workspace, Music Server, Desktop Client, workflow policy, and Git hook tests"
-depends = ["workspace:test", "server:test", "desktop:test", "git-hooks:test", "classifier:test", "main-workflows:test", "clean-room:test", "storage:test"]
-run = ":"
-
-[tasks."git-hooks:test"]
-description = "Test repository-managed Git hook behavior"
-run = "node --test scripts/test-git-hooks.mjs"
-
-[tasks."classifier:test"]
-description = "Test pull-request change classification"
-run = "node --test scripts/test-classify-pr-changes.mjs"
-
-[tasks."main-workflows:test"]
-description = "Test full main verification workflow policy"
-run = "node --test scripts/test-main-verification-workflows.mjs"
-
-[tasks."clean-room:test"]
-description = "Test clean-room verification behavior and workflow policy"
-run = "node --test scripts/test-clean-room-verification.mjs"
-
-[tasks."workspace:build"]
-description = "Build workspace production artifacts"
-run = "bash scripts/run-with-storage.sh build bash scripts/run-workspace-task.sh build web"
-
-[tasks."workspace:format"]
-description = "Format the Web Client, shared UI, and API client"
-run = "bash scripts/run-workspace-task.sh format web @repo/ui @repo/api-client"
-
-[tasks."workspace:format:check"]
-description = "Verify formatting for the Web Client, shared UI, and API client"
-run = "bash scripts/run-workspace-task.sh format:check web @repo/ui @repo/api-client"
-
-[tasks."workspace:lint"]
-description = "Lint the Web Client, shared UI, and API client"
-run = "bash scripts/run-workspace-task.sh lint web @repo/ui @repo/api-client"
-
-[tasks."workspace:check"]
-description = "Check the Web Client, shared UI, and API client"
-run = "bash scripts/run-workspace-task.sh check web @repo/ui @repo/api-client"
-
-[tasks."workspace:typecheck"]
-description = "Type-check the Web Client, shared UI, and API client"
-run = "bash scripts/run-workspace-task.sh typecheck web @repo/ui @repo/api-client"
-
-[tasks."workspace:test"]
-description = "Run Web Client, shared UI, and API client unit tests"
-run = "bash scripts/run-with-storage.sh test bash scripts/run-workspace-task.sh test:unit web @repo/ui @repo/api-client"
+[tasks.build]
+description = "Build the Music Server (with embedded Web Client and docs) and the Desktop Client"
+depends = ["server:build", "desktop:build"]
 
 [tasks."web:build"]
 description = "Build the Web Client"
-depends = ["workspace:build"]
-run = ":"
+run = "bun run --cwd web build"
 
 [tasks."docs:build"]
 description = "Build the product documentation embedded by the Music Server"
-run = "bash scripts/run-with-storage.sh build bash scripts/run-workspace-task.sh build @repo/docs"
+run = "bun run --cwd packages/docs build"
 
-[tasks."web:format"]
-description = "Format the Web Client"
-run = "bash scripts/run-workspace-task.sh format web"
+[tasks."server:build"]
+description = "Build the Music Server binary with embedded Web Client and docs"
+depends = ["web:build", "docs:build"]
+run = [
+	"bash scripts/sync-static.sh",
+	"cd server && go build -o ../bin/server ./cmd/server",
+]
+
+[tasks."desktop:build"]
+description = "Build the release Desktop Client with pinned mpv"
+depends = ["web:build"]
+run = "bun run --cwd desktop build:sidecar:prepared"
+
+# --- Static checks -----------------------------------------------------------
+
+[tasks.format]
+description = "Format TypeScript, Go, and Rust sources"
+run = ["vp fmt", "cd server && go fmt ./...", "bun run --cwd desktop format"]
+
+[tasks.check]
+description = "Format, lint, and type-check every language"
+depends = ["web:check", "server:check", "desktop:check"]
 
 [tasks."web:check"]
-description = "Check the Web Client"
-run = "bash scripts/run-workspace-task.sh check web"
+description = "Oxfmt, Oxlint, and type checks for the TypeScript workspace"
+run = "vp check"
 
-[tasks."web:typecheck"]
-description = "Type-check the Web Client"
-run = "bash scripts/run-workspace-task.sh typecheck web"
-
-[tasks."web:test"]
-description = "Run Web Client unit tests"
-run = "bash scripts/run-with-storage.sh test bash scripts/run-workspace-task.sh test:unit web"
-
-[tasks."ui:format"]
-description = "Format the shared UI"
-run = "bash scripts/run-workspace-task.sh format @repo/ui"
-
-[tasks."ui:check"]
-description = "Check the shared UI"
-run = "bash scripts/run-workspace-task.sh check @repo/ui"
-
-[tasks."ui:typecheck"]
-description = "Type-check the shared UI"
-run = "bash scripts/run-workspace-task.sh typecheck @repo/ui"
-
-[tasks."ui:test"]
-description = "Run shared UI unit tests"
-run = "bash scripts/run-with-storage.sh test bash scripts/run-workspace-task.sh test:unit @repo/ui"
-
-[tasks."api-client:format"]
-description = "Format the API client"
-run = "bash scripts/run-workspace-task.sh format @repo/api-client"
-
-[tasks."api-client:check"]
-description = "Check the API client"
-run = "bash scripts/run-workspace-task.sh check @repo/api-client"
-
-[tasks."api-client:typecheck"]
-description = "Type-check the API client"
-run = "bash scripts/run-workspace-task.sh typecheck @repo/api-client"
-
-[tasks."api-client:test"]
-description = "Run API client unit tests"
-run = "bash scripts/run-with-storage.sh test bash scripts/run-workspace-task.sh test:unit @repo/api-client"
-
-[tasks."server:format"]
-description = "Format the Music Server"
-run = "cd server && go fmt ./..."
-
-[tasks."server:format:check"]
-description = "Verify Music Server formatting"
+[tasks."server:check"]
+description = "gofmt and golangci-lint for the Music Server"
 run = """
 #!/usr/bin/env bash
 set -euo pipefail
 cd server
-unformattedFiles="$(gofmt -l .)"
-if [[ -n "$unformattedFiles" ]]; then
-  printf '%s\n' "$unformattedFiles" >&2
-  exit 1
-fi
+unformatted="$(gofmt -l .)"
+if [[ -n "$unformatted" ]]; then printf '%s\n' "$unformatted" >&2; exit 1; fi
+golangci-lint run
 """
 
-[tasks."server:lint"]
-description = "Lint the Music Server"
-run = "bash scripts/run-with-storage.sh check bash -c 'cd server && golangci-lint run'"
+[tasks."desktop:check"]
+description = "rustfmt and Clippy for the Desktop Client"
+run = ["bun run --cwd desktop format:check", "bun run --cwd desktop lint"]
 
-[tasks."server:check"]
-description = "Check Music Server formatting and lint"
-depends = ["server:format:check", "server:lint"]
-run = ":"
+# --- Tests -------------------------------------------------------------------
+
+[tasks.test]
+description = "Run TypeScript, Go, and Rust unit tests"
+depends = ["web:test", "server:test", "desktop:test"]
+
+[tasks."web:test"]
+description = "Run Web Client, shared UI, and API client unit tests"
+run = "vp run --filter web --filter @repo/ui --filter @repo/api-client test"
 
 [tasks."server:test"]
-description = "Run Music Server unit tests"
-run = "bash scripts/run-with-storage.sh test bash -c 'cd server && go test ./...'"
-
-[tasks."desktop:format"]
-description = "Format the Desktop Client"
-run = "pnpm --filter @repo/desktop format"
-
-[tasks."desktop:format:check"]
-description = "Verify Desktop Client formatting"
-run = "pnpm --filter @repo/desktop format:check"
-
-[tasks."desktop:lint"]
-description = "Lint the Desktop Client with Clippy"
-run = "pnpm --filter @repo/desktop lint"
-
-[tasks."desktop:check"]
-description = "Check Desktop Client formatting and Clippy"
-depends = ["desktop:format:check", "desktop:lint"]
-run = ":"
+description = "Run Music Server tests"
+dir = "server"
+run = "go test ./..."
 
 [tasks."desktop:test"]
 description = "Run Desktop Client unit tests"
-run = "pnpm --filter @repo/desktop test:unit"
+run = "bun run --cwd desktop test"
 
 [tasks."web:test:e2e"]
 description = "Run Web Client Playwright tests"
-run = "pnpm turbo run test:e2e --filter=web"
+run = "bun run --cwd web test:e2e"
 
 [tasks."server:test:hls"]
 description = "Run Music Server HLS browser integration tests"
-run = "bash scripts/run-with-storage.sh browser bash -c 'cd server && RUN_HLS_BROWSER_INTEGRATION=1 go test ./internal/modules/radio -run TestBrowserHLSProxyIntegration -count=1 -v'"
+dir = "server"
+env = { RUN_HLS_BROWSER_INTEGRATION = "1" }
+run = "go test ./internal/modules/radio -run TestBrowserHLSProxyIntegration -count=1 -v"
 
 [tasks."desktop:test:mpv"]
 description = "Run Desktop Client tests against pinned mpv"
-run = "pnpm --filter @repo/desktop prepare:mpv && pnpm --filter @repo/desktop test:mpv"
+run = ["bun run --cwd desktop prepare:mpv", "bun run --cwd desktop test:mpv"]
 
 [tasks."desktop:test:import-parity"]
 description = "Run Desktop Client Managed Import parity against a real Music Server"
-run = "pnpm --filter @repo/desktop test:import-parity"
+run = "bun run --cwd desktop test:import-parity"
 
-[tasks."ci:fast"]
-description = "Run the local fast CI policy"
-depends = ["check", "test"]
-run = ":"
-
-[tasks."ci:classify"]
-description = "Classify validation required between two Git revisions"
-run = "node scripts/classify-pr-changes.mjs"
+[tasks.ci]
+description = "What CI runs on every pull request: static checks and unit tests"
+depends = ["check", "test", "generate:check"]
 
 [tasks."ci:integration"]
-description = "Run all browser, HLS, and pinned-mpv integration tests"
-depends = ["web:test:e2e", "server:test:hls", "desktop:test:mpv", "desktop:test:import-parity"]
-run = ":"
-
-[tasks."ci:full"]
-description = "Run full local CI policy and production builds"
-depends = ["ci:fast"]
-run = """
-#!/usr/bin/env bash
-set -euo pipefail
-mise run generate:check
-mise run ci:integration
-mise run build
-"""
-
-[tasks."ci:clean-room"]
-description = "Run full verification and container construction with isolated empty caches"
-run = "bash scripts/run-clean-room-verification.sh"
-
-# Optional debugging aid only: smoke-tests that the selected Integration Gate
-# job still wires up under nektos/act. It is never authoritative (GitHub-hosted
-# runners produce the PR / Integration Gate result) and never required; see
-# docs/testing/act-smoke.md. It must not grow into a local reimplementation of
-# CI policy.
-[tasks."ci:act:smoke"]
-description = "Optionally smoke-test a selected Integration Gate job locally with act; a wiring-debug aid that is neither authoritative nor required"
-run = """
-#!/usr/bin/env bash
-set -euo pipefail
-command -v act >/dev/null 2>&1 || {
-  echo "nektos/act is required for this optional smoke task; see docs/testing/act-smoke.md." >&2
-  exit 1
-}
-command -v docker >/dev/null 2>&1 || {
-  echo "Docker (or a compatible container engine) is required by act; see docs/testing/act-smoke.md." >&2
-  exit 1
-}
-# Smoke runs still need a pull_request event payload: the classify job reads
-# the base and head SHAs from it. Default to the merge-base with origin/main
-# so the documented no-argument invocation completes.
-base="$(git merge-base origin/main HEAD 2>/dev/null || git rev-parse HEAD~1)"
-head="$(git rev-parse HEAD)"
-event_file="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/act-pull-request-event.json"
-printf '{"pull_request":{"base":{"sha":"%s"},"head":{"sha":"%s"}}}\n' "$base" "$head" > "$event_file"
-# Defaults to the cheapest job; select another one with, for example:
-#   mise run ci:act:smoke -- --job web-e2e
-exec act pull_request \
-  --workflow .github/workflows/pr-integration-gate.yml \
-  --eventpath "$event_file" \
-  "$@"
-"""
-
-[tasks."storage:test"]
-description = "Test local storage isolation and safe cache management"
-run = "node --test scripts/test-storage-*.mjs"
-
-[tasks."cache:setup"]
-description = "Install pinned local compiler cache"
-run = "node scripts/storage.mjs setup"
-
-[tasks."cache:status"]
-description = "Show resolved local storage and cache sizes"
-run = "node scripts/storage.mjs status"
-
-[tasks."cache:migrate"]
-description = "Preview old output migration; pass --apply to move"
-run = "node scripts/storage.mjs migrate"
-
-[tasks."cache:prune"]
-description = "Preview orphaned and expired outputs; pass --apply to remove"
-run = "node scripts/storage.mjs prune"
-
-[tasks."cache:clean"]
-description = "Preview current worktree output cleanup; pass --apply to remove"
-run = "node scripts/storage.mjs clean"
+description = "Browser, HLS, and pinned-mpv integration tests"
+depends = [
+	"web:test:e2e",
+	"server:test:hls",
+	"desktop:test:mpv",
+	"desktop:test:import-parity",
+]

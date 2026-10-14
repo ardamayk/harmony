@@ -9,7 +9,7 @@ import (
 
 func TestMarkPreviewRollsBackJobWhenBatchRevisionFails(t *testing.T) {
 	database := testutil.OpenMigratedDB(t)
-	store := NewStore(database)
+	store := NewRepository(database)
 	batch, err := store.CreateBatch(context.Background(), BatchOptions{})
 	if err != nil {
 		t.Fatalf("create batch: %v", err)
@@ -42,7 +42,7 @@ func TestMarkPreviewRollsBackJobWhenBatchRevisionFails(t *testing.T) {
 
 func TestMarkFailedRollsBackJobWhenBatchRevisionFails(t *testing.T) {
 	database := testutil.OpenMigratedDB(t)
-	store := NewStore(database)
+	store := NewRepository(database)
 	batch, err := store.CreateBatch(context.Background(), BatchOptions{})
 	if err != nil {
 		t.Fatalf("create batch: %v", err)

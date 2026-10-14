@@ -30,7 +30,7 @@ func (reader *cancelAtEOFReader) Read(buffer []byte) (int, error) {
 
 func TestFinishUncommittedBatchFileDoesNotCleanUpAfterCancellation(t *testing.T) {
 	database := testutil.OpenMigratedDB(t)
-	store := NewStore(database)
+	store := NewRepository(database)
 	storage := newStorage(t.TempDir(), StorageLimits{FileBytes: 1024, BatchBytes: 1024}, unlimitedStorageCapacity)
 	upload, err := storage.StageUpload(bytes.NewReader([]byte("audio")), 5)
 	if err != nil {
@@ -51,7 +51,7 @@ func TestFinishUncommittedBatchFileDoesNotCleanUpAfterCancellation(t *testing.T)
 
 func TestCleanupInactiveRemovesOnlyExpiredImportBatch(t *testing.T) {
 	database := testutil.OpenMigratedDB(t)
-	store := NewStore(database)
+	store := NewRepository(database)
 	storage := newStorage(t.TempDir(), StorageLimits{FileBytes: 1024, BatchBytes: 2048}, unlimitedStorageCapacity)
 	service := NewService(store, storage, nil)
 	now := time.Date(2026, time.September, 2, 12, 0, 0, 0, time.UTC)
@@ -87,7 +87,7 @@ func TestCleanupRestartRemovesOrphanStaging(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stage orphan upload: %v", err)
 	}
-	service := NewService(NewStore(testutil.OpenMigratedDB(t)), storage, nil)
+	service := NewService(NewRepository(testutil.OpenMigratedDB(t)), storage, nil)
 
 	if err := service.CleanupRestart(context.Background()); err != nil {
 		t.Fatalf("cleanup restart staging: %v", err)
@@ -99,7 +99,7 @@ func TestCleanupRestartRemovesOrphanStaging(t *testing.T) {
 
 func TestCleanupRestartReconcilesRecordsWhenStagingCleanupPartiallyFails(t *testing.T) {
 	database := testutil.OpenMigratedDB(t)
-	store := NewStore(database)
+	store := NewRepository(database)
 	storage := newStorage(t.TempDir(), StorageLimits{FileBytes: 1024, BatchBytes: 1024}, unlimitedStorageCapacity)
 	batch, _ := createCleanupBatch(t, store, storage)
 	blockedPath := filepath.Join(storage.root, ".staging", ".import-blocked.upload")
@@ -122,7 +122,7 @@ func TestCleanupRestartReconcilesRecordsWhenStagingCleanupPartiallyFails(t *test
 
 func TestCancelJobRejectsCompletedBatchFile(t *testing.T) {
 	database := testutil.OpenMigratedDB(t)
-	store := NewStore(database)
+	store := NewRepository(database)
 	batch, err := store.CreateBatch(context.Background(), BatchOptions{})
 	if err != nil {
 		t.Fatalf("create completed batch: %v", err)
@@ -161,7 +161,7 @@ func TestCancelJobRejectsCompletedBatchFile(t *testing.T) {
 }
 
 func TestCleanupInactiveExpiresFailedStandaloneJob(t *testing.T) {
-	store := NewStore(testutil.OpenMigratedDB(t))
+	store := NewRepository(testutil.OpenMigratedDB(t))
 	job, err := store.CreateJob(context.Background(), "", "")
 	if err != nil {
 		t.Fatalf("create failed standalone job: %v", err)
@@ -179,7 +179,7 @@ func TestCleanupInactiveExpiresFailedStandaloneJob(t *testing.T) {
 	}
 }
 
-func createCleanupBatch(t *testing.T, store *Store, storage *Storage) (Batch, stagedUpload) {
+func createCleanupBatch(t *testing.T, store *Repository, storage *Storage) (Batch, stagedUpload) {
 	t.Helper()
 	batch, err := store.CreateBatch(context.Background(), BatchOptions{})
 	if err != nil {
@@ -193,7 +193,7 @@ func createCleanupBatch(t *testing.T, store *Store, storage *Storage) (Batch, st
 	if err != nil {
 		t.Fatalf("stage cleanup upload: %v", err)
 	}
-	if _, err := store.database.Exec(`UPDATE managed_import_jobs SET status = ?, original_filename = 'track.flac', staged_file_path = ?, content_sha256 = ? WHERE id = ?`, STATUS_AWAITING_CONFIRMATION, upload.Path, strings.Repeat("0", 64), job.ID); err != nil {
+	if _, err := store.sqlDB.Exec(`UPDATE managed_import_jobs SET status = ?, original_filename = 'track.flac', staged_file_path = ?, content_sha256 = ? WHERE id = ?`, STATUS_AWAITING_CONFIRMATION, upload.Path, strings.Repeat("0", 64), job.ID); err != nil {
 		t.Fatalf("prepare cleanup job: %v", err)
 	}
 	return batch, upload
@@ -201,7 +201,7 @@ func createCleanupBatch(t *testing.T, store *Store, storage *Storage) (Batch, st
 
 func TestFinishUncommittedBatchFileRetainsPathWhenCleanupFails(t *testing.T) {
 	database := testutil.OpenMigratedDB(t)
-	store := NewStore(database)
+	store := NewRepository(database)
 	batch, err := store.CreateBatch(context.Background(), BatchOptions{})
 	if err != nil {
 		t.Fatalf("create batch: %v", err)
@@ -237,7 +237,7 @@ func TestFinishUncommittedBatchFileRetainsPathWhenCleanupFails(t *testing.T) {
 
 func TestRejectExactDuplicateRetainsStagingUntilFailureIsPersisted(t *testing.T) {
 	database := testutil.OpenMigratedDB(t)
-	store := NewStore(database)
+	store := NewRepository(database)
 	job, err := store.CreateJob(context.Background(), "", "")
 	if err != nil {
 		t.Fatalf("create job: %v", err)
@@ -304,7 +304,7 @@ func TestRejectExactDuplicateRetainsStagingUntilFailureIsPersisted(t *testing.T)
 
 func TestBatchExactDuplicateCleanupFailureRemainsRetryable(t *testing.T) {
 	database := testutil.OpenMigratedDB(t)
-	store := NewStore(database)
+	store := NewRepository(database)
 	storage := newStorage(t.TempDir(), StorageLimits{FileBytes: 1024, BatchBytes: 1024}, unlimitedStorageCapacity)
 	batch, upload := createCleanupBatch(t, store, storage)
 	if _, err := database.Exec(`UPDATE managed_import_batches SET status = ? WHERE id = ?`, BATCH_STATUS_CONFIRMING, batch.ID); err != nil {
@@ -363,9 +363,9 @@ func TestRecoverPreviewFailureKeepsCanceledBatchJobRetryable(t *testing.T) {
 	assertRetryableBatchJob(t, store, job.ID, err)
 }
 
-func newBatchUploadService(t *testing.T) (*Service, *Store, importJob) {
+func newBatchUploadService(t *testing.T) (*Service, *Repository, importJob) {
 	t.Helper()
-	store := NewStore(testutil.OpenMigratedDB(t))
+	store := NewRepository(testutil.OpenMigratedDB(t))
 	batch, err := store.CreateBatch(context.Background(), BatchOptions{})
 	if err != nil {
 		t.Fatalf("create batch: %v", err)
@@ -382,7 +382,7 @@ func newBatchUploadService(t *testing.T) (*Service, *Store, importJob) {
 	return NewService(store, storage, nil), store, job
 }
 
-func assertRetryableBatchJob(t *testing.T, store *Store, jobID string, uploadErr error) {
+func assertRetryableBatchJob(t *testing.T, store *Repository, jobID string, uploadErr error) {
 	t.Helper()
 	if !errors.Is(uploadErr, ErrUploadInterrupted) {
 		t.Fatalf("upload error = %v", uploadErr)
@@ -398,7 +398,7 @@ func assertRetryableBatchJob(t *testing.T, store *Store, jobID string, uploadErr
 
 func TestCancelBatchReportsUnsafeCleanupAndRetainsRecords(t *testing.T) {
 	database := testutil.OpenMigratedDB(t)
-	store := NewStore(database)
+	store := NewRepository(database)
 	batch, err := store.CreateBatch(context.Background(), BatchOptions{})
 	if err != nil {
 		t.Fatalf("create unsafe cleanup batch: %v", err)
