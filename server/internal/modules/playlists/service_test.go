@@ -30,19 +30,19 @@ func (f fakeTrackAccess) GetTrackFilePath(_ context.Context, trackID string) (st
 	return track.FilePath, nil
 }
 
-func setupPlaylistStore(t *testing.T) (*Store, *sql.DB) {
+func setupPlaylistService(t *testing.T) (*Service, *sql.DB) {
 	t.Helper()
 	db := testutil.OpenMigratedDB(t)
-	return NewStore(db, library.NewStore(db)), db
+	return NewService(NewRepository(db), library.NewStore(db)), db
 }
 
-func setupPlaylistStoreWithTrackAccess(t *testing.T, tracks map[string]library.Track) *Store {
+func setupPlaylistServiceWithTrackAccess(t *testing.T, tracks map[string]library.Track) *Service {
 	t.Helper()
 	db := testutil.OpenMigratedDB(t)
 	for trackID := range tracks {
 		testutil.SeedManagedTrack(t, db, testutil.ManagedTrackSpec{TrackID: trackID})
 	}
-	return NewStore(db, fakeTrackAccess{tracks: tracks})
+	return NewService(NewRepository(db), fakeTrackAccess{tracks: tracks})
 }
 
 func seedPlaylistTrack(t *testing.T, db *sql.DB) string {
@@ -52,7 +52,7 @@ func seedPlaylistTrack(t *testing.T, db *sql.DB) string {
 }
 
 func TestListPlaylistsCreatesDefaultFavorites(t *testing.T) {
-	store, _ := setupPlaylistStore(t)
+	store, _ := setupPlaylistService(t)
 
 	playlists, err := store.ListPlaylists(context.Background(), "user-1")
 	if err != nil {
@@ -68,7 +68,7 @@ func TestListPlaylistsCreatesDefaultFavorites(t *testing.T) {
 }
 
 func TestAddAndRemoveTrackAreIdempotent(t *testing.T) {
-	store, db := setupPlaylistStore(t)
+	store, db := setupPlaylistService(t)
 	trackID := seedPlaylistTrack(t, db)
 
 	favorites, err := store.GetDefaultFavorites(context.Background(), "user-1")
@@ -104,7 +104,7 @@ func TestAddAndRemoveTrackAreIdempotent(t *testing.T) {
 }
 
 func TestRemoveLastTrackDeletesUserPlaylist(t *testing.T) {
-	store, db := setupPlaylistStore(t)
+	store, db := setupPlaylistService(t)
 	trackID := seedPlaylistTrack(t, db)
 
 	playlist, err := store.CreatePlaylist(context.Background(), "user-1", "Road")
@@ -136,7 +136,7 @@ func TestRemoveLastTrackDeletesUserPlaylist(t *testing.T) {
 }
 
 func TestCreatePlaylistAndListWithFavoritesPinned(t *testing.T) {
-	store, _ := setupPlaylistStore(t)
+	store, _ := setupPlaylistService(t)
 
 	created, err := store.CreatePlaylist(context.Background(), "user-1", "Road")
 	if err != nil {
@@ -160,7 +160,7 @@ func TestCreatePlaylistAndListWithFavoritesPinned(t *testing.T) {
 
 func TestStoreUsesTrackAccessInterface(t *testing.T) {
 	trackID := "track-1"
-	store := setupPlaylistStoreWithTrackAccess(t, map[string]library.Track{
+	store := setupPlaylistServiceWithTrackAccess(t, map[string]library.Track{
 		trackID: {ID: trackID, Title: "Song"},
 	})
 

@@ -8,12 +8,12 @@ import (
 )
 
 type Module struct {
-	handlers *Handlers
+	handler *Handler
 }
 
-func NewModule(db *sql.DB, tracks library.TrackReader) *Module {
-	store := NewStore(db, tracks)
-	return &Module{handlers: NewHandlers(store)}
+func NewModule(sqlDB *sql.DB, tracks library.TrackReader) *Module {
+	service := NewService(NewRepository(sqlDB), tracks)
+	return &Module{handler: NewHandler(service)}
 }
 
 func (m *Module) Name() string {
@@ -21,9 +21,9 @@ func (m *Module) Name() string {
 }
 
 func (m *Module) RegisterRoutes(r chi.Router) {
-	r.Get("/api/v1/playlists", m.handlers.ListPlaylists)
-	r.Post("/api/v1/playlists", m.handlers.CreatePlaylist)
-	r.Get("/api/v1/playlists/{playlistId}", m.handlers.GetPlaylist)
-	r.Post("/api/v1/playlists/{playlistId}/tracks", m.handlers.AddTrack)
-	r.Delete("/api/v1/playlists/{playlistId}/tracks/{trackId}", m.handlers.RemoveTrack)
+	r.Get("/api/v1/playlists", m.handler.ListPlaylists)
+	r.Post("/api/v1/playlists", m.handler.CreatePlaylist)
+	r.Get("/api/v1/playlists/{playlistId}", m.handler.GetPlaylist)
+	r.Post("/api/v1/playlists/{playlistId}/tracks", m.handler.AddTrack)
+	r.Delete("/api/v1/playlists/{playlistId}/tracks/{trackId}", m.handler.RemoveTrack)
 }

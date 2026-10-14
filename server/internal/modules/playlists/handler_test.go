@@ -12,11 +12,11 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-func setupPlaylistHandlers(t *testing.T) (*Handlers, *Store, string) {
+func setupPlaylistHandler(t *testing.T) (*Handler, *Service, string) {
 	t.Helper()
-	store, db := setupPlaylistStore(t)
+	store, db := setupPlaylistService(t)
 	trackID := seedPlaylistTrack(t, db)
-	return NewHandlers(store), store, trackID
+	return NewHandler(store), store, trackID
 }
 
 func withRouteParam(req *http.Request, key, value string) *http.Request {
@@ -29,7 +29,7 @@ func withRouteParam(req *http.Request, key, value string) *http.Request {
 }
 
 func TestHandlersListPlaylistsCreatesFavorites(t *testing.T) {
-	h, _, _ := setupPlaylistHandlers(t)
+	h, _, _ := setupPlaylistHandler(t)
 
 	rec := httptest.NewRecorder()
 	h.ListPlaylists(rec, httptest.NewRequest(http.MethodGet, "/", nil))
@@ -47,7 +47,7 @@ func TestHandlersListPlaylistsCreatesFavorites(t *testing.T) {
 }
 
 func TestHandlersCreatePlaylist(t *testing.T) {
-	h, _, _ := setupPlaylistHandlers(t)
+	h, _, _ := setupPlaylistHandler(t)
 
 	rec := httptest.NewRecorder()
 	h.CreatePlaylist(rec, httptest.NewRequest(http.MethodPost, "/", bytes.NewReader([]byte(`{"name":"Road"}`))))
@@ -65,7 +65,7 @@ func TestHandlersCreatePlaylist(t *testing.T) {
 }
 
 func TestHandlersAddAndRemoveTrack(t *testing.T) {
-	h, store, trackID := setupPlaylistHandlers(t)
+	h, store, trackID := setupPlaylistHandler(t)
 	favorites, err := store.GetDefaultFavorites(context.Background(), auth.DefaultUserID)
 	if err != nil {
 		t.Fatal(err)

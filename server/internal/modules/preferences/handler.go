@@ -8,13 +8,21 @@ import (
 	"github.com/ardam/navidrome-replacement/server/internal/auth"
 )
 
-func (m *Module) handleGet(w http.ResponseWriter, r *http.Request) {
+type Handler struct {
+	service *Service
+}
+
+func NewHandler(service *Service) *Handler {
+	return &Handler{service: service}
+}
+
+func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	userID, err := auth.CurrentUserID(r)
 	if err != nil {
 		respond.Error(w, http.StatusUnauthorized, "unauthorized", err.Error())
 		return
 	}
-	prefs, err := m.store.Get(r.Context(), userID)
+	prefs, err := h.service.Get(r.Context(), userID)
 	if err != nil {
 		respond.Error(w, http.StatusInternalServerError, "internal_error", err.Error())
 		return
@@ -22,7 +30,7 @@ func (m *Module) handleGet(w http.ResponseWriter, r *http.Request) {
 	respond.JSON(w, http.StatusOK, prefs)
 }
 
-func (m *Module) handlePatch(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) Patch(w http.ResponseWriter, r *http.Request) {
 	userID, err := auth.CurrentUserID(r)
 	if err != nil {
 		respond.Error(w, http.StatusUnauthorized, "unauthorized", err.Error())
@@ -38,7 +46,7 @@ func (m *Module) handlePatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	prefs, err := m.store.Patch(r.Context(), userID, patch)
+	prefs, err := h.service.Patch(r.Context(), userID, patch)
 	if err != nil {
 		respond.Error(w, http.StatusInternalServerError, "internal_error", err.Error())
 		return

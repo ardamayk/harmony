@@ -11,21 +11,21 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-type Handlers struct {
-	store *Store
+type Handler struct {
+	service *Service
 }
 
-func NewHandlers(store *Store) *Handlers {
-	return &Handlers{store: store}
+func NewHandler(service *Service) *Handler {
+	return &Handler{service: service}
 }
 
-func (h *Handlers) ListPlaylists(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) ListPlaylists(w http.ResponseWriter, r *http.Request) {
 	userID, err := auth.CurrentUserID(r)
 	if err != nil {
 		respond.Error(w, http.StatusUnauthorized, "unauthorized", err.Error())
 		return
 	}
-	playlists, err := h.store.ListPlaylists(r.Context(), userID)
+	playlists, err := h.service.ListPlaylists(r.Context(), userID)
 	if err != nil {
 		respond.Error(w, http.StatusInternalServerError, "internal_error", err.Error())
 		return
@@ -33,7 +33,7 @@ func (h *Handlers) ListPlaylists(w http.ResponseWriter, r *http.Request) {
 	respond.JSON(w, http.StatusOK, playlists)
 }
 
-func (h *Handlers) CreatePlaylist(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) CreatePlaylist(w http.ResponseWriter, r *http.Request) {
 	userID, err := auth.CurrentUserID(r)
 	if err != nil {
 		respond.Error(w, http.StatusUnauthorized, "unauthorized", err.Error())
@@ -46,7 +46,7 @@ func (h *Handlers) CreatePlaylist(w http.ResponseWriter, r *http.Request) {
 		respond.Error(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
 		return
 	}
-	playlist, err := h.store.CreatePlaylist(r.Context(), userID, body.Name)
+	playlist, err := h.service.CreatePlaylist(r.Context(), userID, body.Name)
 	if err != nil {
 		respond.Error(w, http.StatusBadRequest, "bad_request", err.Error())
 		return
@@ -54,14 +54,14 @@ func (h *Handlers) CreatePlaylist(w http.ResponseWriter, r *http.Request) {
 	respond.JSON(w, http.StatusCreated, playlist)
 }
 
-func (h *Handlers) GetPlaylist(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) GetPlaylist(w http.ResponseWriter, r *http.Request) {
 	userID, err := auth.CurrentUserID(r)
 	if err != nil {
 		respond.Error(w, http.StatusUnauthorized, "unauthorized", err.Error())
 		return
 	}
 	playlistID := chi.URLParam(r, "playlistId")
-	playlist, err := h.store.GetPlaylist(r.Context(), userID, playlistID)
+	playlist, err := h.service.GetPlaylist(r.Context(), userID, playlistID)
 	if errors.Is(err, ErrNotFound) {
 		respond.Error(w, http.StatusNotFound, "not_found", "playlist not found")
 		return
@@ -73,7 +73,7 @@ func (h *Handlers) GetPlaylist(w http.ResponseWriter, r *http.Request) {
 	respond.JSON(w, http.StatusOK, playlist)
 }
 
-func (h *Handlers) AddTrack(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) AddTrack(w http.ResponseWriter, r *http.Request) {
 	userID, err := auth.CurrentUserID(r)
 	if err != nil {
 		respond.Error(w, http.StatusUnauthorized, "unauthorized", err.Error())
@@ -91,7 +91,7 @@ func (h *Handlers) AddTrack(w http.ResponseWriter, r *http.Request) {
 		respond.Error(w, http.StatusBadRequest, "bad_request", "trackId is required")
 		return
 	}
-	playlist, err := h.store.AddTrack(r.Context(), userID, playlistID, body.TrackID)
+	playlist, err := h.service.AddTrack(r.Context(), userID, playlistID, body.TrackID)
 	if errors.Is(err, ErrNotFound) {
 		respond.Error(w, http.StatusNotFound, "not_found", "playlist not found")
 		return
@@ -107,7 +107,7 @@ func (h *Handlers) AddTrack(w http.ResponseWriter, r *http.Request) {
 	respond.JSON(w, http.StatusOK, playlist)
 }
 
-func (h *Handlers) RemoveTrack(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) RemoveTrack(w http.ResponseWriter, r *http.Request) {
 	userID, err := auth.CurrentUserID(r)
 	if err != nil {
 		respond.Error(w, http.StatusUnauthorized, "unauthorized", err.Error())
@@ -115,7 +115,7 @@ func (h *Handlers) RemoveTrack(w http.ResponseWriter, r *http.Request) {
 	}
 	playlistID := chi.URLParam(r, "playlistId")
 	trackID := chi.URLParam(r, "trackId")
-	playlist, err := h.store.RemoveTrack(r.Context(), userID, playlistID, trackID)
+	playlist, err := h.service.RemoveTrack(r.Context(), userID, playlistID, trackID)
 	if errors.Is(err, ErrNotFound) {
 		respond.Error(w, http.StatusNotFound, "not_found", "playlist not found")
 		return

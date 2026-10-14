@@ -12,14 +12,17 @@ import (
 	"github.com/ardam/navidrome-replacement/server/internal/testutil"
 )
 
-func intPtr(v int) *int            { return &v }
-func floatPtr(v float64) *float64  { return &v }
-func boolPtr(v bool) *bool         { return &v }
-func ctx() context.Context         { return context.Background() }
-func newStore(t *testing.T) *Store { t.Helper(); return NewStore(testutil.OpenMigratedDB(t)) }
+func intPtr(v int) *int           { return &v }
+func floatPtr(v float64) *float64 { return &v }
+func boolPtr(v bool) *bool        { return &v }
+func ctx() context.Context        { return context.Background() }
+func newService(t *testing.T) *Service {
+	t.Helper()
+	return NewService(NewRepository(testutil.OpenMigratedDB(t)))
+}
 
 func TestGetReturnsDefaultPlaybackPreferencesForSeededRow(t *testing.T) {
-	store := newStore(t)
+	store := newService(t)
 	prefs, err := store.Get(ctx(), auth.DefaultUserID)
 	if err != nil {
 		t.Fatal(err)
@@ -30,7 +33,7 @@ func TestGetReturnsDefaultPlaybackPreferencesForSeededRow(t *testing.T) {
 }
 
 func TestPatchPlaybackKeepsUntouchedFieldsAndPersistsFalse(t *testing.T) {
-	store := newStore(t)
+	store := newService(t)
 	updated, err := store.Patch(ctx(), auth.DefaultUserID, UserPreferencesPatch{
 		Playback: &PlaybackPreferencesPatch{
 			SeekStepSeconds: intPtr(10),
@@ -61,7 +64,7 @@ func TestPatchPlaybackKeepsUntouchedFieldsAndPersistsFalse(t *testing.T) {
 }
 
 func TestPatchWithoutPlaybackLeavesPlaybackAlone(t *testing.T) {
-	store := newStore(t)
+	store := newService(t)
 	if _, err := store.Patch(ctx(), auth.DefaultUserID, UserPreferencesPatch{
 		Playback: &PlaybackPreferencesPatch{HoverTimestamp: boolPtr(false)},
 	}); err != nil {
@@ -79,7 +82,7 @@ func TestPatchWithoutPlaybackLeavesPlaybackAlone(t *testing.T) {
 }
 
 func TestConcurrentPlaybackPatchesPreserveIndependentFields(t *testing.T) {
-	store := newStore(t)
+	store := newService(t)
 	const concurrentRounds = 20
 	for round := range concurrentRounds {
 		seekStep := 10 + round
@@ -149,17 +152,17 @@ func TestValidatePlaybackPatchRejectsOutOfRangeValues(t *testing.T) {
 }
 
 func TestHandlePatchRejectsInvalidPlaybackAndAppliesValid(t *testing.T) {
-	module := NewModule(newStore(t))
+	handler := NewHandler(newService(t))
 
 	rec := httptest.NewRecorder()
-	module.handlePatch(rec, httptest.NewRequest(http.MethodPatch, "/api/v1/preferences",
+	handler.Patch(rec, httptest.NewRequest(http.MethodPatch, "/api/v1/preferences",
 		strings.NewReader(`{"playback":{"playbackRate":9}}`)))
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", rec.Code)
 	}
 
 	rec = httptest.NewRecorder()
-	module.handlePatch(rec, httptest.NewRequest(http.MethodPatch, "/api/v1/preferences",
+	handler.Patch(rec, httptest.NewRequest(http.MethodPatch, "/api/v1/preferences",
 		strings.NewReader(`{"playback":{"autoSkipOnErrorSeconds":0,"showUpNext":false}}`)))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
