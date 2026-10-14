@@ -17,7 +17,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { GripVertical } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "../lib/utils";
-import { getWidgetComponent, widgetRegistry } from "../widgets/registry";
+import { renderWidget, widgetRegistry } from "../widgets/registry";
 import { useLayout } from "./LayoutProvider";
 
 type PanelSide = "left" | "right";
@@ -35,7 +35,7 @@ function SortableWidget({ id, panel }: { id: string; panel: PanelSide }) {
 		data: { panel },
 	});
 
-	const Widget = getWidgetComponent(id);
+	const widget = renderWidget(id);
 	const title = widgetRegistry.find((w) => w.id === id)?.title ?? id;
 
 	const style = {
@@ -43,7 +43,7 @@ function SortableWidget({ id, panel }: { id: string; panel: PanelSide }) {
 		transition,
 	};
 
-	if (!Widget) {
+	if (!widget) {
 		return (
 			<div
 				ref={setNodeRef}
@@ -76,9 +76,7 @@ function SortableWidget({ id, panel }: { id: string; panel: PanelSide }) {
 				</button>
 				<span className="min-w-0 truncate font-medium text-xs">{title}</span>
 			</div>
-			<div className="min-w-0 p-2">
-				<Widget />
-			</div>
+			<div className="min-w-0 p-2">{widget}</div>
 		</div>
 	);
 }

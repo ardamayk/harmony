@@ -161,10 +161,10 @@ export function useManagedImportWorkflow({
 		reviewProblems.length === 0,
 	);
 
-	const { updateEntry } = state;
+	const { updateEntry, setEntries } = state;
 	const handleSelectionChange = useCallback(
 		(key: string, selected: boolean) => {
-			state.setEntries((current) => {
+			setEntries((current) => {
 				const chosen = current.find((entry) => entry.key === key);
 				return current.map((entry) =>
 					entry.key === key
@@ -177,7 +177,7 @@ export function useManagedImportWorkflow({
 				);
 			});
 		},
-		[state.setEntries],
+		[setEntries],
 	);
 	const handleDuplicateDecisionChange = useCallback(
 		(key: string, duplicateDecision: DuplicateDecision) =>

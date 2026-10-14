@@ -20,6 +20,7 @@ import {
 	type ReactNode,
 	useCallback,
 	useEffect,
+	useEffectEvent,
 	useMemo,
 	useRef,
 	useState,
@@ -217,17 +218,19 @@ export function PlayerBar({
 	const { toggleMute } = useMute(volume, setVolume);
 	// Playback Preferences are the source of truth for speed and fade; push
 	// them into whichever engine is active when they change. The setters are
-	// read through a ref: they are recreated on every session update, and
-	// depending on them would re-apply the preference in a loop.
-	const engineSettersRef = useRef({ setPlaybackRate, setTransitionFade });
-	engineSettersRef.current = { setPlaybackRate, setTransitionFade };
+	// recreated on every session update, so they are effect events: depending
+	// on them would re-apply the preference in a loop.
+	const applyPlaybackRate = useEffectEvent((rate: number) =>
+		setPlaybackRate(rate),
+	);
+	const applyTransitionFade = useEffectEvent((fadeMs: number) =>
+		setTransitionFade(fadeMs),
+	);
 	useEffect(() => {
-		engineSettersRef.current.setPlaybackRate(playbackPreferences.playbackRate);
+		applyPlaybackRate(playbackPreferences.playbackRate);
 	}, [playbackPreferences.playbackRate]);
 	useEffect(() => {
-		engineSettersRef.current.setTransitionFade(
-			playbackPreferences.transitionFadeMs,
-		);
+		applyTransitionFade(playbackPreferences.transitionFadeMs);
 	}, [playbackPreferences.transitionFadeMs]);
 	const canSeek = Boolean(currentTrack);
 	const seekBy = useCallback(
@@ -316,41 +319,69 @@ export function PlayerBar({
 		};
 	}, [actionsOpen, updateMenuPosition]);
 
-	const loadPlaylistMembership = useCallback(
+	/** Ids of the playlists that contain the Track. */
+	const fetchPlaylistMembership = useCallback(
 		async (items: Playlist[], trackId: string) => {
 			const details = await Promise.all(
 				items.map((playlist) => getPlaylist(playlist.id)),
 			);
-			const memberIds = new Set<string>();
-			for (const detail of details) {
-				if (detail.tracks.some((entry) => entry.id === trackId)) {
-					memberIds.add(detail.id);
-				}
-			}
-			setMemberPlaylistIds(memberIds);
+			return new Set(
+				details
+					.filter((detail) =>
+						detail.tracks.some((entry) => entry.id === trackId),
+					)
+					.map((detail) => detail.id),
+			);
 		},
 		[getPlaylist],
 	);
-
-	const loadPlaylistsForSubmenu = useCallback(async () => {
-		if (!currentTrack) return;
-		const data = await listPlaylists();
-		setPlaylists(data.items);
-		await loadPlaylistMembership(data.items, currentTrack.id);
+	/** Shows playlist names as soon as they load, then their membership. */
+	const loadPlaylists = async (trackId: string) => {
+		const { items } = await listPlaylists();
+		setPlaylists(items);
+		setMemberPlaylistIds(await fetchPlaylistMembership(items, trackId));
 		setPlaylistsLoaded(true);
-	}, [currentTrack, listPlaylists, loadPlaylistMembership]);
+	};
+	const currentTrackId = currentTrack ? currentTrack.id : null;
 
-	useEffect(() => {
-		if (!actionsOpen || !currentTrack) {
+	// Closing the actions menu (or losing the Track) resets the playlist submenu.
+	const isActionsMenuActive = actionsOpen && Boolean(currentTrack);
+	const [wasActionsMenuActive, setWasActionsMenuActive] =
+		useState(isActionsMenuActive);
+	if (isActionsMenuActive !== wasActionsMenuActive) {
+		setWasActionsMenuActive(isActionsMenuActive);
+		if (!isActionsMenuActive) {
 			setPlaylistSubmenuOpen(false);
 			setPlaylistQuery("");
 			setCreatePlaylistOpen(false);
 			setNewPlaylistName("");
 			setPlaylistsLoaded(false);
-			return;
 		}
-		void loadPlaylistsForSubmenu();
-	}, [actionsOpen, currentTrack, loadPlaylistsForSubmenu]);
+	}
+
+	useEffect(() => {
+		if (!isActionsMenuActive || !currentTrackId) return undefined;
+		let cancelled = false;
+		void listPlaylists().then(({ items }) => {
+			if (cancelled) return undefined;
+			setPlaylists(items);
+			return fetchPlaylistMembership(items, currentTrackId).then(
+				(memberIds) => {
+					if (cancelled) return;
+					setMemberPlaylistIds(memberIds);
+					setPlaylistsLoaded(true);
+				},
+			);
+		});
+		return () => {
+			cancelled = true;
+		};
+	}, [
+		isActionsMenuActive,
+		currentTrackId,
+		listPlaylists,
+		fetchPlaylistMembership,
+	]);
 
 	useEffect(() => {
 		return () => {
@@ -461,7 +492,7 @@ export function PlayerBar({
 
 	const playlistSearchQuery = playlistQuery.trim().toLowerCase();
 
-	const visiblePlaylists = useMemo(() => {
+	const visiblePlaylists = (() => {
 		if (playlistSearchQuery) {
 			return sortedPlaylists.filter((playlist) =>
 				playlist.name.toLowerCase().includes(playlistSearchQuery),
@@ -479,7 +510,7 @@ export function PlayerBar({
 			if (!recentSet.has(playlist.id)) recent.push(playlist);
 		}
 		return recent.slice(0, RECENT_PLAYLIST_LIMIT);
-	}, [playlistSearchQuery, sortedPlaylists]);
+	})();
 
 	const closeActionsMenu = () => {
 		if (playlistSubmenuCloseTimerRef.current !== null) {
@@ -496,7 +527,7 @@ export function PlayerBar({
 			playlistSubmenuCloseTimerRef.current = null;
 		}
 		setPlaylistSubmenuOpen(true);
-		if (!playlistsLoaded) void loadPlaylistsForSubmenu();
+		if (!playlistsLoaded && currentTrackId) void loadPlaylists(currentTrackId);
 	};
 
 	const closePlaylistSubmenu = () => {
@@ -563,10 +594,10 @@ export function PlayerBar({
 	};
 
 	const refreshPlaylists = async () => {
-		const data = await listPlaylists();
-		setPlaylists(data.items);
-		if (currentTrack) {
-			await loadPlaylistMembership(data.items, currentTrack.id);
+		if (currentTrackId) {
+			await loadPlaylists(currentTrackId);
+		} else {
+			setPlaylists((await listPlaylists()).items);
 		}
 		notifyPlaylistMutated();
 	};

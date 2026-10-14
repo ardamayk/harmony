@@ -1,15 +1,22 @@
 import type { ThemePreferences } from "@repo/api-client";
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 
 type ResolvedThemeMode = "light" | "dark";
 
-function resolveThemeMode(mode: ThemePreferences["mode"]): ResolvedThemeMode {
-	if (mode === "dark") return "dark";
-	if (mode === "light") return "light";
-	if (typeof window.matchMedia !== "function") return "light";
-	return window.matchMedia("(prefers-color-scheme: dark)").matches
-		? "dark"
-		: "light";
+const DARK_QUERY = "(prefers-color-scheme: dark)";
+
+function subscribeToSystemTheme(onChange: () => void): () => void {
+	if (typeof window.matchMedia !== "function") return () => {};
+	const media = window.matchMedia(DARK_QUERY);
+	media.addEventListener("change", onChange);
+	return () => media.removeEventListener("change", onChange);
+}
+
+function systemPrefersDark(): boolean {
+	return (
+		typeof window.matchMedia === "function" &&
+		window.matchMedia(DARK_QUERY).matches
+	);
 }
 
 /**
@@ -19,16 +26,11 @@ function resolveThemeMode(mode: ThemePreferences["mode"]): ResolvedThemeMode {
 export function useResolvedThemeMode(
 	mode: ThemePreferences["mode"],
 ): ResolvedThemeMode {
-	const [resolved, setResolved] = useState<ResolvedThemeMode>(() =>
-		resolveThemeMode(mode),
+	const prefersDark = useSyncExternalStore(
+		subscribeToSystemTheme,
+		systemPrefersDark,
+		() => false,
 	);
-	useEffect(() => {
-		setResolved(resolveThemeMode(mode));
-		if (mode !== "system" || typeof window.matchMedia !== "function") return;
-		const media = window.matchMedia("(prefers-color-scheme: dark)");
-		const onChange = () => setResolved(resolveThemeMode(mode));
-		media.addEventListener("change", onChange);
-		return () => media.removeEventListener("change", onChange);
-	}, [mode]);
-	return resolved;
+	if (mode === "dark" || mode === "light") return mode;
+	return prefersDark ? "dark" : "light";
 }

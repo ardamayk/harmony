@@ -43,13 +43,12 @@ export default defineConfig({
 			"vitest/require-mock-type-parameters": "off",
 			// Listbox/option/dialog widgets intentionally use ARIA roles.
 			"jsx-a11y/prefer-tag-over-role": "off",
-			// React Compiler diagnostics: real issues, tracked for a focused
-			// playback refactor rather than mass-edited here.
-			"react/set-state-in-effect": "warn",
-			"react/refs": "warn",
-			"react/static-components": "warn",
-			"react/preserve-manual-memoization": "warn",
-			"react-hooks/exhaustive-deps": "warn",
+			// React Compiler diagnostics.
+			"react/set-state-in-effect": "error",
+			"react/refs": "error",
+			"react/static-components": "error",
+			"react/preserve-manual-memoization": "error",
+			"react-hooks/exhaustive-deps": "error",
 		},
 		overrides: [
 			{

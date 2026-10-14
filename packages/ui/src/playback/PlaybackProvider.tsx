@@ -15,9 +15,11 @@ import {
 	useCallback,
 	useContext,
 	useEffect,
+	useLayoutEffect,
 	useMemo,
 	useRef,
 	useState,
+	useSyncExternalStore,
 } from "react";
 import type {
 	PlaybackEngine,
@@ -200,7 +202,11 @@ export function PlaybackProvider({
 		removeFromQueue,
 		reorderQueue,
 	} = useSynchronizedQueue(api);
-	const [session, setSession] = useState<PlaybackSessionState>(() =>
+	const subscribeToEngine = useCallback(
+		(onChange: () => void) => engine.subscribe(onChange),
+		[engine],
+	);
+	const session = useSyncExternalStore(subscribeToEngine, () =>
 		engine.getState(),
 	);
 	const currentQueueItemIdRef = useRef<string | null>(null);
@@ -208,17 +214,19 @@ export function PlaybackProvider({
 	const repeatCancellationRequestedModeRef = useRef<RepeatMode | null>(null);
 	const [radioNowPlaying, setRadioNowPlaying] =
 		useState<RadioNowPlaying | null>(null);
-	apiRef.current = api;
-
-	useEffect(() => {
-		setSession(engine.getState());
-		return engine.subscribe(setSession);
-	}, [engine]);
+	useLayoutEffect(() => {
+		apiRef.current = api;
+	});
+	// The queue item a play request started; the session reports its own once
+	// the engine confirms it.
+	const [requestedQueueItemId, setRequestedQueueItemId] = useState<
+		string | null
+	>(null);
 
 	const currentTrack =
 		session.source?.type === "track" ? session.source.track : null;
 	const currentRadioStation = useMemo(
-		() => getCurrentRadioStation(session),
+		() => getCurrentRadioStation(session.source),
 		[session.source],
 	);
 	const radioNowPlayingStationId =
@@ -256,6 +264,7 @@ export function PlaybackProvider({
 			if (itemIndex < 0) return;
 			currentQueueItemIdRef.current = item.id;
 			currentQueueIndexRef.current = itemIndex;
+			setRequestedQueueItemId(item.id);
 			setRadioNowPlaying(null);
 			try {
 				await engine.syncQueueContext?.(
@@ -273,7 +282,7 @@ export function PlaybackProvider({
 				// PlaybackEngine exposes the error through observable session state.
 			}
 		},
-		[engine],
+		[queueRef, engine],
 	);
 
 	useEffect(() => {
@@ -288,7 +297,7 @@ export function PlaybackProvider({
 			const item = queueRef.current[currentIndex + offset];
 			if (item) void playQueueItemInternal(item);
 		});
-	}, [engine, playQueueItemInternal]);
+	}, [queueRef, engine, playQueueItemInternal]);
 
 	useEffect(() => {
 		if (!shouldCoordinateQueue || !engine.syncQueueContext) return;
@@ -313,7 +322,7 @@ export function PlaybackProvider({
 			);
 			if (item) await playQueueItemInternal(item, activeQueue);
 		},
-		[playQueueItemInternal],
+		[queueRef, playQueueItemInternal],
 	);
 
 	useEffect(() => {
@@ -362,7 +371,7 @@ export function PlaybackProvider({
 			return;
 		}
 		engine.stop();
-	}, [engine, playQueueItemInternal]);
+	}, [queueRef, engine, playQueueItemInternal]);
 
 	useEffect(() => {
 		if (engine.syncQueueContext) return;
@@ -408,6 +417,17 @@ export function PlaybackProvider({
 		failedSource?.type === "track" ? failedSource.track.id : null;
 	const [errorCause, setErrorCause] = useState<PlaybackErrorCause | null>(null);
 	const [countdownSeconds, setCountdownSeconds] = useState<number | null>(null);
+	// A newly failed Track restarts the diagnosis and the skip countdown.
+	const [diagnosedTrackId, setDiagnosedTrackId] = useState(failedTrackId);
+	if (failedTrackId !== diagnosedTrackId) {
+		setDiagnosedTrackId(failedTrackId);
+		setErrorCause(failedTrackId && !api.headTrackStream ? "unknown" : null);
+		setCountdownSeconds(
+			failedTrackId && shouldCoordinateQueue && autoSkipOnErrorSeconds > 0
+				? autoSkipOnErrorSeconds
+				: null,
+		);
+	}
 	const skipFailedTrack = useCallback(() => {
 		setCountdownSeconds(null);
 		if (engine.syncQueueContext) {
@@ -423,23 +443,9 @@ export function PlaybackProvider({
 	}, [engine, failedSource]);
 
 	useEffect(() => {
-		if (!failedTrackId) {
-			setErrorCause(null);
-			setCountdownSeconds(null);
-			return undefined;
-		}
-		let cancelled = false;
-		setErrorCause(null);
-		setCountdownSeconds(
-			shouldCoordinateQueue && autoSkipOnErrorSeconds > 0
-				? autoSkipOnErrorSeconds
-				: null,
-		);
 		const probe = apiRef.current.headTrackStream;
-		if (!probe) {
-			setErrorCause("unknown");
-			return undefined;
-		}
+		if (!failedTrackId || !probe) return undefined;
+		let cancelled = false;
 		probe(failedTrackId)
 			.then(({ status }) => {
 				if (cancelled) return;
@@ -451,27 +457,25 @@ export function PlaybackProvider({
 		return () => {
 			cancelled = true;
 		};
-	}, [autoSkipOnErrorSeconds, failedTrackId, shouldCoordinateQueue]);
+	}, [failedTrackId]);
 
 	useEffect(() => {
 		if (countdownSeconds === null || !failedTrackId) return undefined;
-		if (countdownSeconds <= 0) {
-			skipFailedTrack();
-			return undefined;
-		}
-		const timer = window.setTimeout(
-			() => setCountdownSeconds((current) => (current ?? 1) - 1),
-			1000,
-		);
+		const timer = window.setTimeout(() => {
+			if (countdownSeconds <= 1) skipFailedTrack();
+			else setCountdownSeconds(countdownSeconds - 1);
+		}, 1000);
 		return () => window.clearTimeout(timer);
 	}, [countdownSeconds, failedTrackId, skipFailedTrack]);
 
-	const hasNextQueueItem = useMemo(() => {
-		const currentIndex = queue.findIndex(
-			(item) => item.id === currentQueueItemIdRef.current,
-		);
-		return currentIndex >= 0 && currentIndex + 1 < queue.length;
-	}, [queue]);
+	const currentQueueItemId =
+		(session.source?.type === "track" ? session.source.queueItemId : null) ??
+		requestedQueueItemId;
+	const currentQueueIndex = queue.findIndex(
+		(item) => item.id === currentQueueItemId,
+	);
+	const hasNextQueueItem =
+		currentQueueIndex >= 0 && currentQueueIndex + 1 < queue.length;
 
 	const errorRecovery = useMemo<PlaybackErrorRecovery | null>(
 		() =>
@@ -516,7 +520,7 @@ export function PlaybackProvider({
 			}
 			await playTrackInternal(trackId, nextQueue);
 		},
-		[appendQueueItem, playTrackInternal, replaceQueue],
+		[queueRef, appendQueueItem, playTrackInternal, replaceQueue],
 	);
 
 	const playRadioStation = useCallback(
@@ -576,7 +580,7 @@ export function PlaybackProvider({
 			const item = queueRef.current[index];
 			if (item) await playQueueItemInternal(item);
 		},
-		[playQueueItemInternal],
+		[queueRef, playQueueItemInternal],
 	);
 
 	const playNext = useCallback(
@@ -749,11 +753,11 @@ export function usePlaylistLibrary() {
 }
 
 function getCurrentRadioStation(
-	session: PlaybackSessionState,
+	source: PlaybackSessionState["source"],
 ): RadioStation | null {
-	if (session.source?.type === "radio-station") return session.source.station;
-	if (session.source?.type !== "catalog-preview") return null;
-	const result = session.source.result;
+	if (source?.type === "radio-station") return source.station;
+	if (source?.type !== "catalog-preview") return null;
+	const result = source.result;
 	return {
 		id: `preview:${result.stationUuid}`,
 		name: result.name,

@@ -3,7 +3,7 @@ import { usePlayback } from "@repo/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
 import { Play, Radio, Star } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { DetailPageShell } from "#/components/page-layout";
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
@@ -44,10 +44,10 @@ export function RadioStationDetailContent({
 		bitrate: "",
 	});
 
-	useEffect(() => {
-		if (!station.data) {
-			return;
-		}
+	// Each fetched version of the station resets the form to its values.
+	const [formSource, setFormSource] = useState<typeof station.data>(undefined);
+	if (station.data && station.data !== formSource) {
+		setFormSource(station.data);
 		setForm({
 			name: station.data.name,
 			streamUrl: station.data.streamUrl,
@@ -59,7 +59,7 @@ export function RadioStationDetailContent({
 			codec: station.data.codec ?? "",
 			bitrate: station.data.bitrate ? String(station.data.bitrate) : "",
 		});
-	}, [station.data]);
+	}
 
 	const updateStation = useMutation({
 		mutationFn: (patch: RadioStationPatch) =>

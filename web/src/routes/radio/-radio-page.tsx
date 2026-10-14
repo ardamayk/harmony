@@ -3,7 +3,7 @@ import { usePlayback } from "@repo/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { Headphones, Pencil, Plus, Search, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import {
 	COLLECTION_PAGE_CONTAINER_CLASS,
 	CollectionPageContainer,
@@ -62,12 +62,8 @@ export function RadioPage() {
 	});
 
 	const stationItems = stations.data?.items ?? [];
-	const filteredStations = useMemo(
-		() =>
-			stationItems.filter((station) =>
-				matchesLocalStationFilter(station, localFilter),
-			),
-		[localFilter, stationItems],
+	const filteredStations = stationItems.filter((station) =>
+		matchesLocalStationFilter(station, localFilter),
 	);
 	const isStationMutating = updateStation.isPending || deleteStation.isPending;
 

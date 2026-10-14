@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { cn } from "../lib/utils";
-import { getWidgetComponent } from "../widgets/registry";
+import { renderWidget } from "../widgets/registry";
 
 export function Slot({
 	widgetIds,
@@ -12,8 +12,8 @@ export function Slot({
 	return (
 		<div className={cn("flex flex-col gap-3", className)}>
 			{widgetIds.map((id) => {
-				const Widget = getWidgetComponent(id);
-				if (!Widget) {
+				const widget = renderWidget(id);
+				if (!widget) {
 					return (
 						<div
 							key={id}
@@ -23,11 +23,7 @@ export function Slot({
 						</div>
 					);
 				}
-				return (
-					<div key={id}>
-						<Widget />
-					</div>
-				);
+				return <div key={id}>{widget}</div>;
 			})}
 		</div>
 	);

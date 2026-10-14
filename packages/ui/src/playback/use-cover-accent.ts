@@ -31,34 +31,37 @@ export function useCoverAccent({
 	mode: AccentThemeMode;
 	loadImage?: (url: string) => Promise<HTMLImageElement>;
 }): Record<string, string> {
-	const [accent, setAccent] = useState<Accent | null>(null);
+	// The last accent shown; kept while an uncached cover loads so moving to
+	// a new album does not flash the default colors.
+	const [shown, setShown] = useState<Accent | null>(null);
+	const activeKey = enabled && cacheKey && coverUrl ? cacheKey : null;
+	const isCached = activeKey !== null && accentCache.has(activeKey);
+	const accent = isCached
+		? (accentCache.get(activeKey) ?? null)
+		: activeKey
+			? shown
+			: null;
+	if (accent !== shown) setShown(accent);
 
 	useEffect(() => {
-		if (!enabled || !cacheKey || !coverUrl) {
-			setAccent(null);
-			return undefined;
-		}
-		if (accentCache.has(cacheKey)) {
-			setAccent(accentCache.get(cacheKey) ?? null);
-			return undefined;
-		}
+		if (!activeKey || !coverUrl || accentCache.has(activeKey)) return undefined;
 		let cancelled = false;
 		loadImage(coverUrl)
 			.then((image) => {
 				const extracted = extractAccent(image);
-				accentCache.set(cacheKey, extracted);
-				if (!cancelled) setAccent(extracted);
+				accentCache.set(activeKey, extracted);
+				if (!cancelled) setShown(extracted);
 			})
 			.catch(() => {
-				accentCache.set(cacheKey, null);
-				if (!cancelled) setAccent(null);
+				accentCache.set(activeKey, null);
+				if (!cancelled) setShown(null);
 			});
 		return () => {
 			cancelled = true;
 		};
-	}, [cacheKey, coverUrl, enabled, loadImage]);
+	}, [activeKey, coverUrl, loadImage]);
 
-	return accentCssVariables(enabled ? accent : null, mode);
+	return accentCssVariables(accent, mode);
 }
 
 function defaultLoadImage(url: string): Promise<HTMLImageElement> {

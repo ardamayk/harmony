@@ -4,6 +4,7 @@ import {
 	createContext,
 	type ReactElement,
 	type ReactNode,
+	useCallback,
 	useContext,
 } from "react";
 
@@ -16,12 +17,13 @@ const QueueNavigationContext = createContext<
 	((href: string) => void) | undefined
 >(undefined);
 
-const QueueRowMenuContext =
-	createContext<ComponentType<QueueRowMenuProps> | null>(null);
+type RenderQueueRowMenu = (props: QueueRowMenuProps) => ReactElement;
+
+const QueueRowMenuContext = createContext<RenderQueueRowMenu | null>(null);
 
 /** Lets the host reuse its context menus without coupling shared UI to the app. */
 export function QueueRowMenuProvider({
-	menu,
+	menu: Menu,
 	children,
 	onNavigate,
 }: {
@@ -29,9 +31,13 @@ export function QueueRowMenuProvider({
 	children: ReactNode;
 	onNavigate?: (href: string) => void;
 }) {
+	const renderMenu = useCallback(
+		(props: QueueRowMenuProps) => <Menu {...props} />,
+		[Menu],
+	);
 	return (
 		<QueueNavigationContext.Provider value={onNavigate}>
-			<QueueRowMenuContext.Provider value={menu}>
+			<QueueRowMenuContext.Provider value={renderMenu}>
 				{children}
 			</QueueRowMenuContext.Provider>
 		</QueueNavigationContext.Provider>

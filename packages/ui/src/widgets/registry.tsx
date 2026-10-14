@@ -1,4 +1,4 @@
-import type { ComponentType } from "react";
+import type { ReactNode } from "react";
 import { usePlayback } from "../playback/PlaybackProvider";
 import type { WidgetDefinition } from "./types";
 
@@ -119,18 +119,14 @@ function DiscoverWidget() {
 	);
 }
 
-const widgetComponents: Record<string, ComponentType> = {
-	"now-playing": NowPlayingWidget,
-	queue: QueueWidget,
-	discover: DiscoverWidget,
-};
-
 export const widgetRegistry: WidgetDefinition[] = [
 	{ id: "now-playing", title: "Now Playing", component: NowPlayingWidget },
 	{ id: "queue", title: "Queue", component: QueueWidget },
 	{ id: "discover", title: "Discover", component: DiscoverWidget },
 ];
 
-export function getWidgetComponent(id: string): ComponentType | undefined {
-	return widgetComponents[id];
+/** The registered widget for an id, or null when the id is unknown. */
+export function renderWidget(id: string): ReactNode {
+	const Widget = widgetRegistry.find((widget) => widget.id === id)?.component;
+	return Widget ? <Widget /> : null;
 }

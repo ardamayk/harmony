@@ -34,26 +34,19 @@ export function useSleepTimer(
 		minutes: number;
 		endsAt: number;
 	} | null>(null);
-	const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
+	// When the minutes timer was last checked; remaining time derives from it.
+	const [checkedAt, setCheckedAt] = useState(now);
 
 	useEffect(() => {
-		if (!minutesTimer) {
-			setRemainingSeconds(null);
-			return undefined;
-		}
-		const tick = () => {
-			const remaining = Math.max(
-				0,
-				Math.ceil((minutesTimer.endsAt - now()) / 1000),
-			);
-			setRemainingSeconds(remaining);
-			if (remaining === 0) {
+		if (!minutesTimer) return undefined;
+		const interval = window.setInterval(() => {
+			const checked = now();
+			setCheckedAt(checked);
+			if (checked >= minutesTimer.endsAt) {
 				engine.pause();
 				setMinutesTimer(null);
 			}
-		};
-		tick();
-		const interval = window.setInterval(tick, TICK_MS);
+		}, TICK_MS);
 		return () => window.clearInterval(interval);
 	}, [engine, minutesTimer, now]);
 
@@ -62,14 +55,20 @@ export function useSleepTimer(
 			setMinutesTimer(null);
 			engine.setStopAfterCurrent?.(request.kind === "after-track");
 			if (request.kind === "minutes") {
+				const startedAt = now();
+				setCheckedAt(startedAt);
 				setMinutesTimer({
 					minutes: request.minutes,
-					endsAt: now() + request.minutes * 60_000,
+					endsAt: startedAt + request.minutes * 60_000,
 				});
 			}
 		},
 		[engine, now],
 	);
+
+	const remainingSeconds = minutesTimer
+		? Math.max(0, Math.ceil((minutesTimer.endsAt - checkedAt) / 1000))
+		: null;
 
 	const mode: SleepTimerMode = minutesTimer
 		? { kind: "minutes", ...minutesTimer }

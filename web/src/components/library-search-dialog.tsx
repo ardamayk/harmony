@@ -23,6 +23,7 @@ import {
 	useMemo,
 	useRef,
 	useState,
+	useSyncExternalStore,
 } from "react";
 import { useDebouncedValue } from "#/hooks/use-debounced-value";
 import { useReturnFocus } from "#/hooks/use-return-focus";
@@ -50,6 +51,15 @@ type SearchGroup = {
 	results: SearchResult[];
 };
 
+/** The app shell's main element hosts the dialog; it is read on each render. */
+function findAppShellMain(): HTMLElement | null {
+	return document.querySelector<HTMLElement>("[data-app-shell] main");
+}
+
+function subscribeToNothing(): () => void {
+	return () => {};
+}
+
 /**
  * Searches every library surface at once: Tracks, Albums, Artists, Genres and
  * Playlists. Results are grouped under "From Your Library"; choosing a track
@@ -62,17 +72,24 @@ export function LibrarySearchDialog({
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
 }) {
-	const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(
-		null,
+	const portalContainer = useSyncExternalStore(
+		subscribeToNothing,
+		findAppShellMain,
+		() => null,
 	);
-	useEffect(() => {
-		setPortalContainer(
-			document.querySelector<HTMLElement>("[data-app-shell] main"),
-		);
-	}, []);
 	const [query, setQuery] = useState("");
 	const [activeKey, setActiveKey] = useState<string | null>(null);
 	const [showAll, setShowAll] = useState(false);
+	// Reset for the next opening once the dialog closes.
+	const [wasOpen, setWasOpen] = useState(open);
+	if (open !== wasOpen) {
+		setWasOpen(open);
+		if (!open) {
+			setQuery("");
+			setActiveKey(null);
+			setShowAll(false);
+		}
+	}
 	const [pendingTracks, setPendingTracks] = useState<Set<string>>(new Set());
 	const pendingTrackIds = useRef(new Set<string>());
 	const footerRef = useRef<HTMLDivElement>(null);
@@ -113,16 +130,6 @@ export function LibrarySearchDialog({
 	}, []);
 
 	useLibrarySearchShortcut(open, onOpenChange);
-
-	// Reset for the next opening; keep the last query while closed only
-	// long enough for the close animation.
-	useEffect(() => {
-		if (!open) {
-			setQuery("");
-			setActiveKey(null);
-			setShowAll(false);
-		}
-	}, [open]);
 
 	const search = useQuery({
 		queryKey: [...libraryQueryKeys.search(debouncedQuery), { all: showAll }],

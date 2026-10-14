@@ -26,7 +26,7 @@ export function QueueTrackRow({
 	coverUrl,
 	onPlay,
 }: QueueTrackRowProps) {
-	const Menu = useQueueRowMenu();
+	const renderMenu = useQueueRowMenu();
 	const isCurrent = state === "current";
 	const renderRow = (menuTrigger: ReactNode) => (
 		<li
@@ -88,7 +88,7 @@ export function QueueTrackRow({
 			<span
 				className={cn(
 					"shrink-0 text-xs text-caption tabular-nums",
-					Menu && "group-hover:opacity-0 group-focus-within:opacity-0",
+					renderMenu && "group-hover:opacity-0 group-focus-within:opacity-0",
 				)}
 			>
 				{formatQueueDuration(item.track.durationMs)}
@@ -96,7 +96,9 @@ export function QueueTrackRow({
 			{menuTrigger}
 		</li>
 	);
-	return Menu ? <Menu item={item}>{renderRow}</Menu> : renderRow(null);
+	return renderMenu
+		? renderMenu({ item, children: renderRow })
+		: renderRow(null);
 }
 
 function QueueEqualizer({ isPlaying }: { isPlaying: boolean }) {

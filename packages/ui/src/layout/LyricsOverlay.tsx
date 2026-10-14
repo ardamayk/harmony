@@ -27,28 +27,34 @@ export function LyricsOverlay({
 	loadLyrics?: (trackId: string) => Promise<{ lyrics: string } | null>;
 	onClose: () => void;
 }) {
-	const [state, setState] = useState<LyricsState>({ status: "loading" });
+	const [loaded, setLoaded] = useState<{
+		trackId: string;
+		state: LyricsState;
+	} | null>(null);
+	let state: LyricsState = { status: "loading" };
+	if (!loadLyrics) state = { status: "loaded", lyrics: "" };
+	else if (loaded?.trackId === track.id) state = loaded.state;
 	const rootRef = useRef<HTMLDivElement>(null);
 	useFocusTrap(rootRef);
 
 	useEffect(() => {
+		if (!loadLyrics) return undefined;
 		let cancelled = false;
-		setState({ status: "loading" });
-		if (!loadLyrics) {
-			setState({ status: "loaded", lyrics: "" });
-			return undefined;
-		}
-		loadLyrics(track.id)
+		const trackId = track.id;
+		loadLyrics(trackId)
 			.then((result) => {
 				if (!cancelled)
-					setState({ status: "loaded", lyrics: result?.lyrics ?? "" });
+					setLoaded({
+						trackId,
+						state: { status: "loaded", lyrics: result?.lyrics ?? "" },
+					});
 			})
 			.catch((error) => {
 				console.warn("Failed to load track lyrics", {
 					trackId: track.id,
 					error,
 				});
-				if (!cancelled) setState({ status: "failed" });
+				if (!cancelled) setLoaded({ trackId, state: { status: "failed" } });
 			});
 		return () => {
 			cancelled = true;

@@ -20,6 +20,7 @@ import {
 	type CSSProperties,
 	type ReactNode,
 	useEffect,
+	useLayoutEffect,
 	useRef,
 	useState,
 } from "react";
@@ -475,7 +476,9 @@ function VolumeControl({
 	// React registers wheel listeners as passive, so a native listener is the
 	// only way to stop the page behind the bar from scrolling too.
 	const volumeRef = useRef(volume);
-	volumeRef.current = volume;
+	useLayoutEffect(() => {
+		volumeRef.current = volume;
+	});
 	useEffect(() => {
 		const root = rootRef.current;
 		if (!root) return undefined;

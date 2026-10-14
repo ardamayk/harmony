@@ -2,8 +2,8 @@ import type React from "react";
 import {
 	type CSSProperties,
 	type PointerEvent as ReactPointerEvent,
-	useCallback,
 	useEffect,
+	useEffectEvent,
 	useId,
 	useRef,
 	useState,
@@ -88,12 +88,12 @@ export function SeekBar({
 			? Math.min(1, Math.max(0, bufferedEnd / duration))
 			: 0;
 
-	const fractionAt = useCallback((clientX: number) => {
+	const fractionAt = (clientX: number) => {
 		const rect = rootRef.current?.getBoundingClientRect();
 		return rect ? fractionForPointer(clientX, rect) : 0;
-	}, []);
+	};
 
-	const cancelScrub = useCallback(() => {
+	const cancelScrub = () => {
 		const pointerId = scrubPointerIdRef.current;
 		if (pointerId !== null) {
 			try {
@@ -104,16 +104,17 @@ export function SeekBar({
 		}
 		scrubPointerIdRef.current = null;
 		setScrubFraction(null);
-	}, []);
+	};
 
+	const onScrubKeyDown = useEffectEvent((event: KeyboardEvent) => {
+		if (event.key === "Escape") cancelScrub();
+	});
+	const isScrubbing = scrubFraction !== null;
 	useEffect(() => {
-		if (scrubFraction === null) return undefined;
-		const cancelOnEscape = (event: KeyboardEvent) => {
-			if (event.key === "Escape") cancelScrub();
-		};
-		document.addEventListener("keydown", cancelOnEscape);
-		return () => document.removeEventListener("keydown", cancelOnEscape);
-	}, [cancelScrub, scrubFraction]);
+		if (!isScrubbing) return undefined;
+		document.addEventListener("keydown", onScrubKeyDown);
+		return () => document.removeEventListener("keydown", onScrubKeyDown);
+	}, [isScrubbing]);
 
 	const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
 		if (!canSeek || event.button !== 0) return;

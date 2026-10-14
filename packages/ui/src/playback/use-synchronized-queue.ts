@@ -5,7 +5,13 @@ import type {
 	QueueItemSource,
 } from "@repo/api-client";
 import { ApiError } from "@repo/api-client";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+	useCallback,
+	useEffect,
+	useLayoutEffect,
+	useRef,
+	useState,
+} from "react";
 
 export type PlaybackQueueApi = {
 	getQueue: () => Promise<Queue>;
@@ -37,7 +43,9 @@ export function useSynchronizedQueue(api: PlaybackQueueApi) {
 	const latestAppliedRequestRef = useRef(0);
 	const [queue, setQueueState] = useState<QueueItem[]>([]);
 	const [queueConflict, setQueueConflict] = useState<string | null>(null);
-	apiRef.current = api;
+	useLayoutEffect(() => {
+		apiRef.current = api;
+	});
 
 	const applyQueue = useCallback((data: Queue, requestOrder: number) => {
 		if (requestOrder < latestAppliedRequestRef.current) return;

@@ -35,12 +35,13 @@ export function ImportTransferDetails({
 		(isExpanded && entry.state === "unresolved" && entry.phase !== "queued");
 	useEffect(() => {
 		if (!isActive) return;
-		setNow(Date.now());
-		const timer = setInterval(
-			() => setNow(Date.now()),
-			PROGRESS_CLOCK_INTERVAL_MS,
-		);
-		return () => clearInterval(timer);
+		const tick = () => setNow(Date.now());
+		const catchUp = setTimeout(tick, 0);
+		const timer = setInterval(tick, PROGRESS_CLOCK_INTERVAL_MS);
+		return () => {
+			clearTimeout(catchUp);
+			clearInterval(timer);
+		};
 	}, [isActive]);
 	const elapsed = Math.max(
 		0,

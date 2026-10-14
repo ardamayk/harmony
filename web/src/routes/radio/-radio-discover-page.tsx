@@ -458,21 +458,18 @@ export function RadioDiscoverPage() {
 		[playRadioCatalogPreview],
 	);
 
+	const { hasNextPage, isFetchingNextPage, fetchNextPage } = catalog;
 	useEffect(() => {
 		const node = loadMoreRef.current;
 		if (!node || typeof IntersectionObserver === "undefined") return;
 		const observer = new IntersectionObserver(([record]) => {
-			if (
-				record.isIntersecting &&
-				catalog.hasNextPage &&
-				!catalog.isFetchingNextPage
-			) {
-				void catalog.fetchNextPage();
+			if (record.isIntersecting && hasNextPage && !isFetchingNextPage) {
+				void fetchNextPage();
 			}
 		});
 		observer.observe(node);
 		return () => observer.disconnect();
-	}, [catalog.hasNextPage, catalog.isFetchingNextPage, catalog.fetchNextPage]);
+	}, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
 	return (
 		<div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -779,9 +776,11 @@ function NativeOptionSelect({
 		return () => document.removeEventListener("pointerdown", handlePointerDown);
 	}, [isOpen]);
 
-	useEffect(() => {
+	const [wasOpen, setWasOpen] = useState(isOpen);
+	if (isOpen !== wasOpen) {
+		setWasOpen(isOpen);
 		if (!isOpen) setQuery("");
-	}, [isOpen]);
+	}
 
 	return (
 		<div

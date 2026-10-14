@@ -46,7 +46,12 @@ export function useTrackWaveform({
 	enabled: boolean;
 	load: TrackWaveformLoader | null;
 }): number[] | null {
-	const [peaks, setPeaks] = useState<number[] | null>(null);
+	// Peaks the latest request returned, tagged with what it was loaded for.
+	const [loaded, setLoaded] = useState<{
+		trackId: string;
+		revision: number;
+		peaks: number[] | null;
+	} | null>(null);
 	const revision = useSyncExternalStore(
 		subscribeCache,
 		getCacheRevision,
@@ -54,11 +59,7 @@ export function useTrackWaveform({
 	);
 
 	useEffect(() => {
-		if (!enabled || !trackId || !load) {
-			setPeaks(null);
-			return undefined;
-		}
-		setPeaks(waveformCache.get(trackId) ?? null);
+		if (!enabled || !trackId || !load) return undefined;
 		let cancelled = false;
 		let timer: number | null = null;
 		let polls = 0;
@@ -69,7 +70,7 @@ export function useTrackWaveform({
 					if (cancelled || revision !== cacheRevision) return;
 					if ("status" in result) {
 						waveformCache.delete(trackId);
-						setPeaks(null);
+						setLoaded({ trackId, revision, peaks: null });
 						polls += 1;
 						if (polls > MAX_PENDING_POLLS) return;
 						timer = window.setTimeout(
@@ -79,7 +80,7 @@ export function useTrackWaveform({
 						return;
 					}
 					waveformCache.set(trackId, result.peaks);
-					setPeaks(result.peaks);
+					setLoaded({ trackId, revision, peaks: result.peaks });
 				})
 				.catch(() => {
 					// No waveform (older server, missing ffmpeg, missing file): the
@@ -93,5 +94,9 @@ export function useTrackWaveform({
 		};
 	}, [enabled, trackId, load, revision]);
 
-	return peaks;
+	if (!enabled || !trackId || !load) return null;
+	if (loaded?.trackId === trackId && loaded.revision === revision) {
+		return loaded.peaks;
+	}
+	return waveformCache.get(trackId) ?? null;
 }

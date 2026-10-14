@@ -23,11 +23,10 @@ export function NowPlayingAnnouncer() {
 			? `Now playing: ${currentRadioStation.name}`
 			: "";
 
+	if (!sourceKey && message !== "") setMessage("");
+
 	useEffect(() => {
-		if (!sourceKey) {
-			setMessage("");
-			return undefined;
-		}
+		if (!sourceKey) return undefined;
 		const timer = window.setTimeout(
 			() => setMessage(nextMessage),
 			ANNOUNCE_DELAY_MS,
