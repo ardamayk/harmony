@@ -4,7 +4,7 @@
     {
       "name": "web",
       "runtimeExecutable": "mise",
-      "runtimeArgs": ["run", "web:dev"],
+      "runtimeArgs": ["run", "dev"],
       "port": 3000
     }
   ]
