@@ -2,7 +2,7 @@ import type { PlaybackError } from "../playback/PlaybackEngine";
 import type { PlaybackErrorRecovery } from "../playback/PlaybackProvider";
 
 /** Second line of the banner, explaining what the probe found. */
-export function describePlaybackErrorCause(
+function describePlaybackErrorCause(
 	cause: PlaybackErrorRecovery["cause"],
 ): string | null {
 	switch (cause) {

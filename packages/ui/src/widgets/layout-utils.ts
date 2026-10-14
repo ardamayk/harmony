@@ -9,9 +9,9 @@ const MIN_MAIN = 25;
 const MIN_MINI = 4;
 
 export const MINI_PANEL_SIZE = 5;
-export const MINI_PANEL_MAX = 12;
+const MINI_PANEL_MAX = 12;
 
-export type PanelSide = "left" | "right";
+type PanelSide = "left" | "right";
 
 type PanelLayout = {
 	left: number;
@@ -40,7 +40,7 @@ type ShellLayout = {
 	toPanelSizes: (next: Record<string, number>) => [number, number, number];
 };
 
-export function getNavPanel(
+function getNavPanel(
 	sidebarPosition: LayoutPreferences["sidebarPosition"],
 ): PanelSide {
 	return sidebarPosition === "left" ? "left" : "right";

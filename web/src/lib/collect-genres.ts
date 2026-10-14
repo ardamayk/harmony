@@ -1,7 +1,7 @@
 import type { Track, TrackList } from "@repo/api-client";
 import { getTrackGenreNames } from "#/lib/library-display";
 
-export type GenreSummary = {
+type GenreSummary = {
 	name: string;
 	trackCount: number;
 	tracks: Track[];

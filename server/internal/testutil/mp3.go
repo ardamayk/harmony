@@ -237,18 +237,6 @@ func ID3TextFrame(version byte, name, value string) []byte {
 	return id3TextFrame(version, name, value)
 }
 
-// ID3UFIDFrame builds a UFID frame: owner, NUL, raw identifier. MusicBrainz
-// Picard stores the recording MBID under the owner "http://musicbrainz.org".
-func ID3UFIDFrame(version byte, owner, identifier string) []byte {
-	name := "UFID"
-	if version == 2 {
-		name = "UFI"
-	}
-	payload := append([]byte(owner), 0)
-	payload = append(payload, []byte(identifier)...)
-	return id3FrameBytes(version, name, payload)
-}
-
 // ID3LyricsFrame builds a USLT (ULT for v2.2) frame: encoding, language,
 // NUL-terminated descriptor, then the lyrics text.
 func ID3LyricsFrame(version byte, language, description, text string) []byte {

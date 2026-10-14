@@ -1,7 +1,7 @@
 import type { ThemePreferences } from "@repo/api-client";
 import { useEffect, useState } from "react";
 
-export type ResolvedThemeMode = "light" | "dark";
+type ResolvedThemeMode = "light" | "dark";
 
 function resolveThemeMode(mode: ThemePreferences["mode"]): ResolvedThemeMode {
 	if (mode === "dark") return "dark";

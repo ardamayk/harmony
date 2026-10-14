@@ -214,7 +214,7 @@ func normalizeSeedIdentity(value string) string {
 	return cases.Fold().String(strings.Join(strings.Fields(norm.NFC.String(value)), " "))
 }
 
-// sortSeedName mirrors library.sortKey for the same reason.
+// sortSeedName lowercases and trims a seeded name for its *_sort column.
 func sortSeedName(value string) string {
 	return strings.ToLower(strings.TrimSpace(value))
 }

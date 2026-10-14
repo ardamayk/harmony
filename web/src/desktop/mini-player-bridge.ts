@@ -1,10 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
 
-/** Opens the always-on-top mini player window (desktop only). */
-export function openMiniPlayer(): Promise<void> {
-	return invoke("desktop_open_mini_player");
-}
-
 /** Closes the mini player window; a no-op when it is not open. */
 export function closeMiniPlayer(): Promise<void> {
 	return invoke("desktop_close_mini_player");

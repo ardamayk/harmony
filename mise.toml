@@ -31,12 +31,12 @@ set -euo pipefail
 # --- Code generation ---------------------------------------------------------
 
 [tasks.generate]
-description = "Regenerate committed OpenAPI clients"
-run = "bash scripts/generate-openapi.sh"
+description = "Regenerate committed OpenAPI clients and sqlc query packages"
+run = ["bash scripts/generate-openapi.sh", "cd server && sqlc generate"]
 
 [tasks."generate:check"]
-description = "Verify committed OpenAPI clients are current"
-run = "bash scripts/check-openapi-generation.sh"
+description = "Verify committed OpenAPI clients and sqlc query packages are current"
+run = ["bash scripts/check-openapi-generation.sh", "cd server && sqlc diff"]
 
 # --- Build -------------------------------------------------------------------
 

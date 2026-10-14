@@ -22,11 +22,11 @@ export interface PlaybackKeyboardOptions {
 	volumeStep?: number;
 }
 
-export const DEFAULT_SEEK_STEP_SECONDS = 5;
-export const DEFAULT_SEEK_STEP_LARGE_SECONDS = 30;
-export const DEFAULT_VOLUME_STEP = 0.05;
+const DEFAULT_SEEK_STEP_SECONDS = 5;
+const DEFAULT_SEEK_STEP_LARGE_SECONDS = 30;
+const DEFAULT_VOLUME_STEP = 0.05;
 
-export type PlaybackShortcutDescription = {
+type PlaybackShortcutDescription = {
 	keys: string[];
 	description: string;
 };

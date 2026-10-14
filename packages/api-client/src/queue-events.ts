@@ -17,7 +17,7 @@ export type QueueEventSource = {
 	onerror: ((event: Event) => void) | null;
 };
 
-export type QueueEventSubscription = {
+type QueueEventSubscription = {
 	getBaseUrl: () => string | Promise<string>;
 	getCapabilities: () => Promise<string[]>;
 	getToken?: () => string | undefined;

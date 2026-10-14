@@ -1,6 +1,6 @@
 export type HexColor = `#${string}`;
 
-export function relativeLuminance(hex: HexColor): number {
+function relativeLuminance(hex: HexColor): number {
 	const normalized = hex.toLowerCase();
 	const r = Number.parseInt(normalized.slice(1, 3), 16) / 255;
 	const g = Number.parseInt(normalized.slice(3, 5), 16) / 255;
