@@ -9,7 +9,7 @@ import (
 
 func TestStoreCreatesAndListsUserStations(t *testing.T) {
 	db := testutil.OpenMigratedDB(t)
-	store := NewStore(db)
+	store := newTestService(db)
 	ctx := context.Background()
 
 	first, err := store.CreateStation(ctx, "user-1", StationCreate{
@@ -57,7 +57,7 @@ func TestStoreCreatesAndListsUserStations(t *testing.T) {
 
 func TestStoreUpdatesAndDeletesStation(t *testing.T) {
 	db := testutil.OpenMigratedDB(t)
-	store := NewStore(db)
+	store := newTestService(db)
 	ctx := context.Background()
 
 	station, err := store.CreateStation(ctx, "user-1", StationCreate{
@@ -91,7 +91,7 @@ func TestStoreUpdatesAndDeletesStation(t *testing.T) {
 
 func TestStoreUpdatesStationMetadata(t *testing.T) {
 	db := testutil.OpenMigratedDB(t)
-	store := NewStore(db)
+	store := newTestService(db)
 	ctx := context.Background()
 
 	station, err := store.CreateStation(ctx, "user-1", StationCreate{
@@ -129,7 +129,7 @@ func TestStoreUpdatesStationMetadata(t *testing.T) {
 }
 
 func TestStoreRejectsInvalidStationURLsOnCreate(t *testing.T) {
-	store := NewStore(testutil.OpenMigratedDB(t))
+	store := newTestService(testutil.OpenMigratedDB(t))
 	testCases := []struct {
 		name  string
 		input StationCreate
@@ -152,7 +152,7 @@ func TestStoreRejectsInvalidStationURLsOnCreate(t *testing.T) {
 }
 
 func TestStoreRejectsInvalidStationURLsOnUpdate(t *testing.T) {
-	store := NewStore(testutil.OpenMigratedDB(t))
+	store := newTestService(testutil.OpenMigratedDB(t))
 	station, err := store.CreateStation(context.Background(), "user-1", StationCreate{
 		Name:        "Station",
 		StreamURL:   "https://radio.example/live",

@@ -41,7 +41,7 @@ func TestBrowserHLSProxyIntegration(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	store := NewStore(testutil.OpenMigratedDB(t))
+	store := newTestService(testutil.OpenMigratedDB(t))
 	station, err := store.CreateStation(context.Background(), auth.DefaultUserID, StationCreate{
 		Name:      "Browser HLS Fixture",
 		StreamURL: fixtureUpstreamOrigin + "/master.m3u8",
@@ -52,7 +52,7 @@ func TestBrowserHLSProxyIntegration(t *testing.T) {
 	cache := NewNowPlayingCache()
 	proxy := NewStreamProxy(store, cache)
 	proxy.client.Transport = fixtureUpstreamTransport(t, upstream.URL)
-	handlers := NewHandlers(store, nil, proxy, cache)
+	handlers := NewHandler(store, nil, proxy, cache)
 	router := chi.NewRouter()
 	router.Use(hlsFixtureCORS)
 	router.Get("/api/v1/radio/stations/{stationId}/stream", handlers.StreamStation)

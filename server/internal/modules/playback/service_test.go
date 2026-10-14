@@ -82,7 +82,7 @@ func TestStoreGetQueueReturnsTrackResolutionErrors(t *testing.T) {
 		},
 		errors: map[string]error{},
 	}
-	store := NewStore(db, trackAccess)
+	store := newTestService(db, trackAccess)
 	if _, err := store.AppendItem(ctx, "user-1", "track-1", "0"); err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +106,7 @@ func TestStoreGetQueueSkipsConfirmedMissingTracks(t *testing.T) {
 			"track-1": {ID: "track-1", Title: "First"},
 		},
 	}
-	store := NewStore(db, trackAccess)
+	store := newTestService(db, trackAccess)
 	if _, err := store.AppendItem(ctx, "user-1", "track-1", "0"); err != nil {
 		t.Fatal(err)
 	}
@@ -129,13 +129,13 @@ func (f fakeTrackAccess) GetTrackFilePath(_ context.Context, trackID string) (st
 	return track.FilePath, nil
 }
 
-func setupPlaybackStore(t *testing.T, tracks map[string]library.Track) *Store {
+func setupPlaybackStore(t *testing.T, tracks map[string]library.Track) *Service {
 	t.Helper()
 	db := testutil.OpenMigratedDB(t)
 	for trackID := range tracks {
 		testutil.SeedManagedTrack(t, db, testutil.ManagedTrackSpec{TrackID: trackID})
 	}
-	return NewStore(db, fakeTrackAccess{tracks: tracks})
+	return newTestService(db, fakeTrackAccess{tracks: tracks})
 }
 
 func TestStoreUsesTrackAccessInterface(t *testing.T) {
@@ -161,20 +161,20 @@ func TestStoreUsesTrackAccessInterface(t *testing.T) {
 }
 
 func TestStoreRejectsEveryStaleMutationWithoutChangingQueue(t *testing.T) {
-	tests := map[string]func(*Store, Queue) error{
-		"replace": func(store *Store, _ Queue) error {
+	tests := map[string]func(*Service, Queue) error{
+		"replace": func(store *Service, _ Queue) error {
 			_, err := store.ReplaceQueue(context.Background(), "user-1", []string{"track-2"}, "0")
 			return err
 		},
-		"append": func(store *Store, _ Queue) error {
+		"append": func(store *Service, _ Queue) error {
 			_, err := store.AppendItem(context.Background(), "user-1", "track-2", "0")
 			return err
 		},
-		"reorder": func(store *Store, queue Queue) error {
+		"reorder": func(store *Service, queue Queue) error {
 			_, err := store.ReorderItems(context.Background(), "user-1", []string{queue.Items[0].ID}, "0")
 			return err
 		},
-		"remove": func(store *Store, queue Queue) error {
+		"remove": func(store *Service, queue Queue) error {
 			_, err := store.RemoveItem(context.Background(), "user-1", queue.Items[0].ID, "0")
 			return err
 		},

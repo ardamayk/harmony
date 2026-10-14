@@ -19,3 +19,15 @@ sql:
       go:
         <<: *go
         out: internal/modules/preferences/db
+  - <<: *module
+    queries: internal/modules/radio/queries.sql
+    gen:
+      go:
+        <<: *go
+        out: internal/modules/radio/db
+  - <<: *module
+    queries: internal/modules/playback/queries.sql
+    gen:
+      go:
+        <<: *go
+        out: internal/modules/playback/db

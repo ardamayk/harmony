@@ -23,28 +23,28 @@ type Streamer interface {
 	Stream(w http.ResponseWriter, r *http.Request, station Station)
 }
 
-type Handlers struct {
-	store    *Store
+type Handler struct {
+	service  *Service
 	searcher Searcher
 	streamer Streamer
 	cache    *NowPlayingCache
 }
 
-func NewHandlers(store *Store, searcher Searcher, streamer Streamer, cache ...*NowPlayingCache) *Handlers {
+func NewHandler(service *Service, searcher Searcher, streamer Streamer, cache ...*NowPlayingCache) *Handler {
 	nowPlayingCache := NewNowPlayingCache()
 	if len(cache) > 0 && cache[0] != nil {
 		nowPlayingCache = cache[0]
 	}
-	return &Handlers{store: store, searcher: searcher, streamer: streamer, cache: nowPlayingCache}
+	return &Handler{service: service, searcher: searcher, streamer: streamer, cache: nowPlayingCache}
 }
 
-func (h *Handlers) ListStations(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) ListStations(w http.ResponseWriter, r *http.Request) {
 	userID, err := auth.CurrentUserID(r)
 	if err != nil {
 		respond.Error(w, http.StatusUnauthorized, "unauthorized", err.Error())
 		return
 	}
-	list, err := h.store.ListStations(r.Context(), userID)
+	list, err := h.service.ListStations(r.Context(), userID)
 	if err != nil {
 		respond.Error(w, http.StatusInternalServerError, "internal_error", err.Error())
 		return
@@ -52,7 +52,7 @@ func (h *Handlers) ListStations(w http.ResponseWriter, r *http.Request) {
 	respond.JSON(w, http.StatusOK, list)
 }
 
-func (h *Handlers) CreateStation(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) CreateStation(w http.ResponseWriter, r *http.Request) {
 	userID, err := auth.CurrentUserID(r)
 	if err != nil {
 		respond.Error(w, http.StatusUnauthorized, "unauthorized", err.Error())
@@ -63,7 +63,7 @@ func (h *Handlers) CreateStation(w http.ResponseWriter, r *http.Request) {
 		respond.Error(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
 		return
 	}
-	station, err := h.store.CreateStation(r.Context(), userID, body)
+	station, err := h.service.CreateStation(r.Context(), userID, body)
 	if err != nil {
 		respond.Error(w, http.StatusBadRequest, "bad_request", err.Error())
 		return
@@ -71,13 +71,13 @@ func (h *Handlers) CreateStation(w http.ResponseWriter, r *http.Request) {
 	respond.JSON(w, http.StatusCreated, station)
 }
 
-func (h *Handlers) GetStation(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) GetStation(w http.ResponseWriter, r *http.Request) {
 	userID, err := auth.CurrentUserID(r)
 	if err != nil {
 		respond.Error(w, http.StatusUnauthorized, "unauthorized", err.Error())
 		return
 	}
-	station, err := h.store.GetStation(r.Context(), userID, chi.URLParam(r, "stationId"))
+	station, err := h.service.GetStation(r.Context(), userID, chi.URLParam(r, "stationId"))
 	if errors.Is(err, ErrNotFound) {
 		respond.Error(w, http.StatusNotFound, "not_found", "radio station not found")
 		return
@@ -89,7 +89,7 @@ func (h *Handlers) GetStation(w http.ResponseWriter, r *http.Request) {
 	respond.JSON(w, http.StatusOK, station)
 }
 
-func (h *Handlers) PatchStation(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) PatchStation(w http.ResponseWriter, r *http.Request) {
 	userID, err := auth.CurrentUserID(r)
 	if err != nil {
 		respond.Error(w, http.StatusUnauthorized, "unauthorized", err.Error())
@@ -100,7 +100,7 @@ func (h *Handlers) PatchStation(w http.ResponseWriter, r *http.Request) {
 		respond.Error(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
 		return
 	}
-	station, err := h.store.UpdateStation(r.Context(), userID, chi.URLParam(r, "stationId"), body)
+	station, err := h.service.UpdateStation(r.Context(), userID, chi.URLParam(r, "stationId"), body)
 	if errors.Is(err, ErrNotFound) {
 		respond.Error(w, http.StatusNotFound, "not_found", "radio station not found")
 		return
@@ -112,13 +112,13 @@ func (h *Handlers) PatchStation(w http.ResponseWriter, r *http.Request) {
 	respond.JSON(w, http.StatusOK, station)
 }
 
-func (h *Handlers) DeleteStation(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) DeleteStation(w http.ResponseWriter, r *http.Request) {
 	userID, err := auth.CurrentUserID(r)
 	if err != nil {
 		respond.Error(w, http.StatusUnauthorized, "unauthorized", err.Error())
 		return
 	}
-	err = h.store.DeleteStation(r.Context(), userID, chi.URLParam(r, "stationId"))
+	err = h.service.DeleteStation(r.Context(), userID, chi.URLParam(r, "stationId"))
 	if errors.Is(err, ErrNotFound) {
 		respond.Error(w, http.StatusNotFound, "not_found", "radio station not found")
 		return
@@ -130,7 +130,7 @@ func (h *Handlers) DeleteStation(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (h *Handlers) SearchStations(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) SearchStations(w http.ResponseWriter, r *http.Request) {
 	if h.searcher == nil {
 		respond.Error(w, http.StatusServiceUnavailable, "unavailable", "radio search unavailable")
 		return
@@ -143,7 +143,7 @@ func (h *Handlers) SearchStations(w http.ResponseWriter, r *http.Request) {
 	respond.JSON(w, http.StatusOK, results)
 }
 
-func (h *Handlers) ListCatalogCountries(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) ListCatalogCountries(w http.ResponseWriter, r *http.Request) {
 	if h.searcher == nil {
 		respond.Error(w, http.StatusServiceUnavailable, "unavailable", "radio search unavailable")
 		return
@@ -156,7 +156,7 @@ func (h *Handlers) ListCatalogCountries(w http.ResponseWriter, r *http.Request) 
 	respond.JSON(w, http.StatusOK, results)
 }
 
-func (h *Handlers) ListCatalogTags(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) ListCatalogTags(w http.ResponseWriter, r *http.Request) {
 	if h.searcher == nil {
 		respond.Error(w, http.StatusServiceUnavailable, "unavailable", "radio search unavailable")
 		return
@@ -174,7 +174,7 @@ type importRequest struct {
 	Result      *SearchResult `json:"result,omitempty"`
 }
 
-func (h *Handlers) ImportStation(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) ImportStation(w http.ResponseWriter, r *http.Request) {
 	userID, err := auth.CurrentUserID(r)
 	if err != nil {
 		respond.Error(w, http.StatusUnauthorized, "unauthorized", err.Error())
@@ -190,7 +190,7 @@ func (h *Handlers) ImportStation(w http.ResponseWriter, r *http.Request) {
 		respond.Error(w, http.StatusBadRequest, "bad_request", err.Error())
 		return
 	}
-	station, err := h.store.ImportStation(r.Context(), userID, result)
+	station, err := h.service.ImportStation(r.Context(), userID, result)
 	if err != nil {
 		respond.Error(w, http.StatusBadRequest, "bad_request", err.Error())
 		return
@@ -198,7 +198,7 @@ func (h *Handlers) ImportStation(w http.ResponseWriter, r *http.Request) {
 	respond.JSON(w, http.StatusCreated, station)
 }
 
-func (h *Handlers) PreviewStation(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) PreviewStation(w http.ResponseWriter, r *http.Request) {
 	if h.streamer == nil {
 		respond.Error(w, http.StatusServiceUnavailable, "unavailable", "radio streaming unavailable")
 		return
@@ -216,7 +216,7 @@ func (h *Handlers) PreviewStation(w http.ResponseWriter, r *http.Request) {
 	h.streamer.Stream(w, r, previewStation(result))
 }
 
-func (h *Handlers) StreamPreviewStation(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) StreamPreviewStation(w http.ResponseWriter, r *http.Request) {
 	if h.streamer == nil {
 		respond.Error(w, http.StatusServiceUnavailable, "unavailable", "radio streaming unavailable")
 		return
@@ -234,7 +234,7 @@ func (h *Handlers) StreamPreviewStation(w http.ResponseWriter, r *http.Request) 
 	h.streamer.Stream(w, r, previewStation(result))
 }
 
-func (h *Handlers) importResult(r *http.Request, body importRequest) (SearchResult, error) {
+func (h *Handler) importResult(r *http.Request, body importRequest) (SearchResult, error) {
 	if body.StationUUID != "" && h.searcher != nil {
 		result, err := h.searcher.LookupStation(r, body.StationUUID)
 		if err == nil {
@@ -267,7 +267,7 @@ func previewStation(result SearchResult) Station {
 	}
 }
 
-func (h *Handlers) StreamStation(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) StreamStation(w http.ResponseWriter, r *http.Request) {
 	if h.streamer == nil {
 		respond.Error(w, http.StatusServiceUnavailable, "unavailable", "radio streaming unavailable")
 		return
@@ -277,7 +277,7 @@ func (h *Handlers) StreamStation(w http.ResponseWriter, r *http.Request) {
 		respond.Error(w, http.StatusUnauthorized, "unauthorized", err.Error())
 		return
 	}
-	station, err := h.store.GetStation(r.Context(), userID, chi.URLParam(r, "stationId"))
+	station, err := h.service.GetStation(r.Context(), userID, chi.URLParam(r, "stationId"))
 	if errors.Is(err, ErrNotFound) {
 		respond.Error(w, http.StatusNotFound, "not_found", "radio station not found")
 		return
@@ -289,7 +289,7 @@ func (h *Handlers) StreamStation(w http.ResponseWriter, r *http.Request) {
 	h.streamer.Stream(w, r, station)
 }
 
-func (h *Handlers) GetNowPlaying(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) GetNowPlaying(w http.ResponseWriter, r *http.Request) {
 	userID, err := auth.CurrentUserID(r)
 	if err != nil {
 		respond.Error(w, http.StatusUnauthorized, "unauthorized", err.Error())
@@ -304,7 +304,7 @@ func (h *Handlers) GetNowPlaying(w http.ResponseWriter, r *http.Request) {
 		respond.JSON(w, http.StatusOK, NowPlaying{})
 		return
 	}
-	if _, stationErr := h.store.GetStation(r.Context(), userID, stationID); errors.Is(stationErr, ErrNotFound) {
+	if _, stationErr := h.service.GetStation(r.Context(), userID, stationID); errors.Is(stationErr, ErrNotFound) {
 		respond.Error(w, http.StatusNotFound, "not_found", "radio station not found")
 		return
 	} else if stationErr != nil {
@@ -315,7 +315,7 @@ func (h *Handlers) GetNowPlaying(w http.ResponseWriter, r *http.Request) {
 		respond.JSON(w, http.StatusOK, now)
 		return
 	}
-	station, err := h.store.GetStation(r.Context(), userID, stationID)
+	station, err := h.service.GetStation(r.Context(), userID, stationID)
 	if err != nil {
 		respond.Error(w, http.StatusInternalServerError, "internal_error", err.Error())
 		return

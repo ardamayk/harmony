@@ -8,16 +8,16 @@ import (
 )
 
 type Module struct {
-	handlers *Handlers
+	handler *Handler
 }
 
-func NewModule(db *sql.DB, tracks library.TrackAccess, queueEventBrokers ...*QueueEventBroker) *Module {
-	store := NewStore(db, tracks)
+func NewModule(sqlDB *sql.DB, tracks library.TrackAccess, queueEventBrokers ...*QueueEventBroker) *Module {
+	service := NewService(NewRepository(sqlDB), tracks)
 	queueEvents := NewQueueEventBroker()
 	if len(queueEventBrokers) > 0 {
 		queueEvents = queueEventBrokers[0]
 	}
-	return &Module{handlers: NewHandlers(store, tracks, queueEvents)}
+	return &Module{handler: NewHandler(service, tracks, queueEvents)}
 }
 
 func (m *Module) Name() string {
@@ -25,12 +25,12 @@ func (m *Module) Name() string {
 }
 
 func (m *Module) RegisterRoutes(r chi.Router) {
-	r.Get("/api/v1/playback/queue", m.handlers.GetQueue)
-	r.Put("/api/v1/playback/queue", m.handlers.ReplaceQueue)
-	r.Patch("/api/v1/playback/queue", m.handlers.ReorderQueue)
-	r.Post("/api/v1/playback/queue/items", m.handlers.AppendItem)
-	r.Delete("/api/v1/playback/queue/items/{itemId}", m.handlers.RemoveItem)
-	r.Get("/api/v1/playback/queue/events", m.handlers.StreamQueueEvents)
-	r.Get("/api/v1/tracks/{trackId}/stream", m.handlers.StreamTrack)
-	r.Head("/api/v1/tracks/{trackId}/stream", m.handlers.StreamTrack)
+	r.Get("/api/v1/playback/queue", m.handler.GetQueue)
+	r.Put("/api/v1/playback/queue", m.handler.ReplaceQueue)
+	r.Patch("/api/v1/playback/queue", m.handler.ReorderQueue)
+	r.Post("/api/v1/playback/queue/items", m.handler.AppendItem)
+	r.Delete("/api/v1/playback/queue/items/{itemId}", m.handler.RemoveItem)
+	r.Get("/api/v1/playback/queue/events", m.handler.StreamQueueEvents)
+	r.Get("/api/v1/tracks/{trackId}/stream", m.handler.StreamTrack)
+	r.Head("/api/v1/tracks/{trackId}/stream", m.handler.StreamTrack)
 }

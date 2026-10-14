@@ -50,11 +50,11 @@ func (f *fakeStreamer) Stream(w http.ResponseWriter, _ *http.Request, station St
 	_, _ = w.Write([]byte("preview"))
 }
 
-func setupHandlers(t *testing.T) (*Handlers, *Store) {
+func setupHandlers(t *testing.T) (*Handler, *Service) {
 	t.Helper()
 	db := testutil.OpenMigratedDB(t)
-	store := NewStore(db)
-	return NewHandlers(store, nil, nil), store
+	store := newTestService(db)
+	return NewHandler(store, nil, nil), store
 }
 
 func withStationID(req *http.Request, stationID string) *http.Request {
@@ -118,7 +118,7 @@ func TestHandlersCreateListPatchDeleteStation(t *testing.T) {
 
 func TestHandlersSearchAndImportStation(t *testing.T) {
 	db := testutil.OpenMigratedDB(t)
-	store := NewStore(db)
+	store := newTestService(db)
 	searcher := fakeSearcher{result: SearchResult{
 		StationUUID: "abc",
 		Name:        "Radio Paradise",
@@ -128,7 +128,7 @@ func TestHandlersSearchAndImportStation(t *testing.T) {
 		Codec:       "MP3",
 		Bitrate:     192,
 	}}
-	h := NewHandlers(store, searcher, nil)
+	h := NewHandler(store, searcher, nil)
 
 	searchRec := httptest.NewRecorder()
 	h.SearchStations(searchRec, httptest.NewRequest(http.MethodGet, "/?q=paradise", nil))
@@ -151,7 +151,7 @@ func TestHandlersSearchAndImportStation(t *testing.T) {
 }
 
 func TestHandlersListCatalogOptions(t *testing.T) {
-	h := NewHandlers(nil, fakeSearcher{}, nil)
+	h := NewHandler(nil, fakeSearcher{}, nil)
 
 	countriesRec := httptest.NewRecorder()
 	h.ListCatalogCountries(countriesRec, httptest.NewRequest(http.MethodGet, "/", nil))
@@ -182,7 +182,7 @@ func TestHandlersListCatalogOptions(t *testing.T) {
 
 func TestHandlersPreviewCatalogStationStreamsWithoutImport(t *testing.T) {
 	db := testutil.OpenMigratedDB(t)
-	store := NewStore(db)
+	store := newTestService(db)
 	streamer := &fakeStreamer{}
 	searcher := fakeSearcher{result: SearchResult{
 		StationUUID: "abc",
@@ -194,7 +194,7 @@ func TestHandlersPreviewCatalogStationStreamsWithoutImport(t *testing.T) {
 		Codec:       "AAC",
 		Bitrate:     128,
 	}}
-	h := NewHandlers(store, searcher, streamer)
+	h := NewHandler(store, searcher, streamer)
 
 	rec := httptest.NewRecorder()
 	h.PreviewStation(rec, httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"stationUuid": "abc"}`)))

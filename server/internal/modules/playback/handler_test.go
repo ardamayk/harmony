@@ -21,13 +21,13 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-func setupPlaybackHandlers(t *testing.T) (*Handlers, *Store, *library.Store, *sql.DB) {
+func setupPlaybackHandlers(t *testing.T) (*Handler, *Service, *library.Store, *sql.DB) {
 	t.Helper()
 	db := testutil.OpenMigratedDB(t)
 	libStore := library.NewStore(db)
 	libSvc := library.NewService(libStore)
-	pbStore := NewStore(db, libStore)
-	return NewHandlers(pbStore, libSvc, NewQueueEventBroker()), pbStore, libStore, db
+	pbStore := newTestService(db, libStore)
+	return NewHandler(pbStore, libSvc, NewQueueEventBroker()), pbStore, libStore, db
 }
 
 func seedPlaybackTrack(t *testing.T, db *sql.DB) string {
@@ -225,30 +225,30 @@ func TestHandlersReplaceQueue(t *testing.T) {
 	}
 }
 
-type staleHandlerMutation func(*Handlers, Queue, string) *httptest.ResponseRecorder
+type staleHandlerMutation func(*Handler, Queue, string) *httptest.ResponseRecorder
 
-func staleReplace(handlers *Handlers, _ Queue, trackID string) *httptest.ResponseRecorder {
+func staleReplace(handlers *Handler, _ Queue, trackID string) *httptest.ResponseRecorder {
 	body, _ := json.Marshal(map[string]any{"trackIds": []string{trackID}, "revision": "0"})
 	recorder := httptest.NewRecorder()
 	handlers.ReplaceQueue(recorder, httptest.NewRequest(http.MethodPut, "/", bytes.NewReader(body)))
 	return recorder
 }
 
-func staleAppend(handlers *Handlers, _ Queue, trackID string) *httptest.ResponseRecorder {
+func staleAppend(handlers *Handler, _ Queue, trackID string) *httptest.ResponseRecorder {
 	body, _ := json.Marshal(map[string]string{"trackId": trackID, "revision": "0"})
 	recorder := httptest.NewRecorder()
 	handlers.AppendItem(recorder, httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(body)))
 	return recorder
 }
 
-func staleReorder(handlers *Handlers, queue Queue, _ string) *httptest.ResponseRecorder {
+func staleReorder(handlers *Handler, queue Queue, _ string) *httptest.ResponseRecorder {
 	body, _ := json.Marshal(map[string]any{"itemIds": []string{queue.Items[0].ID}, "revision": "0"})
 	recorder := httptest.NewRecorder()
 	handlers.ReorderQueue(recorder, httptest.NewRequest(http.MethodPatch, "/", bytes.NewReader(body)))
 	return recorder
 }
 
-func staleRemove(handlers *Handlers, queue Queue, _ string) *httptest.ResponseRecorder {
+func staleRemove(handlers *Handler, queue Queue, _ string) *httptest.ResponseRecorder {
 	request := httptest.NewRequest(http.MethodDelete, "/", nil)
 	request.Header.Set("If-Match", "0")
 	routeContext := chi.NewRouteContext()
