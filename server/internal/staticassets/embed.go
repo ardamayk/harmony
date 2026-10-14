@@ -6,7 +6,7 @@ import (
 	"net/http"
 )
 
-//go:embed web/*
+//go:embed all:web/*
 var webFS embed.FS
 
 //go:embed docs/*
