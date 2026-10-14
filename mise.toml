@@ -131,9 +131,24 @@ run = ["bun run --cwd desktop prepare:mpv", "bun run --cwd desktop test:mpv"]
 description = "Run Desktop Client Managed Import parity against a real Music Server"
 run = "bun run --cwd desktop test:import-parity"
 
+# --- Security audit ----------------------------------------------------------
+
+[tasks.audit]
+description = "Check JS and Go dependencies for known vulnerabilities"
+depends = ["web:audit", "server:audit"]
+
+[tasks."web:audit"]
+description = "bun audit for moderate and higher advisories"
+run = "bun audit --audit-level=moderate"
+
+[tasks."server:audit"]
+description = "govulncheck for vulnerabilities reachable from Music Server code"
+dir = "server"
+run = "go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./..."
+
 [tasks.ci]
-description = "What CI runs on every pull request: static checks and unit tests"
-depends = ["check", "test", "generate:check"]
+description = "What CI runs on every pull request: static checks, unit tests, and dependency audit"
+depends = ["check", "test", "generate:check", "audit"]
 
 [tasks."ci:integration"]
 description = "Browser, HLS, and pinned-mpv integration tests"

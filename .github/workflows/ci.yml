@@ -68,6 +68,15 @@ jobs:
       - run: mise run desktop:check
       - run: mise run desktop:test
 
+  audit:
+    name: Dependency audit (bun audit, govulncheck)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2
+      - run: bun install --frozen-lockfile
+      - run: mise run audit
+
   e2e:
     name: Web E2E
     runs-on: ubuntu-latest
@@ -116,7 +125,7 @@ jobs:
   fast-gate:
     name: PR / Fast Gate
     if: always()
-    needs: [web, server, desktop]
+    needs: [web, server, desktop, audit]
     runs-on: ubuntu-latest
     steps:
       - run: echo '${{ toJSON(needs) }}' | jq -e 'all(.[]; .result == "success")'
