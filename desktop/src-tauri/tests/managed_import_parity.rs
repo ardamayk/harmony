@@ -9,8 +9,8 @@
 //! preview field asserted below must have come from the Music Server.
 //!
 //! The test is ignored by default because it needs the Go toolchain and takes
-//! several seconds; run it with `pnpm --filter @repo/desktop test:import-parity`
-//! (or `mise run desktop:test:import-parity`).
+//! several seconds; run it with
+//! `mise run desktop:test:import-parity`.
 
 use earthly_audio_desktop::connection::{HttpBridge, HttpRequest, HttpResponse, ServerOrigin};
 use earthly_audio_desktop::desktop_import::{

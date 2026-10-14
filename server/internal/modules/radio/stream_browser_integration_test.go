@@ -64,7 +64,7 @@ func TestBrowserHLSProxyIntegration(t *testing.T) {
 	// are written.
 	commandContext, cancel := context.WithTimeout(context.Background(), 180*time.Second)
 	defer cancel()
-	command := exec.CommandContext(commandContext, "pnpm", "exec", "playwright", "test", "e2e/radio-hls-proxy.spec.ts", "--config=playwright.hls.config.ts")
+	command := exec.CommandContext(commandContext, "bun", "x", "playwright", "test", "e2e/radio-hls-proxy.spec.ts", "--config=playwright.hls.config.ts")
 	command.Dir = filepath.Clean(filepath.Join("..", "..", "..", "..", "web"))
 	command.Env = append(os.Environ(),
 		"HLS_PROXY_URL="+musicServer.URL+"/api/v1/radio/stations/"+station.ID+"/stream",
