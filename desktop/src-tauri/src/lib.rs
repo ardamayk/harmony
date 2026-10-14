@@ -10,6 +10,7 @@ mod playback;
 mod playback_app_actions;
 mod playback_lifecycle;
 mod playback_navigation;
+mod playback_publish;
 mod playback_restore;
 #[cfg(test)]
 mod playback_test_support;
@@ -42,6 +43,7 @@ use playback_app_actions::{
     DesktopPlaybackAction, DesktopPlaybackShell, dispatch_desktop_playback_action,
 };
 use playback_lifecycle::{PlaybackLifecycle, PlaybackSnapshotStore};
+use playback_publish::PlayheadThrottle;
 use playback_tray::{
     PlaybackPosition, PlaybackTray, PlaybackTrayView, TRAY_MINI_ID, TRAY_NEXT_ID, TRAY_OPEN_ID,
     TRAY_PREVIOUS_ID, TRAY_QUIT_ID, TRAY_TOGGLE_ID,
@@ -1155,6 +1157,7 @@ pub fn run() -> tauri::Result<()> {
             let playback_event_tray = playback_tray.clone();
             let app_handle = app.handle().clone();
             let window_title = Arc::new(Mutex::new(String::new()));
+            let playhead_throttle = Mutex::new(PlayheadThrottle::default());
             let mpris_app = app.handle().clone();
             let mpris = MprisBridge::start(
                 Arc::new(move |action| {
@@ -1173,6 +1176,13 @@ pub fn run() -> tauri::Result<()> {
                 Arc::new(CommandPipeWireObserver::new()),
                 adaptive_system_rate,
                 move |state| {
+                    let should_publish = playhead_throttle
+                        .lock()
+                        .map(|mut throttle| throttle.should_publish(&state))
+                        .unwrap_or(true);
+                    if !should_publish {
+                        return;
+                    }
                     let is_playing = state.status.is_active();
                     if let Err(error) = playback_event_tray.update(
                         state.source.as_ref(),
