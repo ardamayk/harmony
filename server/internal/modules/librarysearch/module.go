@@ -11,11 +11,11 @@ import (
 )
 
 type Module struct {
-	handlers *Handlers
+	handler *Handler
 }
 
-func NewModule(database *sql.DB) *Module {
-	return &Module{handlers: NewHandlers(NewIndexLoader(database))}
+func NewModule(sqlDB *sql.DB) *Module {
+	return &Module{handler: NewHandler(NewService(NewRepository(sqlDB)))}
 }
 
 func (m *Module) Name() string {
@@ -23,5 +23,5 @@ func (m *Module) Name() string {
 }
 
 func (m *Module) RegisterRoutes(r chi.Router) {
-	r.Get("/api/v1/library/search", m.handlers.Search)
+	r.Get("/api/v1/library/search", m.handler.Search)
 }

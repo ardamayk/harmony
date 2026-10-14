@@ -17,17 +17,16 @@ import (
 
 const MAX_QUERY_CHARACTERS = 200
 
-type Handlers struct {
-	loader *IndexLoader
+type Handler struct {
+	service *Service
 }
 
-func NewHandlers(loader *IndexLoader) *Handlers {
-	return &Handlers{loader: loader}
+func NewHandler(service *Service) *Handler {
+	return &Handler{service: service}
 }
 
-// Search validates the request, then evaluates ranking over the full eligible
-// library. Failures propagate as errors rather than as an empty success.
-func (h *Handlers) Search(w http.ResponseWriter, r *http.Request) {
+// Search validates the request and responds with ranked results.
+func (h *Handler) Search(w http.ResponseWriter, r *http.Request) {
 	userID, err := auth.CurrentUserID(r)
 	if err != nil {
 		respond.Error(w, http.StatusUnauthorized, "unauthorized", err.Error())
@@ -55,7 +54,7 @@ func (h *Handlers) Search(w http.ResponseWriter, r *http.Request) {
 		}
 		all = values[0] == "true"
 	}
-	index, err := h.loader.Load(r.Context(), userID)
+	results, err := h.service.Search(r.Context(), userID, query, all)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			return
@@ -64,7 +63,7 @@ func (h *Handlers) Search(w http.ResponseWriter, r *http.Request) {
 		respond.Error(w, http.StatusInternalServerError, "internal_error", "Library Search is unavailable")
 		return
 	}
-	respond.JSON(w, http.StatusOK, toResponse(rank(index, query, all)))
+	respond.JSON(w, http.StatusOK, toResponse(results))
 }
 
 func toResponse(ranked rankedResults) apigen.LibrarySearchResponse {

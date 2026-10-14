@@ -31,3 +31,15 @@ sql:
       go:
         <<: *go
         out: internal/modules/playback/db
+  - <<: *module
+    queries: internal/searchdata/queries.sql
+    gen:
+      go:
+        <<: *go
+        out: internal/searchdata/db
+  - <<: *module
+    queries: internal/modules/librarysearch/queries.sql
+    gen:
+      go:
+        <<: *go
+        out: internal/modules/librarysearch/db

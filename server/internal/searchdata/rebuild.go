@@ -9,18 +9,18 @@ import (
 
 // Rebuild atomically replaces derived data. Original records and audio are never
 // written, and readers retain the previous snapshot until the commit succeeds.
-func (store *Store) Rebuild(ctx context.Context) error {
-	return store.rebuild(ctx, false)
+func (r *Repository) Rebuild(ctx context.Context) error {
+	return r.rebuild(ctx, false)
 }
 
 // EnsureCurrent backfills missing records and upgrades normalization rules at
 // startup, before the database is handed to request handlers.
-func (store *Store) EnsureCurrent(ctx context.Context) error {
-	return store.rebuild(ctx, true)
+func (r *Repository) EnsureCurrent(ctx context.Context) error {
+	return r.rebuild(ctx, true)
 }
 
-func (store *Store) rebuild(ctx context.Context, onlyIfNeeded bool) (returnErr error) {
-	transaction, err := store.database.BeginTx(ctx, nil)
+func (r *Repository) rebuild(ctx context.Context, onlyIfNeeded bool) (returnErr error) {
+	transaction, err := r.sqlDB.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin Library Search rebuild: %w", err)
 	}
@@ -29,35 +29,24 @@ func (store *Store) rebuild(ctx context.Context, onlyIfNeeded bool) (returnErr e
 			returnErr = errors.Join(returnErr, fmt.Errorf("rollback Library Search rebuild: %w", err))
 		}
 	}()
+	q := r.q.WithTx(transaction)
 	if onlyIfNeeded {
-		isCurrent, err := hasCurrentData(ctx, transaction)
+		isCurrent, err := q.HasCurrentTexts(ctx, RULES_VERSION)
 		if err != nil {
-			return err
+			return fmt.Errorf("check Library Search rules version: %w", err)
 		}
 		if isCurrent {
 			return nil
 		}
 	}
-	if _, err := transaction.ExecContext(ctx, `DELETE FROM library_search_texts;
- INSERT INTO library_search_texts
- SELECT kind, id, library_search_text(name, kind), library_search_version() FROM library_search_sources`); err != nil {
+	if err := q.DeleteTexts(ctx); err != nil {
+		return fmt.Errorf("rebuild Library Search data: %w", err)
+	}
+	if err := q.InsertTextsFromSources(ctx); err != nil {
 		return fmt.Errorf("rebuild Library Search data: %w", err)
 	}
 	if err := transaction.Commit(); err != nil {
 		return fmt.Errorf("commit Library Search rebuild: %w", err)
 	}
 	return nil
-}
-
-func hasCurrentData(ctx context.Context, transaction *sql.Tx) (bool, error) {
-	var isCurrent bool
-	err := transaction.QueryRowContext(ctx, `SELECT NOT EXISTS (
- SELECT 1 FROM library_search_sources source
- LEFT JOIN library_search_texts prepared ON prepared.kind = source.kind AND prepared.id = source.id
- WHERE prepared.id IS NULL OR prepared.rules_version != ?
- )`, RULES_VERSION).Scan(&isCurrent)
-	if err != nil {
-		return false, fmt.Errorf("check Library Search rules version: %w", err)
-	}
-	return isCurrent, nil
 }
