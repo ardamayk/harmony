@@ -12,7 +12,7 @@ RUN bun run --cwd web build \
     && bun run --cwd packages/docs build \
     && bash scripts/sync-static.sh
 
-FROM golang:1.26.6-alpine AS builder
+FROM golang:1.26.9-alpine AS builder
 WORKDIR /src
 RUN apk add --no-cache git
 COPY go.work ./
