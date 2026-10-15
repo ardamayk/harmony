@@ -22,6 +22,8 @@ const ALLOWED_REQUEST_HEADERS: &[&str] = &[
     "accept",
     "authorization",
     "content-type",
+    // Queue mutations carry their Queue Revision as a precondition.
+    "if-match",
     "range",
     "x-permanent-delete",
     "x-track-replacement",
@@ -1153,6 +1155,27 @@ mod tests {
             .send(&configured, request)
             .await
             .expect("Permanent Track Deletion request succeeds");
+
+        assert_eq!(response.status, 200);
+    }
+
+    #[tokio::test]
+    async fn http_bridge_forwards_queue_revision_preconditions() {
+        // Queue Clear and item removal send their Queue Revision as If-Match.
+        let origin = serve_health(&["api.v1"]);
+        let configured = ServerOrigin::parse(&origin).expect("valid origin");
+        let request = HttpRequest {
+            method: "DELETE".to_owned(),
+            url: "/api/v1/playback/queue?keepItemId=item-1".to_owned(),
+            headers: BTreeMap::from([("If-Match".to_owned(), "7".to_owned())]),
+            body: None,
+        };
+
+        let response = HttpBridge::new()
+            .expect("create bridge")
+            .send(&configured, request)
+            .await
+            .expect("Queue Clear request is forwarded");
 
         assert_eq!(response.status, 200);
     }
