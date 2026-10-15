@@ -171,7 +171,7 @@ func (h *Handler) ClearQueue(w http.ResponseWriter, r *http.Request) {
 		respond.Error(w, http.StatusBadRequest, "bad_request", "If-Match revision is required")
 		return
 	}
-	queue, err := h.service.ClearQueue(r.Context(), userID, r.URL.Query().Get("keepItemId"), revision)
+	queue, err := h.service.ClearQueue(r.Context(), userID, r.URL.Query().Get("afterItemId"), revision)
 	if errors.Is(err, ErrRevisionConflict) {
 		h.queueConflict(w, r, userID)
 		return

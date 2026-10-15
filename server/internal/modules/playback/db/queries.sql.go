@@ -54,20 +54,6 @@ func (q *Queries) DeleteQueueItem(ctx context.Context, arg DeleteQueueItemParams
 	return result.RowsAffected()
 }
 
-const deleteQueueItemsExcept = `-- name: DeleteQueueItemsExcept :exec
-DELETE FROM playback_queue WHERE user_id = ? AND id <> ?
-`
-
-type DeleteQueueItemsExceptParams struct {
-	UserID string
-	ID     string
-}
-
-func (q *Queries) DeleteQueueItemsExcept(ctx context.Context, arg DeleteQueueItemsExceptParams) error {
-	_, err := q.db.ExecContext(ctx, deleteQueueItemsExcept, arg.UserID, arg.ID)
-	return err
-}
-
 const ensureQueueState = `-- name: EnsureQueueState :exec
 INSERT OR IGNORE INTO playback_queue_state (user_id, revision) VALUES (?, 0)
 `

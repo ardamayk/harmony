@@ -1166,7 +1166,7 @@ mod tests {
         let configured = ServerOrigin::parse(&origin).expect("valid origin");
         let request = HttpRequest {
             method: "DELETE".to_owned(),
-            url: "/api/v1/playback/queue?keepItemId=item-1".to_owned(),
+            url: "/api/v1/playback/queue?afterItemId=item-1".to_owned(),
             headers: BTreeMap::from([("If-Match".to_owned(), "7".to_owned())]),
             body: None,
         };

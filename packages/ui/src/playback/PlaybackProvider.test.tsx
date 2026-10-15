@@ -84,10 +84,11 @@ function createApi(items = queueItems): PlaybackApi {
 		reorderQueue: vi.fn(async () => ({ items, revision: "2" })),
 		appendQueueItem: vi.fn(async () => ({ items: queueItems, revision: "2" })),
 		removeQueueItem: vi.fn(async () => ({ items: [], revision: "2" })),
-		clearQueue: vi.fn(async (keepItemId: string | null) => ({
-			items: items
-				.filter((item) => item.id === keepItemId)
-				.map((item) => ({ ...item, position: 0 })),
+		clearQueue: vi.fn(async (afterItemId: string | null) => ({
+			items: items.slice(
+				0,
+				items.findIndex((item) => item.id === afterItemId) + 1,
+			),
 			revision: "2",
 		})),
 		subscribeQueueEvents: vi.fn(() => vi.fn()),
@@ -620,7 +621,7 @@ describe("PlaybackProvider", () => {
 		});
 	});
 
-	it("keeps the playing Track as the only Queue item after Clear", async () => {
+	it("removes upcoming Tracks on Clear and lets the playing one finish", async () => {
 		const api = createApi();
 		const { engine } = renderPlayback(api);
 		await act(async () =>
@@ -639,6 +640,22 @@ describe("PlaybackProvider", () => {
 
 		await act(async () => engine.finish());
 		expect(engine.getState()).toMatchObject({ source: null, status: "idle" });
+	});
+
+	it("keeps played Tracks before the playing one after Clear", async () => {
+		const api = createApi();
+		renderPlayback(api);
+		await act(async () => {});
+		await act(async () =>
+			screen.getByRole("button", { name: "Track 2" }).click(),
+		);
+
+		await act(async () =>
+			screen.getByRole("button", { name: "Clear" }).click(),
+		);
+
+		expect(api.clearQueue).toHaveBeenCalledWith("item-2", "1");
+		expect(screen.getByTestId("queue").textContent).toBe("track-1,track-2");
 	});
 
 	it("clears every Queue item when nothing is playing", async () => {

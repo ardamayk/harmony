@@ -200,7 +200,7 @@ export function PlaybackProvider({
 		appendQueueItem,
 		replaceQueue,
 		removeFromQueue,
-		clearQueue: clearQueueExcept,
+		clearQueue: clearQueueAfter,
 		reorderQueue,
 	} = useSynchronizedQueue(api);
 	const subscribeToEngine = useCallback(
@@ -603,13 +603,13 @@ export function PlaybackProvider({
 		[appendQueueItem, reorderQueue],
 	);
 
-	// Like Spotify and Apple Music, Clear removes everything but the playing
-	// Track, which keeps its queue item so the Queue still shows it.
+	// Like Spotify and Apple Music, Clear removes only what is up next: the
+	// playing Track keeps its queue item and played Tracks stay for Previous.
 	const clearQueue = useCallback(async () => {
-		await clearQueueExcept(
+		await clearQueueAfter(
 			session.source?.type === "track" ? currentQueueItemId : null,
 		);
-	}, [clearQueueExcept, session.source?.type, currentQueueItemId]);
+	}, [clearQueueAfter, session.source?.type, currentQueueItemId]);
 
 	const value = useMemo<PlaybackContextValue>(
 		() => ({

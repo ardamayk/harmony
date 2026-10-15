@@ -509,7 +509,7 @@ export interface paths {
         post?: never;
         /**
          * Clear playback queue
-         * @description Removes every queue item except `keepItemId`, which keeps its ID and moves to the front. Without `keepItemId` the whole queue is removed.
+         * @description Removes the queue items after `afterItemId`; that item and the ones before it stay unchanged. Without `afterItemId` the whole queue is removed.
          */
         delete: operations["clearPlaybackQueue"];
         options?: never;
@@ -2785,8 +2785,8 @@ export interface operations {
     clearPlaybackQueue: {
         parameters: {
             query?: {
-                /** @description Queue item to keep, typically the one playing */
-                keepItemId?: string;
+                /** @description Queue item after which everything is removed, typically the one playing */
+                afterItemId?: string;
             };
             header: {
                 /** @description Queue Revision on which the clear intent is based */

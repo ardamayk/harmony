@@ -45,8 +45,8 @@ const playbackApi: PlaybackApi = {
 		apiClient.appendPlaybackQueueItem(trackId, revision, source),
 	removeQueueItem: (itemId, revision) =>
 		apiClient.removePlaybackQueueItem(itemId, revision),
-	clearQueue: (keepItemId, revision) =>
-		apiClient.clearPlaybackQueue(keepItemId, revision),
+	clearQueue: (afterItemId, revision) =>
+		apiClient.clearPlaybackQueue(afterItemId, revision),
 	subscribeQueueEvents: (onEvent, onError) =>
 		apiClient.subscribePlaybackQueueEvents(onEvent, onError),
 	getStreamUrl: (trackId) => apiClient.getTrackStreamUrl(trackId),

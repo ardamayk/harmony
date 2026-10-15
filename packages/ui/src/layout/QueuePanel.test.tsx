@@ -466,24 +466,29 @@ describe("QueuePanel", () => {
 		expect(api.clearQueue).not.toHaveBeenCalled();
 	});
 
-	it("disables Clear when only the playing Track remains", async () => {
-		const api = createApi();
-		const { engine } = renderPanel(api);
-		await screen.findByText("Track 1");
-		await act(async () =>
-			engine.play({
-				type: "track",
-				track,
-				playbackUrl: "/stream/track-1",
-				queueItemId: "item-1",
-			}),
-		);
+	it.each([
+		{ playing: "item-3", track: track3, isDisabled: true },
+		{ playing: "item-2", track: track2, isDisabled: false },
+	])(
+		"Clear is disabled=$isDisabled while $playing plays",
+		async ({ playing, track: playingTrack, isDisabled }) => {
+			const { engine } = renderPanel(createApi(threeItems));
+			await screen.findByText("Track 1");
+			await act(async () =>
+				engine.play({
+					type: "track",
+					track: playingTrack,
+					playbackUrl: `/stream/${playingTrack.id}`,
+					queueItemId: playing,
+				}),
+			);
 
-		const clear = screen.getByRole("button", {
-			name: "Clear",
-		}) as HTMLButtonElement;
-		expect(clear.disabled).toBe(true);
-	});
+			const clear = screen.getByRole("button", {
+				name: "Clear",
+			}) as HTMLButtonElement;
+			expect(clear.disabled).toBe(isDisabled);
+		},
+	);
 
 	it("clears with the current revision and renders the empty state", async () => {
 		const api = createApi(threeItems);

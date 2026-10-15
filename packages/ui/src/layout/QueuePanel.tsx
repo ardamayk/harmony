@@ -38,8 +38,9 @@ export function QueuePanel({
 		currentTrack?.id,
 	);
 	const upcoming = queue.slice(currentIndex + 1);
-	// Clear keeps the playing Track, so a queue of just that Track has nothing to clear.
-	const hasClearableItems = queue.length > (currentIndex >= 0 ? 1 : 0);
+	// While a Track plays, Clear removes only what follows it.
+	const hasClearableItems =
+		currentIndex >= 0 ? upcoming.length > 0 : queue.length > 0;
 
 	async function runAction(message: string, action: () => Promise<void>) {
 		setActionError(null);

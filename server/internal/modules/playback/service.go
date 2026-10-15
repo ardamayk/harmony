@@ -83,10 +83,11 @@ func (s *Service) RemoveItem(ctx context.Context, userID, itemID, expectedRevisi
 	return s.GetQueue(ctx, userID)
 }
 
-// ClearQueue removes every item but keepItemID, so the playing Track survives
-// a Clear with its queue item ID intact. An empty keepItemID clears everything.
-func (s *Service) ClearQueue(ctx context.Context, userID, keepItemID, expectedRevision string) (Queue, error) {
-	if err := s.repo.Clear(ctx, userID, expectedRevision, keepItemID); err != nil {
+// ClearQueue removes the items after afterItemID (the playing one), keeping it
+// and the played items before it so Previous still works. An empty
+// afterItemID clears everything.
+func (s *Service) ClearQueue(ctx context.Context, userID, afterItemID, expectedRevision string) (Queue, error) {
+	if err := s.repo.Clear(ctx, userID, expectedRevision, afterItemID); err != nil {
 		return Queue{}, err
 	}
 	return s.GetQueue(ctx, userID)

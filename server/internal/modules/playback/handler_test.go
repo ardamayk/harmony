@@ -330,11 +330,11 @@ func TestHandlersReorderQueue(t *testing.T) {
 	}
 }
 
-func seedThreeItemQueue(t *testing.T) (*Handler, Queue) {
+func seedFourItemQueue(t *testing.T) (*Handler, Queue) {
 	t.Helper()
 	h, store, _, db := setupPlaybackHandlers(t)
 	trackID := seedPlaybackTrack(t, db)
-	queue, err := store.ReplaceQueue(context.Background(), "00000000-0000-0000-0000-000000000001", []string{trackID, trackID, trackID}, "0")
+	queue, err := store.ReplaceQueue(context.Background(), "00000000-0000-0000-0000-000000000001", []string{trackID, trackID, trackID, trackID}, "0")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -349,11 +349,11 @@ func clearQueueRequest(h *Handler, revision, query string) *httptest.ResponseRec
 	return recorder
 }
 
-func TestHandlersClearQueueKeepsOnlyTheNamedItem(t *testing.T) {
-	h, queue := seedThreeItemQueue(t)
-	kept := queue.Items[1].ID
+func TestHandlersClearQueueRemovesOnlyItemsAfterTheNamedItem(t *testing.T) {
+	h, queue := seedFourItemQueue(t)
+	played, playing := queue.Items[0].ID, queue.Items[1].ID
 
-	rec := clearQueueRequest(h, queue.Revision, "?keepItemId="+kept)
+	rec := clearQueueRequest(h, queue.Revision, "?afterItemId="+playing)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, body %s", rec.Code, rec.Body.String())
@@ -362,16 +362,18 @@ func TestHandlersClearQueueKeepsOnlyTheNamedItem(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&cleared); err != nil {
 		t.Fatal(err)
 	}
-	if len(cleared.Items) != 1 || cleared.Items[0].ID != kept || cleared.Items[0].Position != 0 {
-		t.Fatalf("items = %+v, want only %s at position 0", cleared.Items, kept)
+	if len(cleared.Items) != 2 ||
+		cleared.Items[0].ID != played || cleared.Items[0].Position != 0 ||
+		cleared.Items[1].ID != playing || cleared.Items[1].Position != 1 {
+		t.Fatalf("items = %+v, want %s then %s", cleared.Items, played, playing)
 	}
 	if cleared.Revision != "2" {
 		t.Fatalf("revision = %q, want 2", cleared.Revision)
 	}
 }
 
-func TestHandlersClearQueueWithoutKeepRemovesEveryItem(t *testing.T) {
-	h, queue := seedThreeItemQueue(t)
+func TestHandlersClearQueueWithoutAnAnchorRemovesEveryItem(t *testing.T) {
+	h, queue := seedFourItemQueue(t)
 
 	rec := clearQueueRequest(h, queue.Revision, "")
 
@@ -387,10 +389,10 @@ func TestHandlersClearQueueWithoutKeepRemovesEveryItem(t *testing.T) {
 	}
 }
 
-func TestHandlersClearQueueRejectsAnUnknownKeptItem(t *testing.T) {
-	h, queue := seedThreeItemQueue(t)
+func TestHandlersClearQueueRejectsAnUnknownAnchorItem(t *testing.T) {
+	h, queue := seedFourItemQueue(t)
 
-	if rec := clearQueueRequest(h, queue.Revision, "?keepItemId=missing"); rec.Code != http.StatusNotFound {
+	if rec := clearQueueRequest(h, queue.Revision, "?afterItemId=missing"); rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", rec.Code)
 	}
 	if rec := clearQueueRequest(h, "", ""); rec.Code != http.StatusBadRequest {

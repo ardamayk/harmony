@@ -106,24 +106,27 @@ func (r *Repository) Remove(ctx context.Context, userID, expectedRevision, itemI
 	})
 }
 
-// Clear deletes every item except keepItemID, which keeps its ID and moves to
-// position 0. An empty keepItemID clears the whole queue.
-func (r *Repository) Clear(ctx context.Context, userID, expectedRevision, keepItemID string) error {
+// Clear deletes every item after afterItemID; it and the items before it keep
+// their IDs and positions. An empty afterItemID clears the whole queue.
+func (r *Repository) Clear(ctx context.Context, userID, expectedRevision, afterItemID string) error {
 	return r.mutate(ctx, userID, expectedRevision, func(q *db.Queries) error {
-		if keepItemID == "" {
+		if afterItemID == "" {
 			return q.ClearQueue(ctx, userID)
 		}
 		current, err := q.ListQueueItemIDs(ctx, userID)
 		if err != nil {
 			return err
 		}
-		if !slices.Contains(current, keepItemID) {
+		index := slices.Index(current, afterItemID)
+		if index < 0 {
 			return ErrNotFound
 		}
-		if err := q.DeleteQueueItemsExcept(ctx, db.DeleteQueueItemsExceptParams{UserID: userID, ID: keepItemID}); err != nil {
-			return err
+		for _, itemID := range current[index+1:] {
+			if _, err := q.DeleteQueueItem(ctx, db.DeleteQueueItemParams{ID: itemID, UserID: userID}); err != nil {
+				return err
+			}
 		}
-		return setPositions(ctx, q, userID, []string{keepItemID})
+		return nil
 	})
 }
 
