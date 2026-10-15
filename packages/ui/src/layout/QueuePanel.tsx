@@ -1,9 +1,11 @@
-import { ChevronDown, ListMusic } from "lucide-react";
+import { ChevronDown, ListMusic, Pin, PinOff } from "lucide-react";
 import { useRef, useState } from "react";
+import { cn } from "../lib/utils";
 import { usePlayback } from "../playback/PlaybackProvider";
 import { getQueuePanel } from "../widgets/layout-utils";
 import { useLayout } from "./LayoutProvider";
 import { PanelCollapseButton } from "./PanelCollapseButton";
+import { useQueuePin } from "./QueuePinProvider";
 import { QueueSections } from "./QueueSections";
 import { findCurrentQueueIndex, getQueueMinutes } from "./queue-groups";
 
@@ -16,6 +18,7 @@ export function QueuePanel({
 	onClose?: () => void;
 } = {}) {
 	const { preferences, togglePanel } = useLayout();
+	const queuePin = useQueuePin();
 	const scrollContainerRef = useRef<HTMLDivElement>(null);
 	const [actionError, setActionError] = useState<string | null>(null);
 	const [isUpdating, setIsUpdating] = useState(false);
@@ -100,6 +103,30 @@ export function QueuePanel({
 					>
 						Clear
 					</button>
+					{queuePin ? (
+						<button
+							type="button"
+							aria-label="Pin queue"
+							aria-pressed={queuePin.pinned}
+							title={
+								queuePin.pinned
+									? "Unpin: float the queue over the page"
+									: "Pin: make room for the queue beside the page"
+							}
+							className={cn(
+								"inline-flex size-7 items-center justify-center rounded-md text-caption hover:bg-[var(--player-pill)] hover:text-heading",
+								queuePin.pinned &&
+									"bg-[var(--player-pill)] text-[var(--shell-active-foreground)]",
+							)}
+							onClick={queuePin.togglePinned}
+						>
+							{queuePin.pinned ? (
+								<Pin className="size-4" />
+							) : (
+								<PinOff className="size-4" />
+							)}
+						</button>
+					) : null}
 					{(onClose || !embedded) && (
 						<button
 							type="button"

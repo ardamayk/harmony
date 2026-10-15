@@ -16,6 +16,8 @@ The Web Client defines `--shell-inset` on `:root` as `clamp(1.5rem, (100vw - var
 
 From `lg` (1024px) the drawer fills whatever the fixed 250px collection cards leave over, so its left edge always sits one gap from the last card. Below `lg` the drawer is a fixed 386px (275px below `md`) and the collection grid stretches two columns into the rest, instead of falling to one fixed column beside a wide drawer.
 
+A pin button in the Queue header decides whether the open drawer takes that room. Pinned (the default) it behaves as above; unpinned it floats over the page without a scrim and the page keeps its full width. The pin state is device-local (`localStorage`), not a user preference: it is a per-window habit and does not need to follow the user between clients.
+
 ## Page headers lost their description line and divider
 
 With the nav divider spanning only the content column, page headers no longer render a description or a bottom border; `PageHeader` dropped the `description` prop. Radio Discover, which had its own header markup, uses the same inset padding.

@@ -105,6 +105,49 @@ describe("AppShell", () => {
 		cleanup();
 		vi.restoreAllMocks();
 		vi.unstubAllGlobals();
+		window.localStorage.clear();
+	});
+
+	it("pins the queue by default and floats it over the page once unpinned", () => {
+		const { container } = renderShell(
+			<AppShell>
+				<div>Main content</div>
+			</AppShell>,
+		);
+		const main = container.querySelector("main") as HTMLElement;
+		const pin = screen.getByRole("button", { name: "Pin queue" });
+		expect(pin.getAttribute("aria-pressed")).toBe("true");
+		expect(main.hasAttribute("data-queue-open")).toBe(true);
+
+		fireEvent.click(pin);
+
+		expect(pin.getAttribute("aria-pressed")).toBe("false");
+		// The drawer stays open but no longer pushes the page aside.
+		const drawer = container.querySelector(
+			"[data-queue-drawer]",
+		) as HTMLElement;
+		expect(drawer.dataset.state).toBe("open");
+		expect(main.hasAttribute("data-queue-open")).toBe(false);
+		expect(container.querySelector("[data-queue-scrim]")).toBeNull();
+	});
+
+	it("remembers the pin choice on this device", () => {
+		renderShell(<AppShell />);
+		fireEvent.click(screen.getByRole("button", { name: "Pin queue" }));
+		cleanup();
+
+		const { container } = renderShell(<AppShell />);
+
+		expect(
+			screen
+				.getByRole("button", { name: "Pin queue" })
+				.getAttribute("aria-pressed"),
+		).toBe("false");
+		expect(
+			(container.querySelector("main") as HTMLElement).hasAttribute(
+				"data-queue-open",
+			),
+		).toBe(false);
 	});
 
 	it("renders the top nav, main content and full-height queue", () => {

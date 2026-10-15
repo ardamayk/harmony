@@ -2,6 +2,7 @@ import { type CSSProperties, type ReactNode, useRef } from "react";
 import { getQueuePanel } from "../widgets/layout-utils";
 import { useLayout } from "./LayoutProvider";
 import { QueueDrawer } from "./QueueDrawer";
+import { QueuePinProvider, useQueuePin } from "./QueuePinProvider";
 import {
 	QUEUE_DRAWER_CONTENT_CLEARANCE,
 	SHELL_INSET_CLASS,
@@ -21,23 +22,34 @@ const PLAYER_DOCK_CONTENT_PADDING = "pb-[110px]";
  * App Shell: Top Nav across the top, the page below it, the Player Bar
  * floating over the page's bottom edge, and the Queue Drawer sliding up on
  * the right. Nav, page and bar share one horizontal inset; while the drawer
- * is open the page gives way to it and the nav and bar stay put.
+ * is open and pinned the page gives way to it, unpinned it floats over the
+ * page, and the nav and bar stay put either way.
  */
-export function AppShell({
-	children,
-	bottom,
-	onSearch,
-}: {
+export function AppShell(props: AppShellProps) {
+	return (
+		<QueuePinProvider>
+			<AppShellFrame {...props} />
+		</QueuePinProvider>
+	);
+}
+
+type AppShellProps = {
 	children?: ReactNode;
 	bottom?: ReactNode;
 	/** Opens the host's library search; shown as "Search" in the Top Nav. */
 	onSearch?: () => void;
-}) {
+};
+
+function AppShellFrame({ children, bottom, onSearch }: AppShellProps) {
 	const shellRef = useRef<HTMLDivElement>(null);
 	const metrics = useQueueDrawerWidth(shellRef);
 	const { preferences } = useLayout();
 	const queuePanel = getQueuePanel(preferences.layout.sidebarPosition);
-	const queueOpen = !preferences.layout.collapsed[queuePanel];
+	const queuePin = useQueuePin();
+	// `data-queue-open` marks the page as making room for the drawer, which
+	// only a pinned drawer asks for.
+	const queueTakesSpace =
+		!preferences.layout.collapsed[queuePanel] && (queuePin?.pinned ?? true);
 
 	return (
 		<WidgetDndProvider>
@@ -56,7 +68,7 @@ export function AppShell({
 				<TopNav onSearch={onSearch} />
 				<div className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
 					<main
-						data-queue-open={queueOpen ? "" : undefined}
+						data-queue-open={queueTakesSpace ? "" : undefined}
 						className={`flex h-full min-w-0 flex-1 flex-col overflow-auto bg-background pr-0 data-[queue-open]:pr-[var(--queue-drawer-clearance)] transition-[padding] duration-300 ease-out ${
 							bottom ? PLAYER_DOCK_CONTENT_PADDING : ""
 						}`}
