@@ -57,7 +57,7 @@ export function AppShell({
 				<div className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
 					<main
 						data-queue-open={queueOpen ? "" : undefined}
-						className={`flex h-full min-w-0 flex-1 flex-col overflow-auto bg-background pr-0 lg:data-[queue-open]:pr-[var(--queue-drawer-clearance)] transition-[padding] duration-300 ease-out ${
+						className={`flex h-full min-w-0 flex-1 flex-col overflow-auto bg-background pr-0 data-[queue-open]:pr-[var(--queue-drawer-clearance)] transition-[padding] duration-300 ease-out ${
 							bottom ? PLAYER_DOCK_CONTENT_PADDING : ""
 						}`}
 						style={

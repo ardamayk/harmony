@@ -6,7 +6,14 @@ const COLLECTION_GRID_GAP_REM = 0.75;
 const MAX_COLLECTION_COLUMNS = 6;
 const QUEUE_MIN_WIDTH_REM = 18;
 const QUEUE_GAP_REM = 1.5;
-const DESKTOP_BREAKPOINT_PX = 1024;
+// Below Tailwind's `lg` (1024px) the drawer has a fixed width, narrower again
+// below `md` (768px), and the collection grid stretches two columns into the
+// rest. Mirrored by the `max-lg` grid class in the Web Client's
+// collection-grid-layout.
+const LG_BREAKPOINT_PX = 1024;
+const MD_BREAKPOINT_PX = 768;
+const QUEUE_BELOW_LG_WIDTH_PX = 386;
+const QUEUE_BELOW_MD_WIDTH_PX = 275;
 
 export function calculateQueueDrawerWidth(
 	shellWidth: number,
@@ -15,8 +22,12 @@ export function calculateQueueDrawerWidth(
 ): number {
 	const minimumWidth = QUEUE_MIN_WIDTH_REM * rootFontSize;
 	const availableWidth = Math.max(0, shellWidth - 2 * inset);
-	if (shellWidth < DESKTOP_BREAKPOINT_PX)
-		return Math.min(minimumWidth, availableWidth);
+	if (shellWidth < MD_BREAKPOINT_PX)
+		return Math.min(QUEUE_BELOW_MD_WIDTH_PX, availableWidth);
+	if (shellWidth < LG_BREAKPOINT_PX)
+		return Math.min(QUEUE_BELOW_LG_WIDTH_PX, availableWidth);
+	// From `lg` the drawer fills whatever the fixed cards leave over, so its
+	// left edge always sits one gap from the last card.
 	const margin = QUEUE_GAP_REM * rootFontSize;
 	const collectionGap = COLLECTION_GRID_GAP_REM * rootFontSize;
 	const columns = Math.min(

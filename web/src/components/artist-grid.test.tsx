@@ -23,7 +23,7 @@ describe("ArtistGrid", () => {
 
 		const card = screen.getByText("Nina Simone").closest("div");
 		expect(card?.className).toContain("aspect-square");
-		expect(card?.className).toContain("hover:bg-muted/50");
+		expect(card?.className).toContain("hover:-translate-y-1");
 		expect(screen.getByText("N")).toBeTruthy();
 		expect(screen.getByText("7 albums")).toBeTruthy();
 		expect(screen.queryByRole("link")).toBeNull();

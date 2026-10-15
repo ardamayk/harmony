@@ -26,9 +26,11 @@ const SKELETON_CARD_KEYS = [
 export const COLLECTION_PAGE_CONTAINER_CLASS = PAGE_CONTENT_WIDTH_CLASS;
 // Cards are exactly 250px wide and never stretch: when the column narrows
 // (Queue Drawer opening, window shrinking) cards wrap to the next row instead
-// of resizing. `min(…,100%)` lets one column fit narrow phones.
+// of resizing. `min(…,100%)` lets one column fit narrow phones. Below `lg`
+// an open Queue Drawer has a fixed width (see use-queue-drawer-width) and the
+// grid stretches two columns into what is left.
 export const COLLECTION_GRID_CLASS =
-	"grid grid-cols-[repeat(auto-fill,min(250px,100%))] gap-3";
+	"grid grid-cols-[repeat(auto-fill,min(250px,100%))] gap-3 max-lg:in-data-[queue-open]:grid-cols-2";
 
 export function CollectionPageContainer({
 	className,

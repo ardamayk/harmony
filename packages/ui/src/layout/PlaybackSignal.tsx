@@ -84,7 +84,7 @@ export function PlaybackSignal({
 				onClick={() => setIsOpen((value) => !value)}
 			>
 				{qualityIcon}
-				<span className="hidden font-medium tabular-nums md:inline">
+				<span className="hidden font-medium tabular-nums @min-[66rem]/player-bar:inline">
 					{qualityLabel}
 				</span>
 				<ChevronUp className="size-3.5" aria-hidden />

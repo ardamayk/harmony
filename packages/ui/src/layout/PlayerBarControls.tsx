@@ -351,12 +351,12 @@ export function VolumeAndQueueControls({
 	return (
 		<section
 			aria-label="Volume and queue"
-			className="flex min-w-[200px] flex-[1_0_0] items-center justify-end gap-4 justify-self-end"
+			className="flex min-w-[200px] flex-[1_0_0] items-center justify-end gap-3 justify-self-end @min-[66rem]/player-bar:gap-4"
 		>
 			{isGapless ? (
 				<span
 					data-testid="gapless-badge"
-					className="inline-flex size-7 shrink-0 items-center justify-center text-player-foreground"
+					className="hidden size-7 shrink-0 items-center justify-center text-player-foreground @min-[74rem]/player-bar:inline-flex"
 					role="img"
 					aria-label="Gapless playback enabled"
 					title="Tracks play back to back without a gap"
@@ -373,7 +373,7 @@ export function VolumeAndQueueControls({
 						aria-label={`Quality ${qualityLabel}`}
 					>
 						<QualityIcon className="size-4 shrink-0" />
-						<span className="hidden font-medium tabular-nums md:inline">
+						<span className="hidden font-medium tabular-nums @min-[66rem]/player-bar:inline">
 							{qualityLabel}
 						</span>
 					</span>

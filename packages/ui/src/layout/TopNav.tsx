@@ -12,7 +12,7 @@ const libraryNav = [
 ] as const;
 
 const LINK_BASE_CLASS =
-	"flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-sidebar-foreground text-sm transition hover:bg-[var(--shell-active)] hover:text-[var(--shell-active-foreground)]";
+	"flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-sidebar-foreground text-sm transition hover:bg-[var(--shell-active)] hover:text-[var(--shell-active-foreground)] focus-visible:bg-[var(--shell-active)] focus-visible:text-[var(--shell-active-foreground)] focus-visible:outline-none";
 const NAV_LINK_CLASS = `${LINK_BASE_CLASS} [&.active]:bg-[var(--shell-active)] [&.active]:font-semibold [&.active]:text-[var(--shell-active-foreground)]`;
 
 /**
@@ -35,7 +35,7 @@ export function TopNav({ onSearch }: { onSearch?: () => void }) {
 				</Link>
 				<nav
 					aria-label="Library"
-					className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto"
+					className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-button]:hidden [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-foreground/25 hover:[&::-webkit-scrollbar-thumb]:bg-foreground/40 [&::-webkit-scrollbar-track]:bg-transparent"
 				>
 					{libraryNav.map((item) => (
 						<Link key={item.to} to={item.to} className={NAV_LINK_CLASS}>

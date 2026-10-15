@@ -172,7 +172,7 @@ describe("AppShell", () => {
 		expect(main.hasAttribute("data-queue-open")).toBe(true);
 		expect(main.style.paddingRight).toBe("");
 		expect(main.className).toContain(
-			"lg:data-[queue-open]:pr-[var(--queue-drawer-clearance)]",
+			"data-[queue-open]:pr-[var(--queue-drawer-clearance)]",
 		);
 	});
 
@@ -282,7 +282,7 @@ describe("AppShell", () => {
 		expect(drawer?.style.bottom).toBe(bottom);
 		shellWidth = 1000;
 		fireEvent(window, new Event("resize"));
-		expect(shell?.style.getPropertyValue("--queue-drawer-width")).toBe("288px");
+		expect(shell?.style.getPropertyValue("--queue-drawer-width")).toBe("386px");
 		expect(drawer?.style.bottom).toBe(bottom);
 		unmount();
 		expect(disconnect).toHaveBeenCalled();

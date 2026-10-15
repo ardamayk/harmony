@@ -12,10 +12,13 @@
 
 :root {
 	--radius: 0.625rem;
-	/* Horizontal inset shared by the Top Nav, page content and Player Bar;
-     wide on large screens, ordinary page padding on small ones. Mirrored by
-     SHELL_INSET_CLASS in packages/ui/src/layout/shell-metrics.ts. */
-	--shell-inset: clamp(1.5rem, 12vw, 17rem);
+	/* Horizontal inset shared by the Top Nav, page content and Player Bar.
+     Content grows to --shell-max-content and only wider screens get side
+     gutters; narrower ones keep ordinary page padding so the layout hugs the
+     window edges. Mirrored by SHELL_INSET_CLASS in
+     packages/ui/src/layout/shell-metrics.ts. */
+	--shell-max-content: 1600px;
+	--shell-inset: clamp(1.5rem, (100vw - var(--shell-max-content)) / 2, 17rem);
 }
 
 html[data-theme-preset] {

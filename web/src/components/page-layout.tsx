@@ -62,14 +62,14 @@ export function PageHeader({
 			)}
 		>
 			<div className={cn("flex flex-col gap-2", innerClassName)}>
-				<div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+				<div className="flex items-start justify-between gap-3">
 					<div className="min-w-0">
 						<h1 className="font-semibold text-2xl text-heading tracking-normal">
 							{title}
 						</h1>
 					</div>
 					{actions ? (
-						<div className="flex min-w-0 items-center gap-2 xl:justify-end">
+						<div className="flex min-w-0 items-center justify-end gap-2">
 							{actions}
 						</div>
 					) : null}

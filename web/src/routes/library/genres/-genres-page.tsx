@@ -3,7 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { useMemo } from "react";
 import { CollectionCoverCardStack } from "#/components/collection-cover-strip";
 import {
-	COLLECTION_GRID_CLASS,
+	CollectionGrid,
 	COLLECTION_PAGE_CONTAINER_CLASS,
 } from "#/components/collection-grid-layout";
 import { PageHeader, PageShell } from "#/components/page-layout";
@@ -50,9 +50,7 @@ export function GenresPage() {
 			{genres.length === 0 ? (
 				<p className="text-foreground text-sm">No tagged genres yet.</p>
 			) : (
-				<div
-					className={`${COLLECTION_PAGE_CONTAINER_CLASS} ${COLLECTION_GRID_CLASS}`}
-				>
+				<CollectionGrid className={COLLECTION_PAGE_CONTAINER_CLASS}>
 					{genres.map((genre) => (
 						<Link
 							key={genre.name}
@@ -77,7 +75,7 @@ export function GenresPage() {
 							</div>
 						</Link>
 					))}
-				</div>
+				</CollectionGrid>
 			)}
 		</PageShell>
 	);

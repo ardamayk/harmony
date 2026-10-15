@@ -33,18 +33,18 @@ export function AlbumGrid({ albums }: { albums: Album[] }) {
 							<Link
 								to="/library/$albumId"
 								params={{ albumId: album.id }}
-								className="group relative aspect-square overflow-hidden rounded-md border border-border bg-card transition duration-300 ease-out hover:-translate-y-1 hover:bg-muted/50 hover:shadow-lg"
+								className="group relative aspect-square transform-gpu overflow-hidden rounded-md border border-border bg-card outline-none backface-hidden transition duration-300 ease-out hover:-translate-y-1 hover:border-[var(--shell-active-foreground)]/35 hover:shadow-[0_18px_40px_-18px_rgb(0_0_0/0.75)] focus-visible:-translate-y-1 focus-visible:border-[var(--shell-active-foreground)]/60 focus-visible:shadow-[0_18px_40px_-18px_rgb(0_0_0/0.75)]"
 							>
 								<AlbumArt
 									coverUrl={apiClient.getAlbumCoverUrl(album.id)}
 									title={album.title}
-									className="absolute inset-0 size-full text-2xl transition duration-300 group-hover:scale-105"
+									className="absolute inset-0 size-full transform-gpu text-2xl transition duration-500 ease-out group-hover:scale-[1.04] group-focus-visible:scale-[1.04]"
 								/>
 								<div
 									data-album-card-overlay
 									className="absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-background/95 via-background/75 to-transparent p-2 text-foreground"
 								>
-									<p className="truncate font-medium text-heading text-xs leading-tight group-hover:underline">
+									<p className="truncate font-medium text-heading text-xs leading-tight">
 										{album.title}
 									</p>
 									<p className="truncate text-[11px] text-foreground leading-tight">

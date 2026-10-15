@@ -647,7 +647,7 @@ export function PlayerBar({
 					{outputAlert}
 				</p>
 			) : null}
-			<div className="flex h-full w-full min-w-0 items-center justify-between gap-6">
+			<div className="@container/player-bar flex h-full w-full min-w-0 items-center justify-between gap-6">
 				<section
 					aria-label="Now playing"
 					className="@container/now-playing flex min-w-[200px] flex-[1_0_0] items-center gap-3 justify-self-start sm:gap-3.5"
