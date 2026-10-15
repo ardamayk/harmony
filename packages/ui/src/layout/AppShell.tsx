@@ -9,6 +9,7 @@ import {
 } from "./shell-metrics";
 import { Toaster } from "./Toaster";
 import { TopNav, type WindowControls } from "./TopNav";
+import { TopNavActionsProvider } from "./TopNavActions";
 import { useQueueDrawerWidth } from "./use-queue-drawer-width";
 import { WidgetDndProvider } from "./WidgetDock";
 
@@ -28,7 +29,9 @@ const PLAYER_DOCK_CONTENT_PADDING = "pb-[110px]";
 export function AppShell(props: AppShellProps) {
 	return (
 		<QueuePinProvider>
-			<AppShellFrame {...props} />
+			<TopNavActionsProvider>
+				<AppShellFrame {...props} />
+			</TopNavActionsProvider>
 		</QueuePinProvider>
 	);
 }

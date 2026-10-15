@@ -13,6 +13,7 @@ import {
 	LayoutProvider,
 	PlaybackProvider,
 	TopNav,
+	TopNavActions,
 } from "../index";
 import { InMemoryPlaybackEngine } from "../playback/testing/InMemoryPlaybackEngine";
 
@@ -350,6 +351,19 @@ describe("AppShell", () => {
 		).toBe(false);
 	});
 
+	it("moves a page's Top Nav actions next to Settings", () => {
+		renderShell(
+			<AppShell>
+				<TopNavActions>
+					<button type="button">Filters</button>
+				</TopNavActions>
+			</AppShell>,
+		);
+		const filters = screen.getByRole("button", { name: "Filters" });
+		expect(filters.closest("header")).toBeTruthy();
+		expect(filters.closest("main")).toBeNull();
+	});
+
 	it("shows window controls only when the host supplies them", () => {
 		const { unmount } = render(<TopNav />);
 		expect(screen.queryByRole("group", { name: "Window" })).toBeNull();
@@ -385,9 +399,7 @@ describe("AppShell", () => {
 		fireEvent.click(screen.getByRole("button", { name: "Search" }));
 		expect(onSearch).toHaveBeenCalledTimes(1);
 		const radioLink = screen.getByRole("link", { name: "Radio" });
-		expect(radioLink.className).toContain(
-			"[&.active]:bg-[var(--shell-active)]",
-		);
+		expect(radioLink.className).toContain("[&.active]:text-heading");
 		expect(screen.getByRole("link", { name: "Settings" })).toBeTruthy();
 		expect(screen.queryByText("Premium Account")).toBeNull();
 	});

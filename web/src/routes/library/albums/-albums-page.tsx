@@ -1,3 +1,4 @@
+import { TOP_NAV_ICON_BUTTON_CLASS, TopNavActions } from "@repo/ui";
 import { useQuery } from "@tanstack/react-query";
 import { Disc3, SlidersHorizontal, TriangleAlert, X } from "lucide-react";
 import { Dialog as DialogPrimitive } from "radix-ui";
@@ -99,21 +100,21 @@ export function AlbumsPage() {
 				<PageHeader
 					title="Albums"
 					innerClassName={COLLECTION_PAGE_CONTAINER_CLASS}
-					actions={
-						<Button
-							type="button"
-							variant="ghost"
-							size="icon"
-							aria-label="Filters"
-							className="size-10 text-caption hover:text-heading"
-							onClick={() => setAreFiltersOpen(true)}
-						>
-							<SlidersHorizontal className="size-5" />
-						</Button>
-					}
 				/>
 			}
 		>
+			<TopNavActions>
+				<button
+					type="button"
+					aria-label="Filters"
+					title="Filters"
+					aria-pressed={areFiltersOpen || hasActiveFilters}
+					className={TOP_NAV_ICON_BUTTON_CLASS}
+					onClick={() => setAreFiltersOpen(true)}
+				>
+					<SlidersHorizontal className="size-4" />
+				</button>
+			</TopNavActions>
 			<CollectionPageContainer aria-busy={isFetching || undefined}>
 				<AlbumFilterDrawer
 					isOpen={areFiltersOpen}

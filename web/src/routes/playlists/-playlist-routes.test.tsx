@@ -208,7 +208,8 @@ describe("playlist routes", () => {
 		const { container } = renderWithQuery(<PlaylistsPage />);
 
 		const header = await screen.findByRole("heading", { name: "Playlists" });
-		expect(header.closest("header")?.className).toContain("sticky");
+		// The Top Nav names the open section; the page title is for screen readers.
+		expect(header.className).toContain("sr-only");
 		expect(screen.getByTestId("playlists-page-shell").className).toContain(
 			"overflow-hidden",
 		);

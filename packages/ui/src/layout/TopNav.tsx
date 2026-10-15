@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { Minus, Search, Settings, Square, X } from "lucide-react";
 import { SHELL_INSET_CLASS, TOP_NAV_HEIGHT_CLASS } from "./shell-metrics";
+import { TopNavActionsSlot } from "./TopNavActions";
 
 const libraryNav = [
 	{ to: "/library/albums", label: "Albums" },
@@ -23,7 +24,13 @@ export type WindowControls = {
 	close: () => void;
 };
 
-const NAV_LINK_CLASS = `${LINK_BASE_CLASS} [&.active]:bg-[var(--shell-active)] [&.active]:font-semibold [&.active]:text-[var(--shell-active-foreground)]`;
+// The open section (and a pressed Top Nav control) gets a lit pill: a lighter
+// surface, full-strength text and a soft top highlight with a drop shadow.
+const NAV_LINK_CLASS = `${LINK_BASE_CLASS} [&.active]:bg-[color-mix(in_srgb,var(--heading)_12%,transparent)] [&.active]:font-semibold [&.active]:text-heading [&.active]:shadow-[inset_0_1px_0_color-mix(in_srgb,var(--heading)_10%,transparent),0_8px_20px_-12px_rgb(0_0_0/0.8)]`;
+
+/** Icon control in the Top Nav; `aria-pressed` lights it like the open section. */
+export const TOP_NAV_ICON_BUTTON_CLASS =
+	"inline-flex size-9 shrink-0 items-center justify-center rounded-lg text-sidebar-foreground transition hover:bg-[var(--shell-active)] hover:text-[var(--shell-active-foreground)] focus-visible:bg-[var(--shell-active)] focus-visible:outline-none aria-pressed:bg-[color-mix(in_srgb,var(--heading)_12%,transparent)] aria-pressed:text-heading aria-pressed:shadow-[inset_0_1px_0_color-mix(in_srgb,var(--heading)_10%,transparent),0_8px_20px_-12px_rgb(0_0_0/0.8)] [&.active]:bg-[color-mix(in_srgb,var(--heading)_12%,transparent)] [&.active]:text-heading [&.active]:shadow-[inset_0_1px_0_color-mix(in_srgb,var(--heading)_10%,transparent),0_8px_20px_-12px_rgb(0_0_0/0.8)]";
 
 /**
  * Top navigation bar: brand, library sections, the Search entry (opens the
@@ -84,14 +91,17 @@ export function TopNav({
 						</button>
 					) : null}
 				</nav>
-				<Link
-					to="/settings"
-					title="Settings"
-					aria-label="Settings"
-					className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg text-sidebar-foreground transition hover:bg-[var(--shell-active)] hover:text-[var(--shell-active-foreground)] [&.active]:text-[var(--shell-active-foreground)]"
-				>
-					<Settings className="size-4" />
-				</Link>
+				<div className="flex shrink-0 items-center gap-1">
+					<TopNavActionsSlot />
+					<Link
+						to="/settings"
+						title="Settings"
+						aria-label="Settings"
+						className={TOP_NAV_ICON_BUTTON_CLASS}
+					>
+						<Settings className="size-4" />
+					</Link>
+				</div>
 			</div>
 			{windowControls ? (
 				<div
