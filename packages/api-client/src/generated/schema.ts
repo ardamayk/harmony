@@ -507,7 +507,11 @@ export interface paths {
         /** Replace playback queue */
         put: operations["replacePlaybackQueue"];
         post?: never;
-        delete?: never;
+        /**
+         * Clear playback queue
+         * @description Removes every queue item except `keepItemId`, which keeps its ID and moves to the front. Without `keepItemId` the whole queue is removed.
+         */
+        delete: operations["clearPlaybackQueue"];
         options?: never;
         head?: never;
         /** Reorder playback queue items */
@@ -2767,6 +2771,44 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            /** @description Queue revision conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QueueConflictResponse"];
+                };
+            };
+        };
+    };
+    clearPlaybackQueue: {
+        parameters: {
+            query?: {
+                /** @description Queue item to keep, typically the one playing */
+                keepItemId?: string;
+            };
+            header: {
+                /** @description Queue Revision on which the clear intent is based */
+                "If-Match": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Updated queue */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Queue"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
             /** @description Queue revision conflict */
             409: {
                 headers: {

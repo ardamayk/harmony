@@ -84,6 +84,7 @@ const api: PlaybackApi = {
 		revision: "2",
 	})),
 	removeQueueItem: vi.fn(async () => ({ items: [], revision: "2" })),
+	clearQueue: vi.fn(async () => ({ items: [], revision: "2" })),
 	getStreamUrl: (trackId) => `/stream/${trackId}`,
 	getAlbumCoverUrl: (albumId) => `/cover/${albumId}`,
 	getTrackLyrics: vi.fn(async () => ({ lyrics: "Line one\nLine two" })),

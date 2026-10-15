@@ -27,6 +27,7 @@ export type PlaybackQueueApi = {
 		source?: QueueItemSource,
 	) => Promise<Queue>;
 	removeQueueItem: (itemId: string, revision: string) => Promise<Queue>;
+	clearQueue: (keepItemId: string | null, revision: string) => Promise<Queue>;
 	subscribeQueueEvents?: (
 		onEvent: (event: QueueEvent) => void,
 		onError?: (error: Error) => void,
@@ -227,6 +228,25 @@ export function useSynchronizedQueue(api: PlaybackQueueApi) {
 		[reconcileRemove, runQueueRequest],
 	);
 
+	/** Keeps keepItemId (the playing item) and removes the rest; null clears all. */
+	const clearQueue = useCallback(
+		async (keepItemId: string | null) => {
+			try {
+				await runQueueRequest(() =>
+					apiRef.current.clearQueue(keepItemId, queueRevisionRef.current),
+				);
+				setQueueConflict(null);
+			} catch (error) {
+				if (!isQueueConflict(error)) throw error;
+				await runQueueRequest(() => apiRef.current.getQueue());
+				setQueueConflict(
+					"Queue changed in another Playback Client. Review the queue and try again.",
+				);
+			}
+		},
+		[runQueueRequest],
+	);
+
 	const reorderQueue = useCallback(
 		async (itemIds: string[]) => {
 			try {
@@ -253,6 +273,7 @@ export function useSynchronizedQueue(api: PlaybackQueueApi) {
 		appendQueueItem,
 		replaceQueue,
 		removeFromQueue,
+		clearQueue,
 		reorderQueue,
 	};
 }

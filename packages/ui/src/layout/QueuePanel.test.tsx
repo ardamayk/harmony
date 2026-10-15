@@ -56,6 +56,7 @@ function createApi(
 		reorderQueue: vi.fn(async () => ({ items: [], revision: "2" })),
 		appendQueueItem: vi.fn(async () => ({ items: [], revision: "2" })),
 		removeQueueItem: vi.fn(async () => ({ items: [], revision: "2" })),
+		clearQueue: vi.fn(async () => ({ items: [], revision: "2" })),
 		getStreamUrl: (trackId) => `/stream/${trackId}`,
 		getAlbumCoverUrl: (albumId) => `/cover/${albumId}`,
 		getRadioStationStreamUrl: (stationId) => `/radio/${stationId}`,
@@ -462,7 +463,26 @@ describe("QueuePanel", () => {
 		}) as HTMLButtonElement;
 		expect(clear.disabled).toBe(true);
 		fireEvent.click(clear);
-		expect(api.replaceQueue).not.toHaveBeenCalled();
+		expect(api.clearQueue).not.toHaveBeenCalled();
+	});
+
+	it("disables Clear when only the playing Track remains", async () => {
+		const api = createApi();
+		const { engine } = renderPanel(api);
+		await screen.findByText("Track 1");
+		await act(async () =>
+			engine.play({
+				type: "track",
+				track,
+				playbackUrl: "/stream/track-1",
+				queueItemId: "item-1",
+			}),
+		);
+
+		const clear = screen.getByRole("button", {
+			name: "Clear",
+		}) as HTMLButtonElement;
+		expect(clear.disabled).toBe(true);
 	});
 
 	it("clears with the current revision and renders the empty state", async () => {
@@ -472,13 +492,13 @@ describe("QueuePanel", () => {
 		await act(async () =>
 			fireEvent.click(screen.getByRole("button", { name: "Clear" })),
 		);
-		expect(api.replaceQueue).toHaveBeenCalledExactlyOnceWith([], "1");
+		expect(api.clearQueue).toHaveBeenCalledExactlyOnceWith(null, "1");
 		expect(screen.getByText("Queue is empty")).toBeTruthy();
 	});
 
 	it("shows a failed Clear and allows a successful retry", async () => {
 		const api = createApi(threeItems);
-		vi.mocked(api.replaceQueue).mockRejectedValueOnce(new Error("offline"));
+		vi.mocked(api.clearQueue).mockRejectedValueOnce(new Error("offline"));
 		const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
 		renderPanel(api);
 		await screen.findByText("Track 1");
@@ -499,7 +519,7 @@ describe("QueuePanel", () => {
 
 	it("surfaces a Clear revision conflict and preserves the refreshed queue", async () => {
 		const api = createApi(threeItems);
-		vi.mocked(api.replaceQueue).mockRejectedValueOnce(
+		vi.mocked(api.clearQueue).mockRejectedValueOnce(
 			new ApiError(409, {
 				error: "Conflict",
 				code: "queue_revision_conflict",
@@ -519,7 +539,7 @@ describe("QueuePanel", () => {
 		);
 		expect(screen.getByText("Track 3")).toBeTruthy();
 		expect(screen.queryByText("Track 1")).toBeNull();
-		expect(api.replaceQueue).toHaveBeenCalledTimes(1);
+		expect(api.clearQueue).toHaveBeenCalledTimes(1);
 	});
 
 	it("stops suggestion dismissal on failure and reports the error", async () => {

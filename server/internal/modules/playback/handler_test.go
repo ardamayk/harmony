@@ -259,6 +259,14 @@ func staleRemove(handlers *Handler, queue Queue, _ string) *httptest.ResponseRec
 	return recorder
 }
 
+func staleClear(handlers *Handler, _ Queue, _ string) *httptest.ResponseRecorder {
+	request := httptest.NewRequest(http.MethodDelete, "/", nil)
+	request.Header.Set("If-Match", "0")
+	recorder := httptest.NewRecorder()
+	handlers.ClearQueue(recorder, request)
+	return recorder
+}
+
 func assertQueueConflict(t *testing.T, recorder *httptest.ResponseRecorder) {
 	t.Helper()
 	if recorder.Code != http.StatusConflict {
@@ -282,6 +290,7 @@ func TestHandlersReturnCurrentQueueForEveryStaleMutation(t *testing.T) {
 		"append":  staleAppend,
 		"reorder": staleReorder,
 		"remove":  staleRemove,
+		"clear":   staleClear,
 	}
 
 	for name, mutate := range tests {
@@ -318,6 +327,74 @@ func TestHandlersReorderQueue(t *testing.T) {
 	}
 	if reordered.Revision != "2" {
 		t.Fatalf("revision = %q, want 2", reordered.Revision)
+	}
+}
+
+func seedThreeItemQueue(t *testing.T) (*Handler, Queue) {
+	t.Helper()
+	h, store, _, db := setupPlaybackHandlers(t)
+	trackID := seedPlaybackTrack(t, db)
+	queue, err := store.ReplaceQueue(context.Background(), "00000000-0000-0000-0000-000000000001", []string{trackID, trackID, trackID}, "0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return h, queue
+}
+
+func clearQueueRequest(h *Handler, revision, query string) *httptest.ResponseRecorder {
+	request := httptest.NewRequest(http.MethodDelete, "/"+query, nil)
+	request.Header.Set("If-Match", revision)
+	recorder := httptest.NewRecorder()
+	h.ClearQueue(recorder, request)
+	return recorder
+}
+
+func TestHandlersClearQueueKeepsOnlyTheNamedItem(t *testing.T) {
+	h, queue := seedThreeItemQueue(t)
+	kept := queue.Items[1].ID
+
+	rec := clearQueueRequest(h, queue.Revision, "?keepItemId="+kept)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body %s", rec.Code, rec.Body.String())
+	}
+	var cleared Queue
+	if err := json.NewDecoder(rec.Body).Decode(&cleared); err != nil {
+		t.Fatal(err)
+	}
+	if len(cleared.Items) != 1 || cleared.Items[0].ID != kept || cleared.Items[0].Position != 0 {
+		t.Fatalf("items = %+v, want only %s at position 0", cleared.Items, kept)
+	}
+	if cleared.Revision != "2" {
+		t.Fatalf("revision = %q, want 2", cleared.Revision)
+	}
+}
+
+func TestHandlersClearQueueWithoutKeepRemovesEveryItem(t *testing.T) {
+	h, queue := seedThreeItemQueue(t)
+
+	rec := clearQueueRequest(h, queue.Revision, "")
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body %s", rec.Code, rec.Body.String())
+	}
+	var cleared Queue
+	if err := json.NewDecoder(rec.Body).Decode(&cleared); err != nil {
+		t.Fatal(err)
+	}
+	if len(cleared.Items) != 0 {
+		t.Fatalf("items = %+v, want none", cleared.Items)
+	}
+}
+
+func TestHandlersClearQueueRejectsAnUnknownKeptItem(t *testing.T) {
+	h, queue := seedThreeItemQueue(t)
+
+	if rec := clearQueueRequest(h, queue.Revision, "?keepItemId=missing"); rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", rec.Code)
+	}
+	if rec := clearQueueRequest(h, "", ""); rec.Code != http.StatusBadRequest {
+		t.Fatalf("missing If-Match status = %d, want 400", rec.Code)
 	}
 }
 

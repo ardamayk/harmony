@@ -575,6 +575,12 @@ export function createApiClient(config: ApiClientConfig) {
 				method: "DELETE",
 				headers: { "If-Match": revision },
 			}).then(normalizeQueue),
+		/** Removes every item but keepItemId, which keeps its ID; null clears the whole queue. */
+		clearPlaybackQueue: (keepItemId: string | null, revision: string) =>
+			request<WireQueue>(
+				`/api/v1/playback/queue${keepItemId ? `?${new URLSearchParams({ keepItemId }).toString()}` : ""}`,
+				{ method: "DELETE", headers: { "If-Match": revision } },
+			).then(normalizeQueue),
 		/** One coherent Library Search; the server ranks, gates typo correction, and picks the Best Match. */
 		searchLibrary: (q: string, all = false) =>
 			request<LibrarySearchResponse>(

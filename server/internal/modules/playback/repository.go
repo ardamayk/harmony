@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"slices"
 
 	"github.com/ardam/navidrome-replacement/server/internal/modules/playback/db"
 	"github.com/google/uuid"
@@ -102,6 +103,27 @@ func (r *Repository) Remove(ctx context.Context, userID, expectedRevision, itemI
 			return err
 		}
 		return setPositions(ctx, q, userID, remaining)
+	})
+}
+
+// Clear deletes every item except keepItemID, which keeps its ID and moves to
+// position 0. An empty keepItemID clears the whole queue.
+func (r *Repository) Clear(ctx context.Context, userID, expectedRevision, keepItemID string) error {
+	return r.mutate(ctx, userID, expectedRevision, func(q *db.Queries) error {
+		if keepItemID == "" {
+			return q.ClearQueue(ctx, userID)
+		}
+		current, err := q.ListQueueItemIDs(ctx, userID)
+		if err != nil {
+			return err
+		}
+		if !slices.Contains(current, keepItemID) {
+			return ErrNotFound
+		}
+		if err := q.DeleteQueueItemsExcept(ctx, db.DeleteQueueItemsExceptParams{UserID: userID, ID: keepItemID}); err != nil {
+			return err
+		}
+		return setPositions(ctx, q, userID, []string{keepItemID})
 	})
 }
 

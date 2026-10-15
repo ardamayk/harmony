@@ -871,6 +871,45 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/QueueConflictResponse"
+    delete:
+      tags: [playback]
+      operationId: clearPlaybackQueue
+      summary: Clear playback queue
+      description: Removes every queue item except `keepItemId`, which keeps its ID and moves to the front. Without `keepItemId` the whole queue is removed.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: keepItemId
+          in: query
+          required: false
+          description: Queue item to keep, typically the one playing
+          schema:
+            type: string
+        - name: If-Match
+          in: header
+          required: true
+          description: Queue Revision on which the clear intent is based
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Updated queue
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Queue"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Queue revision conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QueueConflictResponse"
   /api/v1/playback/queue/items:
     post:
       tags: [playback]

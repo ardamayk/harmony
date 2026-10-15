@@ -28,6 +28,7 @@ func (m *Module) RegisterRoutes(r chi.Router) {
 	r.Get("/api/v1/playback/queue", m.handler.GetQueue)
 	r.Put("/api/v1/playback/queue", m.handler.ReplaceQueue)
 	r.Patch("/api/v1/playback/queue", m.handler.ReorderQueue)
+	r.Delete("/api/v1/playback/queue", m.handler.ClearQueue)
 	r.Post("/api/v1/playback/queue/items", m.handler.AppendItem)
 	r.Delete("/api/v1/playback/queue/items/{itemId}", m.handler.RemoveItem)
 	r.Get("/api/v1/playback/queue/events", m.handler.StreamQueueEvents)

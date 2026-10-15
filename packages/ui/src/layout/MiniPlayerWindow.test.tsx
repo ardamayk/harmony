@@ -35,6 +35,7 @@ const api: PlaybackApi = {
 	reorderQueue: vi.fn(async () => ({ items: [], revision: "2" })),
 	appendQueueItem: vi.fn(async () => ({ items: [], revision: "2" })),
 	removeQueueItem: vi.fn(async () => ({ items: [], revision: "2" })),
+	clearQueue: vi.fn(async () => ({ items: [], revision: "2" })),
 	getStreamUrl: (trackId) => `/stream/${trackId}`,
 	getAlbumCoverUrl: (albumId) => `/cover/${albumId}`,
 	getRadioStationStreamUrl: (stationId) => `/radio/${stationId}`,

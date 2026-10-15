@@ -83,6 +83,15 @@ func (s *Service) RemoveItem(ctx context.Context, userID, itemID, expectedRevisi
 	return s.GetQueue(ctx, userID)
 }
 
+// ClearQueue removes every item but keepItemID, so the playing Track survives
+// a Clear with its queue item ID intact. An empty keepItemID clears everything.
+func (s *Service) ClearQueue(ctx context.Context, userID, keepItemID, expectedRevision string) (Queue, error) {
+	if err := s.repo.Clear(ctx, userID, expectedRevision, keepItemID); err != nil {
+		return Queue{}, err
+	}
+	return s.GetQueue(ctx, userID)
+}
+
 // ReorderItems accepts only a permutation of the current queue items.
 func (s *Service) ReorderItems(ctx context.Context, userID string, itemIDs []string, expectedRevision string) (Queue, error) {
 	err := s.repo.Reorder(ctx, userID, expectedRevision, itemIDs, func(current []string) bool {

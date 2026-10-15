@@ -32,6 +32,9 @@ DELETE FROM playback_queue WHERE user_id = ?;
 -- name: DeleteQueueItem :execrows
 DELETE FROM playback_queue WHERE id = ? AND user_id = ?;
 
+-- name: DeleteQueueItemsExcept :exec
+DELETE FROM playback_queue WHERE user_id = ? AND id <> ?;
+
 -- name: ParkQueuePositions :exec
 -- Moves every position below zero so renumbering cannot hit UNIQUE(user_id, position).
 UPDATE playback_queue SET position = -position - 1 WHERE user_id = ?;

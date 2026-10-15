@@ -84,6 +84,12 @@ function createApi(items = queueItems): PlaybackApi {
 		reorderQueue: vi.fn(async () => ({ items, revision: "2" })),
 		appendQueueItem: vi.fn(async () => ({ items: queueItems, revision: "2" })),
 		removeQueueItem: vi.fn(async () => ({ items: [], revision: "2" })),
+		clearQueue: vi.fn(async (keepItemId: string | null) => ({
+			items: items
+				.filter((item) => item.id === keepItemId)
+				.map((item) => ({ ...item, position: 0 })),
+			revision: "2",
+		})),
 		subscribeQueueEvents: vi.fn(() => vi.fn()),
 		getStreamUrl: (trackId) => `/stream/${trackId}`,
 		getAlbumCoverUrl: (albumId) => `/cover/${albumId}`,
@@ -614,8 +620,9 @@ describe("PlaybackProvider", () => {
 		});
 	});
 
-	it("lets current Track finish before stopping after Queue clear", async () => {
-		const { engine } = renderPlayback();
+	it("keeps the playing Track as the only Queue item after Clear", async () => {
+		const api = createApi();
+		const { engine } = renderPlayback(api);
 		await act(async () =>
 			screen.getByRole("button", { name: "Track" }).click(),
 		);
@@ -623,6 +630,8 @@ describe("PlaybackProvider", () => {
 			screen.getByRole("button", { name: "Clear" }).click(),
 		);
 
+		expect(api.clearQueue).toHaveBeenCalledWith("item-1", "2");
+		expect(screen.getByTestId("queue").textContent).toBe("track-1");
 		expect(engine.getState()).toMatchObject({
 			source: { type: "track", track: { id: "track-1" } },
 			status: "playing",
@@ -630,6 +639,19 @@ describe("PlaybackProvider", () => {
 
 		await act(async () => engine.finish());
 		expect(engine.getState()).toMatchObject({ source: null, status: "idle" });
+	});
+
+	it("clears every Queue item when nothing is playing", async () => {
+		const api = createApi();
+		renderPlayback(api);
+		await act(async () => {});
+
+		await act(async () =>
+			screen.getByRole("button", { name: "Clear" }).click(),
+		);
+
+		expect(api.clearQueue).toHaveBeenCalledWith(null, "1");
+		expect(screen.getByTestId("queue").textContent).toBe("");
 	});
 
 	it("keeps current audio after remote removal and resolves latest Queue when it ends", async () => {
@@ -912,7 +934,7 @@ describe("PlaybackProvider", () => {
 	});
 
 	it.each([
-		["replace", "Clear"],
+		["clear", "Clear"],
 		["reorder", "Reorder"],
 	] as const)(
 		"does not auto-merge %s conflicts and exposes them",
@@ -921,8 +943,8 @@ describe("PlaybackProvider", () => {
 			vi.mocked(api.getQueue)
 				.mockResolvedValueOnce({ items: queueItems, revision: "1" })
 				.mockResolvedValueOnce({ items: queueItems, revision: "2" });
-			if (operation === "replace") {
-				vi.mocked(api.replaceQueue).mockRejectedValueOnce(queueConflict("2"));
+			if (operation === "clear") {
+				vi.mocked(api.clearQueue).mockRejectedValueOnce(queueConflict("2"));
 			} else {
 				vi.mocked(api.reorderQueue).mockRejectedValueOnce(queueConflict("2"));
 			}
@@ -933,7 +955,7 @@ describe("PlaybackProvider", () => {
 			);
 
 			const mutation =
-				operation === "replace" ? api.replaceQueue : api.reorderQueue;
+				operation === "clear" ? api.clearQueue : api.reorderQueue;
 			expect(mutation).toHaveBeenCalledTimes(1);
 			expect(api.getQueue).toHaveBeenCalledTimes(2);
 			expect(screen.getByTestId("queue-conflict").textContent).toContain(

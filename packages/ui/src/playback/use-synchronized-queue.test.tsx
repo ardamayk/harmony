@@ -235,6 +235,7 @@ function createQueueApi(): PlaybackQueueApi {
 		reorderQueue: vi.fn(),
 		appendQueueItem: vi.fn(),
 		removeQueueItem: vi.fn(),
+		clearQueue: vi.fn(),
 	};
 }
 

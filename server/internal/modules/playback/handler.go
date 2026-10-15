@@ -160,6 +160,33 @@ func (h *Handler) RemoveItem(w http.ResponseWriter, r *http.Request) {
 	h.respondQueueMutation(w, userID, queue)
 }
 
+func (h *Handler) ClearQueue(w http.ResponseWriter, r *http.Request) {
+	userID, err := auth.CurrentUserID(r)
+	if err != nil {
+		respond.Error(w, http.StatusUnauthorized, "unauthorized", err.Error())
+		return
+	}
+	revision := r.Header.Get("If-Match")
+	if revision == "" {
+		respond.Error(w, http.StatusBadRequest, "bad_request", "If-Match revision is required")
+		return
+	}
+	queue, err := h.service.ClearQueue(r.Context(), userID, r.URL.Query().Get("keepItemId"), revision)
+	if errors.Is(err, ErrRevisionConflict) {
+		h.queueConflict(w, r, userID)
+		return
+	}
+	if errors.Is(err, ErrNotFound) {
+		respond.Error(w, http.StatusNotFound, "not_found", "queue item not found")
+		return
+	}
+	if err != nil {
+		respond.Error(w, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+	h.respondQueueMutation(w, userID, queue)
+}
+
 func (h *Handler) ReorderQueue(w http.ResponseWriter, r *http.Request) {
 	userID, err := auth.CurrentUserID(r)
 	if err != nil {

@@ -38,6 +38,8 @@ export function QueuePanel({
 		currentTrack?.id,
 	);
 	const upcoming = queue.slice(currentIndex + 1);
+	// Clear keeps the playing Track, so a queue of just that Track has nothing to clear.
+	const hasClearableItems = queue.length > (currentIndex >= 0 ? 1 : 0);
 
 	async function runAction(message: string, action: () => Promise<void>) {
 		setActionError(null);
@@ -92,7 +94,7 @@ export function QueuePanel({
 					<button
 						type="button"
 						className="h-7 rounded-lg border border-[var(--sidebar-border)] bg-[var(--player-pill)] px-2.5 text-caption text-xs hover:text-heading disabled:opacity-40"
-						disabled={queue.length === 0 || isUpdating}
+						disabled={!hasClearableItems || isUpdating}
 						onClick={() => void runAction("Failed to clear queue", clearQueue)}
 					>
 						Clear
