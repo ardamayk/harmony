@@ -294,7 +294,9 @@ describe("AppShell", () => {
 			(element, pseudoElement) => {
 				const style = readStyle(element, pseudoElement);
 				if (element.tagName === "HEADER") {
-					Object.defineProperty(style, "paddingRight", { value: "24px" });
+					Object.defineProperty(style, "paddingLeft", { value: "24px" });
+					// With window controls the Top Nav drops its right inset.
+					Object.defineProperty(style, "paddingRight", { value: "0px" });
 				}
 				if (element === document.documentElement) {
 					Object.defineProperty(style, "fontSize", { value: "16px" });
@@ -329,6 +331,42 @@ describe("AppShell", () => {
 		expect(drawer?.style.bottom).toBe(bottom);
 		unmount();
 		expect(disconnect).toHaveBeenCalled();
+	});
+
+	it("lets the Desktop Client drag the window by the top nav's empty space", () => {
+		const { container } = render(<TopNav onSearch={vi.fn()} />);
+		const header = container.querySelector("header") as HTMLElement;
+		expect(header.hasAttribute("data-tauri-drag-region")).toBe(true);
+		expect(
+			screen
+				.getByRole("navigation", { name: "Library" })
+				.hasAttribute("data-tauri-drag-region"),
+		).toBe(true);
+		// Links and buttons stay clickable instead of starting a drag.
+		expect(
+			screen
+				.getByRole("link", { name: "Albums" })
+				.hasAttribute("data-tauri-drag-region"),
+		).toBe(false);
+	});
+
+	it("shows window controls only when the host supplies them", () => {
+		const { unmount } = render(<TopNav />);
+		expect(screen.queryByRole("group", { name: "Window" })).toBeNull();
+		unmount();
+
+		const windowControls = {
+			minimize: vi.fn(),
+			toggleMaximize: vi.fn(),
+			close: vi.fn(),
+		};
+		render(<TopNav windowControls={windowControls} />);
+		fireEvent.click(screen.getByRole("button", { name: "Minimize" }));
+		fireEvent.click(screen.getByRole("button", { name: "Maximize" }));
+		fireEvent.click(screen.getByRole("button", { name: "Close" }));
+		expect(windowControls.minimize).toHaveBeenCalledTimes(1);
+		expect(windowControls.toggleMaximize).toHaveBeenCalledTimes(1);
+		expect(windowControls.close).toHaveBeenCalledTimes(1);
 	});
 
 	it("renders the library sections, Search and Settings in the top nav", () => {

@@ -8,7 +8,7 @@ import {
 	SHELL_INSET_CLASS,
 } from "./shell-metrics";
 import { Toaster } from "./Toaster";
-import { TopNav } from "./TopNav";
+import { TopNav, type WindowControls } from "./TopNav";
 import { useQueueDrawerWidth } from "./use-queue-drawer-width";
 import { WidgetDndProvider } from "./WidgetDock";
 
@@ -38,9 +38,16 @@ type AppShellProps = {
 	bottom?: ReactNode;
 	/** Opens the host's library search; shown as "Search" in the Top Nav. */
 	onSearch?: () => void;
+	/** Minimize/maximize/close in the Top Nav, for a host without a title bar. */
+	windowControls?: WindowControls;
 };
 
-function AppShellFrame({ children, bottom, onSearch }: AppShellProps) {
+function AppShellFrame({
+	children,
+	bottom,
+	onSearch,
+	windowControls,
+}: AppShellProps) {
 	const shellRef = useRef<HTMLDivElement>(null);
 	const metrics = useQueueDrawerWidth(shellRef);
 	const { preferences } = useLayout();
@@ -65,7 +72,7 @@ function AppShellFrame({ children, bottom, onSearch }: AppShellProps) {
 				data-app-shell
 				className="relative flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden bg-background text-foreground"
 			>
-				<TopNav onSearch={onSearch} />
+				<TopNav onSearch={onSearch} windowControls={windowControls} />
 				<div className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
 					<main
 						data-queue-open={queueTakesSpace ? "" : undefined}

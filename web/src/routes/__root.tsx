@@ -26,7 +26,9 @@ import { RootErrorComponent } from "#/components/root-error";
 import { ThemeSync } from "#/components/theme-sync";
 import { isDesktopClient } from "#/desktop/bridge";
 import { DesktopConnectionGate } from "#/desktop/DesktopConnectionGate";
+import { DesktopWindowFrame } from "#/desktop/DesktopWindowFrame";
 import { toggleMiniPlayer } from "#/desktop/mini-player-bridge";
+import { desktopWindowControls } from "#/desktop/window-controls";
 import { useFavoriteRadioStations } from "#/hooks/use-favorite-radio-stations";
 import { useFavoriteTracks } from "#/hooks/use-favorite-tracks";
 import { useServerCapability } from "#/hooks/use-server-capability";
@@ -106,9 +108,12 @@ function PlayerBarWithSync() {
 
 function RootLayout() {
 	return (
-		<DesktopConnectionGate>
-			<ConnectedRootLayout />
-		</DesktopConnectionGate>
+		<>
+			<DesktopWindowFrame />
+			<DesktopConnectionGate>
+				<ConnectedRootLayout />
+			</DesktopConnectionGate>
+		</>
 	);
 }
 
@@ -176,6 +181,9 @@ function ConnectedRootLayout() {
 								<AppShell
 									bottom={<PlayerBarWithSync />}
 									onSearch={() => setSearchOpen(true)}
+									windowControls={
+										isDesktopClient() ? desktopWindowControls : undefined
+									}
 								>
 									<Outlet />
 									<LibrarySearchDialog

@@ -157,6 +157,37 @@ body::after {
 	mask-image: radial-gradient(circle at 50% 30%, black, transparent 78%);
 }
 
+/* Desktop Client main window: no system frame (tauri.conf.json), so the page
+   draws rounded corners itself on a transparent window. The body background
+   moves onto #root because a transparent root would otherwise propagate it
+   to the whole window canvas. Maximized windows go square. */
+html[data-desktop-window],
+html[data-desktop-window] body {
+	background: transparent;
+}
+
+html[data-desktop-window] #root {
+	overflow: hidden;
+	border: 1px solid color-mix(in srgb, var(--foreground) 12%, transparent);
+	border-radius: 10px;
+	background-color: var(--background);
+	background-image:
+		radial-gradient(900px 500px at -5% -5%, var(--hero-a), transparent 55%),
+		radial-gradient(800px 480px at 105% -5%, var(--hero-b), transparent 55%);
+}
+
+html[data-desktop-window] body::before,
+html[data-desktop-window] body::after {
+	border-radius: 10px;
+}
+
+html[data-window-maximized] #root,
+html[data-window-maximized] body::before,
+html[data-window-maximized] body::after {
+	border: 0;
+	border-radius: 0;
+}
+
 @layer utilities {
 	.text-caption {
 		color: var(--caption);

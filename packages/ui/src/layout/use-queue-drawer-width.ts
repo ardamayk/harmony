@@ -82,8 +82,10 @@ export function useQueueDrawerWidth(
 		const measure = () => {
 			const shellWidth = shell.getBoundingClientRect().width;
 			if (shellWidth === 0) return;
+			// The left padding is always the shell inset; the right one is not
+			// when the Top Nav carries window controls at the window's corner.
 			const inset =
-				Number.parseFloat(getComputedStyle(navigation).paddingRight) || 0;
+				Number.parseFloat(getComputedStyle(navigation).paddingLeft) || 0;
 			const rootFontSize =
 				Number.parseFloat(
 					getComputedStyle(document.documentElement).fontSize,
