@@ -122,11 +122,13 @@ impl Service {
         track_id: &str,
     ) -> Result<PlaylistDetail, ServiceError> {
         let mut detail = self.get(user_id, playlist_id).await?;
-        self.repo.remove_track(playlist_id, track_id).await?;
-        if detail.playlist.is_default || self.repo.count_tracks(playlist_id).await? > 0 {
+        if !self
+            .repo
+            .remove_track(user_id, playlist_id, track_id)
+            .await?
+        {
             return self.get(user_id, playlist_id).await;
         }
-        self.repo.delete_user_playlist(user_id, playlist_id).await?;
         detail.playlist.track_count = 0;
         detail.tracks = Vec::new();
         Ok(detail)

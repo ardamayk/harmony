@@ -148,43 +148,83 @@ impl Repository {
         Ok(())
     }
 
+    /// Removes the Track and, in the same write transaction, deletes a user
+    /// playlist it left empty, so a concurrent append either lands first (and
+    /// keeps the playlist) or runs after the delete. The default Favorites
+    /// playlist is never deleted. Returns whether the playlist was deleted.
     pub async fn remove_track(
         &self,
+        user_id: &str,
         playlist_id: &str,
         track_id: &str,
-    ) -> Result<(), PlaylistError> {
+    ) -> Result<bool, PlaylistError> {
+        let mut transaction = crate::db::begin_write(&self.pool).await?;
         sqlx::query!(
             "DELETE FROM playlist_tracks WHERE playlist_id = ? AND track_id = ?",
             playlist_id,
             track_id
         )
-        .execute(&self.pool)
+        .execute(&mut *transaction)
         .await?;
-        Ok(())
-    }
-
-    pub async fn count_tracks(&self, playlist_id: &str) -> Result<i64, PlaylistError> {
-        Ok(sqlx::query_scalar!(
-            r#"SELECT COUNT(*) AS "count!: i64" FROM playlist_tracks WHERE playlist_id = ?"#,
-            playlist_id
-        )
-        .fetch_one(&self.pool)
-        .await?)
-    }
-
-    /// Never deletes the default Favorites playlist.
-    pub async fn delete_user_playlist(
-        &self,
-        user_id: &str,
-        playlist_id: &str,
-    ) -> Result<(), PlaylistError> {
-        sqlx::query!(
-            "DELETE FROM playlists WHERE id = ? AND user_id = ? AND is_default = 0",
+        let deleted = sqlx::query!(
+            "DELETE FROM playlists WHERE id = ?1 AND user_id = ?2 AND is_default = 0
+            AND NOT EXISTS (SELECT 1 FROM playlist_tracks WHERE playlist_id = ?1)",
             playlist_id,
             user_id
         )
-        .execute(&self.pool)
-        .await?;
-        Ok(())
+        .execute(&mut *transaction)
+        .await?
+        .rows_affected()
+            > 0;
+        transaction.commit().await?;
+        Ok(deleted)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    async fn repository() -> (tempfile::TempDir, Repository) {
+        let dir = tempfile::tempdir().unwrap();
+        let migrations = Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations");
+        let pool =
+            crate::db::open_and_migrate(dir.path().join("app.db").to_str().unwrap(), &migrations)
+                .await
+                .unwrap();
+        for statement in [
+            "INSERT INTO artists (id, name, name_sort) VALUES ('ar', 'A', 'a')",
+            "INSERT INTO albums (id, artist_id, title, title_sort) VALUES ('al', 'ar', 'B', 'b')",
+            "INSERT INTO tracks (id, album_id, title, title_sort, artist_name, format, file_path)
+             VALUES ('t1', 'al', 'One', 'one', 'A', 'flac', '/1.flac'),
+                    ('t2', 'al', 'Two', 'two', 'A', 'flac', '/2.flac')",
+        ] {
+            sqlx::query(statement).execute(&pool).await.unwrap();
+        }
+        (dir, Repository::new(pool))
+    }
+
+    #[tokio::test]
+    async fn removing_the_last_track_deletes_only_an_empty_user_playlist() {
+        let (_dir, repo) = repository().await;
+        let empty = repo.create("u", "Empty").await.unwrap();
+        repo.append_track(&empty, "t1").await.unwrap();
+        assert!(repo.remove_track("u", &empty, "t1").await.unwrap());
+        assert!(matches!(
+            repo.get("u", &empty).await,
+            Err(PlaylistError::NotFound)
+        ));
+
+        let kept = repo.create("u", "Kept").await.unwrap();
+        repo.append_track(&kept, "t1").await.unwrap();
+        repo.append_track(&kept, "t2").await.unwrap();
+        assert!(!repo.remove_track("u", &kept, "t1").await.unwrap());
+        assert_eq!(repo.track_ids(&kept).await.unwrap(), ["t2"]);
+
+        let favorites = repo.ensure_default("u").await.unwrap();
+        repo.append_track(&favorites.id, "t1").await.unwrap();
+        assert!(!repo.remove_track("u", &favorites.id, "t1").await.unwrap());
+        assert!(repo.get("u", &favorites.id).await.is_ok());
     }
 }
