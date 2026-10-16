@@ -6,7 +6,7 @@ import { PlaybackControls } from "./PlayerBarControls";
 
 /**
  * Contents of the always-on-top mini player window: cover, title, transport
- * and a thin seek bar. The root carries `data-tauri-drag-region` so the
+ * and a thin seek bar. The root carries `data-window-drag-region` so the
  * undecorated window can be moved by dragging any non-interactive area.
  */
 export function MiniPlayerWindow({
@@ -52,7 +52,7 @@ export function MiniPlayerWindow({
 
 	return (
 		<div
-			data-tauri-drag-region
+			data-window-drag-region
 			data-testid="mini-player-window"
 			className="flex h-screen w-screen select-none items-center gap-3 overflow-hidden bg-player px-3 text-player-foreground"
 		>
@@ -63,19 +63,19 @@ export function MiniPlayerWindow({
 			/>
 			<div className="flex min-w-0 flex-1 flex-col gap-1">
 				<div
-					data-tauri-drag-region
+					data-window-drag-region
 					className="flex min-w-0 items-center justify-between gap-2"
 				>
-					<div data-tauri-drag-region className="min-w-0">
+					<div data-window-drag-region className="min-w-0">
 						<p
-							data-tauri-drag-region
+							data-window-drag-region
 							className="truncate font-medium text-player-title text-sm"
 							title={title}
 						>
 							{title}
 						</p>
 						<p
-							data-tauri-drag-region
+							data-window-drag-region
 							className="truncate text-player-foreground text-xs"
 						>
 							{subtitle}

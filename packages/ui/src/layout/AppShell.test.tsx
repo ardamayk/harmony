@@ -337,17 +337,17 @@ describe("AppShell", () => {
 	it("lets the Desktop Client drag the window by the top nav's empty space", () => {
 		const { container } = render(<TopNav onSearch={vi.fn()} />);
 		const header = container.querySelector("header") as HTMLElement;
-		expect(header.hasAttribute("data-tauri-drag-region")).toBe(true);
+		expect(header.hasAttribute("data-window-drag-region")).toBe(true);
 		expect(
 			screen
 				.getByRole("navigation", { name: "Library" })
-				.hasAttribute("data-tauri-drag-region"),
+				.hasAttribute("data-window-drag-region"),
 		).toBe(true);
 		// Links and buttons stay clickable instead of starting a drag.
 		expect(
 			screen
 				.getByRole("link", { name: "Albums" })
-				.hasAttribute("data-tauri-drag-region"),
+				.hasAttribute("data-window-drag-region"),
 		).toBe(false);
 	});
 

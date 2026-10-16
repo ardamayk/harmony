@@ -1,22 +1,18 @@
 import type { PlaybackSessionState, PlaybackSource } from "@repo/ui";
 import { DEFAULT_PLAYBACK_SESSION_STATE } from "@repo/ui";
-import { clearMocks, mockIPC } from "@tauri-apps/api/mocks";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import { installDesktopBridge } from "#/desktop/testing";
 import { createPlaybackEngine } from "./create-playback-engine";
 import { DesktopPlaybackEngine } from "./DesktopPlaybackEngine";
 
 describe("createPlaybackEngine", () => {
 	afterEach(() => {
-		clearMocks();
-		Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
+		Reflect.deleteProperty(window, "earthlyDesktop");
 		vi.unstubAllGlobals();
 	});
 
 	it("uses native playback in Desktop without creating HTML audio", () => {
-		Object.defineProperty(window, "__TAURI_INTERNALS__", {
-			configurable: true,
-			value: {},
-		});
+		installDesktopBridge();
 		const audioConstructor = vi.fn();
 		vi.stubGlobal("Audio", audioConstructor);
 
@@ -30,27 +26,19 @@ describe("createPlaybackEngine", () => {
 	it("smoke plays saved Radio and Catalog Preview sources through Desktop commands", async () => {
 		const playedSources: PlaybackSource[] = [];
 		let state: PlaybackSessionState = { ...DEFAULT_PLAYBACK_SESSION_STATE };
-		mockIPC(
-			(command, payload) => {
-				if (command === "desktop_playback_renderer_ready") return state;
-				if (command === "desktop_playback_play") {
-					if (
-						typeof payload !== "object" ||
-						payload === null ||
-						Array.isArray(payload) ||
-						!("source" in payload)
-					) {
-						throw new Error("Desktop playback command source is missing");
-					}
-					const source = payload.source as PlaybackSource;
-					playedSources.push(source);
-					state = { ...state, source, status: "playing" };
-					return state;
+		installDesktopBridge((command, args) => {
+			if (command === "desktop_playback_renderer_ready") return state;
+			if (command === "desktop_playback_play") {
+				if (!args || !("source" in args)) {
+					throw new Error("Desktop playback command source is missing");
 				}
+				const source = args.source as PlaybackSource;
+				playedSources.push(source);
+				state = { ...state, source, status: "playing" };
 				return state;
-			},
-			{ shouldMockEvents: true },
-		);
+			}
+			return state;
+		});
 		const engine = createPlaybackEngine();
 		const radioSource: PlaybackSource = {
 			type: "radio-station",

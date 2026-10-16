@@ -190,7 +190,7 @@ body::after {
 	--player-control-primary-foreground: #171717 !important;
 }
 
-/* Desktop Client main window: no system frame (tauri.conf.json), so the page
+/* Desktop Client main window: no system frame (desktop/src/main/windows.ts), so the page
    draws rounded corners itself on a transparent window. The body background
    moves onto #root because a transparent root would otherwise propagate it
    to the whole window canvas. Maximized windows go square. */
@@ -219,6 +219,20 @@ html[data-window-maximized] body::before,
 html[data-window-maximized] body::after {
 	border: 0;
 	border-radius: 0;
+}
+
+/* Desktop Client: undecorated windows move by dragging the regions marked
+   data-window-drag-region (Top Nav, mini player); double-clicking one
+   maximizes. Controls inside stay clickable. Browsers ignore app-region. */
+[data-window-drag-region] {
+	-webkit-app-region: drag;
+	app-region: drag;
+}
+
+[data-window-drag-region]
+	:is(a, button, input, select, textarea, [role="button"], [role="slider"]) {
+	-webkit-app-region: no-drag;
+	app-region: no-drag;
 }
 
 @layer utilities {

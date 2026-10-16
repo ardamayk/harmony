@@ -37,7 +37,7 @@ export const TOP_NAV_ICON_BUTTON_CLASS =
  * host's library search) and the Settings gear. Its content shares the page
  * inset, and the divider spans only that content column so it lines up with
  * the page title and the Player Bar below. The Desktop Client draws no system
- * title bar, so the bar's empty space carries `data-tauri-drag-region` to move
+ * title bar, so the bar's empty space carries `data-window-drag-region` to move
  * (and double-click to maximize) the window; browsers ignore the attribute.
  */
 export function TopNav({
@@ -50,7 +50,7 @@ export function TopNav({
 	return (
 		<header
 			data-shell-surface
-			data-tauri-drag-region
+			data-window-drag-region
 			className={`flex ${TOP_NAV_HEIGHT_CLASS} shrink-0 items-stretch bg-sidebar text-sidebar-foreground ${
 				windowControls ? "pl-[var(--shell-inset,2rem)]" : SHELL_INSET_CLASS
 			}`}
@@ -58,7 +58,7 @@ export function TopNav({
 			{/* Window controls sit at the window's own corner, not on the page
 			    inset line; the content keeps the inset when there is room. */}
 			<div
-				data-tauri-drag-region
+				data-window-drag-region
 				className={`flex h-full w-full min-w-0 items-center gap-6 border-sidebar-border border-b ${
 					windowControls
 						? "mr-[max(0px,calc(var(--shell-inset,2rem)-7.5rem))]"
@@ -72,7 +72,7 @@ export function TopNav({
 					Earthly Audio
 				</Link>
 				<nav
-					data-tauri-drag-region
+					data-window-drag-region
 					aria-label="Library"
 					className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-button]:hidden [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-foreground/25 hover:[&::-webkit-scrollbar-thumb]:bg-foreground/40 [&::-webkit-scrollbar-track]:bg-transparent"
 				>

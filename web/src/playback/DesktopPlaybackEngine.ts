@@ -8,10 +8,8 @@ import type {
 	ReplayGainMode,
 } from "@repo/ui";
 import { DEFAULT_PLAYBACK_SESSION_STATE } from "@repo/ui";
-import { invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-
-const PLAYBACK_STATE_EVENT = "desktop-playback-state";
+import { DESKTOP_EVENTS } from "@repo/desktop-bridge";
+import { invoke, listen, type Unlisten } from "#/desktop/desktop-api";
 
 type DesktopPlaybackBridge = {
 	rendererReady(): Promise<PlaybackSessionState>;
@@ -45,10 +43,10 @@ type DesktopPlaybackBridge = {
 	enableAdaptiveSystemRate(): Promise<PlaybackSessionState>;
 	toggleShuffle(): Promise<PlaybackSessionState>;
 	cycleRepeatMode(): Promise<PlaybackSessionState>;
-	listen(listener: PlaybackSessionListener): Promise<UnlistenFn>;
+	listen(listener: PlaybackSessionListener): Promise<Unlisten>;
 };
 
-const tauriPlaybackBridge: DesktopPlaybackBridge = {
+const desktopPlaybackBridge: DesktopPlaybackBridge = {
 	rendererReady: () => invoke("desktop_playback_renderer_ready"),
 	play: (source) => invoke("desktop_playback_play", { source }),
 	syncQueueContext: (sources, currentIndex) =>
@@ -85,16 +83,14 @@ const tauriPlaybackBridge: DesktopPlaybackBridge = {
 		invoke("desktop_playback_enable_adaptive_system_rate"),
 	toggleShuffle: () => invoke("desktop_playback_toggle_shuffle"),
 	cycleRepeatMode: () => invoke("desktop_playback_cycle_repeat_mode"),
-	listen: (listener) =>
-		listen<PlaybackSessionState>(PLAYBACK_STATE_EVENT, (event) => {
-			listener(event.payload);
-		}),
+	listen: async (listener) =>
+		listen<PlaybackSessionState>(DESKTOP_EVENTS.playbackState, listener),
 };
 
 export class DesktopPlaybackEngine implements PlaybackEngine {
 	private state: PlaybackSessionState = { ...DEFAULT_PLAYBACK_SESSION_STATE };
 	private readonly listeners = new Set<PlaybackSessionListener>();
-	private unlisten: UnlistenFn | null = null;
+	private unlisten: Unlisten | null = null;
 	private isDestroyed = false;
 	private commandRevision = 0;
 	private stateRevision = 0;
@@ -107,7 +103,7 @@ export class DesktopPlaybackEngine implements PlaybackEngine {
 	};
 
 	constructor(
-		private readonly bridge: DesktopPlaybackBridge = tauriPlaybackBridge,
+		private readonly bridge: DesktopPlaybackBridge = desktopPlaybackBridge,
 	) {
 		void this.initialize();
 	}

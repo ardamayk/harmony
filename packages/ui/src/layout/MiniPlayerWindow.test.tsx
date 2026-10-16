@@ -89,7 +89,7 @@ describe("MiniPlayerWindow", () => {
 			screen.getByRole("button", { name: "Start" }).click();
 		});
 		const root = screen.getByTestId("mini-player-window");
-		expect(root.getAttribute("data-tauri-drag-region")).not.toBeNull();
+		expect(root.getAttribute("data-window-drag-region")).not.toBeNull();
 		expect(root.textContent).toContain("Track 1");
 
 		fireEvent.click(screen.getByRole("button", { name: "Pause" }));
