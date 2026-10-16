@@ -11,6 +11,7 @@ pub mod dependencies;
 pub mod gojson;
 pub mod migrate;
 pub mod modules;
+pub mod query;
 pub mod respond;
 pub mod searchdata;
 pub mod static_assets;

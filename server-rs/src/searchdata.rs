@@ -31,7 +31,8 @@ const VERSION_WORDS: &[&str] = &[
 
 /// Spelling evidence and two punctuation alternatives. `compact` joins
 /// punctuation within a word, never whitespace-separated words.
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, serde::Deserialize)]
+#[serde(default)]
 pub struct Text {
     pub original: String,
     pub faithful: String,
@@ -96,6 +97,12 @@ fn fold_words(value: &str, compact: bool) -> String {
     fields(&result)
 }
 
+/// Go's `unicode.IsLetter(c) || unicode.IsDigit(c)`.
+pub fn is_letter_or_digit(character: char) -> bool {
+    let category = get_general_category(character);
+    is_letter(category) || category == GeneralCategory::DecimalNumber
+}
+
 /// Go's `unicode.IsLetter`: the L categories only, unlike Rust's
 /// `char::is_alphabetic`, which also covers letter numbers and some marks.
 fn is_letter(category: GeneralCategory) -> bool {
@@ -141,6 +148,50 @@ fn title_versions(value: &str) -> Vec<String> {
         }
     }
     versions
+}
+
+/// Rebuilds missing or outdated Library Search texts at startup, before
+/// handlers get the database (searchdata.EnsureCurrent). With `force`, it
+/// regenerates all of them (Rebuild). Either way it is one transaction, so
+/// readers keep the previous snapshot until it commits.
+///
+/// These statements call the registered functions, which the schema
+/// database sqlx checks against lacks, so they are not macro-checked.
+pub async fn rebuild(pool: &sqlx::SqlitePool, force: bool) -> Result<(), String> {
+    let mut transaction = crate::db::begin_write(pool)
+        .await
+        .map_err(|error| format!("begin Library Search rebuild: {error}"))?;
+    if !force {
+        let is_current: bool = sqlx::query_scalar(
+            "SELECT NOT EXISTS (
+                SELECT 1 FROM library_search_sources source
+                LEFT JOIN library_search_texts prepared ON prepared.kind = source.kind AND prepared.id = source.id
+                WHERE prepared.id IS NULL OR prepared.rules_version != ?
+            )",
+        )
+        .bind(RULES_VERSION)
+        .fetch_one(&mut *transaction)
+        .await
+        .map_err(|error| format!("check Library Search rules version: {error}"))?;
+        if is_current {
+            return Ok(());
+        }
+    }
+    sqlx::query("DELETE FROM library_search_texts")
+        .execute(&mut *transaction)
+        .await
+        .map_err(|error| format!("rebuild Library Search data: {error}"))?;
+    sqlx::query(
+        "INSERT INTO library_search_texts
+         SELECT kind, id, library_search_text(name, kind), library_search_version() FROM library_search_sources",
+    )
+    .execute(&mut *transaction)
+    .await
+    .map_err(|error| format!("rebuild Library Search data: {error}"))?;
+    transaction
+        .commit()
+        .await
+        .map_err(|error| format!("commit Library Search rebuild: {error}"))
 }
 
 /// JSON exactly as Go's `encoding/json` writes it: struct field order, and

@@ -9,16 +9,15 @@ mod types;
 mod waveform;
 
 use crate::app::AppState;
+use crate::query::GoQuery;
 use crate::respond::{ApiError, ApiResult};
-use axum::extract::{Path, Query, State};
+use axum::extract::{Path, State};
 use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::{Json, Router};
 pub use genres::split_genres;
 pub use repository::{LibraryError, Repository};
-use serde::Deserialize;
-use std::collections::HashMap;
 pub use types::Track;
 use waveform::WaveformError;
 pub use waveform::WaveformService;
@@ -68,17 +67,13 @@ pub fn routes() -> Router<AppState> {
 
 /// `limit` 1..=500 (default 50) and `offset` >= 0; invalid values fall back
 /// to the defaults rather than failing, like the Go server.
-fn pagination(query: &HashMap<String, String>) -> (i64, i64) {
-    let number = |key: &str| query.get(key).and_then(|value| value.parse::<i64>().ok());
+fn pagination(query: &GoQuery) -> (i64, i64) {
+    let number = |key: &str| query.get(key).parse::<i64>().ok();
     let limit = number("limit")
         .filter(|limit| (1..=500).contains(limit))
         .unwrap_or(50);
     let offset = number("offset").filter(|offset| *offset >= 0).unwrap_or(0);
     (limit, offset)
-}
-
-fn text<'a>(query: &'a HashMap<String, String>, key: &str) -> &'a str {
-    query.get(key).map(String::as_str).unwrap_or_default()
 }
 
 fn not_found(message: &str) -> impl FnOnce(LibraryError) -> ApiError + '_ {
@@ -90,11 +85,11 @@ fn not_found(message: &str) -> impl FnOnce(LibraryError) -> ApiError + '_ {
 
 async fn list_artists(
     State(state): State<AppState>,
-    Query(query): Query<HashMap<String, String>>,
+    query: GoQuery,
 ) -> ApiResult<Json<types::Page<types::Artist>>> {
     let (limit, offset) = pagination(&query);
     let page = Repository::new(state.db)
-        .list_artists(limit, offset, text(&query, "q"))
+        .list_artists(limit, offset, query.get("q"))
         .await
         .map_err(ApiError::internal)?;
     Ok(Json(page))
@@ -102,11 +97,11 @@ async fn list_artists(
 
 async fn list_albums(
     State(state): State<AppState>,
-    Query(query): Query<HashMap<String, String>>,
+    query: GoQuery,
 ) -> ApiResult<Json<types::Page<types::Album>>> {
     let (limit, offset) = pagination(&query);
     let page = Repository::new(state.db)
-        .list_albums(limit, offset, text(&query, "artistId"), text(&query, "q"))
+        .list_albums(limit, offset, query.get("artistId"), query.get("q"))
         .await
         .map_err(ApiError::internal)?;
     Ok(Json(page))
@@ -123,19 +118,14 @@ async fn get_album(
     Ok(Json(album))
 }
 
-#[derive(Deserialize)]
-struct CoverQuery {
-    size: Option<String>,
-}
-
 async fn get_album_cover(
     State(state): State<AppState>,
     Path(album_id): Path<String>,
-    Query(query): Query<CoverQuery>,
+    query: GoQuery,
 ) -> ApiResult<Response> {
-    let size = match query.size.as_deref() {
-        None | Some("") => 0,
-        Some(raw) => raw
+    let size = match query.get("size") {
+        "" => 0,
+        raw => raw
             .parse::<i64>()
             .ok()
             .filter(|size| covers::COVER_SIZES.contains(size))
@@ -157,11 +147,11 @@ async fn get_album_cover(
 
 async fn list_tracks(
     State(state): State<AppState>,
-    Query(query): Query<HashMap<String, String>>,
+    query: GoQuery,
 ) -> ApiResult<Json<types::Page<Track>>> {
     let (limit, offset) = pagination(&query);
     let page = Repository::new(state.db)
-        .list_tracks(limit, offset, text(&query, "artistId"), text(&query, "q"))
+        .list_tracks(limit, offset, query.get("artistId"), query.get("q"))
         .await
         .map_err(ApiError::internal)?;
     Ok(Json(page))
@@ -229,24 +219,11 @@ mod tests {
 
     #[test]
     fn pagination_falls_back_to_defaults() {
-        let query = |pairs: &[(&str, &str)]| -> HashMap<String, String> {
-            pairs
-                .iter()
-                .map(|(key, value)| ((*key).to_owned(), (*value).to_owned()))
-                .collect()
-        };
-        assert_eq!(pagination(&query(&[])), (50, 0));
-        assert_eq!(
-            pagination(&query(&[("limit", "100"), ("offset", "20")])),
-            (100, 20)
-        );
-        assert_eq!(
-            pagination(&query(&[("limit", "0"), ("offset", "-1")])),
-            (50, 0)
-        );
-        assert_eq!(
-            pagination(&query(&[("limit", "501"), ("offset", "x")])),
-            (50, 0)
-        );
+        let query = GoQuery::parse;
+        assert_eq!(pagination(&query("")), (50, 0));
+        assert_eq!(pagination(&query("limit=100&offset=20")), (100, 20));
+        assert_eq!(pagination(&query("limit=0&offset=-1")), (50, 0));
+        assert_eq!(pagination(&query("limit=501&offset=x")), (50, 0));
+        assert_eq!(pagination(&query("limit=10&limit=20")), (10, 0));
     }
 }

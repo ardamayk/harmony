@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT revision AS \"revision!: i64\" FROM library_search_revision WHERE singleton = 1",
+  "describe": {
+    "columns": [
+      {
+        "name": "revision!: i64",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "library_search_revision",
+            "name": "revision"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "7b432570290c5dce31d0694a567f68a1cbbd3c3cc7b68d9840711aa7b4ad0e11"
+}

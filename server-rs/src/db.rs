@@ -19,6 +19,8 @@ pub enum DbError {
     Open(sqlx::Error),
     #[error("run migrations: {0}")]
     Migrate(#[from] MigrateError),
+    #[error("prepare Library Search data: {0}")]
+    SearchData(String),
 }
 
 pub async fn open_and_migrate(
@@ -45,6 +47,10 @@ pub async fn open_and_migrate(
     let migrations = migrate::load(migrations_directory)?;
     let mut connection = pool.acquire().await.map_err(DbError::Open)?;
     migrate::up(&mut connection, &migrations).await?;
+    drop(connection);
+    searchdata::rebuild(&pool, false)
+        .await
+        .map_err(DbError::SearchData)?;
     Ok(pool)
 }
 

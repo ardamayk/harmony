@@ -24,6 +24,7 @@ pub struct AppState {
     pub dependencies: Arc<Report>,
     pub db: SqlitePool,
     pub waveforms: Arc<modules::library::WaveformService>,
+    pub search: Arc<modules::search::SearchService>,
 }
 
 impl AppState {
@@ -35,8 +36,9 @@ impl AppState {
         Self {
             config: Arc::new(config),
             dependencies: Arc::new(dependencies),
-            db,
+            db: db.clone(),
             waveforms: Arc::new(waveforms),
+            search: Arc::new(modules::search::SearchService::new(db.clone())),
         }
     }
 }
@@ -50,6 +52,7 @@ pub fn router(state: AppState) -> Router {
         .merge(modules::preferences::routes())
         .merge(modules::library::routes())
         .merge(modules::playlists::routes())
+        .merge(modules::search::routes())
         .fallback(static_assets::web)
         .layer(middleware::from_fn(stream_aware_timeout))
         .layer(cors)

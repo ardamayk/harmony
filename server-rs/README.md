@@ -18,7 +18,7 @@ Run it like the Go server, from `server/` (or the repository root): `../target/r
 | 1 | preferences | done |
 | 2 | playlists (after library: it returns library Tracks) | done |
 | 3 | library (albums, artists, tracks, covers, lyrics, waveform) | done |
-| 4 | library search (and startup rebuild of search data) | |
+| 4 | library search (and startup rebuild of search data) | done |
 | 5 | radio (stations, Radio Browser catalog, HLS proxy, now playing) | |
 | 6 | playback (queue, queue events over SSE) | |
 | 7 | managed import (imports, batches, artwork, replacement, recording identification) | |

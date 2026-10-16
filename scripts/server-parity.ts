@@ -80,9 +80,69 @@ function describeImage(bytes: Uint8Array): string {
  * Requests in order. Path segments in braces are filled from earlier
  * answers of the Go server, e.g. {album} with the first Album's id.
  */
+/**
+ * Library Search queries drawn from the library itself: whole titles,
+ * single words, prefixes, typos (two letters swapped), credits, and the
+ * validation edges.
+ */
+function searchProbes(titles: string[], names: string[]): Probe[] {
+	const queries = new Set<string>([
+		"a",
+		"... / !",
+		"x".repeat(200),
+		"x".repeat(201),
+		"live",
+		"remix",
+		"(live)",
+		"zzzzqqq",
+	]);
+	for (const title of titles.slice(0, 25)) {
+		queries.add(title);
+		const words = title.split(/\s+/).filter(Boolean);
+		if (words[0]) {
+			queries.add(words[0]);
+			queries.add(words[0].slice(0, 3));
+		}
+		if (words.length > 1)
+			queries.add(`${words[0]} ${words.at(-1)?.slice(0, 2)}`);
+		const long = words.find((word) => word.length >= 5);
+		if (long) {
+			queries.add(
+				long.slice(0, 1) + long.slice(2, 3) + long.slice(1, 2) + long.slice(3),
+			);
+			queries.add(long.slice(0, -1));
+		}
+	}
+	for (const name of names.slice(0, 15)) {
+		queries.add(name);
+		queries.add(name.toUpperCase());
+		queries.add(name.split(/\s+/)[0] ?? name);
+	}
+	const probes: Probe[] = [...queries].map((query) => ({
+		path: `/api/v1/library/search?q=${encodeURIComponent(query)}`,
+	}));
+	probes.push(
+		{ path: "/api/v1/library/search" },
+		{ path: "/api/v1/library/search?q=%20%20" },
+		{
+			path: `/api/v1/library/search?q=${encodeURIComponent(titles[0] ?? "a")}&all=true`,
+		},
+		{ path: "/api/v1/library/search?q=a&all=yes" },
+		{ path: "/api/v1/library/search?q=a&all=true&all=false" },
+	);
+	return probes;
+}
+
+function unknownPlaceholder(name: string): never {
+	throw new Error(`Probe uses {${name}}, which nothing defines or captured.`);
+}
+
 function corpus(ids: Record<string, string>): Probe[] {
 	const fill = (path: string) =>
-		path.replace(/\{(\w+)\}/g, (_, key: string) => ids[key] ?? "missing");
+		path.replace(
+			/\{(\w+)\}/g,
+			(_, key: string) => ids[key] ?? unknownPlaceholder(key),
+		);
 	const fillBody = (body: unknown) =>
 		body === undefined ? undefined : JSON.parse(fill(JSON.stringify(body)));
 	const probes: Probe[] = [
@@ -363,22 +423,45 @@ try {
 		pick: (body: T) => string | undefined,
 	) => pick((await (await fetch(`${go.base}${path}`)).json()) as T) ?? "";
 	type Items = { items: Array<{ id: string; title?: string }> };
-	const ids = {
-		album: await first<Items>(
-			"/api/v1/library/albums?limit=1",
-			(b) => b.items[0]?.id,
+	type Albums = {
+		items: Array<{
+			id: string;
+			title: string;
+			artistId: string;
+			artistName: string;
+			genres?: string[];
+		}>;
+	};
+	const albumList = (await (
+		await fetch(`${go.base}/api/v1/library/albums?limit=500`)
+	).json()) as Albums;
+	const albumWithGenre = albumList.items.find((album) => album.genres?.length);
+	const tracks = (await (
+		await fetch(`${go.base}/api/v1/library/tracks?limit=500`)
+	).json()) as Items;
+	const ids: Record<string, string> = {
+		album: albumList.items[0]?.id ?? "",
+		artist: albumList.items[0]?.artistId ?? "",
+		artistQuery: encodeURIComponent(
+			albumList.items[0]?.artistName.slice(0, 3) ?? "",
 		),
-		track: await first<Items>(
-			"/api/v1/library/tracks?limit=1",
-			(b) => b.items[0]?.id,
+		albumQuery: encodeURIComponent(
+			albumList.items[1]?.title.split(/\s+/)[0] ?? "",
 		),
-		query: encodeURIComponent(
-			await first<Items>(
-				"/api/v1/library/tracks?limit=1",
-				(b) => b.items[0]?.title?.split(/\s+/)[0],
-			),
+		genreQuery: encodeURIComponent(albumWithGenre?.genres?.[0] ?? ""),
+		track: tracks.items[0]?.id ?? "",
+		secondTrack: tracks.items[1]?.id ?? "",
+		query: encodeURIComponent(tracks.items[0]?.title?.split(/\s+/)[0] ?? ""),
+		favorites: await first<{
+			items: Array<{ id: string; isDefault: boolean }>;
+		}>(
+			"/api/v1/playlists",
+			(b) => b.items.find((playlist) => playlist.isDefault)?.id,
 		),
 	};
+	for (const [name, value] of Object.entries(ids)) {
+		if (!value) throw new Error(`The library has nothing for {${name}}.`);
+	}
 
 	const goIds = new Map<string, string>();
 	const rustIds = new Map<string, string>();
@@ -386,7 +469,7 @@ try {
 		const fill = (text: string) =>
 			text.replace(
 				/\{\$(\w+)\}/g,
-				(_, key: string) => captured.get(key) ?? "missing",
+				(_, key: string) => captured.get(key) ?? unknownPlaceholder(`$${key}`),
 			);
 		return {
 			...probe,
@@ -409,7 +492,13 @@ try {
 	let matched = 0;
 	let differing = 0;
 	let notPorted = 0;
-	for (const probe of corpus(ids)) {
+	const trackTitles = tracks.items.map((track) => track.title ?? "");
+	const names = [
+		...new Set(
+			albumList.items.flatMap((album) => [album.artistName, album.title]),
+		),
+	];
+	for (const probe of [...corpus(ids), ...searchProbes(trackTitles, names)]) {
 		const label = `${probe.method ?? "GET"} ${probe.path}`;
 		const goAnswer = await ask(go.base, withIds(probe, goIds));
 		const rustAnswer = await ask(rust.base, withIds(probe, rustIds));
