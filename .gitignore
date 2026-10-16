@@ -21,3 +21,4 @@ server/data/
 
 mise.local.toml
 .mise.local.toml
+/target/

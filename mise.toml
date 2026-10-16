@@ -75,6 +75,11 @@ run = [
 	"cd server && go build -o ../bin/server ./cmd/server",
 ]
 
+[tasks."server-rs:build"]
+description = "Build the Rust Music Server (server-rs/, ADR 0025) with embedded Web Client and docs"
+depends = ["web:build", "docs:build"]
+run = ["bash scripts/sync-static.sh", "cargo build --release -p earthly-music-server"]
+
 [tasks."desktop:build"]
 description = "Build the release Desktop Client: Rust core with pinned mpv, Electron shell bundle, Web Client"
 depends = ["web:build"]
@@ -92,7 +97,7 @@ run = [
 
 [tasks.check]
 description = "Format, lint, and type-check every language"
-depends = ["web:check", "server:check", "desktop:check"]
+depends = ["web:check", "server:check", "server-rs:check", "desktop:check"]
 
 [tasks."web:check"]
 description = "Oxfmt, Oxlint, and type checks for the TypeScript workspace"
@@ -109,6 +114,10 @@ if [[ -n "$unformatted" ]]; then printf '%s\n' "$unformatted" >&2; exit 1; fi
 golangci-lint run
 """
 
+[tasks."server-rs:check"]
+description = "rustfmt and Clippy for the Rust Music Server"
+run = ["cargo fmt -p earthly-music-server -- --check", "cargo clippy -p earthly-music-server --all-targets -- -D warnings"]
+
 [tasks."desktop:check"]
 description = "rustfmt and Clippy for the Desktop core (the Electron shell's TypeScript is in web:check)"
 run = ["bun run --cwd desktop format:check", "bun run --cwd desktop lint"]
@@ -117,7 +126,7 @@ run = ["bun run --cwd desktop format:check", "bun run --cwd desktop lint"]
 
 [tasks.test]
 description = "Run TypeScript, Go, and Rust unit tests"
-depends = ["web:test", "server:test", "desktop:test"]
+depends = ["web:test", "server:test", "server-rs:test", "desktop:test"]
 
 [tasks."web:test"]
 description = "Run Web Client, shared UI, and API client unit tests"
@@ -127,6 +136,14 @@ run = "bun --bun vp run --filter web --filter @repo/ui --filter @repo/api-client
 description = "Run Music Server tests"
 dir = "server"
 run = "go test ./..."
+
+[tasks."server-rs:test"]
+description = "Run Rust Music Server tests"
+run = "cargo test -p earthly-music-server"
+
+[tasks."server-rs:parity"]
+description = "Compare the Rust Music Server's answers with the Go server's on copies of the same database"
+run = "bun scripts/server-parity.ts"
 
 [tasks."desktop:test"]
 description = "Run Desktop core (Rust) and Electron shell unit tests"

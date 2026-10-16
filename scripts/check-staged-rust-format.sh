@@ -7,4 +7,4 @@ trap 'rm -rf -- "$STAGED_ROOT"' EXIT
 
 git -C "$REPOSITORY_ROOT" checkout-index --all --prefix="$STAGED_ROOT/"
 
-cargo fmt --manifest-path "$STAGED_ROOT/desktop/core/Cargo.toml" -- --check
+cargo fmt --manifest-path "$STAGED_ROOT/Cargo.toml" --all -- --check

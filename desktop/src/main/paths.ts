@@ -21,7 +21,7 @@ export function shellPaths(
 	return {
 		core: resolve(
 			env.EARTHLY_AUDIO_CORE_PATH ??
-				join(desktopDirectory, "core/target/release/earthly-audio-core"),
+				join(desktopDirectory, "../target/release/earthly-audio-core"),
 		),
 		rendererRoot: resolve(
 			env.EARTHLY_AUDIO_RENDERER_DIR ?? join(desktopDirectory, "../web/dist"),

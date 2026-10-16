@@ -5,7 +5,8 @@
 packages/contracts/openapi.yaml   ← source of truth
         ↓ generate
 packages/api-client               ← TypeScript client
-server/                           ← Go API + static embed
+server/                           ← Go API + static embed (being replaced by server-rs/)
+server-rs/                        ← Rust Music Server, ported module by module (ADR 0025)
 web/                              ← React SPA (dev proxy → Go)
 packages/ui                       ← shared layout/widget shell
 packages/docs                     ← MDX product docs → /docs

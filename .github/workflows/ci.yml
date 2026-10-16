@@ -60,8 +60,8 @@ jobs:
             ~/.cargo/registry/index
             ~/.cargo/registry/cache
             ~/.cargo/git/db
-            desktop/core/target
-          key: cargo-${{ runner.os }}-${{ hashFiles('desktop/core/Cargo.lock') }}
+            target
+          key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
           restore-keys: cargo-${{ runner.os }}-
       - run: bun install --frozen-lockfile
       - run: mise run desktop:check

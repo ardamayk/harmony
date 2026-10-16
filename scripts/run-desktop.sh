@@ -12,7 +12,7 @@ desktopDirectory="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../desktop" && pwd)
 cd "$desktopDirectory"
 
 readonly coreManifest="core/Cargo.toml"
-readonly targetDirectory="${CARGO_TARGET_DIR:-$desktopDirectory/core/target}"
+readonly targetDirectory="${CARGO_TARGET_DIR:-$desktopDirectory/../target}"
 readonly devServerUrl="http://localhost:3000"
 readonly devServerStartupAttempts=300
 
