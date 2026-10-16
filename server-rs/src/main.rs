@@ -47,6 +47,9 @@ async fn run() -> Result<(), String> {
     }
 
     let state = AppState::new(config, report, pool.clone());
+    if let Err(error) = state.managed_import.start().await {
+        tracing::error!(%error, "Managed Import startup cleanup failed");
+    }
     let router = app::router(state.clone());
     let listener = tokio::net::TcpListener::bind(address)
         .await

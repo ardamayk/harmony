@@ -28,6 +28,7 @@ pub struct AppState {
     pub radio: Arc<modules::radio::Radio>,
     /// Shared with Managed Import, whose writes change queues too.
     pub queue_events: Arc<modules::playback::QueueEventBroker>,
+    pub managed_import: Arc<modules::managed_import::ManagedImport>,
 }
 
 impl AppState {
@@ -37,6 +38,7 @@ impl AppState {
             modules::library::Repository::new(db.clone()),
             dependencies.has(crate::dependencies::FFMPEG),
         );
+        let managed_import = modules::managed_import::ManagedImport::new(db.clone(), &config);
         Self {
             config: Arc::new(config),
             dependencies: Arc::new(dependencies),
@@ -45,6 +47,7 @@ impl AppState {
             search: Arc::new(modules::search::SearchService::new(db.clone())),
             radio: Arc::new(radio),
             queue_events: Arc::default(),
+            managed_import: Arc::new(managed_import),
         }
     }
 }
@@ -61,6 +64,7 @@ pub fn router(state: AppState) -> Router {
         .merge(modules::search::routes())
         .merge(modules::radio::routes())
         .merge(modules::playback::routes())
+        .merge(modules::managed_import::routes())
         .fallback(static_assets::web)
         .layer(middleware::from_fn(stream_aware_timeout))
         .layer(cors)

@@ -340,6 +340,47 @@ impl Service {
         }
     }
 
+    /// Stores an uploaded cover for one Album of an uploading Batch
+    /// (artwork-handlers.go UploadArtwork).
+    pub async fn upload_artwork(
+        &self,
+        batch_id: &str,
+        album_key: &str,
+        data: &[u8],
+    ) -> Result<ArtworkOption> {
+        let artwork = inspect::artwork::validate_uploaded(data).map_err(Error::from_inspection)?;
+        let _batch = self.batch_lock.lock().await;
+        let batch = self.get_batch(batch_id).await?;
+        if batch.status != BATCH_STATUS_UPLOADING {
+            return Err(Error::sentinel(Sentinel::InvalidState));
+        }
+        if !batch.albums.iter().any(|album| album.key == album_key) {
+            return Err(Error::sentinel(Sentinel::NotFound));
+        }
+        self.storage.preflight(Requirement {
+            selected_bytes: 0,
+            temporary_bytes: data.len() as i64,
+        })?;
+        let id = format!("upload-{album_key}");
+        self.repo
+            .save_artwork(batch_id, &id, "", album_key, &artwork)
+            .await?;
+        Ok(ArtworkOption {
+            id,
+            job_id: String::new(),
+            media_type: artwork.mime_type,
+            content_sha256: artwork.sha256,
+        })
+    }
+
+    pub async fn get_artwork(
+        &self,
+        batch_id: &str,
+        artwork_id: &str,
+    ) -> Result<inspect::AlbumArtwork> {
+        self.repo.load_artwork(batch_id, artwork_id).await
+    }
+
     pub async fn list_history(&self) -> Result<HistoryList> {
         self.repo.list_history().await
     }

@@ -11,7 +11,13 @@
 // Run with `mise run server-rs:parity` after `mise run server:build` and
 // `mise run server-rs:build`.
 import { type ChildProcess, execFileSync, spawn } from "node:child_process";
-import { copyFileSync, existsSync, mkdtempSync, rmSync } from "node:fs";
+import {
+	copyFileSync,
+	existsSync,
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+} from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -30,6 +36,8 @@ type Probe = {
 	body?: unknown;
 	/** A request body sent as is, for malformed JSON. */
 	raw?: string;
+	/** A file under the repository sent as the request body. */
+	file?: string;
 	/**
 	 * Remembers this answer's `id` under a name, separately per server, for
 	 * later probes to use as {$name}: each server creates its own IDs.
@@ -57,7 +65,13 @@ const COMPARED_HEADERS = [
 ];
 
 /** Fields whose values legitimately differ between two runs. */
-const VOLATILE_KEYS = new Set(["updatedAt", "createdAt", "tstamp"]);
+const VOLATILE_KEYS = new Set([
+	"updatedAt",
+	"createdAt",
+	"tstamp",
+	"startedAt",
+	"completedAt",
+]);
 
 /**
  * Stored columns that differ by design. Scaled-down covers come from
@@ -65,6 +79,8 @@ const VOLATILE_KEYS = new Set(["updatedAt", "createdAt", "tstamp"]);
  */
 const IMPLEMENTATION_COLUMNS: Record<string, string[]> = {
 	album_cover_variants: ["data"],
+	// When each server wrote its copy of an imported file.
+	tracks: ["file_mtime"],
 };
 
 /** "jpeg 128x128" for a JPEG or PNG, else the byte count. */
@@ -545,6 +561,194 @@ function corpus(ids: Record<string, string>): Probe[] {
 		{ method: "DELETE", path: "/api/v1/radio/stations/{$station}" },
 		{ method: "DELETE", path: "/api/v1/radio/stations/{$station}" },
 		{ path: "/api/v1/import-history" },
+		// Managed Import: standalone jobs.
+		{ method: "POST", path: "/api/v1/imports", raw: "", capture: "job1" },
+		{ path: "/api/v1/imports/{$job1}" },
+		{ method: "POST", path: "/api/v1/imports", body: { other: 1 } },
+		{ method: "POST", path: "/api/v1/imports", raw: "{" },
+		{
+			method: "PUT",
+			path: "/api/v1/imports/{$job1}/file",
+			file: "server-rs/testdata/strict-import.flac",
+			headers: { "x-import-filename": "strict-import.flac" },
+		},
+		{ path: "/api/v1/imports/{$job1}" },
+		{ method: "POST", path: "/api/v1/imports/{$job1}/confirm", body: {} },
+		{
+			method: "POST",
+			path: "/api/v1/imports/{$job1}/confirm",
+			body: { revision: 1 },
+		},
+		{
+			method: "POST",
+			path: "/api/v1/imports/{$job1}/confirm",
+			body: { revision: 2 },
+			capture: { newTrack: "trackId" },
+		},
+		{
+			method: "POST",
+			path: "/api/v1/imports/{$job1}/confirm",
+			body: { revision: 2 },
+		},
+		{ path: "/api/v1/library/tracks/{$newTrack}" },
+		{ method: "POST", path: "/api/v1/imports", body: {}, capture: "job2" },
+		{
+			method: "PUT",
+			path: "/api/v1/imports/{$job2}/file",
+			file: "server-rs/testdata/strict-import.flac",
+			headers: {
+				"x-import-filename": "copy%20of%20strict+import.flac",
+				"x-import-filename-encoding": "url",
+			},
+		},
+		{
+			method: "POST",
+			path: "/api/v1/imports/{$job2}/confirm",
+			body: { revision: 2 },
+		},
+		{ method: "POST", path: "/api/v1/imports", body: null, capture: "job3" },
+		{
+			method: "PUT",
+			path: "/api/v1/imports/{$job3}/file",
+			file: "server-rs/testdata/not-audio.flac",
+			headers: { "x-import-filename": "noise.flac" },
+		},
+		{ path: "/api/v1/imports/{$job3}" },
+		{ method: "POST", path: "/api/v1/imports", body: {}, capture: "job4" },
+		{
+			method: "PUT",
+			path: "/api/v1/imports/{$job4}/file",
+			file: "server-rs/testdata/strict-import.ogg",
+			headers: { "x-import-filename": "../escape.ogg" },
+		},
+		{
+			method: "PUT",
+			path: "/api/v1/imports/{$job4}/file",
+			file: "server-rs/testdata/strict-import.ogg",
+			headers: {
+				"x-import-filename": "bad%zz.ogg",
+				"x-import-filename-encoding": "url",
+			},
+		},
+		{ method: "POST", path: "/api/v1/imports", body: {}, capture: "job5" },
+		{
+			method: "PUT",
+			path: "/api/v1/imports/{$job5}/file",
+			file: "server-rs/testdata/strict-import-aac.m4a",
+			headers: { "x-import-filename": "strict-import-aac.m4a" },
+		},
+		{ method: "DELETE", path: "/api/v1/imports/{$job5}" },
+		{ method: "DELETE", path: "/api/v1/imports/{$job5}" },
+		{ path: "/api/v1/imports/{$job5}" },
+		{ path: "/api/v1/imports/missing" },
+		// Managed Import: Batches.
+		{
+			method: "POST",
+			path: "/api/v1/import-batches",
+			raw: "",
+			capture: "batch",
+		},
+		{ method: "POST", path: "/api/v1/import-batches", body: { x: 1 } },
+		{
+			method: "POST",
+			path: "/api/v1/imports",
+			body: { batchId: "{$batch}", clientFileId: "nope" },
+		},
+		{
+			method: "POST",
+			path: "/api/v1/imports",
+			body: {
+				batchId: "{$batch}",
+				clientFileId: "0a7f3c1e-5b2d-4e8f-9a6c-1d2e3f4a5b6c",
+			},
+			capture: "batchJob",
+		},
+		{
+			method: "PUT",
+			path: "/api/v1/imports/{$batchJob}/file",
+			file: "server-rs/testdata/strict-import.ogg",
+			headers: { "x-import-filename": "strict-import.ogg" },
+		},
+		{
+			path: "/api/v1/import-batches/{$batch}",
+			capture: { albumKey: "albums.0.key" },
+		},
+		{
+			method: "PUT",
+			path: "/api/v1/import-batches/{$batch}/albums/{$albumKey}/artwork",
+			file: "server-rs/testdata/cover.png",
+			capture: { artwork: "id" },
+		},
+		{
+			method: "PUT",
+			path: "/api/v1/import-batches/{$batch}/albums/unknown/artwork",
+			file: "server-rs/testdata/cover.png",
+		},
+		{
+			method: "PUT",
+			path: "/api/v1/import-batches/{$batch}/albums/{$albumKey}/artwork",
+			file: "server-rs/testdata/strict-import.ogg",
+		},
+		{ path: "/api/v1/import-batches/{$batch}/artwork/{$artwork}" },
+		{ path: "/api/v1/import-batches/{$batch}/artwork/missing" },
+		{ method: "POST", path: "/api/v1/import-batches/{$batch}/heartbeat" },
+		{ path: "/api/v1/import-batches/{$batch}" },
+		{
+			method: "POST",
+			path: "/api/v1/import-batches/{$batch}/confirm",
+			body: { revision: 3 },
+		},
+		{
+			method: "POST",
+			path: "/api/v1/import-batches/{$batch}/confirm",
+			body: { revision: 2, selectedFileIds: ["{$batchJob}"] },
+		},
+		{
+			method: "POST",
+			path: "/api/v1/import-batches/{$batch}/confirm",
+			body: {
+				revision: 3,
+				selectedFileIds: ["{$batchJob}"],
+				albumDecisions: [
+					{
+						albumKey: "{$albumKey}",
+						artworkMode: "selected",
+						artworkId: "{$artwork}",
+					},
+				],
+			},
+		},
+		{
+			method: "POST",
+			path: "/api/v1/import-batches/{$batch}/confirm",
+			body: { revision: 3, selectedFileIds: ["{$batchJob}"] },
+		},
+		{ method: "POST", path: "/api/v1/import-batches/{$batch}/heartbeat" },
+		{ method: "DELETE", path: "/api/v1/import-batches/{$batch}" },
+		{
+			method: "POST",
+			path: "/api/v1/import-batches",
+			body: {},
+			capture: "batch2",
+		},
+		{
+			method: "POST",
+			path: "/api/v1/imports",
+			body: {
+				batchId: "{$batch2}",
+				clientFileId: "1b8e4d2f-6c3e-4f9a-8b7d-2e3f4a5b6c7d",
+			},
+			capture: "batchJob2",
+		},
+		{
+			method: "PUT",
+			path: "/api/v1/imports/{$batchJob2}/file",
+			file: "server-rs/testdata/strict-import.opus",
+			headers: { "x-import-filename": "strict-import.opus" },
+		},
+		{ method: "DELETE", path: "/api/v1/import-batches/{$batch2}" },
+		{ path: "/api/v1/import-batches/{$batch2}" },
+		{ path: "/api/v1/import-history" },
 	];
 	return probes.map((probe) => ({
 		...probe,
@@ -557,13 +761,21 @@ function corpus(ids: Record<string, string>): Probe[] {
  * Every table's rows as sorted JSON lines, timestamps left out, so the two
  * copies can be compared after both servers wrote to them.
  */
-function dumpDatabase(path: string): Map<string, string[]> {
+function dumpDatabase(
+	path: string,
+	managedRoot: string,
+): Map<string, string[]> {
+	// Each server generates its own UUIDs and stores files under its own
+	// Managed Storage root, so UUIDs become labels in order of first
+	// appearance (rows ordered with UUIDs blanked) and the root a marker.
 	const script = `
-import json, sqlite3, sys
+import json, re, sqlite3, sys
+UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 connection = sqlite3.connect(f"file:{sys.argv[1]}?mode=ro", uri=True)
-tables = [name for (name,) in connection.execute(
-    "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")]
-dump = {}
+root = sys.argv[3]
+tables = sorted(name for (name,) in connection.execute(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"))
+rows_by_table = {}
 for table in tables:
     cursor = connection.execute(f'SELECT * FROM "{table}"')
     columns = [column[0] for column in cursor.description]
@@ -571,14 +783,30 @@ for table in tables:
     keep = [i for i, name in enumerate(columns)
             if not (name.endswith("_at") or name in skipped
                     or name in ("tstamp", "id") and table == "goose_db_version")]
-    dump[table] = sorted(
-        json.dumps([row[i].hex() if isinstance(row[i], bytes) else row[i] for i in keep])
-        for row in cursor)
+    rows = []
+    for row in cursor:
+        values = []
+        for i in keep:
+            value = row[i]
+            if isinstance(value, bytes):
+                value = value.hex()
+            elif isinstance(value, str):
+                value = value.replace(root, "<managed>")
+            values.append(value)
+        rows.append(values)
+    rows.sort(key=lambda values: UUID.sub("U", json.dumps(values)))
+    rows_by_table[table] = rows
+labels = {}
+def label(match):
+    return labels.setdefault(match.group(0), f"uuid-{len(labels)}")
+dump = {}
+for table in tables:
+    dump[table] = sorted(UUID.sub(label, json.dumps(values)) for values in rows_by_table[table])
 print(json.dumps(dump))
 `;
 	const output = execFileSync(
 		"python3",
-		["-c", script, path, JSON.stringify(IMPLEMENTATION_COLUMNS)],
+		["-c", script, path, JSON.stringify(IMPLEMENTATION_COLUMNS), managedRoot],
 		{
 			maxBuffer: 1 << 30,
 		},
@@ -667,13 +895,19 @@ function startFakeRadioBrowser(port: number) {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function start(binary: string, port: number, database: string) {
+async function start(
+	binary: string,
+	port: number,
+	database: string,
+	managedRoot: string,
+) {
 	const child = spawn(binary, [], {
 		cwd: join(ROOT, "server"),
 		env: {
 			...process.env,
 			SERVER_ADDR: `127.0.0.1:${port}`,
 			DATABASE_PATH: database,
+			MANAGED_STORAGE_PATH: managedRoot,
 			RADIO_BROWSER_BASE_URL: "http://127.0.0.1:8194",
 			RUST_LOG: "warn",
 		},
@@ -703,8 +937,10 @@ async function ask(base: string, probe: Probe): Promise<Answer> {
 			...probe.headers,
 		},
 		body:
-			probe.raw ??
-			(probe.body === undefined ? undefined : JSON.stringify(probe.body)),
+			probe.file !== undefined
+				? readFileSync(join(ROOT, probe.file))
+				: (probe.raw ??
+					(probe.body === undefined ? undefined : JSON.stringify(probe.body))),
 	});
 	const type = (response.headers.get("content-type") ?? "").split(";")[0];
 	const bytes = new Uint8Array(await response.arrayBuffer());
@@ -745,6 +981,27 @@ function normalize(value: unknown): unknown {
 	return value;
 }
 
+const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g;
+
+/**
+ * UUIDs only one answer contains were generated by that server (a new
+ * Track, Album or Artist nobody captured); they become labels in order of
+ * appearance. UUIDs both answers contain stay, so a wrong ID still shows.
+ */
+function labelOwnIds(left: string, right: string): [string, string] {
+	const inLeft = new Set(left.match(UUID));
+	const inRight = new Set(right.match(UUID));
+	const label = (text: string, other: Set<string>) => {
+		const labels = new Map<string, string>();
+		return text.replace(UUID, (id) => {
+			if (other.has(id)) return id;
+			if (!labels.has(id)) labels.set(id, `<new-${labels.size}>`);
+			return labels.get(id) ?? id;
+		});
+	};
+	return [label(left, inRight), label(right, inLeft)];
+}
+
 function differences(go: Answer, rust: Answer): string[] {
 	const found: string[] = [];
 	if (go.status !== rust.status)
@@ -757,11 +1014,13 @@ function differences(go: Answer, rust: Answer): string[] {
 	if (go.type === "application/yaml" && rust.type === "application/yaml") {
 		return found; // Same contract; Go re-serializes it with sorted keys.
 	}
-	const left = JSON.stringify(normalize(go.body));
-	const right = JSON.stringify(normalize(rust.body));
+	const [left, right] = labelOwnIds(
+		JSON.stringify(normalize(go.body)),
+		JSON.stringify(normalize(rust.body)),
+	);
 	if (left !== right) {
 		found.push(
-			`body\n      go   ${left.slice(0, 300)}\n      rust ${right.slice(0, 300)}`,
+			`body\n      go   ${left.slice(0, Number(process.env.PARITY_DIFF_CHARS ?? 300))}\n      rust ${right.slice(0, Number(process.env.PARITY_DIFF_CHARS ?? 300))}`,
 		);
 	}
 	return found;
@@ -787,8 +1046,10 @@ try {
 			copyFileSync(SOURCE_DB + suffix, rustDb + suffix);
 		}
 	}
-	const go = await start(GO_BINARY, 8191, goDb);
-	const rust = await start(RUST_BINARY, 8192, rustDb);
+	const goManaged = join(workspace, "go-managed");
+	const rustManaged = join(workspace, "rust-managed");
+	const go = await start(GO_BINARY, 8191, goDb, goManaged);
+	const rust = await start(RUST_BINARY, 8192, rustDb, rustManaged);
 	children.push(go.child, rust.child);
 
 	const first = async <T>(
@@ -900,7 +1161,11 @@ try {
 				if (typeof rustValue === "string") rustIds.set(name, rustValue);
 			}
 		}
-		rustAnswer.body = JSON.parse(asGoIds(JSON.stringify(rustAnswer.body)));
+		rustAnswer.body = JSON.parse(
+			asGoIds(JSON.stringify(rustAnswer.body))
+				.split(rustManaged)
+				.join(goManaged),
+		);
 		if (rustAnswer.isSpa && !goAnswer.isSpa) {
 			notPorted += 1;
 			console.log(`  ·  ${label}  (not ported)`);
@@ -923,13 +1188,8 @@ try {
 	// they stored.
 	for (const child of children) child.kill("SIGTERM");
 	await sleep(500);
-	const goTables = dumpDatabase(goDb);
-	const rustTables = new Map(
-		[...dumpDatabase(rustDb)].map(([table, rows]) => [
-			table,
-			rows.map(asGoIds).sort(),
-		]),
-	);
+	const goTables = dumpDatabase(goDb, goManaged);
+	const rustTables = dumpDatabase(rustDb, rustManaged);
 	const differingTables: string[] = [];
 	for (const [table, goRows] of goTables) {
 		const rustRows = rustTables.get(table) ?? [];
