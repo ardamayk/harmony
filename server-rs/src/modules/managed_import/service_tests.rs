@@ -633,3 +633,49 @@ async fn recovers_a_replacement_from_every_phase() {
         }
     }
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn repairs_artist_credits_offline_after_a_backup() {
+    let h = harness().await;
+    let track_id = h.import("a.flac", FLAC).await;
+    sqlx::query("INSERT INTO artists (id, name, name_sort, name_normalized) VALUES ('wrong', 'Wrong', 'wrong', 'wrong')")
+        .execute(&h.pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE track_artists SET artist_id = 'wrong' WHERE track_id = ?")
+        .bind(&track_id)
+        .execute(&h.pool)
+        .await
+        .unwrap();
+    let database = h._dir.path().join("app.db");
+    sqlx::query("PRAGMA wal_checkpoint(TRUNCATE)")
+        .execute(&h.pool)
+        .await
+        .unwrap();
+    let mut report =
+        super::credit_repair::preview(database.to_str().unwrap(), h.root.to_str().unwrap())
+            .await
+            .unwrap();
+    let encoded = serde_json::to_value(&report).unwrap();
+    assert_eq!(encoded["changes"][0]["kind"], "track");
+    assert_eq!(encoded["changes"][0]["before"][0], "Wrong");
+    assert_eq!(encoded["applied"], false);
+    let backup = h._dir.path().join("before.db");
+    report.apply(backup.to_str().unwrap()).await.unwrap();
+    assert!(backup.exists());
+    let names: Vec<String> = sqlx::query_scalar(
+        "SELECT artists.name FROM track_artists JOIN artists ON artists.id = track_artists.artist_id WHERE track_id = ?",
+    )
+    .bind(&track_id)
+    .fetch_all(&h.pool)
+    .await
+    .unwrap();
+    assert!(!names.contains(&"Wrong".to_owned()), "{names:?}");
+    assert_eq!(
+        h.count("SELECT COUNT(*) FROM artists WHERE id = 'wrong'")
+            .await,
+        0
+    );
+    // A second apply on the same preview is refused.
+    assert!(report.apply(backup.to_str().unwrap()).await.is_err());
+}

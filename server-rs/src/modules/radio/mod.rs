@@ -2,6 +2,8 @@
 //! catalog, catalog previews, the stream proxy and now-playing metadata.
 
 mod browser;
+#[cfg(test)]
+mod hls_browser_test;
 mod repository;
 mod service;
 mod stream;

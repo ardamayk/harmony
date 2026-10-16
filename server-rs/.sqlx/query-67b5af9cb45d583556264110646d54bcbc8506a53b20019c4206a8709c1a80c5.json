@@ -1,0 +1,76 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT b.id AS \"id!\", b.title, b.artist_id, COALESCE(b.identity_key, '') AS \"identity_key!: String\", b.revision,\n            CAST((SELECT json_group_array(json_object('ID', id, 'Name', name, 'Position', position)) FROM (\n                SELECT a.id, a.name, c.position FROM album_artists c JOIN artists a ON a.id = c.artist_id\n                WHERE c.album_id = b.id ORDER BY c.position\n            )) AS TEXT) AS \"credits!: String\"\n        FROM albums b\n        ORDER BY b.id",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "albums",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "title",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "albums",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "name": "artist_id",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "albums",
+            "name": "artist_id"
+          }
+        }
+      },
+      {
+        "name": "identity_key!: String",
+        "ordinal": 3,
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "name": "revision",
+        "ordinal": 4,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "albums",
+            "name": "revision"
+          }
+        }
+      },
+      {
+        "name": "credits!: String",
+        "ordinal": 5,
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "67b5af9cb45d583556264110646d54bcbc8506a53b20019c4206a8709c1a80c5"
+}

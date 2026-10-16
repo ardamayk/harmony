@@ -3,6 +3,7 @@
 //! Track Replacement and Permanent Track Deletion.
 
 mod commit;
+pub mod credit_repair;
 mod deletion;
 pub mod errors;
 mod handlers;
