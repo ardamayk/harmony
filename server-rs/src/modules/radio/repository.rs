@@ -91,7 +91,7 @@ fn to_station(row: Row) -> Station {
 }
 
 fn encode_tags(tags: &[String]) -> String {
-    serde_json::to_string(tags).expect("tags encode")
+    crate::gojson::to_string(tags)
 }
 
 impl Repository {

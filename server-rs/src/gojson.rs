@@ -5,6 +5,25 @@ use crate::respond::ApiError;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Deserializer, Serializer};
 
+/// JSON as Go's json.Marshal writes it for values a client or the database
+/// sees byte for byte: `<`, `>`, `&`, U+2028 and U+2029 escaped (serde_json
+/// leaves them as is). Field order is the struct's, as in Go.
+pub fn to_string<T: serde::Serialize + ?Sized>(value: &T) -> String {
+    let json = serde_json::to_string(value).expect("value encodes as JSON");
+    let mut escaped = String::with_capacity(json.len());
+    for character in json.chars() {
+        match character {
+            '<' => escaped.push_str("\\u003c"),
+            '>' => escaped.push_str("\\u003e"),
+            '&' => escaped.push_str("\\u0026"),
+            '\u{2028}' => escaped.push_str("\\u2028"),
+            '\u{2029}' => escaped.push_str("\\u2029"),
+            other => escaped.push(other),
+        }
+    }
+    escaped
+}
+
 /// Writes a float like Go: whole numbers without a fraction (`22`, not
 /// serde_json's `22.0`). Use with `#[serde(serialize_with = "gojson::float")]`.
 pub fn float<S: Serializer>(value: &f64, serializer: S) -> Result<S::Ok, S::Error> {
@@ -212,6 +231,23 @@ where
     T: Deserialize<'de> + Default,
 {
     Ok(Option::<T>::deserialize(deserializer)?.unwrap_or_default())
+}
+
+/// A `[]string` field: null is `None` (Go's nil slice), and a null element
+/// reads as "".
+pub fn nullable_strings<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<Vec<String>>, D::Error> {
+    let values: Option<Vec<Option<String>>> = Option::deserialize(deserializer)?;
+    Ok(values.map(|values| values.into_iter().map(Option::unwrap_or_default).collect()))
+}
+
+/// A json.RawMessage field: the raw text of whatever was sent, `null`
+/// included; `None` only when the field is absent (use with `default`).
+pub fn raw<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<Box<serde_json::value::RawValue>>, D::Error> {
+    Box::<serde_json::value::RawValue>::deserialize(deserializer).map(Some)
 }
 
 #[cfg(test)]

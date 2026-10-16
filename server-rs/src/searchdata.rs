@@ -194,22 +194,9 @@ pub async fn rebuild(pool: &sqlx::SqlitePool, force: bool) -> Result<(), String>
         .map_err(|error| format!("commit Library Search rebuild: {error}"))
 }
 
-/// JSON exactly as Go's `encoding/json` writes it: struct field order, and
-/// `<`, `>`, `&`, U+2028 and U+2029 escaped (serde_json leaves them as is).
+/// JSON exactly as Go's `encoding/json` writes it.
 pub fn encode(text: &Text) -> String {
-    let json = serde_json::to_string(text).expect("Library Search text encodes");
-    let mut escaped = String::with_capacity(json.len());
-    for character in json.chars() {
-        match character {
-            '<' => escaped.push_str("\\u003c"),
-            '>' => escaped.push_str("\\u003e"),
-            '&' => escaped.push_str("\\u0026"),
-            '\u{2028}' => escaped.push_str("\\u2028"),
-            '\u{2029}' => escaped.push_str("\\u2029"),
-            other => escaped.push(other),
-        }
-    }
-    escaped
+    crate::gojson::to_string(text)
 }
 
 /// Registers both functions on a connection.

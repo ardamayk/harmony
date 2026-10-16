@@ -34,11 +34,27 @@ type Probe = {
 	 * Remembers this answer's `id` under a name, separately per server, for
 	 * later probes to use as {$name}: each server creates its own IDs.
 	 */
-	capture?: string;
+	capture?: string | Record<string, string>;
 	headers?: Record<string, string>;
 };
 
-type Answer = { status: number; type: string; body: unknown; isSpa: boolean };
+type Answer = {
+	status: number;
+	type: string;
+	body: unknown;
+	isSpa: boolean;
+	headers: Record<string, string>;
+};
+
+/** Response headers compared besides status, type and body. */
+const COMPARED_HEADERS = [
+	"content-range",
+	"accept-ranges",
+	"last-modified",
+	"cache-control",
+	"retry-after",
+	"x-content-type-options",
+];
 
 /** Fields whose values legitimately differ between two runs. */
 const VOLATILE_KEYS = new Set(["updatedAt", "createdAt", "tstamp"]);
@@ -215,7 +231,132 @@ function corpus(ids: Record<string, string>): Probe[] {
 		{ path: "/api/v1/library/tracks/{track}/waveform" },
 		{ path: "/api/v1/library/tracks/does-not-exist/waveform" },
 		{ path: "/api/v1/library/search?q={query}" },
+		{ path: "/api/v1/playback/queue", capture: { rev: "revision" } },
+		{
+			method: "PUT",
+			path: "/api/v1/playback/queue",
+			body: {
+				trackIds: ["{track}", "{secondTrack}"],
+				revision: "{$rev}",
+				source: {
+					kind: "album",
+					albumId: "{album}",
+					albumTitle: "A & B <x>",
+					artistName: "X",
+				},
+			},
+			capture: { rev: "revision", item0: "items.0.id", item1: "items.1.id" },
+		},
+		{
+			method: "PUT",
+			path: "/api/v1/playback/queue",
+			body: { trackIds: ["{track}"], revision: "0" },
+		},
+		{
+			method: "PUT",
+			path: "/api/v1/playback/queue",
+			body: { trackIds: ["{track}"] },
+		},
+		{
+			method: "PUT",
+			path: "/api/v1/playback/queue",
+			body: { trackIds: [], revision: "{$rev}", source: null },
+		},
+		{
+			method: "PUT",
+			path: "/api/v1/playback/queue",
+			body: { trackIds: ["missing"], revision: "{$rev}" },
+		},
+		{
+			method: "PUT",
+			path: "/api/v1/playback/queue",
+			raw: '{"revision":"1"} trailing',
+		},
+		{ method: "PUT", path: "/api/v1/playback/queue", raw: "null" },
+		{
+			method: "POST",
+			path: "/api/v1/playback/queue/items",
+			body: {
+				trackId: "{track}",
+				revision: "{$rev}",
+				source: { kind: "suggestion", basedOn: ["{track}"] },
+			},
+			capture: { rev: "revision", item2: "items.2.id" },
+		},
+		{
+			method: "POST",
+			path: "/api/v1/playback/queue/items",
+			body: { revision: "{$rev}" },
+		},
+		{
+			method: "POST",
+			path: "/api/v1/playback/queue/items",
+			body: {
+				trackId: "{track}",
+				revision: "{$rev}",
+				source: { kind: "user", name: "x" },
+			},
+		},
+		{
+			method: "PATCH",
+			path: "/api/v1/playback/queue",
+			body: {
+				itemIds: ["{$item2}", "{$item0}", "{$item1}"],
+				revision: "{$rev}",
+			},
+			capture: { rev: "revision" },
+		},
+		{
+			method: "PATCH",
+			path: "/api/v1/playback/queue",
+			body: { itemIds: ["{$item0}"], revision: "{$rev}" },
+		},
+		{
+			method: "PATCH",
+			path: "/api/v1/playback/queue",
+			body: { revision: "{$rev}" },
+		},
+		{ method: "DELETE", path: "/api/v1/playback/queue/items/{$item0}" },
+		{
+			method: "DELETE",
+			path: "/api/v1/playback/queue/items/{$item0}",
+			headers: { "if-match": "{$rev}" },
+			capture: { rev: "revision" },
+		},
+		{
+			method: "DELETE",
+			path: "/api/v1/playback/queue/items/missing",
+			headers: { "if-match": "{$rev}" },
+		},
+		{
+			method: "DELETE",
+			path: "/api/v1/playback/queue?afterItemId=missing",
+			headers: { "if-match": "{$rev}" },
+		},
+		{
+			method: "DELETE",
+			path: "/api/v1/playback/queue?afterItemId={$item2}",
+			headers: { "if-match": "{$rev}" },
+			capture: { rev: "revision" },
+		},
 		{ path: "/api/v1/playback/queue" },
+		{ path: "/api/v1/tracks/{track}/stream", headers: { range: "bytes=0-99" } },
+		{ path: "/api/v1/tracks/{track}/stream", headers: { range: "bytes=-50" } },
+		{
+			path: "/api/v1/tracks/{track}/stream",
+			headers: { range: "bytes=999999999-" },
+		},
+		{ path: "/api/v1/tracks/{track}/stream", headers: { range: "items=0-1" } },
+		{ method: "HEAD", path: "/api/v1/tracks/{track}/stream" },
+		{
+			path: "/api/v1/tracks/{track}/stream",
+			headers: { "if-modified-since": "Fri, 01 Jan 2100 00:00:00 GMT" },
+		},
+		{
+			path: "/api/v1/tracks/{track}/stream",
+			headers: { "if-match": '"nope"' },
+		},
+		{ path: "/api/v1/tracks/missing/stream" },
 		{ path: "/api/v1/playlists" },
 		{
 			method: "POST",
@@ -551,6 +692,7 @@ async function start(binary: string, port: number, database: string) {
 }
 
 async function ask(base: string, probe: Probe): Promise<Answer> {
+	const path = probe.path.split("?")[0] ?? "";
 	const response = await fetch(`${base}${probe.path}`, {
 		method: probe.method ?? "GET",
 		redirect: "manual",
@@ -573,7 +715,21 @@ async function ask(base: string, probe: Probe): Promise<Answer> {
 	else if (!type.startsWith("text/") && type !== "application/yaml")
 		body = `${bytes.length} bytes`;
 	const isSpa = type === "text/html" && text.includes('<div id="root"');
-	return { status: response.status, type, body, isSpa };
+	const headers: Record<string, string> = {};
+	for (const name of COMPARED_HEADERS) {
+		const value = response.headers.get(name);
+		if (value !== null) headers[name] = value;
+	}
+	// Only file streams set Content-Length explicitly in Go; elsewhere it
+	// follows Go's response buffering (chunked above a few KB).
+	const length = response.headers.get("content-length");
+	if (
+		length !== null &&
+		path.endsWith("/stream") &&
+		type !== "application/json"
+	)
+		headers["content-length"] = length;
+	return { status: response.status, type, body, isSpa, headers };
 }
 
 function normalize(value: unknown): unknown {
@@ -594,6 +750,10 @@ function differences(go: Answer, rust: Answer): string[] {
 	if (go.status !== rust.status)
 		found.push(`status ${go.status} ≠ ${rust.status}`);
 	if (go.type !== rust.type) found.push(`type ${go.type} ≠ ${rust.type}`);
+	const goHeaders = JSON.stringify(go.headers);
+	const rustHeaders = JSON.stringify(rust.headers);
+	if (goHeaders !== rustHeaders)
+		found.push(`headers ${goHeaders} ≠ ${rustHeaders}`);
 	if (go.type === "application/yaml" && rust.type === "application/yaml") {
 		return found; // Same contract; Go re-serializes it with sorted keys.
 	}
@@ -691,13 +851,19 @@ try {
 				probe.body === undefined
 					? undefined
 					: JSON.parse(fill(JSON.stringify(probe.body))),
+			headers:
+				probe.headers === undefined
+					? undefined
+					: JSON.parse(fill(JSON.stringify(probe.headers))),
 		};
 	};
 	/** Rust's own IDs replaced by the Go server's for the same probes. */
 	const asGoIds = (text: string) => {
 		for (const [name, rustId] of rustIds) {
 			const goId = goIds.get(name);
-			if (goId) text = text.split(rustId).join(goId);
+			if (goId && goId !== rustId && rustId.length >= 8) {
+				text = text.split(rustId).join(goId);
+			}
 		}
 		return text;
 	};
@@ -716,12 +882,23 @@ try {
 		const goAnswer = await ask(go.base, withIds(probe, goIds));
 		const rustAnswer = await ask(rust.base, withIds(probe, rustIds));
 		if (probe.capture) {
-			const idOf = (answer: Answer) =>
-				(answer.body as { id?: string } | null)?.id;
-			const goId = idOf(goAnswer);
-			const rustId = idOf(rustAnswer);
-			if (goId) goIds.set(probe.capture, goId);
-			if (rustId) rustIds.set(probe.capture, rustId);
+			const captures =
+				typeof probe.capture === "string"
+					? { [probe.capture]: "id" }
+					: probe.capture;
+			const at = (answer: Answer, path: string) =>
+				path
+					.split(".")
+					.reduce<unknown>(
+						(value, key) => (value as Record<string, unknown> | null)?.[key],
+						answer.body,
+					);
+			for (const [name, path] of Object.entries(captures)) {
+				const goValue = at(goAnswer, path);
+				const rustValue = at(rustAnswer, path);
+				if (typeof goValue === "string") goIds.set(name, goValue);
+				if (typeof rustValue === "string") rustIds.set(name, rustValue);
+			}
 		}
 		rustAnswer.body = JSON.parse(asGoIds(JSON.stringify(rustAnswer.body)));
 		if (rustAnswer.isSpa && !goAnswer.isSpa) {

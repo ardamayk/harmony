@@ -1,0 +1,28 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT\n                CAST(COALESCE((SELECT revision FROM playback_queue_state s WHERE s.user_id = ?1), 0) AS TEXT) AS \"revision!: String\",\n                CAST(COALESCE((SELECT event_sequence FROM playback_queue_state s WHERE s.user_id = ?1), 0) AS TEXT) AS \"event_sequence!: String\"",
+  "describe": {
+    "columns": [
+      {
+        "name": "revision!: String",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "name": "event_sequence!: String",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "558d4b5d395aaa000d279864b7023f31c808e6a986fc8d724f6917cb436026bb"
+}

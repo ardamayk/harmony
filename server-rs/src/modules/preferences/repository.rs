@@ -46,8 +46,8 @@ impl Repository {
         let mut current = get(&mut transaction, user_id).await?;
         mutate(&mut current);
         let theme = theme_to_column(&current.theme);
-        let layout = serde_json::to_string(&current.layout).expect("layout encodes");
-        let playback = serde_json::to_string(&current.playback).expect("playback encodes");
+        let layout = crate::gojson::to_string(&current.layout);
+        let playback = crate::gojson::to_string(&current.playback);
         sqlx::query!(
             "UPDATE user_preferences
              SET theme = ?, layout_json = ?, playback_json = ?, updated_at = CURRENT_TIMESTAMP
@@ -116,7 +116,7 @@ fn theme_to_column(theme: &ThemePreferences) -> String {
     if theme.preset.is_empty() {
         theme.preset = "earthly".to_owned();
     }
-    serde_json::to_string(&theme).expect("theme encodes")
+    crate::gojson::to_string(&theme)
 }
 
 /// Decodes the stored JSON over the defaults, so rows written before a field

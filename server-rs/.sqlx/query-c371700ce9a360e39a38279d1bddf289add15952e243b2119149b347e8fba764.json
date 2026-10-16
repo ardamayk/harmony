@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT OR IGNORE INTO playback_queue_state (user_id, revision) VALUES (?, 0)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "c371700ce9a360e39a38279d1bddf289add15952e243b2119149b347e8fba764"
+}

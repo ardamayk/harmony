@@ -79,7 +79,10 @@ run = [
 [tasks."server-rs:build"]
 description = "Build the Rust Music Server (server-rs/, ADR 0025) with embedded Web Client and docs"
 depends = ["web:build", "docs:build"]
-run = ["bash scripts/sync-static.sh", "cargo build --release -p earthly-music-server"]
+run = [
+	"bash scripts/sync-static.sh",
+	"cargo build --release -p earthly-music-server",
+]
 
 [tasks."desktop:build"]
 description = "Build the release Desktop Client: Rust core with pinned mpv, Electron shell bundle, Web Client"

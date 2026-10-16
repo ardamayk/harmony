@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE playback_queue SET position = -position - 1 WHERE user_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "3a82f9614a587f6d617393a8811f5a31261705c868dfba3c9892e8f9e20de8ea"
+}

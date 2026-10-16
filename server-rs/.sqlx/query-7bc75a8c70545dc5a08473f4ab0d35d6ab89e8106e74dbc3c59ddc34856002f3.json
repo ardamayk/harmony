@@ -1,0 +1,28 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT COUNT(*) AS \"item_count!: i64\", CAST(COALESCE(MAX(position) + 1, 0) AS INTEGER) AS \"next_position!: i64\"\n            FROM playback_queue WHERE user_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "item_count!: i64",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": "Expression"
+      },
+      {
+        "name": "next_position!: i64",
+        "ordinal": 1,
+        "type_info": "Integer",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "7bc75a8c70545dc5a08473f4ab0d35d6ab89e8106e74dbc3c59ddc34856002f3"
+}

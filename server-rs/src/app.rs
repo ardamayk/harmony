@@ -26,6 +26,8 @@ pub struct AppState {
     pub waveforms: Arc<modules::library::WaveformService>,
     pub search: Arc<modules::search::SearchService>,
     pub radio: Arc<modules::radio::Radio>,
+    /// Shared with Managed Import, whose writes change queues too.
+    pub queue_events: Arc<modules::playback::QueueEventBroker>,
 }
 
 impl AppState {
@@ -42,6 +44,7 @@ impl AppState {
             waveforms: Arc::new(waveforms),
             search: Arc::new(modules::search::SearchService::new(db.clone())),
             radio: Arc::new(radio),
+            queue_events: Arc::default(),
         }
     }
 }
@@ -57,6 +60,7 @@ pub fn router(state: AppState) -> Router {
         .merge(modules::playlists::routes())
         .merge(modules::search::routes())
         .merge(modules::radio::routes())
+        .merge(modules::playback::routes())
         .fallback(static_assets::web)
         .layer(middleware::from_fn(stream_aware_timeout))
         .layer(cors)

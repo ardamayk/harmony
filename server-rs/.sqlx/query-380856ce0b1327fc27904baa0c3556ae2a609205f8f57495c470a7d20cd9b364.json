@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO playback_queue (id, user_id, position, track_id, source) VALUES (?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "380856ce0b1327fc27904baa0c3556ae2a609205f8f57495c470a7d20cd9b364"
+}
