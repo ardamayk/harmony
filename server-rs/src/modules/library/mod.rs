@@ -3,7 +3,7 @@
 //! belong to Managed Import.
 
 mod covers;
-mod genres;
+pub mod genres;
 mod repository;
 mod types;
 mod waveform;

@@ -51,7 +51,10 @@ fn scale(data: &[u8], size: i64) -> Option<Vec<u8>> {
     let reader = ImageReader::new(Cursor::new(data))
         .with_guessed_format()
         .ok()?;
-    if !matches!(reader.format(), Some(ImageFormat::Jpeg | ImageFormat::Png)) {
+    if !matches!(
+        reader.format(),
+        Some(ImageFormat::Jpeg | ImageFormat::Png | ImageFormat::WebP)
+    ) {
         return None;
     }
     let (width, height) = reader.into_dimensions().ok()?;

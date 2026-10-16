@@ -9,6 +9,7 @@ pub mod config;
 pub mod db;
 pub mod dependencies;
 pub mod gojson;
+pub mod inspect;
 pub mod migrate;
 pub mod modules;
 pub mod query;
