@@ -102,19 +102,18 @@ fn header_is_one(headers: &HeaderMap, name: &str) -> bool {
 }
 
 /// The explicit-confirmation header and the preview token shared by Track
-/// and Album deletion; `Err` is the response to send.
+/// and Album deletion; `Err` is the error to send.
 async fn read_deletion_confirmation(
     headers: &HeaderMap,
     body: Body,
     subject: &str,
-) -> Result<String, Response> {
+) -> Result<String, ApiError> {
     if !header_is_one(headers, PERMANENT_DELETE_CONFIRMATION_HEADER) {
         return Err(ApiError::new(
             StatusCode::FORBIDDEN,
             "permanent_deletion_forbidden",
             "Permanent Track Deletion requires explicit confirmation",
-        )
-        .into_response());
+        ));
     }
     let confirmation = read_limited(body, MAX_TRACK_DELETION_BODY_BYTES)
         .await
@@ -127,8 +126,7 @@ async fn read_deletion_confirmation(
             StatusCode::BAD_REQUEST,
             "invalid_deletion_confirmation",
             format!("{subject} requires the preview confirmation token"),
-        )
-        .into_response()),
+        )),
     }
 }
 
@@ -151,7 +149,7 @@ async fn delete_album(
 ) -> Response {
     let token = match read_deletion_confirmation(&headers, body, "Album deletion").await {
         Ok(token) => token,
-        Err(response) => return response,
+        Err(error) => return error.into_response(),
     };
     let service = service(&state);
     let result =
@@ -178,7 +176,7 @@ async fn delete_track(
 ) -> Response {
     let token = match read_deletion_confirmation(&headers, body, "Permanent Track Deletion").await {
         Ok(token) => token,
-        Err(response) => return response,
+        Err(error) => return error.into_response(),
     };
     let service = service(&state);
     let result =

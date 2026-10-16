@@ -426,11 +426,11 @@ fn decode_utf16(mut data: &[u8], has_bom: bool) -> std::result::Result<String, S
     if !data.len().is_multiple_of(2) {
         return Err("UTF-16 text has an odd byte count".to_owned());
     }
-    let units = data.chunks_exact(2).map(|pair| {
+    let units = data.as_chunks::<2>().0.iter().map(|&pair| {
         if little_endian {
-            u16::from_le_bytes([pair[0], pair[1]])
+            u16::from_le_bytes(pair)
         } else {
-            u16::from_be_bytes([pair[0], pair[1]])
+            u16::from_be_bytes(pair)
         }
     });
     Ok(char::decode_utf16(units)

@@ -103,8 +103,10 @@ pub fn bucket_peaks(pcm: &[u8], count: usize, total_samples: i64) -> Vec<u8> {
 }
 
 fn decode_pcm16(pcm: &[u8]) -> Vec<i16> {
-    pcm.chunks_exact(2)
-        .map(|pair| i16::from_le_bytes([pair[0], pair[1]]))
+    pcm.as_chunks::<2>()
+        .0
+        .iter()
+        .map(|&pair| i16::from_le_bytes(pair))
         .collect()
 }
 

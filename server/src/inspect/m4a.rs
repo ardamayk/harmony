@@ -251,7 +251,9 @@ fn is_m4a(probe: &Probe) -> bool {
     }
     tag("compatible_brands")
         .as_bytes()
-        .chunks_exact(4)
+        .as_chunks::<4>()
+        .0
+        .iter()
         .any(|brand| brand.eq_ignore_ascii_case(b"M4A "))
 }
 
