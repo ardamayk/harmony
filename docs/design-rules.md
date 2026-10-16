@@ -50,6 +50,62 @@ Every visual change in `web/src` and `packages/ui/src` (Tailwind classes and CSS
 - Contrast is measured: at least 4.5:1 for normal text and 3:1 for large text and icons (WCAG AA). Grey on grey in the dark themes is where this breaks most often; check muted and caption text against its actual background.
 - Never rely on color alone. A state also shows through an icon, text or shape (the pin icon changes shape, not only color).
 - Hit areas are at least 32px, preferably 44px, even when the visible icon is smaller. A control that must look small keeps its size and extends its hit area with an invisible pseudo-element (`relative after:absolute after:-inset-1 after:content-['']`).
+- Use the element that matches the job: `<button>` for actions, `<a>`/router `Link` for navigation, real headings in order, lists for lists. A clickable `<div>` is a bug.
+- An icon-only control has an `aria-label` that names the action ("Pin queue", not "Pin icon") and a tooltip with the same words.
+
+## Keyboard and focus
+
+- Everything a mouse can do, the keyboard can do. Tab order follows the reading order; nothing is reachable only by hover.
+- Dialogs, drawers and full-screen views move focus inside when they open, keep it there, close on `Escape`, and give focus back to the control that opened them. The `radix-ui` Dialog, Popover and menu primitives do this; build overlays on them, and a hand-built one matches them.
+- Menus and lists move with the arrow keys; `Enter` or `Space` acts.
+- A new keyboard shortcut is listed in the shortcut help overlay (`ShortcutHelpOverlay`) and never fires while the focus is in a text field.
+
+## Icons
+
+- One icon set: `lucide-react`, at its default stroke width. Icons from another set, or a hand-drawn SVG beside Lucide ones, break the look.
+- Icon sizes follow the text they sit with: `size-4` (16px) in buttons, menus and Top Nav controls; `size-3.5` (14px) inline with `text-xs` metadata; `size-5` (20px) for the Player Bar's transport and other large controls. Larger icons only in empty states.
+- An icon earns its place by helping someone recognize an action faster. A label that reads fine alone gets no icon.
+
+## Words in the UI
+
+- Sentence case everywhere: "Add to queue", not "Add To Queue". Use the domain words from `CONTEXT.md` (Track, Album, Queue Drawer, Managed Import), the same word for the same thing on every page.
+- Buttons say what happens, with a verb: "Delete playlist", "Scan library". "OK" and "Submit" say nothing.
+- An error says what went wrong and what to do next, in plain words: "Couldn't reach the Music Server. Check that it is running, then retry." No "Oops", no blame, no raw error codes as the only text.
+- Empty states say why the area is empty and offer the one action that fills it.
+
+## Feedback: loading, empty and error
+
+- Loading content shows skeletons of the final size (they also protect CLS). A spinner is for a short action on a control, and only after about 300ms, so fast answers do not flash.
+- Every data area designs its three non-happy states with the shared pieces: loading, empty (`Empty`, `CollectionGrid`'s states) and error with a retry.
+- Background results and undoable actions report through the shared `toast()` (`packages/ui/src/layout/Toaster.tsx`); a toast never carries the only copy of something the user must act on.
+- Destructive actions are undoable when they can be (a toast with Undo); when they cannot, a dialog names exactly what will be lost, and its confirm button repeats the verb ("Delete 12 tracks").
+- A control that started work shows it is busy and cannot be triggered twice.
+
+## Forms and settings
+
+- Every field has a visible `Label`; a placeholder is an example, never the label.
+- Validate on blur or submit, not on every key press, and show the message under the field it belongs to.
+- A setting that applies immediately (a `Switch`, a `Select`) needs no Save button; a form that needs one keeps it disabled until something changed.
+
+## Numbers and time
+
+- Durations, times, counts and other numbers that change in place use `tabular-nums`, so digits do not jitter while a Track plays.
+- Durations read `m:ss` (`h:mm:ss` from an hour). Large counts use the locale's grouping ("12,480 tracks").
+- In lists and tables, numbers align right and their column has a fixed width.
+
+## Layering
+
+Stacking order uses a few steps, from back to front:
+
+| Step | Class | Use for |
+|---|---|---|
+| Local | `z-10` to `z-30` | Stacking inside one component (a cover strip, a sticky row) |
+| Shell | `z-40` | Sticky page headers, Queue Drawer, shell controls |
+| Floating | `z-50` | Player Bar, menus, popovers, selects, dialogs, toasts |
+| Full screen | `z-[60]` | Now Playing view, Lyrics view |
+| Above full screen | `z-[70]` | The shortcut help overlay |
+
+A new layer takes one of these steps instead of a new number. A popover inside a component portals to the body (Radix does this) rather than raising its own `z-index`.
 
 ## Depth and elevation
 
