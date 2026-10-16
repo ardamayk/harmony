@@ -63,7 +63,8 @@ export class CoreProcess extends EventEmitter<CoreProcessEvents> {
 			detached: true,
 		});
 		this.exitPromise = new Promise((resolve) => {
-			this.child.once("exit", (code, signal) => {
+			const finish = (code: number | null, signal: NodeJS.Signals | null) => {
+				if (this.exited) return;
 				this.exited = true;
 				const reason = new CoreCommandError(
 					"The Desktop core stopped before answering.",
@@ -72,10 +73,14 @@ export class CoreProcess extends EventEmitter<CoreProcessEvents> {
 				this.pending.clear();
 				this.emit("exit", code, signal);
 				resolve();
+			};
+			this.child.once("exit", finish);
+			this.child.on("error", (error) => {
+				this.stderrTail.push(error.message);
+				// A core that never started (missing or not executable) emits
+				// no "exit"; report it the same way so the shell does not hang.
+				if (this.child.pid === undefined) finish(null, null);
 			});
-		});
-		this.child.once("error", (error) => {
-			this.stderrTail.push(error.message);
 		});
 		const stdout = this.child.stdout;
 		const stderr = this.child.stderr;

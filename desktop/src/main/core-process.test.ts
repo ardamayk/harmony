@@ -49,6 +49,18 @@ describe("CoreProcess", () => {
 		}
 	});
 
+	it("reports a core that cannot be spawned as exited", async () => {
+		const core = new CoreProcess({
+			executable: "/nonexistent/earthly-audio-core",
+			args: [],
+		});
+		const exit = new Promise((resolve) => core.once("exit", resolve));
+		await expect(core.request("echo")).rejects.toBeInstanceOf(CoreCommandError);
+		await exit;
+		expect(core.exited).toBe(true);
+		expect(core.diagnostics).toContain("ENOENT");
+	});
+
 	it("stops by closing stdin and rejects what is still pending", async () => {
 		const core = startFakeCore();
 		const events: string[] = [];

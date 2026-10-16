@@ -85,6 +85,9 @@ async function start() {
 		onMainWindowCloseRequested: () => sendShellAction("close-main-window"),
 	});
 	let tray: PlaybackTray | null = null;
+	// The core sends its first tray update before shell:ready; replay it so
+	// the tray has its menu (Open, Quit) even if no playback update follows.
+	let pendingTrayUpdate: TrayUpdate | null = null;
 
 	const quit = () => {
 		if (quitting) return;
@@ -100,6 +103,7 @@ async function start() {
 		switch (name) {
 			case "shell:ready":
 				tray = new PlaybackTray(paths.icon, sendShellAction);
+				if (pendingTrayUpdate) tray.update(pendingTrayUpdate);
 				windows.createMainWindow();
 				return;
 			case "shell:show-main-window":
@@ -111,7 +115,9 @@ async function start() {
 			case "shell:window-title":
 				return windows.setMainWindowTitle((payload as { title: string }).title);
 			case "shell:tray":
-				return tray?.update(payload as TrayUpdate);
+				if (tray) return tray.update(payload as TrayUpdate);
+				pendingTrayUpdate = payload as TrayUpdate;
+				return;
 			case "shell:exit":
 				return quit();
 		}

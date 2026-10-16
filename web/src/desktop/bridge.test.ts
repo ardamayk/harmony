@@ -196,6 +196,24 @@ describe("desktop bridge", () => {
 		});
 	});
 
+	it("sends the body of a Request object", async () => {
+		invokeMock.mockResolvedValue({ status: 204, headers: {}, body: [] });
+
+		await desktopFetch(
+			new Request("http://127.0.0.1:8090/api/v1/playlists", {
+				method: "POST",
+				body: "hi",
+			}),
+		);
+
+		expect(invokeMock).toHaveBeenCalledWith("desktop_http_request", {
+			request: expect.objectContaining({
+				method: "POST",
+				body: Array.from(new TextEncoder().encode("hi")),
+			}),
+		});
+	});
+
 	it("adapts bodyless desktop HTTP responses", async () => {
 		invokeMock.mockResolvedValue({ status: 204, headers: {}, body: [] });
 

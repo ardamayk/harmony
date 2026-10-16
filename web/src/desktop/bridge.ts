@@ -198,7 +198,13 @@ export async function desktopFetch(
 			value,
 		]),
 	);
-	const body = await encodeBody(init?.body);
+	const body = await encodeBody(
+		init?.body !== undefined
+			? init.body
+			: input instanceof Request && input.body
+				? new Uint8Array(await input.arrayBuffer())
+				: null,
+	);
 	const response = await invoke<BridgeHttpResponse>("desktop_http_request", {
 		request: {
 			method: init?.method ?? (input instanceof Request ? input.method : "GET"),
