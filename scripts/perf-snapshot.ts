@@ -1,11 +1,12 @@
 // Prints a short CPU and memory snapshot of the built Music Server, idle and
 // while one client streams a Track at playback speed. If a Desktop Client is
-// running (started separately), its processes (app, WebKit, mpv) are sampled
-// in both phases as they are; play something there to measure playback.
+// running (started separately), its processes (Electron main, renderer, GPU
+// and network processes, the Rust core, mpv) are sampled in both phases as
+// they are; play something there to measure playback.
 //
 // Memory is PSS (proportional set size): pages shared between processes, such
-// as WebKit's libraries, count once instead of once per process, so the Desktop
-// Client's several processes add up honestly.
+// as Chromium's libraries, count once instead of once per process, so the
+// Desktop Client's several processes add up honestly.
 //
 // Linux only: samples /proc. Local only: nothing is sent anywhere.
 // Run with `mise run perf:snapshot` after `mise run build`.
@@ -19,7 +20,8 @@ const BASE_URL = `http://${ADDRESS}`;
 const SECONDS = Number(process.env.PERF_SECONDS ?? 30);
 const CLOCK_TICKS = 100; // USER_HZ on Linux
 const PAGE_KB = 4;
-const DESKTOP_APP = "earthly-audio-desktop";
+/** The Rust core's process name; /proc cuts names at 15 characters. */
+const DESKTOP_CORE = "earthly-audio-core".slice(0, 15);
 
 type Sample = {
 	cpuPercent: number;
@@ -87,10 +89,42 @@ function processTree(root: number): number[] {
 	return tree.filter((pid) => table.has(pid));
 }
 
+/**
+ * The Desktop Client's Electron main process: the parent of the Rust core.
+ * Other Electron apps on the machine are not its descendants.
+ */
 function findDesktopClient(): number | undefined {
-	for (const [pid, { comm }] of processTable())
-		if (DESKTOP_APP.startsWith(comm)) return pid; // comm is cut at 15 chars
+	const table = processTable();
+	for (const { ppid, comm } of table.values())
+		if (comm === DESKTOP_CORE && table.has(ppid)) return ppid;
 	return undefined;
+}
+
+/**
+ * A readable name per process. Every Electron process is named "electron",
+ * so Chromium's --type (and the utility sub-type) tells them apart.
+ */
+function processName(pid: number): string {
+	const comm = readStat(pid)?.comm ?? "?";
+	if (comm !== "electron") return comm;
+	let args: string[] = [];
+	try {
+		// Chromium rewrites its children's command lines space-separated.
+		args = readFileSync(`/proc/${pid}/cmdline`, "utf8").split(/[\0 ]/);
+	} catch {
+		return comm;
+	}
+	const flag = (name: string) =>
+		args.find((arg) => arg.startsWith(`--${name}=`))?.split("=")[1];
+	const type = flag("type");
+	if (!type) return "electron main";
+	if (type === "utility") {
+		const subType = flag("utility-sub-type") ?? "";
+		return subType.includes("NetworkService")
+			? "electron network"
+			: "electron utility";
+	}
+	return `electron ${type.replace(/-process$/, "")}`;
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -110,7 +144,7 @@ async function sampleTree(root: number, seconds: number): Promise<Sample[]> {
 		const now = performance.now();
 		const byProcess = new Map<string, number>();
 		for (const pid of pids) {
-			const name = readStat(pid)?.comm ?? "?";
+			const name = processName(pid);
 			byProcess.set(name, (byProcess.get(name) ?? 0) + memoryKb(pid) / 1024);
 		}
 		samples.push({
