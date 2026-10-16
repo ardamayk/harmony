@@ -1,6 +1,6 @@
 // Command desktop-parity-fixtures writes one Strict Import Profile audio
 // fixture per supported Managed Import format so the Desktop Client parity
-// test (desktop/src-tauri/tests/managed_import_parity.rs) can drive real
+// test (desktop/core/tests/managed_import_parity.rs) can drive real
 // imports through the native transport against a real Music Server.
 //
 // The fixtures are the same bytes the Music Server's own Go tests use: the

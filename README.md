@@ -61,7 +61,7 @@ Mise is the canonical command interface. Use `mise run web:build`, `mise run ser
 
 ## Linux Desktop Client
 
-Run the Music Server and Tauri Desktop Client together in development mode:
+Run the Music Server and the Electron Desktop Client together in development mode (Vite HMR, debug Rust core):
 
 ```bash
 mise run desktop:dev
@@ -74,7 +74,7 @@ mise run build
 mise run start
 ```
 
-The launcher automatically selects native Wayland with the NVIDIA explicit-sync workaround when required. Use `EARTHLY_AUDIO_DISPLAY_MODE=x11` to force X11/XWayland or `EARTHLY_AUDIO_DISPLAY_MODE=wayland-shm` for the slower shared-memory Wayland fallback. Docker Compose runs only the Music Server and does not launch the Desktop Client.
+See [desktop/README.md](desktop/README.md) for how the Electron shell and the Rust core fit together. Docker Compose runs only the Music Server and does not launch the Desktop Client.
 
 ## Test
 

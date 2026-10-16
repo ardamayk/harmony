@@ -347,9 +347,9 @@ fn is_media_path(path: &str) -> bool {
         || is_image_path(path)
 }
 
-/// Album covers and Managed Import artwork. The webview loads them from here
-/// because WebKitGTK 2.54 refuses custom-scheme images on an http:// page, and
-/// MPRIS clients fetch the cover art URL outside the webview.
+/// Album covers and Managed Import artwork. The renderer loads them from here
+/// (its CSP allows no other image origin), and MPRIS clients fetch the cover
+/// art URL outside the renderer.
 fn is_image_path(path: &str) -> bool {
     match path.split('/').collect::<Vec<_>>().as_slice() {
         ["", "api", "v1", "library", "albums", album_id, "cover"] => !album_id.is_empty(),

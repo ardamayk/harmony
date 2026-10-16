@@ -1,7 +1,7 @@
 //! MPRIS (org.mpris.MediaPlayer2) integration for Linux desktops: media
 //! widgets, `playerctl` and headset buttons drive playback through D-Bus.
 //!
-//! The D-Bus server runs on the Tauri async runtime. Playback state arrives
+//! The D-Bus server runs on the core's tokio runtime. Playback state arrives
 //! over a channel from the synchronous mpv event thread; a pure `MprisView`
 //! is derived from it, diffed against the previous view, and only the changed
 //! properties are announced. Incoming commands are translated into
