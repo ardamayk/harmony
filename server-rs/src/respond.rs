@@ -22,20 +22,21 @@ pub struct ErrorBody {
 #[derive(Clone, Debug, PartialEq)]
 pub struct ApiError {
     pub status: StatusCode,
-    pub body: ErrorBody,
+    /// Boxed so `Result<T, ApiError>` stays small.
+    pub body: Box<ErrorBody>,
 }
 
 impl ApiError {
     pub fn new(status: StatusCode, code: &str, message: impl Into<String>) -> Self {
         Self {
             status,
-            body: ErrorBody {
+            body: Box::new(ErrorBody {
                 error: code.to_owned(),
                 code: code.to_owned(),
                 message: message.into(),
                 field: String::new(),
                 reason: String::new(),
-            },
+            }),
         }
     }
 
@@ -76,7 +77,7 @@ impl From<sqlx::Error> for ApiError {
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
-        (self.status, Json(self.body)).into_response()
+        (self.status, Json(*self.body)).into_response()
     }
 }
 

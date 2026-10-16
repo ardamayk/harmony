@@ -8,6 +8,7 @@ pub mod auth;
 pub mod config;
 pub mod db;
 pub mod dependencies;
+pub mod gojson;
 pub mod migrate;
 pub mod modules;
 pub mod respond;

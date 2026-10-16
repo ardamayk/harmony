@@ -31,6 +31,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/v1/health", get(api::get_health))
         .route("/api/v1/me", get(api::get_me))
         .merge(modules::docs::routes())
+        .merge(modules::preferences::routes())
         .fallback(static_assets::web)
         .layer(middleware::from_fn(stream_aware_timeout))
         .layer(cors)

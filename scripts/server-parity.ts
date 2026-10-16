@@ -10,7 +10,7 @@
 // Local only: nothing is sent anywhere.
 // Run with `mise run server-rs:parity` after `mise run server:build` and
 // `mise run server-rs:build`.
-import { type ChildProcess, spawn } from "node:child_process";
+import { type ChildProcess, execFileSync, spawn } from "node:child_process";
 import { copyFileSync, existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -27,6 +27,8 @@ type Probe = {
 	method?: string;
 	path: string;
 	body?: unknown;
+	/** A request body sent as is, for malformed JSON. */
+	raw?: string;
 	headers?: Record<string, string>;
 };
 
@@ -48,6 +50,39 @@ function corpus(ids: Record<string, string>): Probe[] {
 		{ path: "/api/openapi.yaml" },
 		{ path: "/docs" },
 		{ path: "/api/v1/preferences" },
+		{
+			method: "PATCH",
+			path: "/api/v1/preferences",
+			body: { theme: { mode: "dark" }, playback: { showWaveform: false } },
+		},
+		{
+			method: "PATCH",
+			path: "/api/v1/preferences",
+			body: { layout: { sizes: [60, 0, 70], collapsed: { left: true } } },
+		},
+		{
+			method: "PATCH",
+			path: "/api/v1/preferences",
+			body: { layout: { panels: { left: [], right: null } } },
+		},
+		{
+			method: "PATCH",
+			path: "/api/v1/preferences",
+			body: { playback: { playbackRate: 3 } },
+		},
+		{
+			method: "PATCH",
+			path: "/api/v1/preferences",
+			body: { playback: { seekStepSeconds: 2.5 } },
+		},
+		{ method: "PATCH", path: "/api/v1/preferences", body: "not an object" },
+		{
+			method: "PATCH",
+			path: "/api/v1/preferences",
+			raw: '{"theme":{}} trailing',
+		},
+		{ method: "PATCH", path: "/api/v1/preferences", raw: "" },
+		{ path: "/api/v1/preferences" },
 		{ path: "/api/v1/library/artists?limit=50" },
 		{ path: "/api/v1/library/albums?limit=50" },
 		{ path: "/api/v1/library/albums/{album}" },
@@ -64,6 +99,35 @@ function corpus(ids: Record<string, string>): Probe[] {
 		{ path: "/api/v1/import-history" },
 	];
 	return probes.map((probe) => ({ ...probe, path: fill(probe.path) }));
+}
+
+/**
+ * Every table's rows as sorted JSON lines, timestamps left out, so the two
+ * copies can be compared after both servers wrote to them.
+ */
+function dumpDatabase(path: string): Map<string, string[]> {
+	const script = `
+import json, sqlite3, sys
+connection = sqlite3.connect(f"file:{sys.argv[1]}?mode=ro", uri=True)
+tables = [name for (name,) in connection.execute(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")]
+dump = {}
+for table in tables:
+    cursor = connection.execute(f'SELECT * FROM "{table}"')
+    columns = [column[0] for column in cursor.description]
+    keep = [i for i, name in enumerate(columns)
+            if not (name.endswith("_at") or name in ("tstamp", "id") and table == "goose_db_version")]
+    dump[table] = sorted(
+        json.dumps([row[i].hex() if isinstance(row[i], bytes) else row[i] for i in keep])
+        for row in cursor)
+print(json.dumps(dump))
+`;
+	const output = execFileSync("python3", ["-c", script, path], {
+		maxBuffer: 1 << 30,
+	});
+	return new Map(
+		Object.entries(JSON.parse(output.toString()) as Record<string, string[]>),
+	);
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -101,7 +165,9 @@ async function ask(base: string, probe: Probe): Promise<Answer> {
 				: { "content-type": "application/json" }),
 			...probe.headers,
 		},
-		body: probe.body === undefined ? undefined : JSON.stringify(probe.body),
+		body:
+			probe.raw ??
+			(probe.body === undefined ? undefined : JSON.stringify(probe.body)),
 	});
 	const type = (response.headers.get("content-type") ?? "").split(";")[0];
 	const bytes = new Uint8Array(await response.arrayBuffer());
@@ -214,7 +280,30 @@ try {
 	console.log(
 		`\n${matched} match, ${differing} differ, ${notPorted} not ported yet`,
 	);
-	process.exitCode = differing > 0 ? 1 : 0;
+
+	// Stop both servers so their WAL is checkpointed, then compare what
+	// they stored.
+	for (const child of children) child.kill("SIGTERM");
+	await sleep(500);
+	const goTables = dumpDatabase(goDb);
+	const rustTables = dumpDatabase(rustDb);
+	const differingTables: string[] = [];
+	for (const [table, goRows] of goTables) {
+		const rustRows = rustTables.get(table) ?? [];
+		if (JSON.stringify(goRows) !== JSON.stringify(rustRows)) {
+			const onlyGo = goRows.filter((row) => !rustRows.includes(row));
+			const onlyRust = rustRows.filter((row) => !goRows.includes(row));
+			differingTables.push(
+				`  ✗  table ${table}\n      go   ${onlyGo.slice(0, 3).join("\n           ")}\n      rust ${onlyRust.slice(0, 3).join("\n           ")}`,
+			);
+		}
+	}
+	console.log(
+		differingTables.length === 0
+			? `stored data: all ${goTables.size} tables match`
+			: `stored data:\n${differingTables.join("\n")}`,
+	);
+	process.exitCode = differing > 0 || differingTables.length > 0 ? 1 : 0;
 } finally {
 	for (const child of children) child.kill("SIGTERM");
 	await sleep(200);

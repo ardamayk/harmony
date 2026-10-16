@@ -4,6 +4,7 @@ node = "24"
 bun = "1.4.2"
 golangci-lint = "2.12.2"
 sqlc = "1.31.1"
+"cargo:sqlx-cli" = { version = "0.9.0", default-features = false, features = "sqlite,rustls" }
 
 [env]
 # Use the workspace-pinned Vite+ (`vp`) and other local binaries.
@@ -115,8 +116,12 @@ golangci-lint run
 """
 
 [tasks."server-rs:check"]
-description = "rustfmt and Clippy for the Rust Music Server"
-run = ["cargo fmt -p earthly-music-server -- --check", "cargo clippy -p earthly-music-server --all-targets -- -D warnings"]
+description = "rustfmt, Clippy and current offline query data for the Rust Music Server"
+run = [
+	"cargo fmt -p earthly-music-server -- --check",
+	"cargo clippy -p earthly-music-server --all-targets -- -D warnings",
+	"bash scripts/sqlx-prepare.sh --check",
+]
 
 [tasks."desktop:check"]
 description = "rustfmt and Clippy for the Desktop core (the Electron shell's TypeScript is in web:check)"
@@ -136,6 +141,10 @@ run = "bun --bun vp run --filter web --filter @repo/ui --filter @repo/api-client
 description = "Run Music Server tests"
 dir = "server"
 run = "go test ./..."
+
+[tasks."server-rs:prepare"]
+description = "Regenerate server-rs/.sqlx after adding or changing a sqlx query (needs sqlx-cli)"
+run = "bash scripts/sqlx-prepare.sh"
 
 [tasks."server-rs:test"]
 description = "Run Rust Music Server tests"
