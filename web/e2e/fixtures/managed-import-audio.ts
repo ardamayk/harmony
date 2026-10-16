@@ -2,7 +2,7 @@ import { deflateSync } from "node:zlib";
 import { STRICT_MP3_AUDIO_BASE64 } from "./strict-mp3-audio.ts";
 
 // Deterministic Strict Import Profile fixtures for the Playwright journey.
-// The builder mirrors server/internal/testutil/mp3.go: an ID3v2.4 tag with
+// The builder mirrors server/testdata/strict-import.mp3: an ID3v2.4 tag with
 // every required identity frame plus an embedded PNG front cover, followed by
 // the shared MPEG-2 Layer III audio frames rewritten as VBR.
 
@@ -109,7 +109,7 @@ function pngChunk(type: string, data: Buffer): Buffer {
 	return Buffer.concat([length, typed, crc]);
 }
 
-/** A 32x32 solid RGBA PNG, matching the Go fixture's cover. */
+/** A 32x32 solid RGBA PNG, matching the server fixture's cover. */
 export function coverPng(
 	[red, green, blue]: [number, number, number] = [12, 98, 180],
 ): Buffer {

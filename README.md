@@ -2,7 +2,7 @@
 
 Self-hosted music server: own your library, stream anywhere on your network, customize the UI with movable panels and widgets.
 
-Not a Navidrome fork — modern OpenAPI backend (Go), React SPA, modular monolith architecture, and room for opt-in plugins/sidecars (discover, party mode, sharing) without legacy Subsonic API lock-in.
+Not a Navidrome fork — modern OpenAPI backend (Rust), React SPA, modular monolith architecture, and room for opt-in plugins/sidecars (discover, party mode, sharing) without legacy Subsonic API lock-in.
 
 ## What it does today (v1)
 
@@ -22,7 +22,7 @@ For **Figma**, **Google Stitch**, or visual design work, start here:
 
 | Layer | Tech |
 |-------|------|
-| Server | Go, chi, SQLite, goose migrations, sqlc queries |
+| Server | Rust, axum, SQLite (sqlx), goose-format migrations |
 | Web | React 19, TanStack Router, Vite, Tailwind 4, shadcn |
 | Monorepo | bun workspaces, Vite+ (`vp`: Oxlint, Oxfmt, Vitest, task runner), mise |
 | API | OpenAPI spec-first (`packages/contracts`) |
@@ -33,8 +33,8 @@ For **Figma**, **Google Stitch**, or visual design work, start here:
 ```bash
 mise install
 bun install
-mise run generate   # OpenAPI codegen
-mise run dev    # Go :8090 + Vite :3000
+mise run generate   # OpenAPI client and sqlx query data
+mise run dev    # Music Server :8090 + Vite :3000
 ```
 
 Open http://localhost:3000/library/tracks and use **Import Music** to upload files or a local folder. The Music Server validates every file, shows an Import Preview, and stores accepted files in Managed Storage only after you confirm.
@@ -81,8 +81,8 @@ See [desktop/README.md](desktop/README.md) for how the Electron shell and the Ru
 ```bash
 mise run ci                # static checks, unit tests, generated-client drift (what PR CI runs)
 mise run ci:integration    # Playwright, HLS, and pinned-mpv tests
-mise run check             # bun --bun vp check (Oxfmt + Oxlint + types), gofmt + golangci-lint, rustfmt + Clippy
-mise run test              # TypeScript, Go, and Rust unit tests
+mise run check             # bun --bun vp check (Oxfmt + Oxlint + types), rustfmt + Clippy
+mise run test              # TypeScript and Rust unit tests
 ```
 
 Targeted commands include `mise run web:test`, `mise run server:test`, and `mise run desktop:test`. Inside the TypeScript workspace, `bun --bun vp check --fix`, `bun --bun vp test`, and `bun --bun vp run <task>` work directly; `--bun` keeps Vite+ on the Bun runtime instead of Node.
@@ -91,7 +91,7 @@ CI is a single workflow (`.github/workflows/ci.yml`): web, server, desktop, and 
 
 ## Git hooks
 
-`bun install` installs the Vite+ hook dispatcher (`.vite-hooks/`). Pre-commit runs `bun --bun vp staged` (Oxfmt/Oxlint on staged TypeScript and JSON, gofmt on Go, rustfmt check on Rust) and OpenAPI drift verification only when generation inputs are staged. Use `--no-verify` to bypass; CI remains authoritative.
+`bun install` installs the Vite+ hook dispatcher (`.vite-hooks/`). Pre-commit runs `bun --bun vp staged` (Oxfmt/Oxlint on staged TypeScript and JSON, rustfmt check on Rust) and OpenAPI drift verification only when generation inputs are staged. Use `--no-verify` to bypass; CI remains authoritative.
 
 If `graphify-out/` exists and `graphify` is available on `PATH`, post-commit and branch-switch post-checkout hooks update the graph in the background.
 

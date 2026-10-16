@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Builds the schema database sqlx checks server-rs queries against.
+"""Builds the schema database sqlx checks the Music Server queries against.
 
 Applies the Up section of every goose migration in server/migrations to a
 fresh SQLite file, then drops the Library Search triggers: they call

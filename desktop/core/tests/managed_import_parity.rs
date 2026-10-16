@@ -1,14 +1,14 @@
 //! Desktop Managed Import parity against a real Music Server (issue #55).
 //!
-//! The test builds the Go Music Server from `../../server`, starts it on a free
-//! loopback port with isolated Managed Storage, generates one Strict Import
-//! Profile fixture per supported format with `cmd/desktop-parity-fixtures`, and
-//! then drives the same server-owned Managed Import journey the Web Client uses
+//! The test builds the Music Server (`cargo build -p earthly-music-server`),
+//! starts it on a free loopback port with isolated Managed Storage, reads one
+//! Strict Import Profile fixture per supported format from `server/testdata`,
+//! and then drives the same server-owned Managed Import journey the Web Client uses
 //! through the Desktop Client's native selection store, HTTP bridge, streaming
 //! upload, and media proxy. Nothing in this crate parses audio, so every
 //! preview field asserted below must have come from the Music Server.
 //!
-//! The test is ignored by default because it needs the Go toolchain and takes
+//! The test is ignored by default because it builds the Music Server and takes
 //! several seconds; run it with
 //! `mise run desktop:test:import-parity`.
 
@@ -618,16 +618,7 @@ impl Harness {
         ));
         fs::create_dir_all(&root).expect("create harness root");
         let server_dir = server_dir();
-        let fixtures_dir = root.join("fixtures");
-        run_go(
-            &server_dir,
-            &[
-                "run",
-                "./cmd/desktop-parity-fixtures",
-                "-out",
-                fixtures_dir.to_str().expect("fixture path"),
-            ],
-        );
+        let fixtures_dir = server_dir.join("testdata");
         let manifest: Vec<Fixture> = serde_json::from_slice(
             &fs::read(fixtures_dir.join("fixtures.json")).expect("manifest"),
         )
@@ -801,16 +792,7 @@ impl Harness {
 
 impl MusicServer {
     fn start(server_dir: &Path, root: &Path) -> Self {
-        let binary = root.join("music-server");
-        run_go(
-            server_dir,
-            &[
-                "build",
-                "-o",
-                binary.to_str().expect("binary path"),
-                "./cmd/server",
-            ],
-        );
+        let binary = build_music_server(server_dir);
         let port = free_port();
         let data = root.join("server-data");
         let managed_storage = data.join("managed");
@@ -876,15 +858,23 @@ fn server_dir() -> PathBuf {
         .expect("server directory")
 }
 
-fn run_go(server_dir: &Path, arguments: &[&str]) {
-    let status = Command::new("go")
-        .args(arguments)
+/// Builds the Music Server in the workspace and returns its binary.
+fn build_music_server(server_dir: &Path) -> PathBuf {
+    let status = Command::new("cargo")
+        .args(["build", "--quiet", "-p", "earthly-music-server"])
         .current_dir(server_dir)
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .status()
-        .expect("run go toolchain");
-    assert!(status.success(), "go {} failed", arguments.join(" "));
+        .expect("run cargo");
+    assert!(
+        status.success(),
+        "cargo build -p earthly-music-server failed"
+    );
+    let target = std::env::var_os("CARGO_TARGET_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| server_dir.join("../target"));
+    target.join("debug/earthly-music-server")
 }
 
 fn free_port() -> u16 {

@@ -1,5 +1,5 @@
-// MPEG-2 Layer III audio frames shared with the Go fixture in
-// server/internal/testutil/mp3.go. Kept byte-identical so the Playwright
+// MPEG-2 Layer III audio frames shared with the server fixture
+// server/testdata/strict-import.mp3. Kept byte-identical so the Playwright
 // journey exercises the same full-stream decode path as the server tests.
 export const STRICT_MP3_AUDIO_BASE64 = [
 	"//NgxAAdI/3kAUMYAAAAKu7uBgAAIREREd3d3dwMAAABOuaAYt+J/+iIhaIiIiJ/u7u5//9cAEJ/6O7u7/u7u5/+7ufEAwN3f0R3",

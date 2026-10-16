@@ -2,9 +2,8 @@
 
 ## Prerequisites
 
-- Go 1.23+
-- [mise](https://mise.jdx.dev) (installs Go, Node, and bun)
-- [mise](https://mise.jdx.dev/)
+- [Rust](https://rustup.rs) (stable)
+- [mise](https://mise.jdx.dev) (installs Node, bun and the Rust tools)
 
 ## Development
 
@@ -15,7 +14,7 @@ mise run dev
 ```
 
 - API: http://localhost:8090
-- Web dev server: http://localhost:3000 (proxies `/api` to Go)
+- Web dev server: http://localhost:3000 (proxies `/api` to the Music Server)
 
 ### Music library
 
@@ -51,7 +50,7 @@ Mise is the canonical interface for development and CI tasks. Run `mise run ci` 
 
 ### Git hooks
 
-`bun install` enables the Vite+ Git hooks. Pre-commit runs `bun --bun vp staged` on staged TypeScript, JSON, Go, and Rust sources, and OpenAPI drift verification only when generation inputs are staged.
+`bun install` enables the Vite+ Git hooks. Pre-commit runs `bun --bun vp staged` on staged TypeScript, JSON, and Rust sources, and OpenAPI drift verification only when generation inputs are staged.
 
 These hooks provide bypassable local feedback; CI is authoritative. Pass `--no-verify` to `git commit` or `git push` when needed. Hook installation is disabled in CI and production dependency installs. When `graphify-out/` exists, Graphify post-commit and branch-switch updates run if `graphify` is available on `PATH`; otherwise they intentionally do nothing.
 

@@ -1,1 +1,0 @@
-var e=`px-[var(--shell-inset)] py-5`,t=`page-content-column w-full`,n=`relative w-full sm:w-[28rem]`,r=`h-11 rounded-xl bg-[var(--player)] pl-10 text-sm`;export{t as i,r as n,e as r,n as t};

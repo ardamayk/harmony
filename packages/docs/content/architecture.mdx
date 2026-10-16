@@ -6,54 +6,43 @@ Navidrome Replacement is a modular monolith with separate web, docs, contracts, 
 
 ```text
 packages/contracts/openapi.yaml
-  -> server/internal/api/gen
   -> packages/api-client/src/generated/schema.ts
   -> packages/api-client/src/index.ts type aliases
+  (the Music Server embeds the spec and serves it at /api/openapi.yaml)
 
 packages/docs/content/*.mdx
   -> packages/docs/dist
-  -> server/internal/staticassets/docs
+  -> server/static/docs
 
 web/src
   -> web/dist
-  -> server/internal/staticassets/web
+  -> server/static/web
 
-server/migrations (goose) + server/internal/modules/*/queries.sql
-  -> sqlc
-  -> server/internal/modules/*/db
+server/migrations (goose format)
+  -> the Music Server's migrator at startup
+  -> the schema sqlx checks every query against (server/.sqlx)
 ```
 
 ## Server modules
 
-Domain routes are registered through `server/internal/modules`.
+The Music Server is written in Rust (axum, sqlx on SQLite). Domain routes live in `server/src/modules`.
 
-- `library`: artists, albums, tracks, covers (read-only; the server never scans a folder)
-- `librarysearch`: Library Search ranking over the prepared search data
-- `managedimport`: Managed Import uploads, validation, Import Preview, commit, Permanent Track Deletion, Track Replacement
-- `playback`: queue and range streaming
+- `library`: artists, albums, tracks, covers, waveforms (read-only; the server never scans a folder)
+- `search`: Library Search ranking over the prepared search data
+- `managed_import`: Managed Import uploads, the Strict Import Profile (`server/src/inspect`), Import Preview, commit, Permanent Track and Album Deletion, Track Replacement
+- `playback`: queue, queue events and range streaming
 - `playlists`: playlists and the default Favorites playlist
 - `preferences`: theme, layout, and playback preferences
 - `radio`: saved stations, Radio Browser search, stream proxy
 - `docs`: MDX docs, Swagger UI, OpenAPI YAML
 
-Inside a module, `handler.go` handles HTTP, `service.go` owns the domain rules, and `repository.go` is the only database access, built on sqlc-generated queries in the module's `db` package.
+Inside a module, `mod.rs` registers the routes and handles HTTP, `service.rs` owns the domain rules, and `repository.rs` is the only database access, with queries checked against the schema at compile time.
 
-Each module implements:
-
-```go
-type Module interface {
-    Name() string
-    RegisterRoutes(r chi.Router)
-}
-```
-
-`cmd/server` wires module dependencies, registers shared middleware, then calls the registry.
+Each module exposes `routes()`, which `server/src/app.rs` merges into one router with the shared middleware (CORS, request timeout, panic recovery).
 
 ## Shared server utilities
 
-HTTP JSON responses use `server/internal/api/respond`.
-
-Use it for module handlers instead of local `writeJSON` or `writeError` helpers so the error envelope stays consistent:
+HTTP JSON errors use `server/src/respond.rs` (`ApiError`), so the error envelope stays consistent:
 
 ```json
 {
@@ -71,7 +60,7 @@ Domain types exported from `@repo/api-client` are aliases to generated OpenAPI s
 
 ## Static assets
 
-Production server embeds built assets with `go:embed`.
+The production Music Server embeds the built Web Client and docs at compile time (`rust-embed`), so `mise run server:build` builds them first.
 
 After build, sync only the changed static target:
 

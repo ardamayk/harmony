@@ -23,8 +23,9 @@ export default defineConfig({
 	projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
 	webServer: [
 		{
-			command: "go run ./cmd/server",
-			timeout: 120_000,
+			// The first run compiles the Music Server.
+			command: "cargo run --quiet -p earthly-music-server",
+			timeout: 600_000,
 			url: `${PRODUCTION_API_ORIGIN}/api/v1/health`,
 			cwd: "../server",
 			env: {

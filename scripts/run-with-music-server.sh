@@ -54,7 +54,7 @@ startMusicServer() {
 	local serverMode="$1"
 	case "$serverMode" in
 		development)
-			setsid bash -c 'cd server && exec go run ./cmd/server' &
+			setsid bash -c 'cd server && exec cargo run --quiet -p earthly-music-server' &
 			;;
 		built)
 			setsid bash -c 'cd server && exec "${EARTHLY_SERVER_BINARY:-../bin/server}"' &

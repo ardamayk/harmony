@@ -6,7 +6,6 @@ const generatedAndBuildOutput = [
 	"**/src/generated/**",
 	"**/routeTree.gen.ts",
 	"desktop/core/**",
-	"server-rs/**",
 	"target/**",
 	"graphify-out/**",
 	"server/**",
@@ -80,8 +79,7 @@ export default defineConfig({
 	},
 	staged: {
 		"*.{js,cjs,mjs,jsx,ts,tsx,json,jsonc}": "vp check --fix",
-		"*.go": "gofmt -w",
-		"{desktop/core,server-rs}/**/*.rs": () =>
+		"{desktop/core,server}/**/*.rs": () =>
 			"bash scripts/check-staged-rust-format.sh",
 	},
 });

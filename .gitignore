@@ -22,3 +22,7 @@ server/data/
 mise.local.toml
 .mise.local.toml
 /target/
+
+# Built Web Client and docs, embedded by the Music Server at compile time.
+server/static/*/*
+!server/static/*/.gitkeep

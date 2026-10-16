@@ -2,4 +2,4 @@
 # lockfile and one target directory.
 [workspace]
 resolver = "3"
-members = ["desktop/core", "server-rs"]
+members = ["desktop/core", "server"]
