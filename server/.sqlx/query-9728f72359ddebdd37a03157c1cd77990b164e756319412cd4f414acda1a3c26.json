@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT source.kind AS \"kind!: String\", source.id AS \"id!: String\", source.field AS \"field!: String\",\n            source.related_kind AS \"related_kind!: String\", source.related_id AS \"related_id!: String\"\n        FROM library_search_field_sources source\n        JOIN library_search_entities entity ON entity.kind = source.kind AND entity.id = source.id\n        WHERE entity.user_id = '' OR entity.user_id = ?\n        ORDER BY source.kind, source.id, CASE source.field WHEN 'primary' THEN 0 ELSE 1 END,\n            source.field, source.position, source.related_id",
+  "query": "SELECT source.kind AS \"kind!: String\", source.id AS \"id!: String\", source.field AS \"field!: String\",\n                source.related_kind AS \"related_kind!: String\", source.related_id AS \"related_id!: String\"\n            FROM library_search_field_sources source\n            JOIN library_search_entities entity ON entity.kind = source.kind AND entity.id = source.id\n            WHERE entity.user_id = '' OR entity.user_id = ?\n            ORDER BY source.kind, source.id, CASE source.field WHEN 'primary' THEN 0 ELSE 1 END,\n                source.field, source.position, source.related_id",
   "describe": {
     "columns": [
       {
@@ -55,5 +55,5 @@
       false
     ]
   },
-  "hash": "378c07121d7fbd0a5993b8b1a4a63d7a1bd78902e660ea7f966150ea26b88573"
+  "hash": "9728f72359ddebdd37a03157c1cd77990b164e756319412cd4f414acda1a3c26"
 }

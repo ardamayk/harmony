@@ -1,7 +1,46 @@
 //! Layout clamping, playback bounds and sparse patching
 //! (preferences/layout.go, playback.go, service.go).
 
+use super::repository::{Repository, RepositoryError};
 use super::types::*;
+use sqlx::SqlitePool;
+
+/// Preferences rules over the repository.
+pub struct Service {
+    repo: Repository,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum ServiceError {
+    #[error("{0}")]
+    Invalid(String),
+    #[error(transparent)]
+    Repository(#[from] RepositoryError),
+}
+
+impl Service {
+    pub fn new(pool: SqlitePool) -> Self {
+        Self {
+            repo: Repository::new(pool),
+        }
+    }
+
+    pub async fn get(&self, user_id: &str) -> Result<UserPreferences, RepositoryError> {
+        self.repo.get(user_id).await
+    }
+
+    pub async fn update(
+        &self,
+        user_id: &str,
+        patch: &UserPreferencesPatch,
+    ) -> Result<UserPreferences, ServiceError> {
+        validate_playback_patch(patch.playback.as_ref()).map_err(ServiceError::Invalid)?;
+        Ok(self
+            .repo
+            .update(user_id, |current| apply_patch(current, patch))
+            .await?)
+    }
+}
 
 pub const MIN_SEEK_STEP_SECONDS: i64 = 1;
 pub const MAX_SEEK_STEP_SECONDS: i64 = 120;

@@ -1,7 +1,7 @@
 //! One preferences row per user; theme, layout and playback are JSON
 //! columns (preferences/repository.go).
 
-use super::rules::{apply_playback_patch, normalize_layout};
+use super::service::{apply_playback_patch, normalize_layout};
 use super::types::*;
 use crate::db;
 use sqlx::{SqliteConnection, SqlitePool};

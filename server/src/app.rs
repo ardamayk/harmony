@@ -35,7 +35,7 @@ impl AppState {
     pub fn new(config: Config, dependencies: Report, db: SqlitePool) -> Self {
         let radio = modules::radio::Radio::new(db.clone(), &config.radio_browser_base_url);
         let waveforms = modules::library::WaveformService::new(
-            modules::library::Repository::new(db.clone()),
+            db.clone(),
             dependencies.has(crate::dependencies::FFMPEG),
         );
         let queue_events: Arc<modules::playback::QueueEventBroker> = Arc::default();

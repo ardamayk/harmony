@@ -22,7 +22,8 @@ Run everything through `mise run <task>` (`mise tasks` lists them). TypeScript t
 `server/src/modules/<module>/` is one Rust module per domain, layered:
 
 ```text
-mod.rs         routes and HTTP: parse request → call service → respond
+mod.rs         wiring: submodules, what other modules may use, `routes`
+handlers.rs    HTTP: parse request → call service → respond
 service.rs     domain rules; no SQL, no HTTP types
 repository.rs  the module's only database access; maps rows to domain types
 ```

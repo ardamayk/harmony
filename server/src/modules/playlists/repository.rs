@@ -1,6 +1,6 @@
 //! Playlist rows (playlists/repository.go, queries.sql).
 
-use super::DEFAULT_FAVORITES_NAME;
+use super::service::DEFAULT_FAVORITES_NAME;
 use serde::Serialize;
 use sqlx::SqlitePool;
 

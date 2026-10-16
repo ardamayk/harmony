@@ -36,7 +36,7 @@ The Music Server is written in Rust (axum, sqlx on SQLite). Domain routes live i
 - `radio`: saved stations, Radio Browser search, stream proxy
 - `docs`: MDX docs, Swagger UI, OpenAPI YAML
 
-Inside a module, `mod.rs` registers the routes and handles HTTP, `service.rs` owns the domain rules, and `repository.rs` is the only database access, with queries checked against the schema at compile time.
+Inside a module, `mod.rs` wires it together, `handlers.rs` handles HTTP, `service.rs` owns the domain rules, and `repository.rs` is the only database access, with queries checked against the schema at compile time.
 
 Each module exposes `routes()`, which `server/src/app.rs` merges into one router with the shared middleware (CORS, request timeout, panic recovery).
 

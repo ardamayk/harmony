@@ -204,9 +204,9 @@ pub struct WaveformService {
 
 impl WaveformService {
     /// `available` reflects the ffmpeg Server Dependency.
-    pub fn new(repo: Repository, available: bool) -> Self {
+    pub fn new(pool: sqlx::SqlitePool, available: bool) -> Self {
         Self {
-            repo,
+            repo: Repository::new(pool),
             available,
             pending_after: PENDING_AFTER,
             in_flight: Arc::default(),
