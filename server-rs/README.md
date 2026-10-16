@@ -16,8 +16,8 @@ Run it like the Go server, from `server/` (or the repository root): `../target/r
 |---|---|---|
 | 0 | Config, logging, SQLite (WAL, IMMEDIATE writes), goose-compatible migrator, Library Search SQLite functions, dependency probe, `health`, `me`, CORS, timeouts, embedded Web Client and docs, parity harness | done |
 | 1 | preferences | done |
-| 2 | playlists | |
-| 3 | library (albums, artists, tracks, covers, lyrics, waveform, stream, deletion) | |
+| 2 | playlists (after library: it returns library Tracks) | |
+| 3 | library (albums, artists, tracks, covers, lyrics, waveform) | done |
 | 4 | library search (and startup rebuild of search data) | |
 | 5 | radio (stations, Radio Browser catalog, HLS proxy, now playing) | |
 | 6 | playback (queue, queue events over SSE) | |

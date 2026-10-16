@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT relations.track_id AS \"track_id!\", genres.id AS \"id!\", genres.name AS \"name!\"\n            FROM track_genres relations\n            INNER JOIN genres ON genres.id = relations.genre_id\n            WHERE relations.track_id IN (SELECT value FROM json_each(?))\n            ORDER BY relations.track_id, relations.position",
+  "describe": {
+    "columns": [
+      {
+        "name": "track_id!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "track_genres",
+            "name": "track_id"
+          }
+        }
+      },
+      {
+        "name": "id!",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "genres",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "name!",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "genres",
+            "name": "name"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "679a313730eb7576416feeb8509ab848b180f7ef0221d898cdb73b3e3a14d8a6"
+}

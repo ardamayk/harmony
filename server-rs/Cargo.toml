@@ -11,11 +11,15 @@ path = "src/main.rs"
 [dependencies]
 axum = { version = "=0.8.9", default-features = false, features = ["http1", "json", "query", "tokio", "original-uri"] }
 caseless = "=0.2.2"
+futures-util = "=0.3.34"
+hex = "=0.4.3"
+image = { version = "=0.25.10", default-features = false, features = ["jpeg", "png"] }
 libsqlite3-sys = "=0.37.0"
 regex = "=1.13.1"
 rust-embed = { version = "=8.12.0", features = ["mime-guess"] }
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.151"
+sha2 = "=0.10.9"
 sqlx = { version = "=0.9.0", default-features = false, features = ["runtime-tokio", "sqlite", "macros", "migrate"] }
 thiserror = "=2.0.20"
 tokio = { version = "=1.53.1", features = ["fs", "io-util", "macros", "net", "process", "rt-multi-thread", "signal", "sync", "time"] }
@@ -25,6 +29,7 @@ tracing = "=0.1.44"
 tracing-subscriber = { version = "=0.3.23", features = ["env-filter", "json"] }
 unicode-general-category = "=1.1.0"
 unicode-normalization = "=0.1.25"
+uuid = { version = "=1.25.0", features = ["v4"] }
 
 [dev-dependencies]
 http-body-util = "=0.1.5"

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO album_cover_variants (album_id, size, source_sha256, media_type, data, generated_at)\n            VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)\n            ON CONFLICT(album_id, size) DO UPDATE SET\n                source_sha256 = excluded.source_sha256,\n                media_type = excluded.media_type,\n                data = excluded.data,\n                generated_at = CURRENT_TIMESTAMP",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "1e46778f6b697f46470db6c58db7e1d881edffc22584a837d882bfb4b205ed30"
+}

@@ -1,0 +1,33 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT file_path AS \"file_path!\", duration_ms AS \"duration_ms!: i64\"\n            FROM library_track_reads WHERE id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "file_path!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "name": "duration_ms!: i64",
+        "ordinal": 1,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "tracks",
+            "name": "duration_ms"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "1fee8cace828a8c48ec2671f77731e2b6b6f815ebfc8e8c44b259a8861395951"
+}

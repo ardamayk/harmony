@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT peaks, source_size_bytes, source_modified_at FROM track_waveforms WHERE track_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "peaks",
+        "ordinal": 0,
+        "type_info": "Blob",
+        "origin": {
+          "Table": {
+            "table": "track_waveforms",
+            "name": "peaks"
+          }
+        }
+      },
+      {
+        "name": "source_size_bytes",
+        "ordinal": 1,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "track_waveforms",
+            "name": "source_size_bytes"
+          }
+        }
+      },
+      {
+        "name": "source_modified_at",
+        "ordinal": 2,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "track_waveforms",
+            "name": "source_modified_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "afbdb2eef0b07e55939e97cc299cad31e26de4950c5da5389dd743fef4affde3"
+}

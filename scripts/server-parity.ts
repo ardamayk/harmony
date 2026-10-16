@@ -38,6 +38,40 @@ type Answer = { status: number; type: string; body: unknown; isSpa: boolean };
 const VOLATILE_KEYS = new Set(["updatedAt", "createdAt", "tstamp"]);
 
 /**
+ * Stored columns that differ by design. Scaled-down covers come from
+ * different JPEG encoders, so only their size and source are compared.
+ */
+const IMPLEMENTATION_COLUMNS: Record<string, string[]> = {
+	album_cover_variants: ["data"],
+};
+
+/** "jpeg 128x128" for a JPEG or PNG, else the byte count. */
+function describeImage(bytes: Uint8Array): string {
+	if (bytes[0] === 0x89 && bytes[1] === 0x50) {
+		const view = new DataView(bytes.buffer, bytes.byteOffset);
+		return `png ${view.getUint32(16)}x${view.getUint32(20)}`;
+	}
+	if (bytes[0] === 0xff && bytes[1] === 0xd8) {
+		let offset = 2;
+		while (offset + 9 < bytes.length && bytes[offset] === 0xff) {
+			const marker = bytes[offset + 1];
+			const length = (bytes[offset + 2] << 8) | bytes[offset + 3];
+			if (
+				marker >= 0xc0 &&
+				marker <= 0xcf &&
+				![0xc4, 0xc8, 0xcc].includes(marker)
+			) {
+				const height = (bytes[offset + 5] << 8) | bytes[offset + 6];
+				const width = (bytes[offset + 7] << 8) | bytes[offset + 8];
+				return `jpeg ${width}x${height}`;
+			}
+			offset += 2 + length;
+		}
+	}
+	return `${bytes.length} bytes`;
+}
+
+/**
  * Requests in order. Path segments in braces are filled from earlier
  * answers of the Go server, e.g. {album} with the first Album's id.
  */
@@ -84,14 +118,34 @@ function corpus(ids: Record<string, string>): Probe[] {
 		{ method: "PATCH", path: "/api/v1/preferences", raw: "" },
 		{ path: "/api/v1/preferences" },
 		{ path: "/api/v1/library/artists?limit=50" },
+		{ path: "/api/v1/library/artists?q={artistQuery}" },
+		{ path: "/api/v1/library/artists?limit=2&offset=1" },
+		{ path: "/api/v1/library/artists?limit=0&offset=-4" },
 		{ path: "/api/v1/library/albums?limit=50" },
+		{ path: "/api/v1/library/albums?artistId={artist}" },
+		{ path: "/api/v1/library/albums?q={albumQuery}" },
+		{ path: "/api/v1/library/albums?limit=3&offset=2" },
 		{ path: "/api/v1/library/albums/{album}" },
 		{ path: "/api/v1/library/albums/does-not-exist" },
+		{ path: "/api/v1/library/albums/{album}/cover" },
 		{ path: "/api/v1/library/albums/{album}/cover?size=64" },
+		{ path: "/api/v1/library/albums/{album}/cover?size=128" },
+		{ path: "/api/v1/library/albums/{album}/cover?size=256" },
+		{ path: "/api/v1/library/albums/{album}/cover?size=512" },
+		{ path: "/api/v1/library/albums/{album}/cover?size=1024" },
 		{ path: "/api/v1/library/albums/{album}/cover?size=63" },
+		{ path: "/api/v1/library/albums/does-not-exist/cover" },
 		{ path: "/api/v1/library/tracks?limit=100" },
+		{ path: "/api/v1/library/tracks?limit=500" },
+		{ path: "/api/v1/library/tracks?artistId={artist}" },
+		{ path: "/api/v1/library/tracks?q={query}" },
+		{ path: "/api/v1/library/tracks?q={genreQuery}" },
 		{ path: "/api/v1/library/tracks/{track}" },
+		{ path: "/api/v1/library/tracks/does-not-exist" },
 		{ path: "/api/v1/library/tracks/{track}/lyrics" },
+		{ path: "/api/v1/library/tracks/does-not-exist/lyrics" },
+		{ path: "/api/v1/library/tracks/{track}/waveform" },
+		{ path: "/api/v1/library/tracks/does-not-exist/waveform" },
 		{ path: "/api/v1/library/search?q={query}" },
 		{ path: "/api/v1/playback/queue" },
 		{ path: "/api/v1/playlists" },
@@ -115,16 +169,22 @@ dump = {}
 for table in tables:
     cursor = connection.execute(f'SELECT * FROM "{table}"')
     columns = [column[0] for column in cursor.description]
+    skipped = json.loads(sys.argv[2]).get(table, [])
     keep = [i for i, name in enumerate(columns)
-            if not (name.endswith("_at") or name in ("tstamp", "id") and table == "goose_db_version")]
+            if not (name.endswith("_at") or name in skipped
+                    or name in ("tstamp", "id") and table == "goose_db_version")]
     dump[table] = sorted(
         json.dumps([row[i].hex() if isinstance(row[i], bytes) else row[i] for i in keep])
         for row in cursor)
 print(json.dumps(dump))
 `;
-	const output = execFileSync("python3", ["-c", script, path], {
-		maxBuffer: 1 << 30,
-	});
+	const output = execFileSync(
+		"python3",
+		["-c", script, path, JSON.stringify(IMPLEMENTATION_COLUMNS)],
+		{
+			maxBuffer: 1 << 30,
+		},
+	);
 	return new Map(
 		Object.entries(JSON.parse(output.toString()) as Record<string, string[]>),
 	);
@@ -174,6 +234,7 @@ async function ask(base: string, probe: Probe): Promise<Answer> {
 	const text = new TextDecoder().decode(bytes);
 	let body: unknown = text;
 	if (type === "application/json") body = JSON.parse(text || "null");
+	else if (type.startsWith("image/")) body = describeImage(bytes);
 	else if (!type.startsWith("text/") && type !== "application/yaml")
 		body = `${bytes.length} bytes`;
 	const isSpa = type === "text/html" && text.includes('<div id="root"');
@@ -294,7 +355,13 @@ try {
 			const onlyGo = goRows.filter((row) => !rustRows.includes(row));
 			const onlyRust = rustRows.filter((row) => !goRows.includes(row));
 			differingTables.push(
-				`  ✗  table ${table}\n      go   ${onlyGo.slice(0, 3).join("\n           ")}\n      rust ${onlyRust.slice(0, 3).join("\n           ")}`,
+				`  ✗  table ${table}\n      go   ${onlyGo
+					.slice(0, 3)
+					.map((row) => row.slice(0, 200))
+					.join("\n           ")}\n      rust ${onlyRust
+					.slice(0, 3)
+					.map((row) => row.slice(0, 200))
+					.join("\n           ")}`,
 			);
 		}
 	}

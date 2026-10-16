@@ -1,0 +1,353 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT t.id AS \"id!\", t.title AS \"title!\", t.artist_name AS \"artist_name!\",\n           t.album_id AS \"album_id!\", t.album_title AS \"album_title!\", t.track_no,\n           t.disc_no AS \"disc_no!: i64\", t.track_total, t.disc_total,\n           t.duration_ms AS \"duration_ms!: i64\", t.format AS \"format!\",\n           t.size_bytes AS \"size_bytes!: i64\", t.genre AS \"genre!\",\n           t.sample_rate_hz AS \"sample_rate_hz!: i64\", t.bit_depth AS \"bit_depth!: i64\",\n           t.channel_count AS \"channel_count!: i64\", t.bitrate_bps AS \"bitrate_bps!: i64\",\n           t.codec, t.container, t.sample_format, t.file_path AS \"file_path!\",\n           t.replaygain_track_gain_db, t.replaygain_track_peak,\n           t.replaygain_album_gain_db, t.replaygain_album_peak,\n           t.title_sort AS \"title_sort!\", t.file_mtime AS \"file_mtime!: i64\",\n           t.content_sha256, t.identity_key, t.revision AS \"revision!: i64\",\n           t.created_at AS \"created_at!: String\", t.updated_at AS \"updated_at!: String\" FROM library_track_reads t WHERE (CAST(?1 AS TEXT) = '' OR EXISTS (\n                    SELECT 1 FROM track_artists credit WHERE credit.track_id = t.id AND credit.artist_id = CAST(?1 AS TEXT)\n                ) OR EXISTS (\n                    SELECT 1 FROM album_artists credit WHERE credit.album_id = t.album_id AND credit.artist_id = CAST(?1 AS TEXT)))\n              AND (CAST(?2 AS TEXT) = '' OR t.title LIKE '%' || CAST(?2 AS TEXT) || '%' OR t.album_title LIKE '%' || CAST(?2 AS TEXT) || '%' OR EXISTS (\n                    SELECT 1 FROM track_artists credit\n                    INNER JOIN artists credited ON credited.id = credit.artist_id\n                    WHERE credit.track_id = t.id AND credited.name LIKE '%' || CAST(?2 AS TEXT) || '%'\n                ) OR EXISTS (\n                    SELECT 1 FROM track_genres relation\n                    INNER JOIN genres genre ON genre.id = relation.genre_id\n                    WHERE relation.track_id = t.id AND genre.name LIKE '%' || CAST(?2 AS TEXT) || '%'))\n            ORDER BY t.title_sort\n            LIMIT ?3 OFFSET ?4",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tracks",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "title!",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tracks",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "name": "artist_name!",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tracks",
+            "name": "artist_name"
+          }
+        }
+      },
+      {
+        "name": "album_id!",
+        "ordinal": 3,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tracks",
+            "name": "album_id"
+          }
+        }
+      },
+      {
+        "name": "album_title!",
+        "ordinal": 4,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "albums",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "name": "track_no",
+        "ordinal": 5,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "tracks",
+            "name": "track_no"
+          }
+        }
+      },
+      {
+        "name": "disc_no!: i64",
+        "ordinal": 6,
+        "type_info": "Integer",
+        "origin": "Expression"
+      },
+      {
+        "name": "track_total",
+        "ordinal": 7,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "tracks",
+            "name": "track_total"
+          }
+        }
+      },
+      {
+        "name": "disc_total",
+        "ordinal": 8,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "tracks",
+            "name": "disc_total"
+          }
+        }
+      },
+      {
+        "name": "duration_ms!: i64",
+        "ordinal": 9,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "tracks",
+            "name": "duration_ms"
+          }
+        }
+      },
+      {
+        "name": "format!",
+        "ordinal": 10,
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "name": "size_bytes!: i64",
+        "ordinal": 11,
+        "type_info": "Integer",
+        "origin": "Expression"
+      },
+      {
+        "name": "genre!",
+        "ordinal": 12,
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "name": "sample_rate_hz!: i64",
+        "ordinal": 13,
+        "type_info": "Integer",
+        "origin": "Expression"
+      },
+      {
+        "name": "bit_depth!: i64",
+        "ordinal": 14,
+        "type_info": "Integer",
+        "origin": "Expression"
+      },
+      {
+        "name": "channel_count!: i64",
+        "ordinal": 15,
+        "type_info": "Integer",
+        "origin": "Expression"
+      },
+      {
+        "name": "bitrate_bps!: i64",
+        "ordinal": 16,
+        "type_info": "Integer",
+        "origin": "Expression"
+      },
+      {
+        "name": "codec",
+        "ordinal": 17,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tracks",
+            "name": "codec"
+          }
+        }
+      },
+      {
+        "name": "container",
+        "ordinal": 18,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tracks",
+            "name": "container"
+          }
+        }
+      },
+      {
+        "name": "sample_format",
+        "ordinal": 19,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tracks",
+            "name": "sample_format"
+          }
+        }
+      },
+      {
+        "name": "file_path!",
+        "ordinal": 20,
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "name": "replaygain_track_gain_db",
+        "ordinal": 21,
+        "type_info": "Float",
+        "origin": {
+          "Table": {
+            "table": "tracks",
+            "name": "replaygain_track_gain_db"
+          }
+        }
+      },
+      {
+        "name": "replaygain_track_peak",
+        "ordinal": 22,
+        "type_info": "Float",
+        "origin": {
+          "Table": {
+            "table": "tracks",
+            "name": "replaygain_track_peak"
+          }
+        }
+      },
+      {
+        "name": "replaygain_album_gain_db",
+        "ordinal": 23,
+        "type_info": "Float",
+        "origin": {
+          "Table": {
+            "table": "tracks",
+            "name": "replaygain_album_gain_db"
+          }
+        }
+      },
+      {
+        "name": "replaygain_album_peak",
+        "ordinal": 24,
+        "type_info": "Float",
+        "origin": {
+          "Table": {
+            "table": "tracks",
+            "name": "replaygain_album_peak"
+          }
+        }
+      },
+      {
+        "name": "title_sort!",
+        "ordinal": 25,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tracks",
+            "name": "title_sort"
+          }
+        }
+      },
+      {
+        "name": "file_mtime!: i64",
+        "ordinal": 26,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "tracks",
+            "name": "file_mtime"
+          }
+        }
+      },
+      {
+        "name": "content_sha256",
+        "ordinal": 27,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "track_sources",
+            "name": "content_sha256"
+          }
+        }
+      },
+      {
+        "name": "identity_key",
+        "ordinal": 28,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tracks",
+            "name": "identity_key"
+          }
+        }
+      },
+      {
+        "name": "revision!: i64",
+        "ordinal": 29,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "tracks",
+            "name": "revision"
+          }
+        }
+      },
+      {
+        "name": "created_at!: String",
+        "ordinal": 30,
+        "type_info": "Datetime",
+        "origin": {
+          "Table": {
+            "table": "tracks",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "name": "updated_at!: String",
+        "ordinal": 31,
+        "type_info": "Datetime",
+        "origin": {
+          "Table": {
+            "table": "tracks",
+            "name": "updated_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "c85629617669583e867b26937b6a53daac1054cb35b38aded828aa8814999462"
+}

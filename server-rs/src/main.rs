@@ -2,7 +2,6 @@ use earthly_music_server::app::{self, AppState};
 use earthly_music_server::config::{self, Config};
 use earthly_music_server::{db, dependencies};
 use std::path::PathBuf;
-use std::sync::Arc;
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
@@ -47,11 +46,7 @@ async fn run() -> Result<(), String> {
         }
     }
 
-    let state = AppState {
-        config: Arc::new(config),
-        dependencies: Arc::new(report),
-        db: pool.clone(),
-    };
+    let state = AppState::new(config, report, pool.clone());
     let router = app::router(state.clone());
     let listener = tokio::net::TcpListener::bind(address)
         .await

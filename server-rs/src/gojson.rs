@@ -33,6 +33,62 @@ impl serde::Serialize for GoFloat {
     }
 }
 
+/// [`float`] for an optional value; `None` is `null`.
+pub fn optional_float<S: Serializer>(
+    value: &Option<f64>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    match value {
+        Some(value) => float(value, serializer),
+        None => serializer.serialize_none(),
+    }
+}
+
+/// A SQLite DATETIME (`2026-09-06 15:47:56`, optionally with fractional
+/// seconds or a zone) as Go writes the `time.Time` the driver parsed from
+/// it: RFC 3339 with trailing fractional zeros dropped, UTC as `Z`.
+pub fn time(stored: &str) -> String {
+    let stored = stored.trim();
+    let (date_time, zone) = split_zone(stored);
+    let date_time = date_time.replacen(' ', "T", 1);
+    let date_time = match date_time.split_once('.') {
+        Some((whole, fraction)) => {
+            let fraction = fraction.trim_end_matches('0');
+            if fraction.is_empty() {
+                whole.to_owned()
+            } else {
+                format!("{whole}.{fraction}")
+            }
+        }
+        None => date_time,
+    };
+    format!("{date_time}{zone}")
+}
+
+fn split_zone(value: &str) -> (&str, String) {
+    if let Some(rest) = value.strip_suffix('Z') {
+        return (rest, "Z".to_owned());
+    }
+    // A numeric offset after the time part, e.g. +03:00 or -0500.
+    if let Some(index) = value.rfind(['+', '-'])
+        && index > 10
+    {
+        let offset = &value[index..];
+        let offset = if offset.len() == 5 && !offset.contains(':') {
+            format!("{}:{}", &offset[..3], &offset[3..])
+        } else {
+            offset.to_owned()
+        };
+        let offset = if offset == "+00:00" {
+            "Z".to_owned()
+        } else {
+            offset
+        };
+        return (value[..index].trim_end(), offset);
+    }
+    (value, "Z".to_owned())
+}
+
 /// Reads a request body the way `json.NewDecoder(body).Decode(&value)`
 /// does: the first JSON value counts and anything after it is ignored, and
 /// `null` leaves the value at its default. Any failure answers 400 with
@@ -83,6 +139,21 @@ mod tests {
         })
         .expect("json");
         assert_eq!(json, r#"{"rate":1,"sizes":[22,50.5,27.25]}"#);
+    }
+
+    #[test]
+    fn sqlite_datetimes_read_like_go_time() {
+        assert_eq!(time("2026-09-06 15:47:56"), "2026-09-06T15:47:56Z");
+        assert_eq!(
+            time("2026-09-06 15:47:56.120000"),
+            "2026-09-06T15:47:56.12Z"
+        );
+        assert_eq!(time("2026-09-06T15:47:56.000Z"), "2026-09-06T15:47:56Z");
+        assert_eq!(
+            time("2026-09-06 15:47:56+03:00"),
+            "2026-09-06T15:47:56+03:00"
+        );
+        assert_eq!(time("2026-09-06 15:47:56+00:00"), "2026-09-06T15:47:56Z");
     }
 
     #[derive(Debug, Default, Deserialize, PartialEq)]

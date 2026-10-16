@@ -23,6 +23,22 @@ pub struct AppState {
     pub config: Arc<Config>,
     pub dependencies: Arc<Report>,
     pub db: SqlitePool,
+    pub waveforms: Arc<modules::library::WaveformService>,
+}
+
+impl AppState {
+    pub fn new(config: Config, dependencies: Report, db: SqlitePool) -> Self {
+        let waveforms = modules::library::WaveformService::new(
+            modules::library::Repository::new(db.clone()),
+            dependencies.has(crate::dependencies::FFMPEG),
+        );
+        Self {
+            config: Arc::new(config),
+            dependencies: Arc::new(dependencies),
+            db,
+            waveforms: Arc::new(waveforms),
+        }
+    }
 }
 
 pub fn router(state: AppState) -> Router {
@@ -32,6 +48,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/v1/me", get(api::get_me))
         .merge(modules::docs::routes())
         .merge(modules::preferences::routes())
+        .merge(modules::library::routes())
         .fallback(static_assets::web)
         .layer(middleware::from_fn(stream_aware_timeout))
         .layer(cors)

@@ -1,0 +1,98 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT album_id AS \"album_id!\", source_track_id AS \"source_track_id!\",\n                content_sha256 AS \"content_sha256!\", media_type AS \"media_type!\",\n                width AS \"width!: i64\", height AS \"height!: i64\",\n                encoded_size_bytes AS \"encoded_size_bytes!: i64\"\n            FROM visible_album_artwork\n            WHERE album_id IN (SELECT value FROM json_each(?))",
+  "describe": {
+    "columns": [
+      {
+        "name": "album_id!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "album_artwork",
+            "name": "album_id"
+          }
+        }
+      },
+      {
+        "name": "source_track_id!",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "album_artwork",
+            "name": "source_track_id"
+          }
+        }
+      },
+      {
+        "name": "content_sha256!",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "album_artwork",
+            "name": "content_sha256"
+          }
+        }
+      },
+      {
+        "name": "media_type!",
+        "ordinal": 3,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "album_artwork",
+            "name": "media_type"
+          }
+        }
+      },
+      {
+        "name": "width!: i64",
+        "ordinal": 4,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "album_artwork",
+            "name": "width"
+          }
+        }
+      },
+      {
+        "name": "height!: i64",
+        "ordinal": 5,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "album_artwork",
+            "name": "height"
+          }
+        }
+      },
+      {
+        "name": "encoded_size_bytes!: i64",
+        "ordinal": 6,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "album_artwork",
+            "name": "encoded_size_bytes"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "50231c0e38931cc85f180ce68885ebcf667127b695d457e9ef0b138093c45ddd"
+}
