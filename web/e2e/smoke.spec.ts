@@ -97,7 +97,9 @@ test("swagger reference loads through docs module", async ({ page }) => {
 	await expect(page.locator("#swagger-ui")).toBeVisible();
 });
 
-test("queue overlays narrow pages and reserves space on desktop", async ({
+// The page makes room for the pinned Queue Drawer at every desktop width,
+// down to the 900px minimum window; phone widths are not a target.
+test("queue reserves space beside the page on narrow and wide desktop windows", async ({
 	page,
 }) => {
 	await page.goto("/library/albums");
@@ -106,20 +108,21 @@ test("queue overlays narrow pages and reserves space on desktop", async ({
 		await page.getByRole("button", { name: "Toggle queue panel" }).click();
 	}
 	await expect(drawer).toHaveAttribute("data-state", "open");
-	await page.setViewportSize({ width: 375, height: 812 });
 	const main = page.locator("main");
-	await expect(main).toHaveCSS("padding-right", "0px");
-	await expect
-		.poll(() => main.evaluate((element) => element.clientWidth))
-		.toBeGreaterThan(300);
-	await page.setViewportSize({ width: 1280, height: 800 });
-	await expect
-		.poll(() =>
-			main.evaluate((element) =>
-				Number.parseFloat(getComputedStyle(element).paddingRight),
-			),
-		)
-		.toBeGreaterThan(300);
+	const layout = () =>
+		main.evaluate((element) => {
+			const style = getComputedStyle(element);
+			const left = Number.parseFloat(style.paddingLeft);
+			const right = Number.parseFloat(style.paddingRight);
+			return { right, content: element.clientWidth - left - right };
+		});
+	for (const width of [900, 1280]) {
+		await page.setViewportSize({ width, height: 800 });
+		await expect.poll(async () => (await layout()).right).toBeGreaterThan(250);
+		await expect
+			.poll(async () => (await layout()).content)
+			.toBeGreaterThan(300);
+	}
 });
 
 test("library search follows the full album grid and animates result height", async ({
