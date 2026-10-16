@@ -137,7 +137,9 @@ run = ["bun run --cwd desktop test:core", "bun run --cwd desktop test"]
 
 [tasks."web:test:e2e"]
 description = "Run Web Client Playwright tests"
-run = "bun run --cwd web test:e2e"
+# The Music Server embeds the product docs from server/static, which git ignores.
+depends = ["docs:build"]
+run = ["bash scripts/sync-static.sh docs", "bun run --cwd web test:e2e"]
 
 [tasks."server:test:hls"]
 description = "Run the Music Server HLS browser integration test (needs Playwright's Chromium)"
