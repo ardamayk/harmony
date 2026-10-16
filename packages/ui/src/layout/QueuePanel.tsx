@@ -69,12 +69,12 @@ export function QueuePanel({
 					/>
 				</div>
 				<div
-					className="relative mt-3 flex size-9 items-center justify-center rounded-md text-caption"
+					className="relative mt-3 flex size-9 items-center justify-center rounded-sm text-caption"
 					title={`Queue (${queue.length})`}
 				>
 					<ListMusic className="size-4" />
 					{queue.length > 0 && (
-						<span className="absolute -top-1 -right-1 flex size-4 items-center justify-center rounded-full bg-primary font-medium text-[10px] text-primary-foreground">
+						<span className="absolute -top-1 -right-1 flex size-4 items-center justify-center rounded-full bg-primary font-medium text-xs text-primary-foreground">
 							{queue.length > 9 ? "9+" : queue.length}
 						</span>
 					)}
@@ -84,12 +84,12 @@ export function QueuePanel({
 
 	return (
 		<div className="flex h-full min-h-0 flex-col">
-			<div className="flex items-center justify-between gap-2 border-[var(--sidebar-border)] border-b pt-3 pr-3 pb-2.5 pl-4">
+			<div className="flex items-center justify-between gap-2 border-sidebar-border border-b pt-3 pr-3 pb-3 pl-4">
 				<div className="min-w-0">
 					<h2 className="font-semibold text-heading text-base leading-[22px]">
 						Queue
 					</h2>
-					<p className="whitespace-nowrap text-[11px] text-caption leading-4 tabular-nums">
+					<p className="whitespace-nowrap text-xs text-caption leading-4 tabular-nums">
 						{upcoming.length} {upcoming.length === 1 ? "track" : "tracks"} ·{" "}
 						{getQueueMinutes(upcoming)} min left
 					</p>
@@ -97,7 +97,7 @@ export function QueuePanel({
 				<div className="flex shrink-0 items-center gap-1">
 					<button
 						type="button"
-						className="h-7 rounded-lg border border-[var(--sidebar-border)] bg-[var(--player-pill)] px-2.5 text-caption text-xs hover:text-heading disabled:opacity-40"
+						className="h-8 rounded-sm border border-sidebar-border bg-player-pill px-3 text-caption text-xs hover:text-heading disabled:opacity-40"
 						disabled={!hasClearableItems || isUpdating}
 						onClick={() => void runAction("Failed to clear queue", clearQueue)}
 					>
@@ -114,9 +114,9 @@ export function QueuePanel({
 									: "Pin: make room for the queue beside the page"
 							}
 							className={cn(
-								"inline-flex size-7 items-center justify-center rounded-md text-caption hover:bg-[var(--player-pill)] hover:text-heading",
+								"inline-flex size-8 items-center justify-center rounded-sm text-caption hover:bg-player-pill hover:text-heading",
 								queuePin.pinned &&
-									"bg-[var(--player-pill)] text-[var(--shell-active-foreground)]",
+									"bg-player-pill text-shell-active-foreground",
 							)}
 							onClick={queuePin.togglePinned}
 						>
@@ -132,7 +132,7 @@ export function QueuePanel({
 							type="button"
 							aria-label="Hide queue"
 							title="Hide queue"
-							className="inline-flex size-7 items-center justify-center rounded-md text-caption hover:bg-[var(--player-pill)] hover:text-heading"
+							className="inline-flex size-8 items-center justify-center rounded-sm text-caption hover:bg-player-pill hover:text-heading"
 							onClick={onClose ?? (() => togglePanel(panelSide))}
 						>
 							<ChevronDown className="size-4" />

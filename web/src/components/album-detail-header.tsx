@@ -69,23 +69,23 @@ export function AlbumDetailHeader({
 	return (
 		<ContextMenu>
 			<ContextMenuTrigger asChild>
-				<div className="@container relative overflow-hidden rounded-xl border border-border/60 bg-card/40">
+				<div className="@container relative overflow-hidden rounded-lg border border-border/60 bg-card/40">
 					<div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/20 via-background/40 to-background" />
 					<div className="relative grid gap-8 p-6 @xl:grid-cols-[auto_minmax(0,1fr)] @xl:items-start @4xl:grid-cols-[auto_minmax(0,1fr)_220px]">
 						<AlbumArt
-							coverUrl={apiClient.getAlbumCoverUrl(album.id)}
+							coverUrl={apiClient.getAlbumCoverUrl(album.id, 1024)}
 							title={album.title}
-							className="aspect-square w-full shrink-0 rounded-lg shadow-lg text-5xl @xl:size-52"
+							className="aspect-square w-full shrink-0 rounded-md shadow-lg text-3xl @xl:size-52"
 						/>
 
 						<div className="min-w-0 pt-1">
 							<p className="mb-2 font-semibold text-caption text-xs uppercase tracking-widest">
 								Album
 							</p>
-							<h1 className="font-semibold text-3xl tracking-tight sm:text-4xl">
+							<h1 className="font-semibold text-3xl tracking-tight">
 								{album.title}
 							</h1>
-							<p className="mt-2 font-medium text-foreground text-lg">
+							<p className="mt-2 font-medium text-foreground text-xl">
 								{artistName}
 							</p>
 

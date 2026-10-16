@@ -9,6 +9,7 @@ import {
 	PictureInPicture2,
 	Play,
 	Repeat,
+	Repeat1,
 	Shuffle,
 	SkipBack,
 	SkipForward,
@@ -33,12 +34,12 @@ import {
 import { SeekBar } from "./SeekBar";
 
 const CONTROL_BUTTON_CLASS =
-	"inline-flex size-6 items-center justify-center rounded text-player-foreground hover:text-[var(--player-control-primary)] disabled:opacity-40";
+	"inline-flex size-6 items-center justify-center rounded-sm text-player-foreground hover:text-player-control-primary disabled:opacity-40";
 const CONTROL_ICON_CLASS = "size-[18px]";
 // The right cluster sits alone at the edge, so its icons run one step larger.
 const SIDE_ICON_CLASS = "size-5";
 const SIDE_BUTTON_CLASS = "size-7";
-const ACTIVE_CONTROL_BUTTON_CLASS = "text-[var(--player-control-primary)]";
+const ACTIVE_CONTROL_BUTTON_CLASS = "text-player-control-primary";
 const VOLUME_WHEEL_STEP = 0.05;
 const MAX_QUEUE_BADGE_COUNT = 9;
 
@@ -89,7 +90,7 @@ function TransportControls({
 	onNext,
 }: PlaybackControlsProps) {
 	return (
-		<div className="flex items-center gap-5">
+		<div className="flex items-center gap-6">
 			<ShuffleButton
 				isEnabled={shuffleEnabled}
 				disabled={!hasCurrentTrack}
@@ -184,7 +185,7 @@ function PrimaryPlaybackButton({
 		<button
 			type="button"
 			data-player-control
-			className="inline-flex size-11 items-center justify-center rounded-full bg-[var(--player-control-primary)] text-[var(--player-control-primary-foreground)] shadow-[0px_10px_15px_-3px_var(--player-control-shadow),0px_4px_6px_-4px_var(--player-control-shadow)] transition hover:scale-105 hover:opacity-95 disabled:opacity-50 disabled:hover:scale-100"
+			className="inline-flex size-11 items-center justify-center rounded-full bg-player-control-primary text-player-control-primary-foreground shadow-[0px_10px_15px_-3px_var(--player-control-shadow),0px_4px_6px_-4px_var(--player-control-shadow)] transition hover:scale-105 hover:opacity-95 disabled:opacity-50 disabled:hover:scale-100"
 			onClick={onClick}
 			disabled={disabled}
 			aria-label={isPlaying ? "Pause" : "Play"}
@@ -232,12 +233,12 @@ function RepeatButton({
 			onClick={onClick}
 			disabled={disabled}
 		>
-			<Repeat className={CONTROL_ICON_CLASS} />
+			{/* Repeat once swaps the glyph, so the state reads from its shape. */}
 			{repeatMode === "once" ? (
-				<span className="-right-0.5 -bottom-0.5 absolute flex size-3 items-center justify-center rounded-full bg-primary font-semibold text-[0.5rem] text-primary-foreground">
-					1
-				</span>
-			) : null}
+				<Repeat1 className={CONTROL_ICON_CLASS} />
+			) : (
+				<Repeat className={CONTROL_ICON_CLASS} />
+			)}
 			{repeatMode === "loop" ? (
 				<span
 					className="-right-1 -bottom-1 absolute flex size-4 items-center justify-center rounded-full bg-primary text-primary-foreground"
@@ -275,12 +276,12 @@ function PlaybackProgress({
 	onSeek: (seconds: number) => void;
 }) {
 	return (
-		<div className="mt-1 flex w-full min-w-0 items-center gap-2 text-[11px] tabular-nums">
+		<div className="mt-1 flex w-full min-w-0 items-center gap-2 text-xs tabular-nums">
 			<span className="w-8 shrink-0 text-right text-player-foreground">
 				{isRadioPlaying ? "LIVE" : formatTime(currentTime)}
 			</span>
 			{isRadioPlaying ? (
-				<div className="h-1 min-w-0 flex-1 rounded-full bg-[var(--player-live-progress)]/45" />
+				<div className="h-1 min-w-0 flex-1 rounded-full bg-player-live-progress/45" />
 			) : (
 				<SeekBar
 					currentTime={currentTime}
@@ -368,7 +369,7 @@ export function VolumeAndQueueControls({
 				{signalControl ?? (
 					<span
 						role="note"
-						className="inline-flex h-8 shrink-0 items-center gap-2 rounded-xl border border-[var(--sidebar-border)] bg-[var(--player-pill)] px-3.5 text-player-foreground text-xs"
+						className="inline-flex h-8 shrink-0 items-center gap-2 rounded-lg border border-sidebar-border bg-player-pill px-4 text-player-foreground text-xs"
 						title={qualityLabel}
 						aria-label={`Quality ${qualityLabel}`}
 					>
@@ -417,7 +418,7 @@ export function VolumeAndQueueControls({
 			>
 				<ListMusic className={SIDE_ICON_CLASS} />
 				{!isQueueOpen && hasQueueItems ? (
-					<span className="-top-1 -right-1.5 absolute flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--player-control-primary)] px-1 font-semibold text-[10px] text-[var(--player-control-primary-foreground)]">
+					<span className="-top-1 -right-1.5 absolute flex h-4 min-w-4 items-center justify-center rounded-full bg-player-control-primary px-1 font-semibold text-xs text-player-control-primary-foreground">
 						{upcomingCount > MAX_QUEUE_BADGE_COUNT
 							? `${MAX_QUEUE_BADGE_COUNT}+`
 							: upcomingCount}
@@ -509,7 +510,7 @@ function VolumeControl({
 				className={cn(
 					CONTROL_BUTTON_CLASS,
 					SIDE_BUTTON_CLASS,
-					"group-focus-within:text-[var(--player-control-primary)] group-hover:text-[var(--player-control-primary)]",
+					"group-focus-within:text-player-control-primary group-hover:text-player-control-primary",
 				)}
 				aria-label={volume <= 0 ? "Unmute" : "Mute"}
 				onPointerDown={(event) => {
@@ -532,7 +533,7 @@ function VolumeControl({
 					touchOpen && "pointer-events-auto opacity-100",
 				)}
 			>
-				<div className="flex h-32 w-9 items-center justify-center rounded-xl border border-[var(--player-border)] bg-player px-2 py-3 shadow-[0_8px_24px_-4px_var(--player-shadow)]">
+				<div className="flex h-32 w-9 items-center justify-center rounded-lg border border-player-border bg-player px-2 py-3 shadow-[0_8px_24px_-4px_var(--player-shadow)]">
 					<div className="relative h-full w-4">
 						<input
 							type="range"

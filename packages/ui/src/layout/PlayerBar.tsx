@@ -410,8 +410,12 @@ export function PlayerBar({
 				: null) ??
 			"Select a track");
 	const nowPlayingCaption = currentTrack?.albumTitle ?? null;
+	// The bar shows a 56–64px cover; the full-screen views get a large one.
 	const artworkUrl = currentTrack
-		? getAlbumCoverUrl(currentTrack.albumId)
+		? getAlbumCoverUrl(currentTrack.albumId, 128)
+		: (currentRadioStation?.faviconUrl ?? null);
+	const largeArtworkUrl = currentTrack
+		? getAlbumCoverUrl(currentTrack.albumId, 1024)
 		: (currentRadioStation?.faviconUrl ?? null);
 	const themeMode = useResolvedThemeMode(preferences.theme.mode);
 	const accentStyle = useCoverAccent({
@@ -634,8 +638,9 @@ export function PlayerBar({
 	return (
 		<footer
 			data-testid="player-bar"
+			data-shell-surface
 			style={accentStyle}
-			className="relative h-[86px] rounded-2xl border border-[var(--player-border)] bg-player px-5 text-player-foreground shadow-[0_-10px_32px_-6px_var(--player-shadow),0_14px_40px_-8px_var(--player-shadow)]"
+			className="relative h-[86px] rounded-lg border border-player-border bg-player px-6 text-player-foreground shadow-[0_-10px_32px_-6px_var(--player-shadow),0_14px_40px_-8px_var(--player-shadow)]"
 		>
 			{playbackError ? (
 				<PlaybackErrorBanner error={playbackError} recovery={errorRecovery} />
@@ -650,13 +655,13 @@ export function PlayerBar({
 			<div className="@container/player-bar flex h-full w-full min-w-0 items-center justify-between gap-6">
 				<section
 					aria-label="Now playing"
-					className="@container/now-playing flex min-w-[200px] flex-[1_0_0] items-center gap-3 justify-self-start sm:gap-3.5"
+					className="@container/now-playing flex min-w-[200px] flex-[1_0_0] items-center gap-3 justify-self-start sm:gap-4"
 				>
 					{currentTrack ? (
 						<button
 							type="button"
 							data-player-control
-							className="shrink-0 rounded-md"
+							className="shrink-0 rounded-sm"
 							aria-label="Open now playing"
 							onClick={() => setNowPlayingOpen(true)}
 						>
@@ -664,7 +669,7 @@ export function PlayerBar({
 								key={artworkUrl ?? "none"}
 								coverUrl={artworkUrl}
 								title={nowPlayingTitle}
-								className="player-cover-enter size-14 rounded-md border border-[var(--shell-subtle-border)] bg-[var(--player-artwork)] text-sm sm:size-16"
+								className="player-cover-enter size-14 rounded-sm border border-shell-subtle-border bg-player-artwork text-sm sm:size-16"
 							/>
 						</button>
 					) : (
@@ -672,14 +677,14 @@ export function PlayerBar({
 							key={artworkUrl ?? "none"}
 							coverUrl={artworkUrl}
 							title={nowPlayingTitle}
-							className="player-cover-enter size-14 shrink-0 rounded-md border border-[var(--shell-subtle-border)] bg-[var(--player-artwork)] text-sm sm:size-16"
+							className="player-cover-enter size-14 shrink-0 rounded-sm border border-shell-subtle-border bg-player-artwork text-sm sm:size-16"
 						/>
 					)}
 					<div className="min-w-0 flex-1 overflow-hidden">
 						<div className="flex max-w-full min-w-0 items-center">
 							<p
 								key={nowPlayingTitle}
-								className="player-title-enter min-w-0 truncate font-medium text-[var(--player-title)] text-sm sm:text-[15px] sm:leading-6"
+								className="player-title-enter min-w-0 truncate font-medium text-player-title text-sm sm:leading-6"
 								title={nowPlayingTitle}
 							>
 								{nowPlayingTitle}
@@ -689,9 +694,8 @@ export function PlayerBar({
 									type="button"
 									data-player-control
 									className={cn(
-										"ml-2 inline-flex size-6 shrink-0 items-center justify-center rounded text-player-foreground hover:text-[var(--player-control-primary)] disabled:opacity-40",
-										favoriteTarget?.isFavorite &&
-											"text-[var(--player-control-primary)]",
+										"ml-2 inline-flex size-6 relative after:absolute after:-inset-1 after:content-[''] shrink-0 items-center justify-center rounded-sm text-player-foreground hover:text-player-control-primary disabled:opacity-40",
+										favoriteTarget?.isFavorite && "text-player-control-primary",
 									)}
 									aria-label={
 										favoriteTarget?.isFavorite
@@ -715,8 +719,8 @@ export function PlayerBar({
 								type="button"
 								data-player-control
 								className={cn(
-									"ml-1 inline-flex size-6 shrink-0 items-center justify-center rounded text-player-foreground hover:text-[var(--player-control-primary)] disabled:opacity-40",
-									actionsOpen && "text-[var(--player-control-primary)]",
+									"ml-1 inline-flex size-6 relative after:absolute after:-inset-1 after:content-[''] shrink-0 items-center justify-center rounded-sm text-player-foreground hover:text-player-control-primary disabled:opacity-40",
+									actionsOpen && "text-player-control-primary",
 								)}
 								aria-label="Track actions"
 								aria-expanded={actionsOpen}
@@ -733,7 +737,7 @@ export function PlayerBar({
 							</button>
 						</div>
 						<p
-							className="truncate text-player-foreground text-xs sm:text-[13px] sm:leading-5"
+							className="truncate text-player-foreground text-xs sm:text-sm sm:leading-5"
 							title={nowPlayingSubtitle}
 							role={isReconnecting ? "status" : undefined}
 							aria-live={isReconnecting ? "polite" : undefined}
@@ -952,7 +956,7 @@ export function PlayerBar({
 			{lyricsOpen && currentTrack ? (
 				<LyricsOverlay
 					track={currentTrack}
-					coverUrl={artworkUrl}
+					coverUrl={largeArtworkUrl}
 					loadLyrics={getTrackLyrics}
 					onClose={() => setLyricsOpen(false)}
 				/>
@@ -975,7 +979,7 @@ export function PlayerBar({
 			{nowPlayingOpen && currentTrack ? (
 				<NowPlayingView
 					track={currentTrack}
-					coverUrl={artworkUrl}
+					coverUrl={largeArtworkUrl}
 					accentStyle={accentStyle}
 					onOpenLyrics={() => {
 						setNowPlayingOpen(false);
@@ -1038,7 +1042,7 @@ function AddToPlaylistMenuItem({
 		>
 			<div
 				className={cn(
-					"flex w-full items-center justify-between gap-2 rounded-sm px-2 py-1.5 text-left text-xs",
+					"flex w-full items-center justify-between gap-2 rounded-sm px-2 py-2 text-left text-xs",
 					open && "bg-muted text-heading",
 				)}
 				role="menuitem"
@@ -1065,11 +1069,11 @@ function AddToPlaylistMenuItem({
 						placeholder="Search playlists"
 						value={query}
 						onChange={(event) => onQueryChange(event.target.value)}
-						className="mb-2 h-8 w-full rounded-md border border-border bg-background px-2.5 text-xs outline-none focus:ring-2 focus:ring-primary/40"
+						className="mb-2 h-8 w-full rounded-sm border border-border bg-background px-3 text-xs outline-none focus:ring-2 focus:ring-primary/40"
 						onClick={(event) => event.stopPropagation()}
 					/>
 					{createOpen ? (
-						<div className="mb-2 flex gap-1.5">
+						<div className="mb-2 flex gap-2">
 							<label className="sr-only" htmlFor="player-new-playlist-name">
 								New playlist name
 							</label>
@@ -1079,12 +1083,12 @@ function AddToPlaylistMenuItem({
 								onChange={(event) =>
 									onNewPlaylistNameChange(event.target.value)
 								}
-								className="h-8 min-w-0 flex-1 rounded-md border border-border bg-background px-2.5 text-xs outline-none focus:ring-2 focus:ring-primary/40"
+								className="h-8 min-w-0 flex-1 rounded-sm border border-border bg-background px-3 text-xs outline-none focus:ring-2 focus:ring-primary/40"
 								placeholder="Playlist name"
 							/>
 							<button
 								type="button"
-								className="inline-flex h-8 items-center rounded-md bg-primary px-2.5 font-medium text-primary-foreground text-xs disabled:opacity-50"
+								className="inline-flex h-8 items-center rounded-sm bg-primary px-3 font-medium text-primary-foreground text-xs disabled:opacity-50"
 								disabled={!newPlaylistName.trim()}
 								onClick={onCreate}
 							>
@@ -1094,7 +1098,7 @@ function AddToPlaylistMenuItem({
 					) : (
 						<button
 							type="button"
-							className="mb-2 flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs hover:bg-muted"
+							className="mb-2 flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left text-xs hover:bg-muted"
 							role="menuitem"
 							onClick={onCreateOpen}
 						>
@@ -1105,13 +1109,13 @@ function AddToPlaylistMenuItem({
 						</button>
 					)}
 					{!isSearching && playlists.length > 0 ? (
-						<p className="mb-1 px-2 font-medium text-[0.625rem] text-caption uppercase tracking-wide">
+						<p className="mb-1 px-2 font-medium text-xs text-caption uppercase tracking-wide">
 							Recent
 						</p>
 					) : null}
 					<div className="max-h-40 overflow-auto">
 						{playlists.length === 0 ? (
-							<p className="px-2 py-1.5 text-caption text-xs">
+							<p className="px-2 py-2 text-caption text-xs">
 								{isSearching ? "No playlists found" : "No playlists yet"}
 							</p>
 						) : (
@@ -1121,7 +1125,7 @@ function AddToPlaylistMenuItem({
 									<button
 										key={playlist.id}
 										type="button"
-										className="flex w-full items-center justify-between gap-2 rounded-sm px-2 py-1.5 text-left text-xs hover:bg-muted"
+										className="flex w-full items-center justify-between gap-2 rounded-sm px-2 py-2 text-left text-xs hover:bg-muted"
 										role="menuitem"
 										aria-label={
 											isMember
@@ -1157,7 +1161,7 @@ function MenuButton({
 	return (
 		<button
 			type="button"
-			className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+			className="flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left text-xs hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
 			role="menuitem"
 			disabled={disabled}
 			onClick={onClick}
@@ -1187,7 +1191,7 @@ function TrackInfoDialog({
 					aria-modal="true"
 					aria-label={track.title}
 					tabIndex={-1}
-					className="max-h-[80vh] w-full max-w-2xl overflow-hidden rounded-lg border border-border bg-popover text-popover-foreground shadow-xl"
+					className="max-h-[80vh] w-full max-w-2xl overflow-hidden rounded-md border border-border bg-popover text-popover-foreground shadow-xl"
 				>
 					<div className="flex items-center justify-between gap-3 border-border border-b p-4">
 						<h2 className="truncate font-semibold text-heading text-xl">
@@ -1251,8 +1255,8 @@ function MenuSection({
 			aria-label={label}
 			className="m-0 mt-1 min-w-0 border-0 border-border border-t p-0 pt-1"
 		>
-			<div className="flex items-center justify-between gap-2 px-2 py-1 text-[0.625rem] text-caption uppercase tracking-wide">
-				<span className="flex items-center gap-1.5">
+			<div className="flex items-center justify-between gap-2 px-2 py-1 text-xs text-caption uppercase tracking-wide">
+				<span className="flex items-center gap-2">
 					{icon}
 					{label}
 				</span>

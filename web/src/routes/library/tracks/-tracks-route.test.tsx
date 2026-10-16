@@ -796,7 +796,7 @@ describe("tracks route", () => {
 			"[scrollbar-width:none]",
 		);
 		expect(screen.getByTestId("tracks-page-content").className).toContain(
-			"py-5",
+			"py-6",
 		);
 	});
 

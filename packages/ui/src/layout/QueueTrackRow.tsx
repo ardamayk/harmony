@@ -49,11 +49,11 @@ export function QueueTrackRow({
 				}
 			}}
 			className={cn(
-				"group relative flex cursor-pointer items-center gap-2.5 rounded-r-md py-2 pr-3 pl-6 outline-offset-[-2px] hover:bg-[rgb(from_var(--player-pill)_r_g_b_/_0.6)] focus-visible:outline-2 focus-visible:outline-[var(--player-control-primary)]",
+				"group relative flex cursor-pointer items-center gap-3 rounded-r-sm py-2 pr-3 pl-6 outline-offset-[-2px] hover:bg-[rgb(from_var(--player-pill)_r_g_b_/_0.6)] focus-visible:outline-2 focus-visible:outline-player-control-primary",
 				state === "played" &&
 					"opacity-50 hover:opacity-100 focus-within:opacity-100",
 				isCurrent &&
-					"my-[3px] mr-1.5 ml-2 rounded-md bg-[rgb(from_var(--player-pill)_r_g_b_/_0.7)] py-2 pr-3 pl-4 shadow-[0_0_0_1px_var(--player-control-primary),0_6px_18px_-6px_var(--player-control-shadow)]",
+					"my-1 mr-2 ml-2 rounded-sm bg-[rgb(from_var(--player-pill)_r_g_b_/_0.7)] py-2 pr-3 pl-4 shadow-[0_0_0_1px_var(--player-control-primary),0_6px_18px_-6px_var(--player-control-shadow)]",
 			)}
 		>
 			{isCurrent ? (
@@ -67,20 +67,24 @@ export function QueueTrackRow({
 				<AlbumArt
 					coverUrl={coverUrl}
 					title={item.track.title}
-					className="size-8 shrink-0 rounded text-xs"
+					className="size-8 shrink-0 rounded-sm text-xs"
 				/>
 			)}
 			<span className="min-w-0 flex-1">
 				<span
 					className={cn(
 						"block truncate text-sm text-heading leading-5",
-						isCurrent && "font-semibold text-[var(--player-control-primary)]",
+						isCurrent && "font-semibold text-player-control-primary",
 					)}
+					title={item.track.title}
 				>
 					{item.track.title}
 				</span>
 				{(!isAlbum || isCurrent) && (
-					<span className="block truncate text-xs text-caption leading-4">
+					<span
+						className="block truncate text-xs text-caption leading-4"
+						title={item.track.artistName}
+					>
 						{item.track.artistName}
 					</span>
 				)}
@@ -105,12 +109,12 @@ function QueueEqualizer({ isPlaying }: { isPlaying: boolean }) {
 	return (
 		<span
 			aria-hidden
-			className="queue-equalizer flex size-4 shrink-0 items-end justify-center gap-0.5 pb-px text-[var(--player-control-primary)]"
+			className="queue-equalizer flex size-4 shrink-0 items-end justify-center gap-0.5 pb-px text-player-control-primary"
 			data-playing={isPlaying}
 		>
-			<span className="h-1.5 w-0.5 rounded-[1px] bg-current" />
-			<span className="h-2.5 w-0.5 rounded-[1px] bg-current" />
-			<span className="h-2 w-0.5 rounded-[1px] bg-current" />
+			<span className="h-1.5 w-0.5 rounded-full bg-current" />
+			<span className="h-2.5 w-0.5 rounded-full bg-current" />
+			<span className="h-2 w-0.5 rounded-full bg-current" />
 		</span>
 	);
 }

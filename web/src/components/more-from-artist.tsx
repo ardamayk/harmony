@@ -81,23 +81,26 @@ export function MoreFromArtist({
 
 			<div
 				ref={scrollRef}
-				className="flex gap-4 overflow-x-auto pt-2 pb-5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+				className="flex gap-4 overflow-x-auto pt-2 pb-6 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
 			>
 				{items.map((album) => (
 					<Link
 						key={album.id}
 						to="/library/$albumId"
 						params={{ albumId: album.id }}
-						className="group w-40 shrink-0 rounded-md outline-none sm:w-44"
+						className="group w-40 shrink-0 rounded-sm outline-none sm:w-44"
 					>
-						<div className="mb-3 aspect-square transform-gpu overflow-hidden rounded-md border border-border shadow-sm backface-hidden transition duration-300 ease-out group-hover:-translate-y-1 group-hover:border-[var(--shell-active-foreground)]/35 group-hover:shadow-[0_18px_40px_-18px_rgb(0_0_0/0.75)] group-focus-visible:-translate-y-1 group-focus-visible:border-[var(--shell-active-foreground)]/60 group-focus-visible:shadow-[0_18px_40px_-18px_rgb(0_0_0/0.75)]">
+						<div className="mb-3 aspect-square transform-gpu overflow-hidden rounded-md border border-border backface-hidden transition duration-300 ease-out group-hover:-translate-y-1 group-hover:border-shell-active-foreground/35 group-hover:shadow-[0_18px_40px_-18px_rgb(0_0_0/0.75)] group-focus-visible:-translate-y-1 group-focus-visible:border-shell-active-foreground/60 group-focus-visible:shadow-[0_18px_40px_-18px_rgb(0_0_0/0.75)]">
 							<AlbumArt
-								coverUrl={apiClient.getAlbumCoverUrl(album.id)}
+								coverUrl={apiClient.getAlbumCoverUrl(album.id, 512)}
 								title={album.title}
 								className="size-full transform-gpu text-2xl transition duration-500 ease-out group-hover:scale-[1.04] group-focus-visible:scale-[1.04]"
 							/>
 						</div>
-						<p className="truncate font-medium text-heading text-sm">
+						<p
+							className="truncate font-medium text-heading text-sm"
+							title={album.title}
+						>
 							{album.title}
 						</p>
 						<p className="truncate text-caption text-xs">

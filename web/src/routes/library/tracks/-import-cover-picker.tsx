@@ -54,7 +54,7 @@ export function ImportCoverPicker({
 					<label
 						key={option.id}
 						className={cn(
-							"relative grid w-32 cursor-pointer gap-2 rounded-lg border bg-secondary/30 p-2 text-sm transition-colors focus-within:ring-2 focus-within:ring-ring",
+							"relative grid w-32 cursor-pointer gap-2 rounded-md border bg-secondary/30 p-2 text-sm transition-colors focus-within:ring-2 focus-within:ring-ring",
 							selectedId === option.id
 								? "border-primary bg-primary/10"
 								: "border-border hover:bg-secondary/60",

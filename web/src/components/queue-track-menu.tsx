@@ -23,9 +23,9 @@ import {
 } from "#/lib/playlist-query-cache";
 
 const MENU_CONTENT_CLASS =
-	"z-50 min-w-40 overflow-hidden rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md";
+	"z-50 min-w-40 overflow-hidden rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg";
 const MENU_ITEM_CLASS =
-	"relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50";
+	"relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-2 text-sm outline-hidden focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50";
 
 export function QueueTrackMenu({ item, children }: QueueRowMenuProps) {
 	const [isContextOpen, setIsContextOpen] = useState(false);
@@ -36,7 +36,7 @@ export function QueueTrackMenu({ item, children }: QueueRowMenuProps) {
 				type="button"
 				data-queue-menu-trigger
 				aria-label={`Queue actions for ${item.track.title}`}
-				className="absolute top-1/2 right-2 inline-flex size-5 -translate-y-1/2 items-center justify-center rounded text-caption opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 hover:bg-[var(--player-pill)] hover:text-heading focus-visible:outline focus-visible:outline-2 data-[state=open]:opacity-100"
+				className="absolute top-1/2 right-2 inline-flex size-8 -translate-y-1/2 items-center justify-center rounded-sm text-caption opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 hover:bg-player-pill hover:text-heading focus-visible:outline focus-visible:outline-2 data-[state=open]:opacity-100"
 				onClick={(event) => event.stopPropagation()}
 				onPointerDown={(event) => event.stopPropagation()}
 				onKeyDown={(event) => event.stopPropagation()}

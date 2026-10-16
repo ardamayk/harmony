@@ -4,7 +4,7 @@ import { Dialog as DialogPrimitive } from "radix-ui";
 export const DELETION_DIALOG_OVERLAY_CLASS =
 	"fixed inset-0 z-50 bg-background/70";
 export const DELETION_DIALOG_CONTENT_CLASS =
-	"-translate-x-1/2 -translate-y-1/2 fixed top-1/2 left-1/2 z-50 w-[calc(100vw-2rem)] max-w-lg rounded-lg border border-border bg-popover p-5 text-popover-foreground shadow-xl outline-none";
+	"-translate-x-1/2 -translate-y-1/2 fixed top-1/2 left-1/2 z-50 w-[calc(100vw-2rem)] max-w-lg rounded-md border border-border bg-popover p-6 text-popover-foreground shadow-xl outline-none";
 
 export function TrackDeletionDialog({
 	track,
@@ -127,7 +127,7 @@ export function DeletionActions({
 		<div className="mt-6 flex justify-end gap-2">
 			<button
 				type="button"
-				className="rounded-md border border-border px-4 py-2 text-sm"
+				className="rounded-sm border border-border px-4 py-2 text-sm"
 				disabled={isDeleting}
 				onClick={onCancel}
 			>
@@ -135,7 +135,7 @@ export function DeletionActions({
 			</button>
 			<button
 				type="button"
-				className="rounded-md bg-destructive px-4 py-2 text-destructive-foreground text-sm"
+				className="rounded-sm bg-destructive px-4 py-2 text-destructive-foreground text-sm"
 				disabled={!isReady || isDeleting}
 				onClick={onConfirm}
 			>

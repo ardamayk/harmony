@@ -62,7 +62,7 @@ export function PageHeader({
 				hasVisibleContent
 					? "sticky top-0 z-40 shrink-0 bg-background/80 py-3 backdrop-blur"
 					: "sr-only",
-				PAGE_CONTENT_PADDING_CLASS.replace("py-5", ""),
+				PAGE_CONTENT_PADDING_CLASS.replace("py-6", ""),
 				className,
 			)}
 		>

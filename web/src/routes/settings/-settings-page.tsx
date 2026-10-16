@@ -57,13 +57,13 @@ export function SettingsPage() {
 								type="button"
 								onClick={() => saveTheme({ preset: preset.id })}
 								className={cn(
-									"rounded-xl border p-3 text-left transition",
+									"rounded-lg border p-3 text-left transition",
 									isActive
 										? "border-primary bg-primary/5 ring-2 ring-primary/30"
 										: "border-border bg-card/40 hover:bg-muted/40",
 								)}
 							>
-								<div className="mb-3 flex h-10 overflow-hidden rounded-lg border border-border/60">
+								<div className="mb-3 flex h-10 overflow-hidden rounded-md border border-border/60">
 									{preset.swatches.map((color) => (
 										<span
 											key={color}

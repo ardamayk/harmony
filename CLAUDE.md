@@ -14,6 +14,10 @@ server/migrations                 ← goose migrations; also the sqlc schema
 
 Run everything through `mise run <task>` (`mise tasks` lists them). TypeScript tooling is bun + Vite+; run Vite+ on the Bun runtime as `bun --bun vp …` (`bun --bun vp check`, `bun --bun vp test`), never bare `vp`, which runs on Node; see ADR 0023.
 
+## UI design rules
+
+Before changing Tailwind classes or CSS in `web/src` or `packages/ui/src`, read `docs/design-rules.md` and stay within it. The Top Nav, page content, Queue Drawer, Player Bar and desktop window frame follow one design; no part styles itself on its own. In short: theme tokens through Tailwind classes (`bg-player-pill`, not `bg-[var(--player-pill)]`), three corner radii (`rounded-sm` 6px, `rounded-md` 10px, `rounded-lg` 16px, plus `rounded-full`/`rounded-none`), the spacing and type scales, one primary action per area, complete interaction states, and the shared hover/focus/lit states and motion durations. Pages compose shared components; settings live in place on their surface, otherwise in Settings. The Web and Desktop Clients behave alike: a UI fix is checked in both. Pages stay within the performance budgets (LCP ≤ 2.5s, INP ≤ 200ms, CLS ≤ 0.1, TTFB ≤ 800ms); `mise run web:lighthouse` checks them on a production build. `web/src/design-rules.test.ts` enforces the radius and token rules; fix the code, not the check. A new visual pattern gets a rule in that file first.
+
 ## Music Server modules
 
 `server/internal/modules/<module>/` is one Go package per module, layered:

@@ -4,6 +4,8 @@ import { useLayout } from "./LayoutProvider";
 import { QueueDrawer } from "./QueueDrawer";
 import { QueuePinProvider, useQueuePin } from "./QueuePinProvider";
 import {
+	PLAYER_BAR_HEIGHT_PX,
+	PLAYER_BAR_INSET_PX,
 	QUEUE_DRAWER_CONTENT_CLEARANCE,
 	SHELL_INSET_CLASS,
 } from "./shell-metrics";
@@ -15,9 +17,10 @@ import { WidgetDndProvider } from "./WidgetDock";
 
 export { PLAYER_BAR_HEIGHT_PX, PLAYER_BAR_INSET_PX } from "./shell-metrics";
 
-// Floating player bar: 86px bar + 16px bottom inset + 8px breathing room, so
+// Floating player bar: the bar, its bottom inset and 8px breathing room, so
 // scrolled content never ends hidden under the bar.
-const PLAYER_DOCK_CONTENT_PADDING = "pb-[110px]";
+const PLAYER_DOCK_CONTENT_PADDING = "pb-[var(--player-dock-clearance)]";
+const PLAYER_DOCK_CLEARANCE = `${PLAYER_BAR_HEIGHT_PX + PLAYER_BAR_INSET_PX + 8}px`;
 
 /**
  * App Shell: Top Nav across the top, the page below it, the Player Bar
@@ -85,6 +88,7 @@ function AppShellFrame({
 						style={
 							{
 								"--queue-drawer-clearance": QUEUE_DRAWER_CONTENT_CLEARANCE,
+								"--player-dock-clearance": PLAYER_DOCK_CLEARANCE,
 							} as CSSProperties
 						}
 					>

@@ -94,7 +94,7 @@ export function DesktopConnectionGate({
 
 	return (
 		<main className="grid h-full place-items-center p-6">
-			<section className="flex w-full max-w-lg flex-col gap-6 rounded-xl border bg-card p-8 shadow-sm">
+			<section className="flex w-full max-w-lg flex-col gap-6 rounded-lg border bg-card p-8">
 				<div className="flex flex-col gap-2">
 					<p className="text-sm font-medium text-primary">
 						Earthly Audio Desktop

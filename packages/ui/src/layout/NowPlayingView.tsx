@@ -7,21 +7,6 @@ import { cn } from "../lib/utils";
 import { CurrentTrackPanel } from "./CurrentTrackPanel";
 import { QueuePanel } from "./QueuePanel";
 
-const ARTWORK_VIEW_STYLE = {
-	"--heading": "#f5f5f5",
-	"--foreground": "#e5e5e5",
-	"--caption": "#a3a3a3",
-	"--muted": "#262626",
-	"--muted-foreground": "#a3a3a3",
-	"--border": "#262626",
-	"--queue-foreground": "#e5e5e5",
-	"--primary": "#f5f5f5",
-	"--primary-foreground": "#171717",
-	"--player-foreground": "#e5e5e5",
-	"--player-control-primary": "#f5f5f5",
-	"--player-control-primary-foreground": "#171717",
-} as CSSProperties;
-
 /**
  * Full-screen "Now Playing" view: pointer-responsive artwork, the
  * transport and the Queue. Sibling of the Lyrics view and opened from the
@@ -61,8 +46,9 @@ export function NowPlayingView({
 			aria-modal="true"
 			aria-label="Now playing"
 			tabIndex={-1}
-			style={{ ...accentStyle, ...ARTWORK_VIEW_STYLE }}
-			className="lyrics-view-enter fixed inset-0 z-[60] flex flex-col overflow-hidden bg-black text-white outline-none"
+			data-now-playing-surface
+			style={accentStyle}
+			className="lyrics-view-enter fixed inset-0 z-[60] flex flex-col overflow-hidden bg-background text-foreground outline-none"
 		>
 			<header className="relative flex shrink-0 items-center justify-between gap-4 px-6 py-3">
 				<p className="text-caption text-xs uppercase tracking-[0.2em]">
@@ -88,7 +74,7 @@ export function NowPlayingView({
 						<button
 							type="button"
 							className={cn(
-								"inline-flex items-center gap-2 rounded-full border border-border px-4 py-1.5 text-sm hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+								"inline-flex items-center gap-2 rounded-full border border-border px-4 py-2 text-sm hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
 							)}
 							onClick={onOpenLyrics}
 						>
@@ -97,7 +83,7 @@ export function NowPlayingView({
 						</button>
 					) : null}
 				</div>
-				<aside className="hidden w-[22rem] shrink-0 border-white/10 border-l bg-black text-queue-foreground backdrop-blur md:block">
+				<aside className="hidden w-[22rem] shrink-0 border-border border-l bg-background text-queue-foreground md:block">
 					<QueuePanel embedded />
 				</aside>
 			</div>

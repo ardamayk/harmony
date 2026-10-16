@@ -87,7 +87,7 @@ export function RadioStationDetailContent({
 			<div className="p-6">
 				<Link
 					to="/radio"
-					className="mb-5 inline-block text-foreground text-sm hover:text-heading"
+					className="mb-6 inline-block text-foreground text-sm hover:text-heading"
 				>
 					Back to radio
 				</Link>
@@ -110,7 +110,7 @@ export function RadioStationDetailContent({
 				Back to radio
 			</Link>
 
-			<header className="flex flex-col gap-4 rounded-lg border border-border bg-card/35 p-4">
+			<header className="flex flex-col gap-4 rounded-md border border-border bg-card/35 p-4">
 				<div className="flex min-w-0 items-center gap-4">
 					<StationArtwork faviconUrl={data.faviconUrl} name={data.name} />
 					<div className="min-w-0 flex-1">
@@ -146,8 +146,8 @@ export function RadioStationDetailContent({
 				</div>
 			</header>
 
-			<section className="grid gap-4 rounded-lg border border-border bg-card/25 p-4 md:grid-cols-2">
-				<h2 className="font-semibold text-heading text-lg md:col-span-2">
+			<section className="grid gap-4 rounded-md border border-border bg-card/25 p-4 md:grid-cols-2">
+				<h2 className="font-semibold text-heading text-xl md:col-span-2">
 					Metadata
 				</h2>
 				<MetadataField
@@ -276,7 +276,7 @@ function MetadataField({
 	type?: "number" | "text" | "url";
 }) {
 	return (
-		<label className="flex min-w-0 flex-col gap-1.5" htmlFor={id}>
+		<label className="flex min-w-0 flex-col gap-2" htmlFor={id}>
 			<span className="font-medium text-caption text-xs">{label}</span>
 			<Input
 				id={id}
@@ -298,13 +298,13 @@ function StationArtwork({
 	return faviconUrl ? (
 		<img
 			alt={name}
-			className="size-16 shrink-0 rounded-lg border border-border bg-muted object-cover"
+			className="size-16 shrink-0 rounded-md border border-border bg-muted object-cover"
 			src={faviconUrl}
 		/>
 	) : (
 		<div
 			aria-hidden
-			className="flex size-16 shrink-0 items-center justify-center rounded-lg border border-border bg-muted text-caption"
+			className="flex size-16 shrink-0 items-center justify-center rounded-md border border-border bg-muted text-caption"
 		>
 			<Radio className="size-6" />
 		</div>

@@ -50,7 +50,7 @@ export function TrackReplacementDialog({
 				<DialogPrimitive.Content
 					aria-describedby="track-replacement-description"
 					onCloseAutoFocus={onCloseAutoFocus}
-					className="-translate-x-1/2 -translate-y-1/2 fixed top-1/2 left-1/2 z-50 max-h-[85vh] w-[calc(100vw-2rem)] max-w-2xl overflow-y-auto rounded-lg border border-border bg-popover p-5 text-popover-foreground shadow-xl outline-none"
+					className="-translate-x-1/2 -translate-y-1/2 fixed top-1/2 left-1/2 z-50 max-h-[85vh] w-[calc(100vw-2rem)] max-w-2xl overflow-y-auto rounded-md border border-border bg-popover p-6 text-popover-foreground shadow-xl outline-none"
 				>
 					<DialogPrimitive.Title className="font-semibold text-heading text-xl">
 						Replace {track?.title}
@@ -120,7 +120,7 @@ function ReplacementFilePicker({
 			{isDesktop ? (
 				<button
 					type="button"
-					className="rounded-md border border-border px-4 py-2 text-sm"
+					className="rounded-sm border border-border px-4 py-2 text-sm"
 					disabled={isBusy}
 					onClick={onSelectDesktopFile}
 				>
@@ -139,7 +139,7 @@ function ReplacementFilePicker({
 						type="file"
 						accept={SUPPORTED_AUDIO_FILE_ACCEPT}
 						disabled={isBusy}
-						className="rounded-lg border border-input bg-background px-3 py-2 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1.5 file:text-secondary-foreground"
+						className="rounded-md border border-input bg-background px-3 py-2 text-sm file:mr-3 file:rounded-sm file:border-0 file:bg-secondary file:px-3 file:py-2 file:text-secondary-foreground"
 						onChange={(event) => {
 							const file = event.target.files?.[0];
 							if (file) onFile(file);
@@ -277,7 +277,7 @@ function LibrarySection({ preview }: { preview: TrackReplacementPreview }) {
 			{notes.length === 0 ? (
 				<p className="text-caption text-sm">No changes</p>
 			) : (
-				<ul className="list-disc pl-5 text-sm">
+				<ul className="list-disc pl-6 text-sm">
 					{notes.map((note) => (
 						<li key={note}>{note}</li>
 					))}
@@ -326,7 +326,7 @@ function ReplacementActions({
 			<div className="mt-6 flex justify-end gap-2">
 				<button
 					type="button"
-					className="rounded-md border border-border px-4 py-2 text-sm"
+					className="rounded-sm border border-border px-4 py-2 text-sm"
 					onClick={onClose}
 				>
 					Done
@@ -338,7 +338,7 @@ function ReplacementActions({
 		<div className="mt-6 flex justify-end gap-2">
 			<button
 				type="button"
-				className="rounded-md border border-border px-4 py-2 text-sm"
+				className="rounded-sm border border-border px-4 py-2 text-sm"
 				disabled={step === "replacing"}
 				onClick={onCancel}
 			>
@@ -346,7 +346,7 @@ function ReplacementActions({
 			</button>
 			<button
 				type="button"
-				className="rounded-md bg-destructive px-4 py-2 text-destructive-foreground text-sm"
+				className="rounded-sm bg-destructive px-4 py-2 text-destructive-foreground text-sm"
 				disabled={step !== "review" || isBusy}
 				onClick={onConfirm}
 			>

@@ -37,10 +37,10 @@ export function ShortcutHelpOverlay({
 				aria-modal="true"
 				aria-label="Keyboard shortcuts"
 				tabIndex={-1}
-				className="w-full max-w-md overflow-hidden rounded-lg border border-border bg-popover text-popover-foreground shadow-xl"
+				className="w-full max-w-md overflow-hidden rounded-md border border-border bg-popover text-popover-foreground shadow-xl"
 			>
 				<div className="flex items-center justify-between gap-3 border-border border-b p-4">
-					<h2 className="font-semibold text-heading text-lg">
+					<h2 className="font-semibold text-heading text-xl">
 						Keyboard shortcuts
 					</h2>
 					<button
@@ -59,7 +59,7 @@ export function ShortcutHelpOverlay({
 								{shortcut.keys.map((key) => (
 									<kbd
 										key={key}
-										className="inline-flex h-6 min-w-6 items-center justify-center rounded border border-border bg-muted px-1.5 font-mono text-xs"
+										className="inline-flex h-6 min-w-6 items-center justify-center rounded-sm border border-border bg-muted px-2 font-mono text-xs"
 									>
 										{key}
 									</kbd>

@@ -238,10 +238,9 @@ describe("playlist routes", () => {
 		expect(link.className).toContain("aspect-square");
 		expect(link.className).toContain("overflow-hidden");
 		expect(link.className).toContain("rounded-md");
-		expect(link.className).toContain("hover:-translate-y-px");
-		expect(link.className).toContain("focus-visible:ring-2");
+		expect(link.className).toContain("hover:-translate-y-1");
+		expect(link.className).toContain("focus-visible:-translate-y-1");
 		expect(link.className).toContain("motion-reduce:transition-none");
-		expect(link.className).not.toContain("hover:-translate-y-1");
 		expect(screen.queryByRole("button", { name: "Play" })).toBeNull();
 		expect(screen.queryByRole("button", { name: "Shuffle" })).toBeNull();
 		await waitFor(() => {
@@ -261,7 +260,7 @@ describe("playlist routes", () => {
 		);
 		const overlay = container.querySelector("[data-playlist-card-overlay]");
 		expect(overlay?.className).toContain("px-3");
-		expect(overlay?.className).toContain("pt-14");
+		expect(overlay?.className).toContain("pt-12");
 		expect(overlay?.querySelector("p")?.className).toContain("font-semibold");
 		expect(overlay?.querySelector("p")?.className).not.toContain(
 			"group-hover:underline",
@@ -378,7 +377,7 @@ describe("playlist routes", () => {
 		expect(
 			screen.getByRole("row", { name: /Blue Monday/ }).querySelector("td")
 				?.className,
-		).toContain("py-1.5");
+		).toContain("py-2");
 		expect(screen.getByRole("row", { name: /1 Blue Monday/ })).toBeTruthy();
 		expect(
 			screen.getByRole("row", { name: /2 Bizarre Love Triangle/ }),

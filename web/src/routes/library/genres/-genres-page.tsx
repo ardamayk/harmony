@@ -5,6 +5,7 @@ import { CollectionCoverCardStack } from "#/components/collection-cover-strip";
 import {
 	CollectionGrid,
 	COLLECTION_PAGE_CONTAINER_CLASS,
+	CARD_INTERACTION_CLASS,
 } from "#/components/collection-grid-layout";
 import { PageHeader, PageShell } from "#/components/page-layout";
 import { apiClient } from "#/lib/api";
@@ -13,6 +14,7 @@ import {
 	fetchGenreTracks,
 	GENRE_SOURCE_QUERY_KEY,
 } from "#/lib/collect-genres";
+import { cn } from "#/lib/utils";
 
 export function GenresPage() {
 	const tracks = useQuery({
@@ -56,7 +58,10 @@ export function GenresPage() {
 							key={genre.name}
 							to="/library/genres/$genre"
 							params={{ genre: genre.name }}
-							className="group relative aspect-square overflow-hidden rounded-md border border-border bg-card transition duration-300 ease-out hover:-translate-y-px hover:border-ring/60 hover:bg-muted/50 hover:shadow-lg focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2 focus-visible:ring-offset-background motion-reduce:transform-none motion-reduce:transition-none"
+							className={cn(
+								"group relative aspect-square overflow-hidden rounded-md border border-border bg-card",
+								CARD_INTERACTION_CLASS,
+							)}
 						>
 							<CollectionCoverCardStack
 								tracks={genre.tracks}
@@ -64,12 +69,12 @@ export function GenresPage() {
 							/>
 							<div
 								data-genre-card-overlay
-								className="absolute inset-x-0 bottom-0 z-50 bg-gradient-to-t from-background/95 via-background/70 to-transparent px-3 pt-14 pb-2.5 text-foreground"
+								className="absolute inset-x-0 bottom-0 z-50 bg-gradient-to-t from-background/95 via-background/70 to-transparent px-3 pt-12 pb-3 text-foreground"
 							>
 								<p className="truncate font-semibold text-heading text-sm leading-tight tracking-[-0.012em]">
 									{genre.name}
 								</p>
-								<p className="mt-0.5 truncate text-[11px] text-caption leading-tight tracking-[0.01em]">
+								<p className="mt-0.5 truncate text-xs text-caption leading-tight tracking-[0.01em]">
 									{genre.trackCount} track{genre.trackCount === 1 ? "" : "s"}
 								</p>
 							</div>

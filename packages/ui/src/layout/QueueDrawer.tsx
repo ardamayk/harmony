@@ -23,12 +23,13 @@ export function QueueDrawer({ abovePlayerBar }: { abovePlayerBar: boolean }) {
 	return (
 		<aside
 			data-queue-drawer
+			data-shell-surface
 			data-state={open ? "open" : "closed"}
 			aria-label="Queue"
 			aria-hidden={!open}
 			inert={!open}
 			className={cn(
-				"absolute z-40 overflow-hidden rounded-2xl border border-[var(--player-border)] shadow-[0_-16px_48px_-12px_var(--player-shadow),0_14px_40px_-8px_var(--player-shadow)] transition-[translate,visibility] duration-300 ease-out",
+				"absolute z-40 overflow-hidden rounded-lg border border-player-border shadow-[0_-16px_48px_-12px_var(--player-shadow),0_14px_40px_-8px_var(--player-shadow)] transition-[translate,visibility] duration-300 ease-out",
 				// Closed: slides below the viewport, then goes fully invisible so
 				// it can never peek out under the Player Bar, whatever the host
 				// window's geometry does to the shell.

@@ -331,7 +331,7 @@ export function LibrarySearchDialog({
 					}}
 					onCloseAutoFocus={returnFocus.restore}
 					aria-describedby={undefined}
-					className="library-search-card fixed top-[calc(23dvh)] z-50 flex max-h-[min(85dvh,56rem)] -translate-x-1/2 flex-col overflow-hidden rounded-2xl border border-border bg-popover text-popover-foreground shadow-[0_24px_80px_-20px_var(--player-shadow)] outline-none"
+					className="library-search-card fixed top-[calc(23dvh)] z-50 flex max-h-[min(85dvh,56rem)] -translate-x-1/2 flex-col overflow-hidden rounded-lg border border-border bg-popover text-popover-foreground shadow-[0_24px_80px_-20px_var(--player-shadow)] outline-none"
 				>
 					<DialogPrimitive.Title className="sr-only">
 						Search your library
@@ -358,16 +358,16 @@ export function LibrarySearchDialog({
 								setShowAll(false);
 							}}
 							onKeyDown={onInputKeyDown}
-							className="h-16 min-w-0 flex-1 bg-transparent text-lg outline-none placeholder:text-muted-foreground sm:h-20 sm:text-xl"
+							className="h-16 min-w-0 flex-1 bg-transparent text-xl outline-none placeholder:text-muted-foreground sm:h-20 sm:text-xl"
 						/>
 						{resultCount !== undefined ? (
-							<output className="shrink-0 rounded-xl border border-foreground/10 px-3 py-2 text-caption text-xs sm:text-sm">
+							<output className="shrink-0 rounded-lg border border-foreground/10 px-3 py-2 text-caption text-xs sm:text-sm">
 								{resultCount} {resultCount === 1 ? "result" : "results"}
 							</output>
 						) : null}
 						<DialogPrimitive.Close
 							aria-label="Close search"
-							className="shrink-0 rounded-lg border border-foreground/10 px-2.5 py-2 text-caption text-xs outline-none hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-[var(--shell-active-foreground)]"
+							className="shrink-0 rounded-md border border-foreground/10 px-3 py-2 text-caption text-xs outline-none hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-shell-active-foreground"
 						>
 							Esc
 						</DialogPrimitive.Close>
@@ -437,9 +437,9 @@ export function LibrarySearchDialog({
 														<li
 															key={result.key}
 															className={cn(
-																"flex items-center rounded-xl border pr-2 transition-colors motion-reduce:transition-none",
+																"flex items-center rounded-lg border pr-2 transition-colors motion-reduce:transition-none",
 																isActive
-																	? "border-[var(--shell-active-foreground)] bg-[var(--shell-active)]"
+																	? "border-shell-active-foreground bg-shell-active"
 																	: "border-transparent hover:bg-muted/50",
 															)}
 														>
@@ -449,7 +449,7 @@ export function LibrarySearchDialog({
 																role="option"
 																aria-selected={isActive}
 																tabIndex={-1}
-																className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-xl p-3 text-left outline-none sm:gap-4"
+																className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-lg p-3 text-left outline-none sm:gap-4"
 																onMouseEnter={() => setActiveKey(result.key)}
 																onMouseDown={(event) => event.preventDefault()}
 																onClick={result.action}
@@ -458,12 +458,13 @@ export function LibrarySearchDialog({
 																	<AlbumArt
 																		coverUrl={apiClient.getAlbumCoverUrl(
 																			result.albumId,
+																			128,
 																		)}
 																		title={result.title}
-																		className="size-11 shrink-0 rounded-md sm:size-12"
+																		className="size-11 shrink-0 rounded-sm sm:size-12"
 																	/>
 																) : (
-																	<span className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-muted/50 text-caption sm:size-12">
+																	<span className="flex size-11 shrink-0 items-center justify-center rounded-md bg-muted/50 text-caption sm:size-12">
 																		<group.icon className="size-5" />
 																	</span>
 																)}
@@ -472,7 +473,7 @@ export function LibrarySearchDialog({
 																		className={cn(
 																			"block truncate text-base",
 																			isActive &&
-																				"text-[var(--shell-active-foreground)]",
+																				"text-shell-active-foreground",
 																		)}
 																	>
 																		{result.title}
@@ -494,7 +495,7 @@ export function LibrarySearchDialog({
 																	) : null}
 																	<CornerDownLeft
 																		className={cn(
-																			"size-4 text-[var(--shell-active-foreground)]",
+																			"size-4 text-shell-active-foreground",
 																			!isActive && "invisible",
 																		)}
 																	/>
@@ -512,7 +513,7 @@ export function LibrarySearchDialog({
 																	onClick={() => {
 																		void queueResult(result);
 																	}}
-																	className="flex size-11 shrink-0 items-center justify-center rounded-lg text-caption outline-none hover:bg-foreground/10 hover:text-[var(--shell-active-foreground)] focus-visible:ring-2 focus-visible:ring-[var(--shell-active-foreground)] aria-disabled:opacity-50"
+																	className="flex size-11 shrink-0 items-center justify-center rounded-md text-caption outline-none hover:bg-foreground/10 hover:text-shell-active-foreground focus-visible:ring-2 focus-visible:ring-shell-active-foreground aria-disabled:opacity-50"
 																>
 																	{pendingTracks.has(result.trackId) ? (
 																		<LoaderCircle className="size-5 motion-safe:animate-spin" />
@@ -536,23 +537,23 @@ export function LibrarySearchDialog({
 						className="flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-3 border-foreground/10 border-t px-4 py-3 text-caption text-xs sm:px-6"
 					>
 						<div className="flex flex-wrap items-center gap-3">
-							<span className="inline-flex items-center gap-1.5">
-								<kbd className="rounded border border-foreground/10 p-1">
+							<span className="inline-flex items-center gap-2">
+								<kbd className="rounded-sm border border-foreground/10 p-1">
 									<ArrowUp className="size-3" />
 								</kbd>
-								<kbd className="rounded border border-foreground/10 p-1">
+								<kbd className="rounded-sm border border-foreground/10 p-1">
 									<ArrowDown className="size-3" />
 								</kbd>{" "}
 								Navigate
 							</span>
-							<span className="inline-flex items-center gap-1.5">
-								<kbd className="rounded border border-foreground/10 p-1">
+							<span className="inline-flex items-center gap-2">
+								<kbd className="rounded-sm border border-foreground/10 p-1">
 									<CornerDownLeft className="size-3" />
 								</kbd>{" "}
 								Play / open
 							</span>
-							<span className="inline-flex items-center gap-1.5">
-								<kbd className="rounded border border-foreground/10 px-1.5 py-1">
+							<span className="inline-flex items-center gap-2">
+								<kbd className="rounded-sm border border-foreground/10 px-2 py-1">
 									Shift ↵
 								</kbd>{" "}
 								Add to queue
@@ -566,7 +567,7 @@ export function LibrarySearchDialog({
 									setShowAll(!showAll);
 									inputRef.current?.focus();
 								}}
-								className="inline-flex min-w-0 max-w-full items-center gap-2 rounded px-1 py-1 text-[var(--shell-active-foreground)] outline-none hover:underline focus-visible:ring-2 focus-visible:ring-[var(--shell-active-foreground)] disabled:opacity-50"
+								className="inline-flex min-w-0 max-w-full items-center gap-2 rounded-sm px-1 py-1 text-shell-active-foreground outline-none hover:underline focus-visible:ring-2 focus-visible:ring-shell-active-foreground disabled:opacity-50"
 							>
 								<span className="truncate">
 									{showAll

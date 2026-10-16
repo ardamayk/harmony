@@ -47,7 +47,7 @@ export function PlaybackErrorBanner({
 					<button
 						type="button"
 						data-player-control
-						className="rounded-md border border-border px-2 py-1 text-xs hover:bg-muted"
+						className="rounded-sm border border-border px-2 py-1 text-xs hover:bg-muted"
 						onClick={recovery.retry}
 					>
 						Retry
@@ -56,7 +56,7 @@ export function PlaybackErrorBanner({
 						<button
 							type="button"
 							data-player-control
-							className="rounded-md bg-primary px-2 py-1 text-primary-foreground text-xs hover:opacity-90"
+							className="rounded-sm bg-primary px-2 py-1 text-primary-foreground text-xs hover:opacity-90"
 							onClick={recovery.skip}
 						>
 							Skip
@@ -66,7 +66,7 @@ export function PlaybackErrorBanner({
 						<button
 							type="button"
 							data-player-control
-							className="rounded-md px-2 py-1 text-caption text-xs hover:bg-muted"
+							className="rounded-sm px-2 py-1 text-caption text-xs hover:bg-muted"
 							onClick={recovery.cancelCountdown}
 						>
 							Wait

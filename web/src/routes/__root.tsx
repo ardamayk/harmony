@@ -53,7 +53,8 @@ const playbackApi: PlaybackApi = {
 		apiClient.subscribePlaybackQueueEvents(onEvent, onError),
 	getStreamUrl: (trackId) => apiClient.getTrackStreamUrl(trackId),
 	headTrackStream: (trackId) => apiClient.headTrackStream(trackId),
-	getAlbumCoverUrl: (albumId) => apiClient.getAlbumCoverUrl(albumId),
+	getAlbumCoverUrl: (albumId, size) =>
+		apiClient.getAlbumCoverUrl(albumId, size),
 	getTrack: (trackId) => apiClient.getTrack(trackId),
 	getTrackLyrics: (trackId) => apiClient.getTrackLyrics(trackId),
 	getTrackWaveform: (trackId) => apiClient.getTrackWaveform(trackId),

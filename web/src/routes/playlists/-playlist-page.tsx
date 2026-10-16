@@ -101,7 +101,7 @@ export function PlaylistDetailContent({ playlistId }: { playlistId: string }) {
 					>
 						<Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-caption" />
 						<Input
-							className="h-11 rounded-xl bg-[var(--player)] pl-10 text-sm"
+							className="h-11 rounded-lg bg-player pl-8 text-sm"
 							placeholder={`Search ${data.name}…`}
 							value={collection.search}
 							onChange={(event) => collection.setSearch(event.target.value)}

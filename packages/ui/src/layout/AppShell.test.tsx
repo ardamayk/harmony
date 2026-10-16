@@ -262,7 +262,7 @@ describe("AppShell", () => {
 		expect(container.querySelector("[data-widget-dock]")).toBeNull();
 		expect(drawer.style.width).toBe("var(--queue-drawer-width, 18rem)");
 		expect(drawer.style.bottom).toContain("1.5rem");
-		expect(drawer.className).toContain("rounded-2xl");
+		expect(drawer.className).toContain("rounded-lg");
 	});
 
 	it("updates inherited drawer width on shell and window resize without changing the bottom gap", () => {

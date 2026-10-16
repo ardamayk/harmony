@@ -45,13 +45,13 @@ export function CollectionDetailHeader({
 	const showSearch = searchValue !== undefined && onSearchChange;
 
 	return (
-		<div className="relative overflow-hidden rounded-xl border border-border/60 bg-card/40">
+		<div className="relative overflow-hidden rounded-lg border border-border/60 bg-card/40">
 			<div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/20 via-background/40 to-background" />
 			<div className="relative grid gap-6 p-6 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-stretch">
 				{coverTracks && coverTracks.length > 0 ? (
 					<CollectionCoverStack tracks={coverTracks} />
 				) : (
-					<div className="flex size-32 shrink-0 items-center justify-center rounded-lg bg-muted text-caption shadow-lg">
+					<div className="flex size-32 shrink-0 items-center justify-center rounded-md bg-muted text-caption shadow-lg">
 						<Icon className="size-12" />
 					</div>
 				)}
@@ -60,10 +60,10 @@ export function CollectionDetailHeader({
 					<p className="mb-2 font-semibold text-caption text-xs uppercase tracking-widest">
 						{kind}
 					</p>
-					<h1 className="truncate font-semibold text-3xl tracking-tight sm:text-4xl">
+					<h1 className="truncate font-semibold text-3xl tracking-tight">
 						{title}
 					</h1>
-					<p className="mt-2 font-medium text-foreground text-lg">{subtitle}</p>
+					<p className="mt-2 font-medium text-foreground text-xl">{subtitle}</p>
 
 					<div className="mt-4 flex flex-wrap items-center gap-2 text-foreground text-sm">
 						<Music2 className="size-4 shrink-0" />
@@ -103,7 +103,7 @@ export function CollectionDetailHeader({
 							<div className="relative ml-auto w-full sm:max-w-xs">
 								<Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-caption" />
 								<Input
-									className="pl-9"
+									className="pl-8"
 									placeholder={
 										searchPlaceholder ?? `Search ${kind.toLowerCase()}…`
 									}

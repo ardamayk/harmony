@@ -88,7 +88,7 @@ describe("albums route", () => {
 			"[scrollbar-width:none]",
 		);
 		expect(screen.getByTestId("albums-page-content").className).toContain(
-			"py-5",
+			"py-6",
 		);
 		expect(screen.getByTestId("albums-page-content").className).not.toContain(
 			"pt-8",

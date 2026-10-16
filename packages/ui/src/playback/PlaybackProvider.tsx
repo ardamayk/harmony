@@ -1,4 +1,5 @@
 import type {
+	CoverSize,
 	Playlist,
 	PlaylistDetail,
 	PlaylistList,
@@ -58,7 +59,7 @@ export type PlaybackAssetApi = {
 	 * unreachable. Hosts without it get an "unknown" cause.
 	 */
 	headTrackStream?: (trackId: string) => Promise<{ status: number }>;
-	getAlbumCoverUrl: (albumId: string) => string;
+	getAlbumCoverUrl: (albumId: string, size?: CoverSize) => string;
 	getTrack?: (trackId: string) => Promise<Track>;
 	/** Lyrics text stored for a Track; optional for hosts without the endpoint. */
 	getTrackLyrics?: (trackId: string) => Promise<{ lyrics: string }>;
@@ -155,7 +156,7 @@ type PlaybackContextValue = {
 	clearQueue: () => Promise<void>;
 	refreshQueue: () => Promise<void>;
 	stopPlayback: () => void;
-	getAlbumCoverUrl: (albumId: string) => string;
+	getAlbumCoverUrl: (albumId: string, size?: CoverSize) => string;
 	getTrack: (trackId: string) => Promise<Track | null>;
 	/** Resolves null when the host exposes no lyrics endpoint. */
 	getTrackLyrics: (trackId: string) => Promise<{ lyrics: string } | null>;
@@ -277,7 +278,7 @@ export function PlaybackProvider({
 					track: item.track,
 					playbackUrl: apiRef.current.getStreamUrl(item.trackId),
 					queueItemId: item.id,
-					artworkUrl: apiRef.current.getAlbumCoverUrl(item.track.albumId),
+					artworkUrl: apiRef.current.getAlbumCoverUrl(item.track.albumId, 512),
 				});
 			} catch {
 				// PlaybackEngine exposes the error through observable session state.
@@ -675,7 +676,8 @@ export function PlaybackProvider({
 			clearQueue,
 			refreshQueue,
 			stopPlayback: () => engine.stop(),
-			getAlbumCoverUrl: (albumId) => apiRef.current.getAlbumCoverUrl(albumId),
+			getAlbumCoverUrl: (albumId, size) =>
+				apiRef.current.getAlbumCoverUrl(albumId, size),
 			getTrack,
 			getTrackLyrics,
 			getTrackWaveform,
@@ -739,7 +741,7 @@ function queuePlaybackSources(
 		track: item.track,
 		playbackUrl: api.getStreamUrl(item.trackId),
 		queueItemId: item.id,
-		artworkUrl: api.getAlbumCoverUrl(item.track.albumId),
+		artworkUrl: api.getAlbumCoverUrl(item.track.albumId, 512),
 	}));
 }
 

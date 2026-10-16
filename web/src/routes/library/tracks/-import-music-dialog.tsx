@@ -78,7 +78,7 @@ export function ImportMusicDialog({
 					<DialogPrimitive.Content
 						aria-describedby="import-music-description"
 						onCloseAutoFocus={onCloseAutoFocus}
-						className="-translate-x-1/2 -translate-y-1/2 fixed top-1/2 left-1/2 z-50 flex max-h-[90dvh] w-[calc(100vw-1rem)] max-w-5xl flex-col overflow-hidden rounded-xl border border-border bg-background shadow-xl outline-none sm:w-[calc(100vw-3rem)]"
+						className="-translate-x-1/2 -translate-y-1/2 fixed top-1/2 left-1/2 z-50 flex max-h-[90dvh] w-[calc(100vw-1rem)] max-w-5xl flex-col overflow-hidden rounded-lg border border-border bg-background shadow-xl outline-none sm:w-[calc(100vw-3rem)]"
 					>
 						<ImportDialogHeader isBusy={false} />
 						<div
@@ -86,7 +86,7 @@ export function ImportMusicDialog({
 							className={
 								workflow.entries.length > 0
 									? "hidden"
-									: "grid gap-5 overflow-y-auto px-4 py-5 sm:px-6 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+									: "grid gap-6 overflow-y-auto px-4 py-6 sm:px-6 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
 							}
 						>
 							<ImportFilePicker
@@ -286,7 +286,7 @@ function ImportFileInput({
 				multiple
 				accept={SUPPORTED_AUDIO_FILE_ACCEPT}
 				disabled={isBusy}
-				className="rounded-lg border border-input bg-background px-3 py-2 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1.5 file:text-secondary-foreground"
+				className="rounded-md border border-input bg-background px-3 py-2 text-sm file:mr-3 file:rounded-sm file:border-0 file:bg-secondary file:px-3 file:py-2 file:text-secondary-foreground"
 				onChange={(event) =>
 					event.target.files && void onFiles(event.target.files)
 				}
@@ -300,7 +300,7 @@ function ImportActivity({ errorMessage }: { errorMessage: string }) {
 	return (
 		<p
 			role="alert"
-			className="mx-4 my-3 rounded-md bg-destructive/10 px-3 py-2 text-destructive text-sm sm:mx-6"
+			className="mx-4 my-3 rounded-sm bg-destructive/10 px-3 py-2 text-destructive text-sm sm:mx-6"
 		>
 			{errorMessage}
 		</p>
@@ -521,7 +521,7 @@ const ImportFileRow = memo(function ImportFileRow({
 		entry.phase === "uploading" ||
 		(!entry.phase && entry.state === "unresolved" && entry.progress < 100);
 	return (
-		<article className="border-border/50 border-b px-4 py-1.5 transition-colors hover:bg-muted/20 sm:px-6">
+		<article className="border-border/50 border-b px-4 py-2 transition-colors hover:bg-muted/20 sm:px-6">
 			<div className="flex min-h-10 items-center gap-3">
 				{duplicateClassification === "none" ? (
 					<SelectionCheckbox
@@ -560,7 +560,7 @@ const ImportFileRow = memo(function ImportFileRow({
 						type="button"
 						variant="ghost"
 						size="icon"
-						className="size-7 text-caption"
+						className="size-8 text-caption"
 						aria-label={`Details for ${filename}`}
 						aria-expanded={isExpanded}
 						aria-controls={isExpanded ? detailsId : undefined}
@@ -589,7 +589,7 @@ const ImportFileRow = memo(function ImportFileRow({
 			{isExpanded ? (
 				<div
 					id={detailsId}
-					className="ml-7 space-y-2 border-border/50 border-t py-3 text-caption text-xs"
+					className="ml-8 space-y-2 border-border/50 border-t py-3 text-caption text-xs"
 				>
 					<p className="break-all">
 						<span className="font-medium">File:</span> {filename}
@@ -650,7 +650,7 @@ function SelectionCheckbox({
 				checked={checked}
 				disabled={disabled}
 				onChange={(event) => onChange(event.target.checked)}
-				className="peer size-4 cursor-pointer appearance-none rounded border border-input bg-background transition-colors checked:border-primary checked:bg-primary focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-40"
+				className="peer size-4 cursor-pointer appearance-none rounded-sm border border-input bg-background transition-colors checked:border-primary checked:bg-primary focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-40"
 			/>
 			<Check
 				aria-hidden="true"
@@ -688,7 +688,7 @@ function StatusBadge({
 }) {
 	if (isConfirming && entry.selected && !entry.outcome) {
 		return (
-			<span className="flex items-center gap-1.5 text-caption text-xs">
+			<span className="flex items-center gap-2 text-caption text-xs">
 				<LoaderCircle aria-hidden="true" className="size-3 animate-spin" />
 				Importing…
 			</span>
@@ -772,7 +772,7 @@ function DuplicateReview({
 			</p>
 		);
 	return (
-		<fieldset className="grid gap-2 rounded border border-border p-3">
+		<fieldset className="grid gap-2 rounded-sm border border-border p-3">
 			<legend className="px-1 font-medium">Track Replacement</legend>
 			<p className="text-caption text-sm">
 				Replace {candidates[0]?.title} ({candidates[0]?.format}) with this{" "}

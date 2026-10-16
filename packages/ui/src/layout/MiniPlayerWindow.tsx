@@ -41,7 +41,7 @@ export function MiniPlayerWindow({
 		currentTrack?.artistName ??
 		(isRadioPlaying ? "Live radio" : "Select a track in the main window");
 	const artworkUrl = currentTrack
-		? getAlbumCoverUrl(currentTrack.albumId)
+		? getAlbumCoverUrl(currentTrack.albumId, 128)
 		: (currentRadioStation?.faviconUrl ?? null);
 	const effectiveDuration =
 		duration > 0
@@ -59,7 +59,7 @@ export function MiniPlayerWindow({
 			<AlbumArt
 				coverUrl={artworkUrl}
 				title={title}
-				className="pointer-events-none size-16 shrink-0 rounded-md text-sm"
+				className="pointer-events-none size-16 shrink-0 rounded-sm text-sm"
 			/>
 			<div className="flex min-w-0 flex-1 flex-col gap-1">
 				<div
@@ -69,7 +69,7 @@ export function MiniPlayerWindow({
 					<div data-tauri-drag-region className="min-w-0">
 						<p
 							data-tauri-drag-region
-							className="truncate font-medium text-[var(--player-title)] text-sm"
+							className="truncate font-medium text-player-title text-sm"
 							title={title}
 						>
 							{title}
@@ -87,7 +87,7 @@ export function MiniPlayerWindow({
 								type="button"
 								data-player-control
 								className={cn(
-									"inline-flex size-6 items-center justify-center rounded text-player-foreground hover:text-[var(--player-control-primary)]",
+									"inline-flex size-6 relative after:absolute after:-inset-1 after:content-[''] items-center justify-center rounded-sm text-player-foreground hover:text-player-control-primary",
 								)}
 								aria-label="Open main window"
 								onClick={onExpand}
@@ -99,7 +99,7 @@ export function MiniPlayerWindow({
 							<button
 								type="button"
 								data-player-control
-								className="inline-flex size-6 items-center justify-center rounded text-player-foreground hover:text-[var(--player-control-primary)]"
+								className="inline-flex size-6 relative after:absolute after:-inset-1 after:content-[''] items-center justify-center rounded-sm text-player-foreground hover:text-player-control-primary"
 								aria-label="Close mini player"
 								onClick={onClose}
 							>

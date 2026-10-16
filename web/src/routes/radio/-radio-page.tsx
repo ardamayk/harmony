@@ -7,6 +7,7 @@ import { useState } from "react";
 import {
 	COLLECTION_PAGE_CONTAINER_CLASS,
 	CollectionPageContainer,
+	CARD_INTERACTION_CLASS,
 } from "#/components/collection-grid-layout";
 import { PageHeader, PageShell } from "#/components/page-layout";
 import { Button } from "#/components/ui/button";
@@ -90,7 +91,7 @@ export function RadioPage() {
 							<Button
 								aria-label="Add radio station"
 								asChild
-								className="size-10 rounded-xl bg-[var(--player-control-primary)] text-[var(--player-control-primary-foreground)] hover:opacity-90"
+								className="size-10 rounded-lg bg-player-control-primary text-player-control-primary-foreground hover:opacity-90"
 								size="icon"
 							>
 								<Link to="/radio/discover">
@@ -116,14 +117,14 @@ export function RadioPage() {
 					</p>
 				) : null}
 				{!stations.isLoading && stationItems.length === 0 ? (
-					<div className="rounded-lg border border-dashed border-border p-6 text-caption text-sm">
+					<div className="rounded-md border border-dashed border-border p-6 text-caption text-sm">
 						No saved stations yet.
 					</div>
 				) : null}
 				{!stations.isLoading &&
 				stationItems.length > 0 &&
 				filteredStations.length === 0 ? (
-					<div className="rounded-lg border border-dashed border-border p-6 text-caption text-sm">
+					<div className="rounded-md border border-dashed border-border p-6 text-caption text-sm">
 						No saved stations match this filter.
 					</div>
 				) : null}
@@ -188,16 +189,15 @@ function StationCard({
 					aria-label={isEditing ? undefined : `Play ${station.name}`}
 					data-testid={`radio-station-card-${station.id}`}
 					className={cn(
-						"flex min-w-0 items-start gap-3 rounded-xl border border-border bg-card/45 p-3 text-left transition duration-300 ease-out hover:-translate-y-1 hover:bg-card/65 hover:shadow-lg",
-						!isEditing &&
-							"cursor-pointer outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50",
+						"flex min-w-0 items-start gap-3 rounded-md border border-border bg-card/45 p-3 text-left hover:bg-card/65",
+						!isEditing && ["cursor-pointer", CARD_INTERACTION_CLASS],
 						isActive &&
-							"border-border bg-[var(--player)] text-player-foreground shadow-lg",
+							"border-border bg-player text-player-foreground shadow-lg",
 					)}
 					onClick={isEditing ? undefined : onPlay}
 					type={isEditing ? undefined : "button"}
 				>
-					<div className="shrink-0 rounded-lg">
+					<div className="shrink-0 rounded-md">
 						<StationArtwork
 							faviconUrl={station.faviconUrl}
 							name={station.name}
@@ -235,11 +235,11 @@ function StationCard({
 							</div>
 						) : (
 							<>
-								<div className="flex min-w-0 items-center gap-1.5">
+								<div className="flex min-w-0 items-center gap-2">
 									<p
 										className={cn(
 											"truncate font-semibold text-heading text-sm",
-											isActive && "text-[var(--player-control-primary)]",
+											isActive && "text-player-control-primary",
 										)}
 										title={station.name}
 									>
@@ -248,7 +248,7 @@ function StationCard({
 									{isActive ? <EqualizerBars /> : null}
 								</div>
 								{tags.length > 0 ? (
-									<div className="mt-1.5 flex min-w-0 flex-wrap gap-1.5">
+									<div className="mt-2 flex min-w-0 flex-wrap gap-2">
 										{tags.map((tag) => (
 											<span
 												key={tag}
@@ -335,7 +335,7 @@ function StationCard({
 
 function EqualizerBars() {
 	return (
-		<span className="inline-flex h-4 items-end gap-0.5 text-[var(--player-control-primary)]">
+		<span className="inline-flex h-4 items-end gap-0.5 text-player-control-primary">
 			<span className="h-2 w-0.5 rounded-full bg-current" />
 			<span className="h-4 w-0.5 rounded-full bg-current" />
 			<span className="h-3 w-0.5 rounded-full bg-current" />
@@ -354,14 +354,14 @@ function StationArtwork({
 	return faviconUrl && !hasImageError ? (
 		<img
 			alt={name}
-			className="h-20 w-20 shrink-0 rounded-lg border border-border bg-muted object-cover"
+			className="h-20 w-20 shrink-0 rounded-md border border-border bg-muted object-cover"
 			src={faviconUrl}
 			onError={() => setHasImageError(true)}
 		/>
 	) : (
 		<div
 			aria-hidden
-			className="flex h-20 w-20 shrink-0 items-center justify-center rounded-lg border border-border bg-[var(--player-artwork)] text-[var(--player-control-primary)]"
+			className="flex h-20 w-20 shrink-0 items-center justify-center rounded-md border border-border bg-player-artwork text-player-control-primary"
 		>
 			<Headphones className="size-7" />
 		</div>

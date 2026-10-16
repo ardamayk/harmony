@@ -11,7 +11,6 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-	--radius: 0.625rem;
 	/* Horizontal inset shared by the Top Nav, page content and Player Bar.
      Content grows to --shell-max-content and only wider screens get side
      gutters; narrower ones keep ordinary page padding so the layout hugs the
@@ -60,10 +59,11 @@ html[data-theme-preset] {
 	--color-chart-3: var(--chart-3);
 	--color-chart-4: var(--chart-4);
 	--color-chart-5: var(--chart-5);
-	--radius-sm: calc(var(--radius) - 4px);
-	--radius-md: calc(var(--radius) - 2px);
-	--radius-lg: var(--radius);
-	--radius-xl: calc(var(--radius) + 4px);
+	/* The only three corner radii (docs/design-rules.md): small controls,
+	   medium cards and menus, large shell surfaces. */
+	--radius-sm: 6px;
+	--radius-md: 10px;
+	--radius-lg: 16px;
 	--color-sidebar: var(--sidebar);
 	--color-sidebar-foreground: var(--sidebar-foreground);
 	--color-sidebar-primary: var(--sidebar-primary);
@@ -78,6 +78,19 @@ html[data-theme-preset] {
 	--color-queue-foreground: var(--queue-foreground);
 	--color-player: var(--player);
 	--color-player-foreground: var(--player-foreground);
+	--color-shell-brand: var(--shell-brand);
+	--color-shell-active: var(--shell-active);
+	--color-shell-active-foreground: var(--shell-active-foreground);
+	--color-shell-subtle-border: var(--shell-subtle-border);
+	--color-player-title: var(--player-title);
+	--color-player-artwork: var(--player-artwork);
+	--color-player-border: var(--player-border);
+	--color-player-control-primary: var(--player-control-primary);
+	--color-player-control-primary-foreground: var(
+		--player-control-primary-foreground
+	);
+	--color-player-live-progress: var(--player-live-progress);
+	--color-player-pill: var(--player-pill);
 }
 
 html,
@@ -157,6 +170,26 @@ body::after {
 	mask-image: radial-gradient(circle at 50% 30%, black, transparent 78%);
 }
 
+/* Now Playing view: an always-dark, neutral surface so the artwork carries
+   the color. Its own values live here, not in the component. The primary
+   control stays neutral even when the Player Bar accent is passed in, hence
+   !important over the inline accent variables. */
+[data-now-playing-surface] {
+	--background: #000000;
+	--heading: #f5f5f5;
+	--foreground: #e5e5e5;
+	--caption: #a3a3a3;
+	--muted: #262626;
+	--muted-foreground: #a3a3a3;
+	--border: #262626;
+	--queue-foreground: #e5e5e5;
+	--primary: #f5f5f5;
+	--primary-foreground: #171717;
+	--player-foreground: #e5e5e5;
+	--player-control-primary: #f5f5f5 !important;
+	--player-control-primary-foreground: #171717 !important;
+}
+
 /* Desktop Client main window: no system frame (tauri.conf.json), so the page
    draws rounded corners itself on a transparent window. The body background
    moves onto #root because a transparent root would otherwise propagate it
@@ -169,7 +202,7 @@ html[data-desktop-window] body {
 html[data-desktop-window] #root {
 	overflow: hidden;
 	border: 1px solid color-mix(in srgb, var(--foreground) 12%, transparent);
-	border-radius: 10px;
+	border-radius: var(--radius-md);
 	background-color: var(--background);
 	background-image:
 		radial-gradient(900px 500px at -5% -5%, var(--hero-a), transparent 55%),
@@ -178,7 +211,7 @@ html[data-desktop-window] #root {
 
 html[data-desktop-window] body::before,
 html[data-desktop-window] body::after {
-	border-radius: 10px;
+	border-radius: var(--radius-md);
 }
 
 html[data-window-maximized] #root,
@@ -492,7 +525,7 @@ code {
 	font-size: 0.9em;
 	border: 1px solid var(--line);
 	background: color-mix(in oklab, var(--surface-strong) 82%, white 18%);
-	border-radius: 7px;
+	border-radius: var(--radius-sm);
 	padding: 2px 7px;
 }
 
@@ -507,7 +540,7 @@ pre code {
 
 .prose pre {
 	border: 1px solid var(--line);
-	border-radius: 12px;
+	border-radius: var(--radius-md);
 	background: var(--card);
 	color: var(--card-foreground);
 }

@@ -85,7 +85,7 @@ export function LyricsOverlay({
 					<AlbumArt
 						coverUrl={coverUrl}
 						title={track.title}
-						className="size-12 shrink-0 rounded-md text-sm"
+						className="size-12 shrink-0 rounded-sm text-sm"
 					/>
 					<div className="min-w-0">
 						<p className="truncate font-semibold text-heading text-sm">
@@ -112,7 +112,7 @@ export function LyricsOverlay({
 				</div>
 				<section
 					aria-label="Lyrics text"
-					className="flex min-h-64 min-w-0 flex-1 flex-col md:overflow-y-auto px-8 py-10 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+					className="flex min-h-64 min-w-0 flex-1 flex-col md:overflow-y-auto px-8 py-12 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
 				>
 					<LyricsBody state={state} />
 				</section>
@@ -136,7 +136,7 @@ function LyricsBody({ state }: { state: LyricsState }): ReactNode {
 	if (state.status === "failed") {
 		return (
 			<div className="m-auto max-w-md text-center" role="alert">
-				<p className="font-semibold text-heading text-lg">
+				<p className="font-semibold text-heading text-xl">
 					Lyrics could not be loaded
 				</p>
 				<p className="mt-2 text-caption text-sm">
@@ -152,7 +152,7 @@ function LyricsBody({ state }: { state: LyricsState }): ReactNode {
 	if (lines.every((line) => line === "")) {
 		return (
 			<div className="m-auto max-w-md text-center">
-				<p className="font-semibold text-heading text-lg">No lyrics yet</p>
+				<p className="font-semibold text-heading text-xl">No lyrics yet</p>
 				<p className="mt-2 text-caption text-sm">
 					This Track has no lyrics stored on your Music Server. Tag the file
 					with lyrics (Picard writes them) and import it again.
