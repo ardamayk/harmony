@@ -48,6 +48,17 @@ depends = ["server:build", "desktop:build"]
 description = "Build the Web Client"
 run = "bun run --cwd web build"
 
+[tasks."web:lighthouse"]
+description = "Check performance budgets (LCP, TBT/INP, CLS, TTFB) with Lighthouse on the production build"
+depends = ["server:build"]
+# Its own port, so a running development server is not measured instead.
+env = { SERVER_ADDR = "127.0.0.1:8099", LIGHTHOUSE_BASE_URL = "http://127.0.0.1:8099" }
+run = "./scripts/run-with-music-server.sh built bun run --cwd web lighthouse"
+
+[tasks."perf:snapshot"]
+description = "Print CPU and memory of the built Music Server, idle and streaming (plus a running Desktop Client)"
+run = "bun scripts/perf-snapshot.ts"
+
 [tasks."docs:build"]
 description = "Build the product documentation embedded by the Music Server"
 run = "bun run --cwd packages/docs build"

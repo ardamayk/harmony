@@ -13,7 +13,8 @@
     "test": "bun --bun vp test",
     "test:e2e": "playwright test && playwright test --config playwright.production.config.ts",
     "test:integration": "playwright test e2e/radio-hls-proxy.spec.ts --config=playwright.hls.config.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lighthouse": "bun scripts/lighthouse-budget.ts"
   },
   "dependencies": {
     "@repo/api-client": "workspace:*",
@@ -53,6 +54,7 @@
     "@vitejs/plugin-react": "^6.0.1",
     "babel-plugin-react-compiler": "^1.0.0",
     "jsdom": "^28.1.0",
+    "lighthouse": "^13.5.0",
     "typescript": "^6.0.2",
     "vite": "catalog:",
     "vite-plus": "catalog:"

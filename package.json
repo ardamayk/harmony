@@ -15,6 +15,7 @@
     "generate": "mise run generate"
   },
   "devDependencies": {
+    "@types/node": "^24",
     "vite": "catalog:",
     "vite-plus": "catalog:"
   },
