@@ -59,6 +59,10 @@ run = "./scripts/run-with-music-server.sh built bun run --cwd web lighthouse"
 description = "Print CPU and memory of the built Music Server, idle and streaming (plus a running Desktop Client)"
 run = "bun scripts/perf-snapshot.ts"
 
+[tasks."perf:server-load"]
+description = "Startup, idle footprint, endpoint latency under load and stream throughput of the built Music Server"
+run = "bun scripts/server-load.ts"
+
 [tasks."docs:build"]
 description = "Build the product documentation embedded by the Music Server"
 run = "bun run --cwd packages/docs build"
