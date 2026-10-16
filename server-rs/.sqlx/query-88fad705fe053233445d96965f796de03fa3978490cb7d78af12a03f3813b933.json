@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE managed_track_replacements SET artwork_created = 1, updated_at = CURRENT_TIMESTAMP\n            WHERE id = ? AND phase = 'prepared'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "88fad705fe053233445d96965f796de03fa3978490cb7d78af12a03f3813b933"
+}

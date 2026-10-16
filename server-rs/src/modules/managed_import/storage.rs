@@ -82,6 +82,34 @@ pub struct ReplacementPlacement {
     pub artwork_created: bool,
 }
 
+/// The relative paths a replacement preview and its token show.
+pub struct ReplacementRelatives<'a> {
+    pub audio: &'a str,
+    pub previous_artwork: &'a str,
+    pub retired_artwork: &'a str,
+}
+
+impl PlacedFiles {
+    /// Paths only, for writing a replacement's rows.
+    pub fn paths(audio_path: &str, artwork_path: &str) -> Self {
+        Self {
+            audio_path: audio_path.to_owned(),
+            artwork_path: artwork_path.to_owned(),
+            ..Self::default()
+        }
+    }
+}
+
+impl ReplacementPlacement {
+    pub fn relatives(&self) -> ReplacementRelatives<'_> {
+        ReplacementRelatives {
+            audio: &self.audio_relative,
+            previous_artwork: &self.previous_artwork_relative,
+            retired_artwork: &self.retired_artwork_relative,
+        }
+    }
+}
+
 /// The absolute journal paths of a replacement placement.
 pub struct ReplacementPaths {
     pub pending_audio: String,

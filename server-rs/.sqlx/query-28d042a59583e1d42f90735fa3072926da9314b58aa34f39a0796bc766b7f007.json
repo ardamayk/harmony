@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE managed_track_replacements SET phase = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND phase = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "28d042a59583e1d42f90735fa3072926da9314b58aa34f39a0796bc766b7f007"
+}

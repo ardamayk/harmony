@@ -391,3 +391,245 @@ async fn rolls_back_when_the_database_commit_fails() {
     assert_eq!(result.status, STATUS_COMMITTED);
     assert_eq!(h.count("SELECT COUNT(*) FROM visible_tracks").await, 1);
 }
+
+const OGG: &[u8] = include_bytes!("../../../testdata/strict-import.ogg");
+
+impl Harness {
+    async fn import(&self, name: &str, data: &[u8]) -> String {
+        let job = self.service.create_job("", "").await.unwrap();
+        self.upload(&job.id, name, data).await.unwrap();
+        self.service
+            .confirm_with_decision(&CancellationToken::new(), &job.id, 2, "")
+            .await
+            .unwrap()
+            .track_id
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn deletes_a_track_after_its_preview_token() {
+    let h = harness().await;
+    let track_id = h.import("a.flac", FLAC).await;
+    let preview = h.service.preview_track_deletion(&track_id).await.unwrap();
+    assert_eq!(preview.track_id, track_id);
+    assert!(preview.managed_file.path.starts_with("library/"));
+    assert_eq!(preview.managed_file.size_bytes, FLAC.len() as i64);
+    let stale = h.service.delete_track(&track_id, "nope").await.unwrap_err();
+    assert!(stale.is(Sentinel::DeletionConflict));
+    let deleted = h
+        .service
+        .delete_track(&track_id, &preview.confirmation_token)
+        .await
+        .unwrap();
+    assert_eq!(deleted.deleted_files, 2);
+    assert_eq!(h.count("SELECT COUNT(*) FROM tracks").await, 0);
+    assert_eq!(h.count("SELECT COUNT(*) FROM albums").await, 0);
+    assert_eq!(
+        h.count("SELECT COUNT(*) FROM permanent_track_deletions")
+            .await,
+        0
+    );
+    assert!(h.library_files().is_empty(), "{:?}", h.library_files());
+    let missing = h
+        .service
+        .preview_track_deletion(&track_id)
+        .await
+        .unwrap_err();
+    assert!(missing.is(Sentinel::TrackNotFound));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn deletes_an_album_track_by_track() {
+    let h = harness().await;
+    let track_id = h.import("a.flac", FLAC).await;
+    let album_id: String = sqlx::query_scalar("SELECT album_id FROM tracks WHERE id = ?")
+        .bind(&track_id)
+        .fetch_one(&h.pool)
+        .await
+        .unwrap();
+    let preview = h.service.preview_album_deletion(&album_id).await.unwrap();
+    assert_eq!(preview.track_count, 1);
+    assert!(
+        h.service
+            .delete_album(&album_id, "stale")
+            .await
+            .unwrap_err()
+            .is(Sentinel::DeletionConflict)
+    );
+    let result = h
+        .service
+        .delete_album(&album_id, &preview.confirmation_token)
+        .await
+        .unwrap();
+    assert_eq!((result.deleted.len(), result.deleted_files), (1, 2));
+    assert!(result.stopped_at.is_none());
+    assert!(
+        h.service
+            .preview_album_deletion(&album_id)
+            .await
+            .unwrap_err()
+            .is(Sentinel::AlbumNotFound)
+    );
+}
+
+async fn prepare_replacement(h: &Harness) -> (String, String, String) {
+    let track_id = h.import("a.flac", FLAC).await;
+    let job = h.service.create_replacement_job(&track_id).await.unwrap();
+    assert_eq!(job.replaces_track_id, track_id);
+    let preview = h.upload(&job.id, "new.ogg", OGG).await.unwrap();
+    let replacement: serde_json::Value =
+        serde_json::from_str(preview.replacement.as_ref().unwrap().get()).unwrap();
+    assert_eq!(replacement["trackId"], track_id.as_str());
+    assert_eq!(replacement["sourceFormat"]["replacement"], "ogg");
+    assert_eq!(replacement["library"]["movesAlbum"], true);
+    let token = replacement["confirmationToken"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    (track_id, job.id, token)
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn replaces_a_track_in_place() {
+    let h = harness().await;
+    let (track_id, job_id, token) = prepare_replacement(&h).await;
+    let confirm = |token: &str| super::replacement::TrackReplacementConfirmation {
+        revision: 2,
+        confirmation_token: token.to_owned(),
+    };
+    let stale = h
+        .service
+        .confirm_replacement(&CancellationToken::new(), &job_id, &confirm("stale"))
+        .await
+        .unwrap_err();
+    assert!(stale.is(Sentinel::ReplacementConflict));
+    let result = h
+        .service
+        .confirm_replacement(&CancellationToken::new(), &job_id, &confirm(&token))
+        .await
+        .unwrap();
+    assert_eq!(
+        (
+            result.track_id.as_str(),
+            result.revision,
+            result.deleted_files
+        ),
+        (track_id.as_str(), 3, 2)
+    );
+    let format: String = sqlx::query_scalar("SELECT format FROM tracks WHERE id = ?")
+        .bind(&track_id)
+        .fetch_one(&h.pool)
+        .await
+        .unwrap();
+    assert_eq!(format, "ogg");
+    assert_eq!(h.count("SELECT COUNT(*) FROM albums").await, 1);
+    let files = h.library_files();
+    assert!(
+        files
+            .iter()
+            .all(|file| !file.to_string_lossy().ends_with(".flac")),
+        "{files:?}"
+    );
+    let again = h
+        .service
+        .confirm_replacement(&CancellationToken::new(), &job_id, &confirm(&token))
+        .await
+        .unwrap();
+    assert_eq!(again.deleted_files, 2);
+    let not_replacement = h.service.create_job("", "").await.unwrap();
+    let error = h
+        .service
+        .confirm_replacement(
+            &CancellationToken::new(),
+            &not_replacement.id,
+            &confirm(&token),
+        )
+        .await
+        .unwrap_err();
+    assert!(error.is(Sentinel::NotReplacementJob));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn recovers_a_replacement_from_every_phase() {
+    use super::replacement::*;
+    let phases = [
+        (REPLACEMENT_PHASE_PREPARED, false),
+        (REPLACEMENT_PHASE_PLACED, false),
+        (REPLACEMENT_PHASE_VERIFIED, false),
+        (REPLACEMENT_PHASE_SWAPPED, false),
+        (REPLACEMENT_PHASE_DATABASE_COMMITTED, true),
+    ];
+    for (phase, completes) in phases {
+        let marker = format!("replacement:{phase}");
+        let hook: Hook = Arc::new(move |current: &str| {
+            if current == marker {
+                Err(Error::new("simulated crash"))
+            } else {
+                Ok(())
+            }
+        });
+        let h = harness_with(Some(hook), None).await;
+        let (track_id, job_id, token) = prepare_replacement(&h).await;
+        let confirmation = TrackReplacementConfirmation {
+            revision: 2,
+            confirmation_token: token,
+        };
+        let error = h
+            .service
+            .confirm_replacement(&CancellationToken::new(), &job_id, &confirmation)
+            .await
+            .unwrap_err();
+        assert!(
+            error.to_string().contains("simulated crash"),
+            "{phase}: {error}"
+        );
+        let restarted = Service::new(Repository::new(h.pool.clone()), h.service.storage.clone());
+        restarted
+            .recover_pending_track_replacements()
+            .await
+            .unwrap();
+        let format: String = sqlx::query_scalar("SELECT format FROM tracks WHERE id = ?")
+            .bind(&track_id)
+            .fetch_one(&h.pool)
+            .await
+            .unwrap();
+        let phase_now: String = sqlx::query_scalar("SELECT phase FROM managed_track_replacements")
+            .fetch_one(&h.pool)
+            .await
+            .unwrap();
+        let files = h.library_files();
+        if completes {
+            assert_eq!(
+                (format.as_str(), phase_now.as_str()),
+                ("ogg", "completed"),
+                "{phase}"
+            );
+            assert!(
+                files
+                    .iter()
+                    .all(|file| !file.to_string_lossy().ends_with(".flac")),
+                "{phase}: {files:?}"
+            );
+        } else {
+            assert_eq!(
+                (format.as_str(), phase_now.as_str()),
+                ("flac", "rolled_back"),
+                "{phase}"
+            );
+            assert!(
+                files
+                    .iter()
+                    .any(|file| file.to_string_lossy().ends_with(".flac")),
+                "{phase}: {files:?}"
+            );
+            assert!(
+                files
+                    .iter()
+                    .all(|file| !file.to_string_lossy().contains(".replacement-")),
+                "{phase}: {files:?}"
+            );
+            // The staged upload is back, so the job can be confirmed again.
+            assert_eq!(h.staged_files(), 1, "{phase}");
+        }
+    }
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE track_sources SET file_path = ?, content_sha256 = ?, source_format = ?, size_bytes = ?,\n            revision = revision + 1, updated_at = CURRENT_TIMESTAMP\n        WHERE track_id = ? AND revision = ? AND source_kind = 'managed'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": []
+  },
+  "hash": "d69ae8d8c39c2572ecffbb5bff091d6f700e5dfda27132906b6b88ddf7a8d582"
+}

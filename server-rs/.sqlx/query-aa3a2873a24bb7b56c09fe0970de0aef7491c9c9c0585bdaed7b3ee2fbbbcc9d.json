@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT tracks.album_id AS \"album_id!\" FROM permanent_track_deletions\n            JOIN tracks ON tracks.id = permanent_track_deletions.track_id WHERE tracks.id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "album_id!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tracks",
+            "name": "album_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "aa3a2873a24bb7b56c09fe0970de0aef7491c9c9c0585bdaed7b3ee2fbbbcc9d"
+}

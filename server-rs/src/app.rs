@@ -38,7 +38,9 @@ impl AppState {
             modules::library::Repository::new(db.clone()),
             dependencies.has(crate::dependencies::FFMPEG),
         );
-        let managed_import = modules::managed_import::ManagedImport::new(db.clone(), &config);
+        let queue_events: Arc<modules::playback::QueueEventBroker> = Arc::default();
+        let managed_import =
+            modules::managed_import::ManagedImport::new(db.clone(), &config, queue_events.clone());
         Self {
             config: Arc::new(config),
             dependencies: Arc::new(dependencies),
@@ -46,7 +48,7 @@ impl AppState {
             waveforms: Arc::new(waveforms),
             search: Arc::new(modules::search::SearchService::new(db.clone())),
             radio: Arc::new(radio),
-            queue_events: Arc::default(),
+            queue_events,
             managed_import: Arc::new(managed_import),
         }
     }

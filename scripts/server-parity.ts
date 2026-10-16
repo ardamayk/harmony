@@ -71,6 +71,9 @@ const VOLATILE_KEYS = new Set([
 	"tstamp",
 	"startedAt",
 	"completedAt",
+	// Deletion and replacement tokens hash the absolute managed file path,
+	// which differs between the two servers' Managed Storage roots.
+	"confirmationToken",
 ]);
 
 /**
@@ -722,6 +725,7 @@ function corpus(ids: Record<string, string>): Probe[] {
 			method: "POST",
 			path: "/api/v1/import-batches/{$batch}/confirm",
 			body: { revision: 3, selectedFileIds: ["{$batchJob}"] },
+			capture: { batchTrack: "files.0.trackId" },
 		},
 		{ method: "POST", path: "/api/v1/import-batches/{$batch}/heartbeat" },
 		{ method: "DELETE", path: "/api/v1/import-batches/{$batch}" },
@@ -748,6 +752,117 @@ function corpus(ids: Record<string, string>): Probe[] {
 		},
 		{ method: "DELETE", path: "/api/v1/import-batches/{$batch2}" },
 		{ path: "/api/v1/import-batches/{$batch2}" },
+		// Track Replacement.
+		{
+			method: "POST",
+			path: "/api/v1/library/tracks/missing/replacement",
+		},
+		{
+			method: "POST",
+			path: "/api/v1/library/tracks/{$newTrack}/replacement",
+			capture: "replaceJob",
+		},
+		{
+			method: "PUT",
+			path: "/api/v1/imports/{$replaceJob}/file",
+			file: "server-rs/testdata/strict-import-aac.m4a",
+			headers: { "x-import-filename": "replacement.m4a" },
+			capture: { replaceToken: "replacement.confirmationToken" },
+		},
+		{
+			method: "POST",
+			path: "/api/v1/imports/{$replaceJob}/confirm",
+			body: { revision: 2 },
+		},
+		{
+			method: "POST",
+			path: "/api/v1/imports/{$replaceJob}/replacement",
+			body: { revision: 2, confirmationToken: "{$replaceToken}" },
+		},
+		{
+			method: "POST",
+			path: "/api/v1/imports/{$replaceJob}/replacement",
+			headers: { "x-track-replacement": "1" },
+			body: { revision: 2 },
+		},
+		{
+			method: "POST",
+			path: "/api/v1/imports/{$replaceJob}/replacement",
+			headers: { "x-track-replacement": "1" },
+			body: { revision: 2, confirmationToken: "stale" },
+		},
+		{
+			method: "POST",
+			path: "/api/v1/imports/{$replaceJob}/replacement",
+			headers: { "x-track-replacement": "1" },
+			body: { revision: 2, confirmationToken: "{$replaceToken}" },
+		},
+		{
+			method: "POST",
+			path: "/api/v1/imports/{$replaceJob}/replacement",
+			headers: { "x-track-replacement": "1" },
+			body: { revision: 2, confirmationToken: "{$replaceToken}" },
+		},
+		{
+			method: "POST",
+			path: "/api/v1/imports/{$job1}/replacement",
+			headers: { "x-track-replacement": "1" },
+			body: { revision: 3, confirmationToken: "x" },
+		},
+		{ path: "/api/v1/library/tracks/{$newTrack}" },
+		// Permanent Track Deletion.
+		{ path: "/api/v1/library/tracks/missing/deletion" },
+		{
+			path: "/api/v1/library/tracks/{$newTrack}/deletion",
+			capture: { deleteToken: "confirmationToken" },
+		},
+		{
+			method: "DELETE",
+			path: "/api/v1/library/tracks/{$newTrack}",
+			body: { confirmationToken: "{$deleteToken}" },
+		},
+		{
+			method: "DELETE",
+			path: "/api/v1/library/tracks/{$newTrack}",
+			headers: { "x-permanent-delete": "1" },
+			body: {},
+		},
+		{
+			method: "DELETE",
+			path: "/api/v1/library/tracks/{$newTrack}",
+			headers: { "x-permanent-delete": "1" },
+			body: { confirmationToken: "stale" },
+		},
+		{
+			method: "DELETE",
+			path: "/api/v1/library/tracks/{$newTrack}",
+			headers: { "x-permanent-delete": "1" },
+			body: { confirmationToken: "{$deleteToken}" },
+		},
+		{ path: "/api/v1/library/tracks/{$newTrack}" },
+		// Album deletion.
+		{
+			path: "/api/v1/library/tracks/{$batchTrack}",
+			capture: { batchAlbum: "albumId" },
+		},
+		{ path: "/api/v1/library/albums/missing/deletion" },
+		{
+			path: "/api/v1/library/albums/{$batchAlbum}/deletion",
+			capture: { albumToken: "confirmationToken" },
+		},
+		{
+			method: "DELETE",
+			path: "/api/v1/library/albums/{$batchAlbum}",
+			headers: { "x-permanent-delete": "1" },
+			body: { confirmationToken: "stale" },
+		},
+		{
+			method: "DELETE",
+			path: "/api/v1/library/albums/{$batchAlbum}",
+			headers: { "x-permanent-delete": "1" },
+			body: { confirmationToken: "{$albumToken}" },
+		},
+		{ path: "/api/v1/library/albums/{$batchAlbum}" },
 		{ path: "/api/v1/import-history" },
 	];
 	return probes.map((probe) => ({
@@ -1141,6 +1256,8 @@ try {
 	for (const probe of [...corpus(ids), ...searchProbes(trackTitles, names)]) {
 		const label = `${probe.method ?? "GET"} ${probe.path}`;
 		const goAnswer = await ask(go.base, withIds(probe, goIds));
+		if (process.env.PARITY_TRACE && label.includes(process.env.PARITY_TRACE))
+			console.log(JSON.stringify(goAnswer.body).slice(0, 600));
 		const rustAnswer = await ask(rust.base, withIds(probe, rustIds));
 		if (probe.capture) {
 			const captures =

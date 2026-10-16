@@ -13,6 +13,7 @@ use sqlx::SqliteConnection;
 use std::collections::HashMap;
 
 /// Everything one commit writes.
+#[derive(Clone, Copy)]
 pub struct CommitData<'a> {
     pub job: &'a ImportJob,
     pub identity: &'a CommitIdentity,
@@ -388,10 +389,10 @@ async fn write_commit_data(conn: &mut SqliteConnection, data: &CommitData<'_>) -
         &data.identity.album_artist_id,
     )
     .await?;
-    upsert_album(conn, data, &artist_ids).await?;
+    upsert_album_for(conn, data, &artist_ids).await?;
     insert_track(conn, data).await?;
     insert_relationships(conn, data, &artist_ids).await?;
-    insert_artwork(conn, data).await
+    insert_artwork_for(conn, data).await
 }
 
 /// Artist IDs by normalized name; the primary Album Artist keeps the ID
@@ -452,7 +453,7 @@ pub(super) async fn upsert_artists(
     Ok(ids)
 }
 
-async fn upsert_album(
+pub(super) async fn upsert_album_for(
     conn: &mut SqliteConnection,
     data: &CommitData<'_>,
     artist_ids: &HashMap<String, String>,
@@ -682,7 +683,10 @@ pub(super) async fn upsert_genre(conn: &mut SqliteConnection, name: &str) -> Res
     Ok(id)
 }
 
-async fn insert_artwork(conn: &mut SqliteConnection, data: &CommitData<'_>) -> Result<()> {
+pub(super) async fn insert_artwork_for(
+    conn: &mut SqliteConnection,
+    data: &CommitData<'_>,
+) -> Result<()> {
     let artwork = &data.inspection.album_artwork;
     if !data.identity.existing_artwork_path.is_empty() || artwork.sha256.is_empty() {
         return Ok(());

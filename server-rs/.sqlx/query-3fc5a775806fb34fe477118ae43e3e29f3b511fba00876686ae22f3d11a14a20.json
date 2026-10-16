@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE album_artwork SET source_track_id = ?1 WHERE album_id = ?2 AND source_track_id = ?3",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "3fc5a775806fb34fe477118ae43e3e29f3b511fba00876686ae22f3d11a14a20"
+}

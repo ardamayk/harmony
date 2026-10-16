@@ -63,8 +63,11 @@ pub struct Service {
     batch_lock: tokio::sync::Mutex<()>,
     upload_locks: Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
     active: Active,
-    /// Runs after each durable commit phase; tests use it to stop a commit
-    /// there (`commitPhaseHook`).
+    /// `permanentTrackDeletionMu`.
+    pub(super) deletion_lock: tokio::sync::Mutex<()>,
+    pub(super) queue_events: Option<Arc<crate::modules::playback::QueueEventBroker>>,
+    /// Runs after each durable commit or replacement phase; tests use it to
+    /// stop there (`commitPhaseHook`, `replacementPhaseHook`).
     phase_hook: Option<Hook>,
     /// Runs after the database commit returns (`commitResultHook`).
     result_hook: Option<Hook>,
@@ -258,9 +261,38 @@ impl Service {
             batch_lock: tokio::sync::Mutex::new(()),
             upload_locks: Mutex::new(HashMap::new()),
             active: Arc::new(Mutex::new(ActiveState::default())),
+            deletion_lock: tokio::sync::Mutex::new(()),
+            queue_events: None,
             phase_hook: None,
             result_hook: None,
         }
+    }
+
+    pub fn with_queue_events(
+        mut self,
+        events: Arc<crate::modules::playback::QueueEventBroker>,
+    ) -> Self {
+        self.queue_events = Some(events);
+        self
+    }
+
+    pub(super) async fn commit_lock(&self) -> tokio::sync::MutexGuard<'_, ()> {
+        self.commit_lock.lock().await
+    }
+
+    pub(super) async fn batch_lock(&self) -> tokio::sync::MutexGuard<'_, ()> {
+        self.batch_lock.lock().await
+    }
+
+    pub(super) fn after_result(&self) -> Result<()> {
+        match &self.result_hook {
+            Some(hook) => hook(""),
+            None => Ok(()),
+        }
+    }
+
+    pub(super) fn after_replacement_phase(&self, phase: &str) -> Result<()> {
+        self.after_commit_phase(&format!("replacement:{phase}"))
     }
 
     #[cfg(test)]
@@ -974,7 +1006,7 @@ impl Service {
         }
     }
 
-    async fn inspect_staged_job(
+    pub(super) async fn inspect_staged_job(
         &self,
         cancel: &CancellationToken,
         job: &ImportJob,
@@ -1111,7 +1143,7 @@ impl Service {
         };
         if !job.replace_track_id.is_empty() && classification != DUPLICATE_EXACT {
             let state = match self
-                .build_replacement_state(job, &inspection, &staged.path)
+                .build_replacement_state(cancel, job, &inspection, &staged.path)
                 .await
             {
                 Ok(state) => state,
@@ -1227,7 +1259,7 @@ impl Service {
     }
 
     /// Ignores one existing Track, which a Track Replacement overwrites.
-    async fn validate_album_positions_excluding(
+    pub(super) async fn validate_album_positions_excluding(
         &self,
         cancel: &CancellationToken,
         job_id: &str,
@@ -1427,10 +1459,15 @@ impl Service {
                 .set_job_replace_target(job.id(), &job.replace_track_id)
                 .await?;
             let state = self
-                .build_replacement_state(&job, &inspection, &job.staged_file_path)
+                .build_replacement_state(cancel, &job, &inspection, &job.staged_file_path)
                 .await?;
             let result = self.commit_replacement(&job, state).await?;
-            return Ok(result);
+            return Ok(ImportResult {
+                job_id: result.job_id,
+                status: result.status,
+                revision: result.revision,
+                track_id: result.track_id,
+            });
         }
         if !decision.is_empty() && decision != DUPLICATE_ACTION_IMPORT_SEPARATELY {
             return Err(Error::sentinel(Sentinel::RevisionConflict));
@@ -1444,7 +1481,7 @@ impl Service {
         self.commit(&job, &inspection, &album_key).await
     }
 
-    async fn reject_exact_duplicate(&self, job: &ImportJob) -> Error {
+    pub(super) async fn reject_exact_duplicate(&self, job: &ImportJob) -> Error {
         if let Err(error) = self.repo.mark_confirmation_exact_duplicate(job.id()).await {
             return Error::join([Some(Error::sentinel(Sentinel::ExactDuplicate)), Some(error)])
                 .unwrap();
@@ -1452,7 +1489,7 @@ impl Service {
         self.finish_exact_duplicate_cleanup(job).await
     }
 
-    async fn finish_exact_duplicate_cleanup(&self, job: &ImportJob) -> Error {
+    pub(super) async fn finish_exact_duplicate_cleanup(&self, job: &ImportJob) -> Error {
         let duplicate = Error::sentinel(Sentinel::ExactDuplicate);
         if let Err(error) = self.storage.remove_staged(&job.staged_file_path) {
             return Error::join([Some(duplicate), Some(error)]).unwrap();
@@ -1656,7 +1693,11 @@ impl Service {
             .await
     }
 
-    fn preflight_commit(&self, staged_bytes: i64, inspection: &MediaInspection) -> Result<()> {
+    pub(super) fn preflight_commit(
+        &self,
+        staged_bytes: i64,
+        inspection: &MediaInspection,
+    ) -> Result<()> {
         self.storage.preflight(Requirement {
             selected_bytes: staged_bytes,
             temporary_bytes: inspection.album_artwork.data.len() as i64,

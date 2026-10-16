@@ -59,6 +59,188 @@ pub fn routes() -> Router<AppState> {
         )
         .route("/api/v1/imports/{import_id}/file", put(upload_file))
         .route("/api/v1/imports/{import_id}/confirm", post(confirm))
+        .route(
+            "/api/v1/imports/{import_id}/replacement",
+            post(confirm_replacement),
+        )
+        .route(
+            "/api/v1/library/albums/{album_id}/deletion",
+            get(preview_album_deletion),
+        )
+        .route(
+            "/api/v1/library/albums/{album_id}",
+            axum::routing::delete(delete_album),
+        )
+        .route(
+            "/api/v1/library/tracks/{track_id}/deletion",
+            get(preview_track_deletion),
+        )
+        .route(
+            "/api/v1/library/tracks/{track_id}",
+            axum::routing::delete(delete_track),
+        )
+        .route(
+            "/api/v1/library/tracks/{track_id}/replacement",
+            post(create_track_replacement),
+        )
+}
+
+const PERMANENT_DELETE_CONFIRMATION_HEADER: &str = "x-permanent-delete";
+const TRACK_REPLACEMENT_CONFIRMATION_HEADER: &str = "x-track-replacement";
+const MAX_TRACK_DELETION_BODY_BYTES: usize = 1024;
+const MAX_TRACK_REPLACEMENT_BODY_BYTES: usize = 4 * 1024;
+
+#[derive(Default, serde::Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields, default)]
+struct DeletionConfirmation {
+    #[serde(deserialize_with = "crate::gojson::nullable")]
+    confirmation_token: String,
+}
+
+fn header_is_one(headers: &HeaderMap, name: &str) -> bool {
+    headers.get(name).is_some_and(|value| value == "1")
+}
+
+/// The explicit-confirmation header and the preview token shared by Track
+/// and Album deletion; `Err` is the response to send.
+async fn read_deletion_confirmation(
+    headers: &HeaderMap,
+    body: Body,
+    subject: &str,
+) -> Result<String, Response> {
+    if !header_is_one(headers, PERMANENT_DELETE_CONFIRMATION_HEADER) {
+        return Err(ApiError::new(
+            StatusCode::FORBIDDEN,
+            "permanent_deletion_forbidden",
+            "Permanent Track Deletion requires explicit confirmation",
+        )
+        .into_response());
+    }
+    let confirmation = read_limited(body, MAX_TRACK_DELETION_BODY_BYTES)
+        .await
+        .and_then(|body| decode::<DeletionConfirmation>(&body).ok().flatten());
+    match confirmation {
+        Some(confirmation) if !confirmation.confirmation_token.is_empty() => {
+            Ok(confirmation.confirmation_token)
+        }
+        _ => Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "invalid_deletion_confirmation",
+            format!("{subject} requires the preview confirmation token"),
+        )
+        .into_response()),
+    }
+}
+
+async fn preview_album_deletion(
+    State(state): State<AppState>,
+    Path(album_id): Path<String>,
+) -> Response {
+    respond(
+        service(&state).preview_album_deletion(&album_id).await,
+        StatusCode::OK,
+        "/api/v1/library/albums",
+    )
+}
+
+async fn delete_album(
+    State(state): State<AppState>,
+    Path(album_id): Path<String>,
+    headers: HeaderMap,
+    body: Body,
+) -> Response {
+    let token = match read_deletion_confirmation(&headers, body, "Album deletion").await {
+        Ok(token) => token,
+        Err(response) => return response,
+    };
+    let service = service(&state);
+    let result =
+        detached(move |_| async move { service.delete_album(&album_id, &token).await }).await;
+    respond(result, StatusCode::OK, "/api/v1/library/albums")
+}
+
+async fn preview_track_deletion(
+    State(state): State<AppState>,
+    Path(track_id): Path<String>,
+) -> Response {
+    respond(
+        service(&state).preview_track_deletion(&track_id).await,
+        StatusCode::OK,
+        "/api/v1/library/tracks",
+    )
+}
+
+async fn delete_track(
+    State(state): State<AppState>,
+    Path(track_id): Path<String>,
+    headers: HeaderMap,
+    body: Body,
+) -> Response {
+    let token = match read_deletion_confirmation(&headers, body, "Permanent Track Deletion").await {
+        Ok(token) => token,
+        Err(response) => return response,
+    };
+    let service = service(&state);
+    let result =
+        detached(move |_| async move { service.delete_track(&track_id, &token).await }).await;
+    respond(result, StatusCode::OK, "/api/v1/library/tracks")
+}
+
+async fn create_track_replacement(
+    State(state): State<AppState>,
+    Path(track_id): Path<String>,
+) -> Response {
+    respond(
+        service(&state).create_replacement_job(&track_id).await,
+        StatusCode::CREATED,
+        "/api/v1/library/tracks",
+    )
+}
+
+async fn confirm_replacement(
+    State(state): State<AppState>,
+    Path(import_id): Path<String>,
+    headers: HeaderMap,
+    body: Body,
+) -> Response {
+    if !header_is_one(&headers, TRACK_REPLACEMENT_CONFIRMATION_HEADER) {
+        return ApiError::new(
+            StatusCode::FORBIDDEN,
+            "track_replacement_forbidden",
+            "Track Replacement requires explicit confirmation",
+        )
+        .into_response();
+    }
+    let confirmation = read_limited(body, MAX_TRACK_REPLACEMENT_BODY_BYTES)
+        .await
+        .and_then(|body| {
+            decode::<super::replacement::TrackReplacementConfirmation>(&body)
+                .ok()
+                .flatten()
+        });
+    let confirmation = match confirmation {
+        Some(confirmation)
+            if confirmation.revision >= 1 && !confirmation.confirmation_token.is_empty() =>
+        {
+            confirmation
+        }
+        _ => {
+            return ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "invalid_replacement_confirmation",
+                "Track Replacement requires a positive revision and the preview confirmation token",
+            )
+            .into_response();
+        }
+    };
+    let service = service(&state);
+    let result = detached(move |cancel| async move {
+        service
+            .confirm_replacement(&cancel, &import_id, &confirmation)
+            .await
+    })
+    .await;
+    respond(result, StatusCode::OK, "/api/v1/imports")
 }
 
 fn service(state: &AppState) -> Arc<super::service::Service> {
@@ -574,6 +756,8 @@ async fn get_artwork(
 impl ManagedImport {
     /// Restart recovery, then the inactivity cleanup every minute.
     pub async fn start(self: &Arc<Self>) -> ImportResult<()> {
+        self.service.recover_pending_track_deletions().await?;
+        self.service.recover_pending_track_replacements().await?;
         self.service.cleanup_restart().await?;
         let module = self.clone();
         tokio::spawn(async move {

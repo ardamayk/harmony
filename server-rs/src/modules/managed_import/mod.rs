@@ -3,6 +3,7 @@
 //! Track Replacement and Permanent Track Deletion.
 
 mod commit;
+mod deletion;
 pub mod errors;
 mod handlers;
 mod history;
@@ -27,7 +28,11 @@ pub struct ManagedImport {
 }
 
 impl ManagedImport {
-    pub fn new(pool: sqlx::SqlitePool, config: &Config) -> Self {
+    pub fn new(
+        pool: sqlx::SqlitePool,
+        config: &Config,
+        queue_events: Arc<crate::modules::playback::QueueEventBroker>,
+    ) -> Self {
         let storage = storage::Storage::new(
             &config.managed_storage_path,
             storage::Limits {
@@ -36,7 +41,8 @@ impl ManagedImport {
                 batch_bytes: config.managed_import_batch_limit_bytes,
             },
         );
-        let service = service::Service::new(repository::Repository::new(pool), Arc::new(storage));
+        let service = service::Service::new(repository::Repository::new(pool), Arc::new(storage))
+            .with_queue_events(queue_events);
         Self {
             service: Arc::new(service),
         }

@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT album_artwork.file_path, album_artwork.content_sha256 FROM album_artwork\n        WHERE album_artwork.album_id = ?1\n            AND NOT EXISTS (SELECT 1 FROM tracks WHERE tracks.album_id = ?1 AND tracks.id != ?2)",
+  "describe": {
+    "columns": [
+      {
+        "name": "file_path",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "album_artwork",
+            "name": "file_path"
+          }
+        }
+      },
+      {
+        "name": "content_sha256",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "album_artwork",
+            "name": "content_sha256"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "e07a9547fda6fd7a6d454a81211374f2aeb562a15b5e6c3c699ae87b67dd1c3e"
+}
