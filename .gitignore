@@ -16,7 +16,7 @@ test-results/
 .claude/worktrees/
 .superpowers/**/state/
 server/music/
-desktop/src-tauri/binaries/
+desktop/core/binaries/
 server/data/
 
 mise.local.toml

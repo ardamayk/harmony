@@ -1,29 +1,79 @@
+use serde::Serialize;
 use serde_json::Value;
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
-use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
-use tauri::tray::{TrayIcon, TrayIconBuilder};
-use tauri::{AppHandle, Wry};
 
 /// Tooltip updates carry the playhead, which changes several times a second;
 /// D-Bus tray hosts are only told this often.
 const TOOLTIP_REFRESH_INTERVAL: Duration = Duration::from_secs(5);
 
-pub(crate) const TRAY_MINI_ID: &str = "playback-mini";
-pub(crate) const TRAY_NEXT_ID: &str = "playback-next";
-pub(crate) const TRAY_OPEN_ID: &str = "playback-open";
-pub(crate) const TRAY_PREVIOUS_ID: &str = "playback-previous";
-pub(crate) const TRAY_QUIT_ID: &str = "playback-quit";
-pub(crate) const TRAY_TOGGLE_ID: &str = "playback-toggle";
+/// What the shell's tray shows. The shell draws the menu; the core decides
+/// its labels and only sends an update when something visible changed.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct TrayUpdate {
+    pub(crate) source_label: String,
+    pub(crate) has_source: bool,
+    pub(crate) previous_label: &'static str,
+    pub(crate) toggle_label: &'static str,
+    pub(crate) next_label: &'static str,
+    pub(crate) open_label: &'static str,
+    pub(crate) mini_label: &'static str,
+    pub(crate) quit_label: &'static str,
+    /// Present only when the tooltip is due (see [`TooltipThrottle`]).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) tooltip: Option<String>,
+}
 
-#[derive(Clone)]
+/// Coalesces Playback Session updates into tray updates.
+#[derive(Default)]
 pub(crate) struct PlaybackTray {
-    source: MenuItem<Wry>,
-    previous: MenuItem<Wry>,
-    toggle: MenuItem<Wry>,
-    next: MenuItem<Wry>,
-    icon: TrayIcon<Wry>,
-    tooltip: Arc<Mutex<TooltipThrottle>>,
+    last_menu: Mutex<Option<TrayUpdate>>,
+    tooltip: Mutex<TooltipThrottle>,
+}
+
+impl PlaybackTray {
+    pub(crate) fn update(
+        &self,
+        source: Option<&Value>,
+        is_playing: bool,
+        position: PlaybackPosition,
+    ) -> Option<TrayUpdate> {
+        let view = PlaybackTrayView::from_playback(source, is_playing);
+        let tooltip = view.tooltip(position);
+        let menu = TrayUpdate {
+            source_label: view.source_label,
+            has_source: view.has_source,
+            previous_label: view.previous_label,
+            toggle_label: view.toggle_label,
+            next_label: view.next_label,
+            open_label: view.open_label,
+            mini_label: view.mini_label,
+            quit_label: view.quit_label,
+            tooltip: None,
+        };
+        let menu_changed = self
+            .last_menu
+            .lock()
+            .map(|mut last| {
+                let changed = last.as_ref() != Some(&menu);
+                *last = Some(menu.clone());
+                changed
+            })
+            .unwrap_or(true);
+        let tooltip_due = self
+            .tooltip
+            .lock()
+            .map(|mut throttle| throttle.should_send(&tooltip, Instant::now()))
+            .unwrap_or(true);
+        if !menu_changed && !tooltip_due {
+            return None;
+        }
+        Some(TrayUpdate {
+            tooltip: tooltip_due.then_some(tooltip),
+            ..menu
+        })
+    }
 }
 
 #[derive(Debug, Default)]
@@ -58,69 +108,6 @@ fn tooltip_heading(text: &str) -> &str {
     text.split(" · ").next().unwrap_or(text)
 }
 
-impl PlaybackTray {
-    pub(crate) fn start(
-        app: &AppHandle,
-        on_menu_event: impl Fn(&AppHandle, &str) + Send + Sync + 'static,
-    ) -> tauri::Result<Self> {
-        let view = PlaybackTrayView::from_playback(None, false);
-        let source = menu_item(app, "playback-source", &view.source_label, false)?;
-        let previous = menu_item(app, TRAY_PREVIOUS_ID, view.previous_label, false)?;
-        let toggle = menu_item(app, TRAY_TOGGLE_ID, view.toggle_label, false)?;
-        let next = menu_item(app, TRAY_NEXT_ID, view.next_label, false)?;
-        let open = menu_item(app, TRAY_OPEN_ID, view.open_label, true)?;
-        let mini = menu_item(app, TRAY_MINI_ID, view.mini_label, true)?;
-        let quit = menu_item(app, TRAY_QUIT_ID, view.quit_label, true)?;
-        let separator = PredefinedMenuItem::separator(app)?;
-        let menu = Menu::with_items(
-            app,
-            &[
-                &source, &previous, &toggle, &next, &separator, &open, &mini, &quit,
-            ],
-        )?;
-        let mut builder = TrayIconBuilder::with_id("earthly-audio-playback").menu(&menu);
-        if let Some(icon) = app.default_window_icon() {
-            builder = builder.icon(icon.clone());
-        }
-        let icon = builder
-            .on_menu_event(move |app, event| on_menu_event(app, event.id().as_ref()))
-            .build(app)?;
-        Ok(Self {
-            source,
-            previous,
-            toggle,
-            next,
-            icon,
-            tooltip: Arc::new(Mutex::new(TooltipThrottle::default())),
-        })
-    }
-
-    pub(crate) fn update(
-        &self,
-        source: Option<&Value>,
-        is_playing: bool,
-        position: PlaybackPosition,
-    ) -> tauri::Result<()> {
-        let view = PlaybackTrayView::from_playback(source, is_playing);
-        let has_source = source.is_some();
-        self.source.set_text(&view.source_label)?;
-        self.previous.set_enabled(has_source)?;
-        self.toggle.set_enabled(has_source)?;
-        self.toggle.set_text(view.toggle_label)?;
-        self.next.set_enabled(has_source)?;
-        let tooltip = view.tooltip(position);
-        let should_send = self
-            .tooltip
-            .lock()
-            .map(|mut throttle| throttle.should_send(&tooltip, Instant::now()))
-            .unwrap_or(true);
-        if should_send {
-            self.icon.set_tooltip(Some(tooltip.as_str()))?;
-        }
-        Ok(())
-    }
-}
-
 /// Playhead and length in seconds, for the tooltip.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub(crate) struct PlaybackPosition {
@@ -134,15 +121,6 @@ pub(crate) fn format_clock(seconds: f64) -> String {
     }
     let total = seconds.floor() as u64;
     format!("{}:{:02}", total / 60, total % 60)
-}
-
-fn menu_item(
-    app: &AppHandle,
-    id: &str,
-    label: &str,
-    is_enabled: bool,
-) -> tauri::Result<MenuItem<Wry>> {
-    MenuItem::with_id(app, id, label, is_enabled, None::<&str>)
 }
 
 #[derive(Clone, Debug, PartialEq)]

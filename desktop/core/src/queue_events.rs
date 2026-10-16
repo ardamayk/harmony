@@ -86,7 +86,7 @@ impl QueueEventService {
         on_error: impl Fn(String) + Send + Sync + 'static,
     ) -> Self {
         let (reconnect, reconnect_rx) = watch::channel(0);
-        tauri::async_runtime::spawn(run_queue_event_stream(
+        crate::runtime::spawn(run_queue_event_stream(
             bridge,
             origin,
             Arc::new(on_event),

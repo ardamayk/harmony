@@ -9,7 +9,6 @@ use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
-use tauri::ipc::Channel;
 use tokio_util::io::ReaderStream;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
@@ -150,6 +149,10 @@ pub struct ImportUploadProgress {
     pub total_bytes: u64,
 }
 
+/// Receives upload progress; the shell forwards it to the renderer that
+/// started the upload.
+pub type ProgressSink = Arc<dyn Fn(ImportUploadProgress) + Send + Sync>;
+
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DesktopImportError {
@@ -173,7 +176,7 @@ pub async fn upload_selection(
     selection_id: &str,
     upload_id: &str,
     job_id: &str,
-    on_progress: Channel<ImportUploadProgress>,
+    on_progress: ProgressSink,
 ) -> Result<HttpResponse, DesktopImportError> {
     let cancellation = store.begin_upload(upload_id)?;
     let result = upload_selection_inner(
@@ -199,7 +202,7 @@ async fn upload_selection_inner(
     origin: &ServerOrigin,
     selection_id: &str,
     job_id: &str,
-    on_progress: Channel<ImportUploadProgress>,
+    on_progress: ProgressSink,
     cancellation: CancellationToken,
 ) -> Result<HttpResponse, DesktopImportError> {
     let (filename, content_length, body) = cancellable_preparation(
@@ -224,7 +227,7 @@ async fn upload_selection_inner(
 async fn prepare_upload(
     store: &ImportSelectionStore,
     selection_id: &str,
-    on_progress: Channel<ImportUploadProgress>,
+    on_progress: ProgressSink,
 ) -> Result<(String, u64, reqwest::Body), DesktopImportError> {
     let selection = store.selection(selection_id)?;
     let filename = selection.name;
@@ -280,7 +283,7 @@ impl ProgressThrottle {
 fn progress_body(
     file: tokio::fs::File,
     total_bytes: u64,
-    on_progress: Channel<ImportUploadProgress>,
+    on_progress: ProgressSink,
 ) -> reqwest::Body {
     let sent_bytes = Arc::new(AtomicU64::new(0));
     let progress_bytes = sent_bytes.clone();
@@ -289,10 +292,8 @@ fn progress_body(
         let chunk = chunk?;
         let sent =
             progress_bytes.fetch_add(chunk.len() as u64, Ordering::Relaxed) + chunk.len() as u64;
-        if let Some(progress) = progress_throttle.update(sent, total_bytes)
-            && let Err(error) = on_progress.send(progress)
-        {
-            eprintln!("Desktop import progress receiver closed: {error}");
+        if let Some(progress) = progress_throttle.update(sent, total_bytes) {
+            on_progress(progress);
         }
         Ok::<_, std::io::Error>(chunk)
     });
@@ -574,7 +575,6 @@ mod tests {
     use std::thread;
     use std::time::Duration;
     use std::time::{SystemTime, UNIX_EPOCH};
-    use tauri::ipc::Channel;
     use tokio_util::sync::CancellationToken;
 
     #[test]
@@ -839,7 +839,7 @@ mod tests {
                 &selection.id,
                 "upload-1",
                 "job-1",
-                Channel::<ImportUploadProgress>::new(|_| Ok(())),
+                Arc::new(|_| {}) as super::ProgressSink,
             )
             .await
         });
@@ -887,7 +887,7 @@ mod tests {
             "not-a-registered-selection",
             "upload-1",
             "job-1",
-            Channel::<ImportUploadProgress>::new(|_| Ok(())),
+            Arc::new(|_| {}) as super::ProgressSink,
         )
         .await
         .expect_err("unknown selection fails");
@@ -917,7 +917,7 @@ mod tests {
             &selection.id,
             "upload-1",
             "../../attacker.example/collect",
-            Channel::<ImportUploadProgress>::new(|_| Ok(())),
+            Arc::new(|_| {}) as super::ProgressSink,
         )
         .await
         .expect_err("hostile job id fails");
@@ -1018,13 +1018,8 @@ mod tests {
             let (origin, captured) = capture_upload();
             let progress = Arc::new(std::sync::Mutex::new(Vec::new()));
             let recorded = progress.clone();
-            let channel = Channel::<ImportUploadProgress>::new(move |body| {
-                if let tauri::ipc::InvokeResponseBody::Json(json) = body {
-                    let update: ImportUploadProgress =
-                        serde_json::from_str(&json).expect("progress JSON");
-                    recorded.lock().expect("progress lock").push(update);
-                }
-                Ok(())
+            let channel: super::ProgressSink = Arc::new(move |update: ImportUploadProgress| {
+                recorded.lock().expect("progress lock").push(update);
             });
 
             let response = upload_selection(

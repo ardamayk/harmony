@@ -1,4 +1,4 @@
-use earthly_audio_desktop::output_device::{
+use earthly_audio_core::output_device::{
     AlsaOutputDeviceAdapter, OutputDevice, OutputDeviceCatalog, OutputDeviceError,
 };
 use std::sync::{Arc, Mutex};

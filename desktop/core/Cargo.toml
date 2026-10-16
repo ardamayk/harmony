@@ -1,15 +1,15 @@
 [package]
-name = "earthly-audio-desktop"
+name = "earthly-audio-core"
 version = "0.1.0"
-description = "Earthly Audio Desktop Client"
+description = "Earthly Audio Desktop Client core: native playback, media proxy and Managed Import, driven by the Electron shell over stdio"
 edition = "2024"
 
 [lib]
-name = "earthly_audio_desktop"
-crate-type = ["lib", "cdylib", "staticlib"]
+name = "earthly_audio_core"
 
-[build-dependencies]
-tauri-build = { version = "=2.6.3", features = [] }
+[[bin]]
+name = "earthly-audio-core"
+path = "src/main.rs"
 
 [dependencies]
 axum = { version = "=0.8.9", default-features = false, features = ["http1", "tokio"] }
@@ -21,12 +21,8 @@ libc = "=0.2.189"
 reqwest = { version = "=0.13.4", default-features = false, features = ["json", "rustls", "stream"] }
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.151"
-tauri = { version = "=2.11.5", features = ["tray-icon"] }
-tauri-plugin-dialog = "=2.7.3"
-tauri-plugin-opener = "=2.5.5"
-tauri-plugin-single-instance = "=2.4.3"
 thiserror = "=2.0.20"
-tokio = { version = "=1.53.1", features = ["fs", "io-util", "net", "sync"] }
+tokio = { version = "=1.53.1", features = ["fs", "io-util", "net", "rt-multi-thread", "sync"] }
 tokio-util = { version = "=0.7.19", features = ["io", "rt"] }
 url = "=2.5.8"
 uuid = { version = "=1.25.0", features = ["v4"] }

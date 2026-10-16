@@ -12,11 +12,11 @@
 //! several seconds; run it with
 //! `mise run desktop:test:import-parity`.
 
-use earthly_audio_desktop::connection::{HttpBridge, HttpRequest, HttpResponse, ServerOrigin};
-use earthly_audio_desktop::desktop_import::{
-    ImportSelection, ImportSelectionStore, ImportUploadProgress, upload_selection,
+use earthly_audio_core::connection::{HttpBridge, HttpRequest, HttpResponse, ServerOrigin};
+use earthly_audio_core::desktop_import::{
+    ImportSelection, ImportSelectionStore, ImportUploadProgress, ProgressSink, upload_selection,
 };
-use earthly_audio_desktop::media_proxy::MediaProxy;
+use earthly_audio_core::media_proxy::MediaProxy;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
@@ -26,7 +26,6 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use tauri::ipc::{Channel, InvokeResponseBody};
 
 const SUPPORTED_FORMATS: [&str; 6] = ["flac", "mp3", "m4a", "ogg", "opus", "wav"];
 
@@ -546,7 +545,7 @@ async fn desktop_managed_import_matches_web_for_every_supported_format() {
         &cancel_selection.id,
         "upload-canceled",
         &job_id,
-        Channel::<ImportUploadProgress>::new(|_| Ok(())),
+        Arc::new(|_| {}) as ProgressSink,
     )
     .await
     .expect_err("canceled upload fails");
@@ -781,13 +780,8 @@ impl Harness {
     ) -> (HttpResponse, Vec<ImportUploadProgress>) {
         let progress = Arc::new(Mutex::new(Vec::new()));
         let recorded = progress.clone();
-        let channel = Channel::<ImportUploadProgress>::new(move |body| {
-            if let InvokeResponseBody::Json(json) = body {
-                let update: ImportUploadProgress =
-                    serde_json::from_str(&json).expect("progress JSON");
-                recorded.lock().expect("progress lock").push(update);
-            }
-            Ok(())
+        let channel: ProgressSink = Arc::new(move |update: ImportUploadProgress| {
+            recorded.lock().expect("progress lock").push(update);
         });
         let response = upload_selection(
             &self.store,

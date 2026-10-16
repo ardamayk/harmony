@@ -61,7 +61,7 @@ impl MediaProxy {
         let router = Router::new().fallback(any(proxy_request)).with_state(state);
         let (shutdown_sender, shutdown_receiver) = oneshot::channel();
         let (ready_sender, ready_receiver) = std::sync::mpsc::sync_channel(1);
-        tauri::async_runtime::spawn(async move {
+        crate::runtime::spawn(async move {
             let listener = match tokio::net::TcpListener::from_std(listener) {
                 Ok(listener) => listener,
                 Err(_) => {
@@ -499,15 +499,6 @@ mod tests {
         for rejected in [Method::POST, Method::PUT, Method::PATCH, Method::DELETE] {
             assert!(ensure_read_method(&rejected).is_err(), "{rejected}");
         }
-    }
-
-    #[test]
-    fn desktop_csp_allows_only_the_dedicated_media_proxy_origin() {
-        let config = include_str!("../tauri.conf.json");
-
-        assert!(config.contains("img-src 'self' http://127.0.0.1:43129 data:"));
-        assert!(config.contains("http://127.0.0.1:43129"));
-        assert!(!config.contains("http://127.0.0.1:*"));
     }
 
     fn serve_never_ending_large_stream() -> (String, Sender<()>) {

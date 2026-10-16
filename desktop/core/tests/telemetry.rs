@@ -1,5 +1,5 @@
-use earthly_audio_desktop::telemetry;
-use earthly_audio_desktop::telemetry::{
+use earthly_audio_core::telemetry;
+use earthly_audio_core::telemetry::{
     AudioFormatObservation, CommandPipeWireObserver, ObservedMpvProperties, PipeWireObservation,
     PipeWireObserver, PlaybackTelemetry, ProcessingObservation, SystemObservationKind,
     parse_pw_dump,

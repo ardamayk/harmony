@@ -1,0 +1,1109 @@
+pub mod adaptive_system_rate;
+pub mod connection;
+pub mod desktop_import;
+mod exclusive_output;
+pub mod media_proxy;
+mod mpris;
+pub mod output_device;
+mod playback;
+mod playback_app_actions;
+mod playback_lifecycle;
+mod playback_navigation;
+mod playback_publish;
+mod playback_restore;
+#[cfg(test)]
+mod playback_test_support;
+mod playback_tray;
+pub mod processing;
+mod queue_events;
+mod rpc;
+pub mod runtime;
+pub mod telemetry;
+
+use adaptive_system_rate::{
+    AdaptiveSystemRateController, CommandPipeWireRateAdapter, FileAdaptiveCleanupMarker,
+};
+use connection::{
+    ConnectionCheck, ConnectionError, ConnectionErrorCode, ConnectionStore, HttpBridge,
+    HttpRequest, HttpResponse, ServerOrigin,
+};
+use desktop_import::{
+    DesktopImportError, ImportSelection, ImportSelectionStore, ImportUploadProgress, ProgressSink,
+    upload_selection,
+};
+use media_proxy::MediaProxy;
+use mpris::MprisBridge;
+use output_device::{
+    ActiveOutputError, ActiveOutputResolver, CommandPipeWireActiveOutputResolver, OutputDevice,
+};
+use playback::{
+    OutputDeviceIssueCode, PlaybackCommandError, PlaybackController, PlaybackSessionState,
+};
+use playback_app_actions::{
+    DesktopPlaybackAction, DesktopPlaybackShell, dispatch_desktop_playback_action,
+};
+use playback_lifecycle::{PlaybackLifecycle, PlaybackSnapshotStore};
+use playback_publish::PlayheadThrottle;
+use playback_tray::{PlaybackPosition, PlaybackTray, PlaybackTrayView};
+use processing::{
+    EqualizerPreset, FileProcessingSettingsStorage, OutputMode, ProcessingController,
+    ProcessingProfile, ReplayGainMode, mpv_configuration_for,
+};
+use queue_events::QueueEventService;
+use rpc::{Output, Reply, Request, param, reply};
+use serde::Serialize;
+use serde_json::{Value, json};
+use std::io::BufRead;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, OnceLock, RwLock, Weak, mpsc};
+use std::time::Duration;
+use telemetry::CommandPipeWireObserver;
+
+const CONNECTION_FILE_NAME: &str = "server-connection.json";
+const PLAYBACK_SNAPSHOT_FILE_NAME: &str = "playback-session.json";
+const PROCESSING_SETTINGS_FILE_NAME: &str = "processing-settings.json";
+const ADAPTIVE_CLEANUP_MARKER_FILE_NAME: &str = "adaptive-system-rate.cleanup-required";
+const PLAYBACK_STATE_EVENT: &str = "desktop-playback-state";
+const CONNECTION_CHANGED_EVENT: &str = "server-connection-changed";
+const QUEUE_EVENTS_ERROR_EVENT: &str = "desktop-queue-events-error";
+const QUEUE_INVALIDATED_EVENT: &str = "desktop-queue-invalidated";
+const IMPORT_PROGRESS_EVENT: &str = "desktop-import-progress";
+const SHELL_SHOW_MAIN_WINDOW: &str = "shell:show-main-window";
+const SHELL_HIDE_MAIN_WINDOW: &str = "shell:hide-main-window";
+const SHELL_TOGGLE_MINI_WINDOW: &str = "shell:toggle-mini-window";
+const SHELL_WINDOW_TITLE: &str = "shell:window-title";
+const SHELL_TRAY: &str = "shell:tray";
+const SHELL_EXIT: &str = "shell:exit";
+const SHELL_READY: &str = "shell:ready";
+
+struct AppState {
+    playback: PlaybackController,
+    processing: Mutex<ProcessingController>,
+    active_output_resolver: Arc<dyn ActiveOutputResolver>,
+    playback_lifecycle: Arc<Mutex<PlaybackLifecycle>>,
+    playback_snapshot_store: PlaybackSnapshotStore,
+    bridge: Arc<HttpBridge>,
+    store: ConnectionStore,
+    origin: Arc<RwLock<Option<ServerOrigin>>>,
+    media_proxy: MediaProxy,
+    queue_events: QueueEventService,
+    import_selections: ImportSelectionStore,
+    output: Arc<Output>,
+    /// Set once the core has asked the shell to exit, so closing stdin after
+    /// an explicit Quit does not quit (and snapshot) a second time.
+    exiting: AtomicBool,
+    exit: mpsc::Sender<()>,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ServerConnection {
+    origin: String,
+}
+
+fn get_server_connection(state: &AppState) -> Result<Option<ServerConnection>, ConnectionError> {
+    let origin = state.origin.read().map_err(|_| state_error())?;
+    Ok(origin.as_ref().map(|origin| ServerConnection {
+        origin: origin.as_str().to_owned(),
+    }))
+}
+
+async fn test_server_connection(
+    state: &AppState,
+    origin: String,
+) -> Result<ConnectionCheck, ConnectionError> {
+    let origin = ServerOrigin::parse(&origin)?;
+    state.bridge.test_server(&origin).await
+}
+
+async fn save_server_connection(
+    state: &AppState,
+    origin: String,
+) -> Result<ConnectionCheck, ConnectionError> {
+    let origin = ServerOrigin::parse(&origin)?;
+    let check = state.bridge.test_server(&origin).await?;
+    state.store.save(&origin)?;
+    *state.origin.write().map_err(|_| state_error())? = Some(origin);
+    state.queue_events.reconnect();
+    state.output.emit(CONNECTION_CHANGED_EVENT, &check);
+    Ok(check)
+}
+
+async fn desktop_http_request(
+    state: &AppState,
+    request: HttpRequest,
+) -> Result<HttpResponse, ConnectionError> {
+    let origin = state
+        .origin
+        .read()
+        .map_err(|_| state_error())?
+        .clone()
+        .ok_or_else(|| {
+            ConnectionError::new(
+                ConnectionErrorCode::InvalidOrigin,
+                "Configure a Music Server before sending desktop HTTP requests.",
+            )
+        })?;
+    state.bridge.send(&origin, request).await
+}
+
+/// Registers what the shell's native picker returned. Only the shell calls
+/// this: the renderer never hands the core a path, it receives opaque
+/// selection IDs.
+fn desktop_register_import_paths(
+    state: &AppState,
+    paths: Vec<PathBuf>,
+) -> Result<Vec<ImportSelection>, DesktopImportError> {
+    state.import_selections.register_paths(paths)
+}
+
+async fn desktop_upload_import_file(
+    state: &AppState,
+    selection_id: String,
+    upload_id: String,
+    job_id: String,
+) -> Result<HttpResponse, DesktopImportError> {
+    let origin = state
+        .origin
+        .read()
+        .map_err(|_| desktop_import_state_error())?
+        .clone()
+        .ok_or_else(|| DesktopImportError {
+            code: "invalid_origin",
+            message: "Configure a Music Server before uploading music.".to_owned(),
+        })?;
+    let output = state.output.clone();
+    let progress_upload_id = upload_id.clone();
+    let on_progress: ProgressSink = Arc::new(move |progress: ImportUploadProgress| {
+        output.emit(
+            IMPORT_PROGRESS_EVENT,
+            json!({
+                "uploadId": progress_upload_id,
+                "sentBytes": progress.sent_bytes,
+                "totalBytes": progress.total_bytes,
+            }),
+        );
+    });
+    upload_selection(
+        &state.import_selections,
+        &state.bridge,
+        &origin,
+        &selection_id,
+        &upload_id,
+        &job_id,
+        on_progress,
+    )
+    .await
+}
+
+fn desktop_import_state_error() -> DesktopImportError {
+    DesktopImportError {
+        code: "state_unavailable",
+        message: "Desktop import state is unavailable.".to_owned(),
+    }
+}
+
+fn desktop_playback_renderer_ready(
+    state: &AppState,
+) -> Result<PlaybackSessionState, PlaybackCommandError> {
+    state
+        .playback_lifecycle
+        .lock()
+        .map_err(|_| PlaybackCommandError::new("Playback lifecycle state is unavailable."))?
+        .renderer_attached();
+    let playback_state = state.playback.state()?;
+    state.output.emit(PLAYBACK_STATE_EVENT, &playback_state);
+    Ok(playback_state)
+}
+
+fn desktop_playback_play(
+    state: &AppState,
+    source: Option<Value>,
+) -> Result<PlaybackSessionState, PlaybackCommandError> {
+    if let Some(source) = source.as_ref() {
+        validate_playback_source(source, state.media_proxy.base_url())?;
+    }
+    state.playback.play(source)
+}
+
+fn desktop_playback_sync_queue_context(
+    state: &AppState,
+    sources: Vec<Value>,
+    current_index: Option<usize>,
+) -> Result<PlaybackSessionState, PlaybackCommandError> {
+    for source in &sources {
+        validate_playback_source(source, state.media_proxy.base_url())?;
+    }
+    state.playback.sync_queue_context(sources, current_index)
+}
+
+fn desktop_playback_set_replay_gain(
+    state: &AppState,
+    mode: ReplayGainMode,
+) -> Result<PlaybackSessionState, PlaybackCommandError> {
+    update_processing(state, |processing| {
+        if mode == ReplayGainMode::Off {
+            processing.disable_replay_gain()
+        } else {
+            processing.enable_replay_gain(mode)
+        }
+    })
+}
+
+fn desktop_playback_select_direct_alsa_output(
+    state: &AppState,
+    device_id: String,
+) -> Result<PlaybackSessionState, PlaybackCommandError> {
+    let mut processing = state
+        .processing
+        .lock()
+        .map_err(|_| PlaybackCommandError::new("Output Mode settings are unavailable."))?;
+    let previous_mode = processing.output_mode();
+    let previous_device_id = processing.selected_output_device_id().map(str::to_owned);
+    let playback_state = state.playback.select_direct_alsa_output(&device_id)?;
+    if !is_valid_direct_selection(&playback_state, &device_id) {
+        return Ok(playback_state);
+    }
+    if let Err(error) = processing.select_direct_alsa_output(&device_id) {
+        eprintln!("Direct ALSA Output preference persistence failed: {error}");
+        restore_native_output_mode(
+            &state.playback,
+            previous_mode,
+            previous_device_id.as_deref(),
+        );
+        return Err(PlaybackCommandError::new(
+            "Direct ALSA Output preference could not be saved. The previous Output Mode was restored.",
+        ));
+    }
+    Ok(restore_remembered_volume(
+        state,
+        &mut processing,
+        playback_state,
+    ))
+}
+
+fn desktop_playback_select_exclusive_output(
+    state: &AppState,
+) -> Result<PlaybackSessionState, PlaybackCommandError> {
+    let device = match state.active_output_resolver.resolve() {
+        Ok(device) => device,
+        Err(error) => {
+            select_normal_output(state)?;
+            return Err(PlaybackCommandError::new(active_output_error_message(
+                &error,
+            )));
+        }
+    };
+    select_exclusive_output(state, device)
+}
+
+fn desktop_playback_enable_adaptive_system_rate(
+    state: &AppState,
+) -> Result<PlaybackSessionState, PlaybackCommandError> {
+    let mut processing = state
+        .processing
+        .lock()
+        .map_err(|_| PlaybackCommandError::new("Output Mode settings are unavailable."))?;
+    let playback_state = state.playback.enable_adaptive_system_rate()?;
+    if let Err(error) = processing.set_output_mode(OutputMode::AdaptiveSystemRate) {
+        eprintln!("Adaptive System Rate preference persistence failed: {error}");
+        if let Err(rollback_error) = state.playback.fallback_to_system_output() {
+            eprintln!(
+                "Adaptive System Rate rollback failed after persistence error: {}",
+                rollback_error.message
+            );
+        }
+        return Err(PlaybackCommandError::new(
+            "Adaptive System Rate preference could not be saved. System Output was restored.",
+        ));
+    }
+    Ok(restore_remembered_volume(
+        state,
+        &mut processing,
+        playback_state,
+    ))
+}
+
+fn is_valid_direct_selection(state: &PlaybackSessionState, device_id: &str) -> bool {
+    let is_selected = state
+        .selected_output_device
+        .as_ref()
+        .is_some_and(|device| device.id == device_id);
+    let is_busy_or_unsupported = state
+        .output_device_issue
+        .as_ref()
+        .is_some_and(|issue| issue.code == OutputDeviceIssueCode::BusyOrUnsupported);
+    is_selected && (state.output_mode == OutputMode::DirectAlsa || is_busy_or_unsupported)
+}
+
+fn restore_native_output_mode(
+    playback: &PlaybackController,
+    output_mode: OutputMode,
+    device_id: Option<&str>,
+) {
+    let result = match (output_mode, device_id) {
+        (OutputMode::DirectAlsa, Some(device_id)) => {
+            playback.select_direct_alsa_output(device_id).map(|_| ())
+        }
+        (OutputMode::AdaptiveSystemRate, _) => playback.enable_adaptive_system_rate().map(|_| ()),
+        _ => playback.fallback_to_system_output().map(|_| ()),
+    };
+    if let Err(error) = result {
+        eprintln!("Output Mode rollback failed: {}", error.message);
+    }
+}
+
+fn select_normal_output(state: &AppState) -> Result<PlaybackSessionState, PlaybackCommandError> {
+    let mut processing = state
+        .processing
+        .lock()
+        .map_err(|_| PlaybackCommandError::new("Output Mode settings are unavailable."))?;
+    let previous_mode = processing.output_mode();
+    let previous_device_id = processing.selected_output_device_id().map(str::to_owned);
+    let playback_state = state.playback.fallback_to_system_output()?;
+    if let Err(error) = processing.set_output_mode(OutputMode::System) {
+        restore_native_output_mode(
+            &state.playback,
+            previous_mode,
+            previous_device_id.as_deref(),
+        );
+        return Err(PlaybackCommandError::new(format!(
+            "Normal Output preference could not be saved: {error}"
+        )));
+    }
+    Ok(restore_remembered_volume(
+        state,
+        &mut processing,
+        playback_state,
+    ))
+}
+
+fn select_exclusive_output(
+    state: &AppState,
+    device: OutputDevice,
+) -> Result<PlaybackSessionState, PlaybackCommandError> {
+    let mut processing = state
+        .processing
+        .lock()
+        .map_err(|_| PlaybackCommandError::new("Output Mode settings are unavailable."))?;
+    let playback_state = state.playback.select_direct_alsa_output(&device.id)?;
+    if playback_state.output_mode != OutputMode::DirectAlsa {
+        let message = playback_state
+            .output_device_issue
+            .as_ref()
+            .map(|issue| issue.message.clone())
+            .unwrap_or_else(|| "Exclusive Output could not open the active device.".to_owned());
+        state.playback.fallback_to_system_output()?;
+        processing
+            .set_output_mode(OutputMode::System)
+            .map_err(PlaybackCommandError::new)?;
+        return Err(PlaybackCommandError::new(message));
+    }
+    if let Err(error) = processing.select_direct_alsa_output(&device.id) {
+        eprintln!("Exclusive Output preference persistence failed: {error}");
+        if let Err(fallback_error) = state.playback.fallback_to_system_output() {
+            eprintln!(
+                "Normal Output recovery failed after Exclusive persistence error: {}",
+                fallback_error.message
+            );
+        }
+        if let Err(persistence_error) = processing.set_output_mode(OutputMode::System) {
+            eprintln!("Normal Output recovery persistence failed: {persistence_error}");
+        }
+        return Err(PlaybackCommandError::new(
+            "Exclusive Output preference could not be saved. Normal Output was restored.",
+        ));
+    }
+    Ok(restore_remembered_volume(
+        state,
+        &mut processing,
+        playback_state,
+    ))
+}
+
+fn active_output_error_message(error: &ActiveOutputError) -> String {
+    match error {
+        ActiveOutputError::NoActiveOutput => {
+            "Exclusive Output is unavailable because no active system output was found. Normal Output remains active."
+        }
+        ActiveOutputError::NotAlsaBacked => {
+            "Exclusive Output is unavailable for the active system output. Normal Output remains active."
+        }
+        ActiveOutputError::QueryFailed(_) => {
+            "Exclusive Output could not inspect the active system output. Normal Output remains active."
+        }
+    }
+    .to_owned()
+}
+
+fn restore_saved_exclusive_output(
+    playback: &PlaybackController,
+    processing: &mut ProcessingController,
+    resolver: &dyn ActiveOutputResolver,
+) {
+    let result = resolver
+        .resolve()
+        .map_err(|error| active_output_error_message(&error))
+        .and_then(|device| restore_exclusive_device(playback, processing, &device));
+    if let Err(error) = result {
+        eprintln!("Saved Exclusive Output could not be restored: {error}");
+        if let Err(fallback_error) = playback.fallback_to_system_output() {
+            eprintln!(
+                "Normal Output startup recovery failed: {}",
+                fallback_error.message
+            );
+        }
+        if let Err(persistence_error) = processing.set_output_mode(OutputMode::System) {
+            eprintln!("Normal Output startup persistence failed: {persistence_error}");
+        }
+    }
+}
+
+fn restore_exclusive_device(
+    playback: &PlaybackController,
+    processing: &mut ProcessingController,
+    device: &OutputDevice,
+) -> Result<(), String> {
+    let state = playback
+        .select_direct_alsa_output(&device.id)
+        .map_err(|error| error.message)?;
+    if state.output_mode != OutputMode::DirectAlsa {
+        return Err("the active output could not be opened exclusively".to_owned());
+    }
+    processing.select_direct_alsa_output(&device.id)
+}
+
+/// After an output route switch, bring back the volume last used on that
+/// route. Failures only log: the switch itself already succeeded.
+fn restore_remembered_volume(
+    state: &AppState,
+    processing: &mut ProcessingController,
+    playback_state: PlaybackSessionState,
+) -> PlaybackSessionState {
+    let Some(volume) = processing.remembered_volume() else {
+        return playback_state;
+    };
+    if (volume - processing.state().software_volume).abs() < f64::EPSILON {
+        return playback_state;
+    }
+    match update_processing_locked(state, processing, |processing| {
+        processing.set_software_volume(volume)
+    }) {
+        Ok(restored) => restored,
+        Err(error) => {
+            eprintln!(
+                "Remembered output volume could not be restored: {}",
+                error.message
+            );
+            playback_state
+        }
+    }
+}
+
+fn update_processing(
+    state: &AppState,
+    change: impl FnOnce(&mut ProcessingController) -> Result<(), String>,
+) -> Result<PlaybackSessionState, PlaybackCommandError> {
+    let mut processing = state
+        .processing
+        .lock()
+        .map_err(|_| PlaybackCommandError::new("Processing Profile state is unavailable."))?;
+    update_processing_locked(state, &mut processing, change)
+}
+
+fn update_processing_locked(
+    state: &AppState,
+    processing: &mut ProcessingController,
+    change: impl FnOnce(&mut ProcessingController) -> Result<(), String>,
+) -> Result<PlaybackSessionState, PlaybackCommandError> {
+    let previous_state = processing.snapshot();
+    change(processing).map_err(PlaybackCommandError::new)?;
+    let processing_state = processing.state().clone();
+    let configuration = processing.mpv_configuration();
+    match state
+        .playback
+        .apply_processing(processing_state, &configuration)
+    {
+        Ok(playback_state) => {
+            if let Err(error) = processing.restore(playback_state.processing.clone()) {
+                rollback_processing(&state.playback, processing, previous_state);
+                return Err(PlaybackCommandError::new(error));
+            }
+            Ok(playback_state)
+        }
+        Err(error) => {
+            rollback_processing(&state.playback, processing, previous_state);
+            Err(error)
+        }
+    }
+}
+
+fn rollback_processing(
+    playback: &PlaybackController,
+    processing: &mut ProcessingController,
+    previous_state: processing::ProcessingSnapshot,
+) {
+    let configuration = mpv_configuration_for(&previous_state.state);
+    let processing_state = previous_state.state.clone();
+    if let Err(error) = processing.restore_snapshot(previous_state) {
+        eprintln!("Processing Profile rollback persistence failed: {error}");
+    }
+    if let Err(error) = playback.apply_processing(processing_state, &configuration) {
+        eprintln!(
+            "Native mpv Processing Profile rollback failed: {}",
+            error.message
+        );
+    }
+}
+
+fn validate_playback_source(
+    source: &Value,
+    media_proxy_base_url: &str,
+) -> Result<(), PlaybackCommandError> {
+    let playback_url = source
+        .get("playbackUrl")
+        .and_then(Value::as_str)
+        .ok_or_else(|| PlaybackCommandError::new("Playback Source URL is missing."))?;
+    let required_prefix = format!("{media_proxy_base_url}/");
+    if !playback_url.starts_with(&required_prefix) {
+        return Err(PlaybackCommandError::new(
+            "Native playback is restricted to the private Desktop media proxy.",
+        ));
+    }
+    Ok(())
+}
+
+fn state_error() -> ConnectionError {
+    ConnectionError::new(
+        ConnectionErrorCode::Storage,
+        "Desktop connection state is unavailable. Restart the Desktop Client.",
+    )
+}
+
+/// Answers one request. Commands that drive mpv run on the blocking pool: a
+/// transition fade may sleep for up to two seconds.
+async fn dispatch(state: Arc<AppState>, method: &str, params: Value) -> Reply {
+    match method {
+        "get_server_connection" => reply(get_server_connection(&state)),
+        "test_server_connection" => {
+            let origin = param(&params, "origin")?;
+            reply(test_server_connection(&state, origin).await)
+        }
+        "save_server_connection" => {
+            let origin = param(&params, "origin")?;
+            reply(save_server_connection(&state, origin).await)
+        }
+        "desktop_http_request" => {
+            let request = param(&params, "request")?;
+            reply(desktop_http_request(&state, request).await)
+        }
+        "desktop_register_import_paths" => {
+            let paths = param(&params, "paths")?;
+            reply(desktop_register_import_paths(&state, paths))
+        }
+        "desktop_upload_import_file" => {
+            let selection_id = param(&params, "selectionId")?;
+            let upload_id = param(&params, "uploadId")?;
+            let job_id = param(&params, "jobId")?;
+            reply(desktop_upload_import_file(&state, selection_id, upload_id, job_id).await)
+        }
+        "desktop_cancel_import_upload" => {
+            let upload_id: String = param(&params, "uploadId")?;
+            reply(state.import_selections.cancel(&upload_id))
+        }
+        "desktop_release_import_selections" => {
+            let selection_ids: Vec<String> = param(&params, "selectionIds")?;
+            reply(state.import_selections.release(&selection_ids))
+        }
+        "get_media_proxy_url" => reply::<_, ()>(Ok(state.media_proxy.base_url())),
+        "desktop_reconnect_queue_events" => {
+            state.queue_events.reconnect();
+            Ok(Value::Null)
+        }
+        "get_desktop_mpv_status" => {
+            blocking(&state, |_| Ok::<_, ()>(playback::probe_mpv_status())).await
+        }
+        "get_desktop_playback_state" => reply(state.playback.state()),
+        "desktop_playback_renderer_ready" => reply(desktop_playback_renderer_ready(&state)),
+        "desktop_playback_play" => {
+            let source = param(&params, "source")?;
+            blocking(&state, move |state| desktop_playback_play(state, source)).await
+        }
+        "desktop_playback_pause" => blocking(&state, |state| state.playback.pause()).await,
+        "desktop_playback_stop" => blocking(&state, |state| state.playback.stop()).await,
+        "desktop_playback_toggle_play" => {
+            blocking(&state, |state| state.playback.toggle_play()).await
+        }
+        "desktop_playback_previous" => blocking(&state, |state| state.playback.previous()).await,
+        "desktop_playback_next" => blocking(&state, |state| state.playback.next()).await,
+        "desktop_playback_sync_queue_context" => {
+            let sources = param(&params, "sources")?;
+            let current_index = param(&params, "currentIndex")?;
+            blocking(&state, move |state| {
+                desktop_playback_sync_queue_context(state, sources, current_index)
+            })
+            .await
+        }
+        "desktop_playback_seek" => {
+            let seconds: f64 = param(&params, "seconds")?;
+            blocking(&state, move |state| state.playback.seek(seconds)).await
+        }
+        "desktop_playback_set_volume" => {
+            let value: f64 = param(&params, "value")?;
+            blocking(&state, move |state| {
+                update_processing(state, |processing| processing.set_software_volume(value))
+            })
+            .await
+        }
+        "desktop_playback_set_playback_rate" => {
+            let rate: f64 = param(&params, "rate")?;
+            blocking(&state, move |state| state.playback.set_playback_rate(rate)).await
+        }
+        "desktop_playback_set_stop_after_current" => {
+            let enabled: bool = param(&params, "enabled")?;
+            blocking(&state, move |state| {
+                state.playback.set_stop_after_current(enabled)
+            })
+            .await
+        }
+        "desktop_playback_set_transition_fade" => {
+            let milliseconds: u64 = param(&params, "milliseconds")?;
+            blocking(&state, move |state| {
+                state.playback.set_transition_fade_ms(milliseconds)
+            })
+            .await
+        }
+        "desktop_playback_set_processing_profile" => {
+            let profile: ProcessingProfile = param(&params, "profile")?;
+            blocking(&state, move |state| {
+                update_processing(state, |processing| processing.set_profile(profile))
+            })
+            .await
+        }
+        "desktop_playback_set_replay_gain" => {
+            let mode: ReplayGainMode = param(&params, "mode")?;
+            blocking(&state, move |state| {
+                desktop_playback_set_replay_gain(state, mode)
+            })
+            .await
+        }
+        "desktop_playback_set_equalizer_preset" => {
+            let preset: EqualizerPreset = param(&params, "preset")?;
+            blocking(&state, move |state| {
+                update_processing(state, |processing| {
+                    processing.apply_equalizer_preset(preset)
+                })
+            })
+            .await
+        }
+        "desktop_playback_set_equalizer_gain" => {
+            let index: usize = param(&params, "index")?;
+            let value: f64 = param(&params, "value")?;
+            blocking(&state, move |state| {
+                update_processing(state, |processing| {
+                    processing.set_equalizer_gain(index, value)
+                })
+            })
+            .await
+        }
+        "desktop_playback_refresh_output_devices" => {
+            blocking(&state, |state| state.playback.refresh_output_devices()).await
+        }
+        "desktop_playback_select_direct_alsa_output" => {
+            let device_id = param(&params, "deviceId")?;
+            blocking(&state, move |state| {
+                desktop_playback_select_direct_alsa_output(state, device_id)
+            })
+            .await
+        }
+        "desktop_playback_select_exclusive_output" => {
+            blocking(&state, desktop_playback_select_exclusive_output).await
+        }
+        "desktop_playback_fallback_to_system_output" => {
+            blocking(&state, select_normal_output).await
+        }
+        "desktop_playback_enable_adaptive_system_rate" => {
+            blocking(&state, desktop_playback_enable_adaptive_system_rate).await
+        }
+        "desktop_playback_toggle_shuffle" => {
+            blocking(&state, |state| state.playback.toggle_shuffle()).await
+        }
+        "desktop_playback_cycle_repeat_mode" => {
+            blocking(&state, |state| state.playback.cycle_repeat_mode()).await
+        }
+        "desktop_playback_quit" => {
+            blocking(&state, |state| {
+                dispatch_application_action(state, DesktopPlaybackAction::Quit)
+            })
+            .await
+        }
+        "shell_action" => {
+            let action = shell_action(&param::<String>(&params, "action")?)?;
+            blocking(&state, move |state| {
+                dispatch_application_action(state, action)
+            })
+            .await
+        }
+        _ => Err(Value::String(format!(
+            "Unknown desktop command '{method}'."
+        ))),
+    }
+}
+
+async fn blocking<T, E>(
+    state: &Arc<AppState>,
+    command: impl FnOnce(&AppState) -> Result<T, E> + Send + 'static,
+) -> Reply
+where
+    T: Serialize + Send + 'static,
+    E: Serialize + Send + 'static,
+{
+    let state = state.clone();
+    runtime::spawn_blocking(move || reply(command(&state)))
+        .await
+        .unwrap_or_else(|_| Err(Value::String("Desktop command panicked.".to_owned())))
+}
+
+/// Shell-originated actions: tray menu items and the main window's close
+/// button. They go through the same dispatch as MPRIS.
+fn shell_action(name: &str) -> Result<DesktopPlaybackAction, Value> {
+    Ok(match name {
+        "open-main-window" => DesktopPlaybackAction::OpenMainWindow,
+        "close-main-window" => DesktopPlaybackAction::CloseMainWindow,
+        "toggle-play" => DesktopPlaybackAction::TogglePlay,
+        "previous" => DesktopPlaybackAction::Previous,
+        "next" => DesktopPlaybackAction::Next,
+        "toggle-mini-player" => DesktopPlaybackAction::ToggleMiniPlayer,
+        "quit" => DesktopPlaybackAction::Quit,
+        _ => return Err(Value::String(format!("Unknown shell action '{name}'."))),
+    })
+}
+
+fn dispatch_application_action(
+    state: &AppState,
+    action: DesktopPlaybackAction,
+) -> Result<(), PlaybackCommandError> {
+    dispatch_desktop_playback_action(
+        action,
+        &state.playback,
+        &state.playback_lifecycle,
+        &state.playback_snapshot_store,
+        &RpcDesktopPlaybackShell { state },
+    )
+}
+
+/// Window and lifetime requests become `shell:*` events for Electron.
+struct RpcDesktopPlaybackShell<'a> {
+    state: &'a AppState,
+}
+
+impl DesktopPlaybackShell for RpcDesktopPlaybackShell<'_> {
+    fn show_main_window(&self) -> Result<(), String> {
+        self.state.output.emit(SHELL_SHOW_MAIN_WINDOW, ());
+        Ok(())
+    }
+
+    fn hide_main_window(&self) -> Result<(), String> {
+        self.state.output.emit(SHELL_HIDE_MAIN_WINDOW, ());
+        Ok(())
+    }
+
+    fn set_software_volume(&self, volume: f64) -> Result<(), String> {
+        update_processing(self.state, |processing| {
+            processing.set_software_volume(volume)
+        })
+        .map(|_| ())
+        .map_err(|error| error.message)
+    }
+
+    fn toggle_mini_window(&self) -> Result<(), String> {
+        self.state.output.emit(SHELL_TOGGLE_MINI_WINDOW, ());
+        Ok(())
+    }
+
+    fn exit(&self) {
+        self.state.exiting.store(true, Ordering::SeqCst);
+        self.state.output.emit(SHELL_EXIT, ());
+        let _ = self.state.exit.send(());
+    }
+}
+
+/// Publishes a Playback Session to the renderers, the tray, the window title
+/// and MPRIS, coalescing playhead-only progress.
+struct PlaybackPublisher {
+    output: Arc<Output>,
+    throttle: Mutex<PlayheadThrottle>,
+    tray: PlaybackTray,
+    window_title: Mutex<String>,
+    mpris: MprisBridge,
+}
+
+impl PlaybackPublisher {
+    fn publish(&self, state: PlaybackSessionState) {
+        let should_publish = self
+            .throttle
+            .lock()
+            .map(|mut throttle| throttle.should_publish(&state))
+            .unwrap_or(true);
+        if !should_publish {
+            return;
+        }
+        let is_playing = state.status.is_active();
+        if let Some(update) = self.tray.update(
+            state.source.as_ref(),
+            is_playing,
+            PlaybackPosition {
+                current_seconds: state.current_time,
+                duration_seconds: state.duration,
+            },
+        ) {
+            self.output.emit(SHELL_TRAY, update);
+        }
+        self.publish_window_title(&state, is_playing);
+        self.mpris.update(state.clone());
+        self.output.emit(PLAYBACK_STATE_EVENT, state);
+    }
+
+    /// Sets the main window title from the playing source, only when it changes.
+    fn publish_window_title(&self, state: &PlaybackSessionState, is_playing: bool) {
+        let title =
+            PlaybackTrayView::from_playback(state.source.as_ref(), is_playing).window_title();
+        let Ok(mut last) = self.window_title.lock() else {
+            return;
+        };
+        if *last == title {
+            return;
+        }
+        self.output
+            .emit(SHELL_WINDOW_TITLE, json!({ "title": title }));
+        *last = title;
+    }
+}
+
+impl AppState {
+    fn start(
+        config_directory: &Path,
+        output: Arc<Output>,
+        exit: mpsc::Sender<()>,
+    ) -> Result<Arc<Self>, String> {
+        let adaptive_system_rate = AdaptiveSystemRateController::recover_startup_if_marked(
+            Arc::new(CommandPipeWireRateAdapter::new()),
+            Arc::new(FileAdaptiveCleanupMarker::new(
+                config_directory.join(ADAPTIVE_CLEANUP_MARKER_FILE_NAME),
+            )),
+        )?;
+        let store = ConnectionStore::new(config_directory.join(CONNECTION_FILE_NAME));
+        let playback_snapshot_store =
+            PlaybackSnapshotStore::new(config_directory.join(PLAYBACK_SNAPSHOT_FILE_NAME));
+        let saved_origin = store.load().map_err(|error| error.message)?;
+        let bridge = Arc::new(HttpBridge::new().map_err(|error| error.message)?);
+        let saved_playback = runtime::block_on(playback_restore::load_saved_playback(
+            &playback_snapshot_store,
+            &bridge,
+            saved_origin.as_ref(),
+        ))
+        .map_err(|error| error.to_string())?;
+        let origin = Arc::new(RwLock::new(saved_origin));
+        let media_proxy =
+            MediaProxy::start(bridge.clone(), origin.clone()).map_err(|error| error.message)?;
+        let saved_playback = saved_playback
+            .map(|snapshot| snapshot.rebind_media_proxy(media_proxy.base_url()))
+            .transpose()
+            .map_err(|error| error.to_string())?;
+        let playback_lifecycle = Arc::new(Mutex::new(PlaybackLifecycle::new()));
+        let active_output_resolver: Arc<dyn ActiveOutputResolver> =
+            Arc::new(CommandPipeWireActiveOutputResolver::new());
+        let mut processing =
+            ProcessingController::open(Box::new(FileProcessingSettingsStorage::new(
+                config_directory.join(PROCESSING_SETTINGS_FILE_NAME),
+            )))?;
+        if processing.output_mode() == OutputMode::AdaptiveSystemRate {
+            processing.set_output_mode(OutputMode::System)?;
+        }
+
+        // MPRIS commands can arrive before the state exists, and must not
+        // keep it alive at exit; they reach it through a weak reference.
+        let mpris_state: Arc<OnceLock<Weak<AppState>>> = Arc::new(OnceLock::new());
+        let mpris_target = mpris_state.clone();
+        let mpris = MprisBridge::start(
+            Arc::new(move |action| {
+                let Some(state) = mpris_target.get().and_then(Weak::upgrade) else {
+                    return;
+                };
+                if let Err(error) = dispatch_application_action(&state, action) {
+                    eprintln!("MPRIS action {action:?} failed: {}", error.message);
+                }
+            }),
+            media_proxy.base_url().to_owned(),
+        );
+        let publisher = PlaybackPublisher {
+            output: output.clone(),
+            throttle: Mutex::new(PlayheadThrottle::default()),
+            tray: PlaybackTray::default(),
+            window_title: Mutex::new(String::new()),
+            mpris,
+        };
+        if let Some(update) = publisher
+            .tray
+            .update(None, false, PlaybackPosition::default())
+        {
+            output.emit(SHELL_TRAY, update);
+        }
+        let playback = PlaybackController::start_default_with_lifecycle(
+            playback_lifecycle.clone(),
+            Arc::new(CommandPipeWireObserver::new()),
+            adaptive_system_rate,
+            move |state| publisher.publish(state),
+        )?;
+        playback.refresh_output_devices().unwrap_or_else(|error| {
+            eprintln!(
+                "Raw ALSA hardware startup enumeration failed: {}",
+                error.message
+            );
+            playback.state().unwrap_or_default()
+        });
+        if processing.output_mode() == OutputMode::DirectAlsa {
+            restore_saved_exclusive_output(
+                &playback,
+                &mut processing,
+                active_output_resolver.as_ref(),
+            );
+        }
+        if let Some(snapshot) = saved_playback.as_ref() {
+            playback
+                .restore_paused(snapshot)
+                .map_err(|error| error.message)?;
+        }
+        playback
+            .apply_processing(processing.state().clone(), &processing.mpv_configuration())
+            .map_err(|error| error.message)?;
+        let queue_event_output = output.clone();
+        let queue_error_output = output.clone();
+        let queue_events = QueueEventService::start(
+            bridge.clone(),
+            origin.clone(),
+            move |event| queue_event_output.emit(QUEUE_INVALIDATED_EVENT, event),
+            move |message| queue_error_output.emit(QUEUE_EVENTS_ERROR_EVENT, message),
+        );
+        let state = Arc::new(AppState {
+            playback,
+            processing: Mutex::new(processing),
+            active_output_resolver,
+            playback_lifecycle,
+            playback_snapshot_store,
+            bridge,
+            store,
+            origin,
+            media_proxy,
+            queue_events,
+            import_selections: ImportSelectionStore::default(),
+            output,
+            exiting: AtomicBool::new(false),
+            exit,
+        });
+        let _ = mpris_state.set(Arc::downgrade(&state));
+        Ok(state)
+    }
+}
+
+/// Runs the core until the shell asks it to quit or closes stdin. Settings
+/// files live in `config_directory`.
+pub fn run(config_directory: &Path) -> Result<(), String> {
+    let output = Arc::new(Output::stdout());
+    let (exit_sender, exit_receiver) = mpsc::channel();
+    let state = AppState::start(config_directory, output.clone(), exit_sender.clone())?;
+    output.emit(
+        SHELL_READY,
+        json!({ "mediaProxyUrl": state.media_proxy.base_url() }),
+    );
+
+    // The reader holds only a weak reference, so the state can be dropped
+    // (stopping mpv and restoring the system output) while it waits on stdin.
+    let reader_state = Arc::downgrade(&state);
+    let reader_output = output.clone();
+    std::thread::Builder::new()
+        .name("earthly-core-stdin".to_owned())
+        .spawn(move || {
+            for line in std::io::stdin().lock().lines() {
+                let Ok(line) = line else { break };
+                if line.trim().is_empty() {
+                    continue;
+                }
+                let request: Request = match serde_json::from_str(&line) {
+                    Ok(request) => request,
+                    Err(error) => {
+                        eprintln!("Desktop core ignored a malformed request: {error}");
+                        continue;
+                    }
+                };
+                let Some(state) = reader_state.upgrade() else {
+                    break;
+                };
+                let output = reader_output.clone();
+                runtime::spawn(async move {
+                    let reply = dispatch(state, &request.method, request.params).await;
+                    output.respond(request.id, reply);
+                });
+            }
+            let _ = exit_sender.send(());
+        })
+        .map_err(|error| format!("Desktop core stdin reader could not start: {error}"))?;
+
+    let _ = exit_receiver.recv();
+    if !state.exiting.load(Ordering::SeqCst)
+        && let Err(error) = dispatch_application_action(&state, DesktopPlaybackAction::Quit)
+    {
+        eprintln!(
+            "Desktop core shutdown could not save playback: {}",
+            error.message
+        );
+    }
+    release(state);
+    Ok(())
+}
+
+/// Drops the state once in-flight commands let go of it, so its teardown
+/// (mpv, the media proxy, the Adaptive System Rate restore) runs before exit.
+fn release(mut state: Arc<AppState>) {
+    for _ in 0..100 {
+        match Arc::try_unwrap(state) {
+            Ok(state) => {
+                drop(state);
+                return;
+            }
+            Err(shared) => {
+                state = shared;
+                std::thread::sleep(Duration::from_millis(20));
+            }
+        }
+    }
+    eprintln!("Desktop core exited while a command still held its state.");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{shell_action, validate_playback_source};
+    use crate::playback_app_actions::DesktopPlaybackAction;
+    use serde_json::json;
+
+    #[test]
+    fn native_playback_rejects_urls_outside_private_media_proxy() {
+        let source = json!({
+            "type": "track",
+            "playbackUrl": "https://attacker.example/track.flac"
+        });
+
+        assert!(validate_playback_source(&source, "http://127.0.0.1:43129/private-token").is_err());
+    }
+
+    #[test]
+    fn shell_actions_map_only_known_names() {
+        assert_eq!(
+            shell_action("close-main-window"),
+            Ok(DesktopPlaybackAction::CloseMainWindow)
+        );
+        assert_eq!(shell_action("quit"), Ok(DesktopPlaybackAction::Quit));
+        assert!(shell_action("seek").is_err());
+    }
+}

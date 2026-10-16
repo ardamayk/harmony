@@ -269,7 +269,7 @@ impl MprisPlayer {
 
     fn dispatch(&self, action: DesktopPlaybackAction) {
         let dispatch = self.dispatch.clone();
-        tauri::async_runtime::spawn_blocking(move || dispatch(action));
+        crate::runtime::spawn_blocking(move || dispatch(action));
     }
 }
 
@@ -481,11 +481,11 @@ pub(crate) struct MprisBridge {
 }
 
 impl MprisBridge {
-    /// Starts the D-Bus server on the Tauri async runtime. When no session
+    /// Starts the D-Bus server on the core runtime. When no session
     /// bus is available the bridge logs once and silently drops updates.
     pub(crate) fn start(dispatch: MprisDispatch, art_base_url: String) -> Self {
         let (sender, receiver) = mpsc::unbounded_channel();
-        tauri::async_runtime::spawn(run_server(dispatch, art_base_url, receiver));
+        crate::runtime::spawn(run_server(dispatch, art_base_url, receiver));
         Self { sender }
     }
 

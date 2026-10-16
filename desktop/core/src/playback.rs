@@ -6936,18 +6936,6 @@ mod tests {
         }));
     }
 
-    #[test]
-    fn desktop_config_packages_the_pinned_mpv_sidecar() {
-        let config: serde_json::Value =
-            serde_json::from_str(include_str!("../tauri.sidecar.conf.json"))
-                .expect("Tauri sidecar config");
-
-        assert_eq!(
-            config.pointer("/bundle/externalBin"),
-            Some(&json!(["binaries/mpv"]))
-        );
-    }
-
     fn temporary_path(file_name: &str) -> PathBuf {
         let mut random = [0_u8; 8];
         getrandom::fill(&mut random).expect("random temporary name");

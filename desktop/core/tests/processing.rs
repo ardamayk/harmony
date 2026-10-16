@@ -1,4 +1,4 @@
-use earthly_audio_desktop::processing::{
+use earthly_audio_core::processing::{
     EffectiveReplayGainMode, EqualizerPreset, FileProcessingSettingsStorage,
     MpvProcessingConfiguration, OutputMode, ProcessingController, ProcessingProfile,
     ProcessingSettingsStorage, ReplayGainMode,
@@ -258,10 +258,7 @@ fn software_volume_is_remembered_per_output_route() {
         .expect("reopen controller");
     assert_eq!(reopened.remembered_volume(), Some(0.4));
     assert_eq!(
-        earthly_audio_desktop::processing::output_volume_key(
-            OutputMode::DirectAlsa,
-            Some("hw:1,0")
-        ),
+        earthly_audio_core::processing::output_volume_key(OutputMode::DirectAlsa, Some("hw:1,0")),
         "alsa:hw:1,0"
     );
 }
