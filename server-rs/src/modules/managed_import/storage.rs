@@ -207,6 +207,10 @@ impl Storage {
         }
     }
 
+    pub fn batch_limit(&self) -> i64 {
+        self.batch_limit
+    }
+
     pub fn root(&self) -> &Path {
         &self.root
     }
@@ -370,10 +374,11 @@ impl Storage {
 
     /// Streams an upload into `.staging`, hashing it and checking capacity
     /// as it lands; a short or failed upload leaves nothing behind.
-    pub async fn stage_upload<S, E>(&self, mut body: S, content_length: i64) -> Result<StagedUpload>
+    /// A body error carrying `UploadInterrupted` or `Cancelled` marks the
+    /// upload interrupted; any other body error is reported as it is.
+    pub async fn stage_upload<S>(&self, mut body: S, content_length: i64) -> Result<StagedUpload>
     where
-        S: Stream<Item = std::result::Result<Bytes, E>> + Unpin,
-        E: std::fmt::Display,
+        S: Stream<Item = Result<Bytes>> + Unpin,
     {
         self.validate_upload_length(content_length)?;
         if content_length > 0 {
@@ -403,8 +408,9 @@ impl Storage {
             let chunk = match chunk {
                 Ok(chunk) => chunk,
                 Err(error) => {
-                    interrupted = true;
-                    failure = Some(Error::new(error.to_string()));
+                    interrupted =
+                        error.is(Sentinel::UploadInterrupted) || error.is(Sentinel::Cancelled);
+                    failure = Some(error);
                     break;
                 }
             };

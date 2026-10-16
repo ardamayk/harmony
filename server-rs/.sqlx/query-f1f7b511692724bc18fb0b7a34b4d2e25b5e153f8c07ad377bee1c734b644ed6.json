@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM managed_import_batches WHERE id = ? AND status != 'completed'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "f1f7b511692724bc18fb0b7a34b4d2e25b5e153f8c07ad377bee1c734b644ed6"
+}

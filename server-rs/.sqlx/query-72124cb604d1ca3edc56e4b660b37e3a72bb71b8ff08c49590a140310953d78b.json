@@ -1,0 +1,62 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id AS \"id!\", job_id, track_id, phase FROM managed_track_replacements\n            WHERE job_id = ? AND phase NOT IN ('completed', 'rolled_back')",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_track_replacements",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "job_id",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_track_replacements",
+            "name": "job_id"
+          }
+        }
+      },
+      {
+        "name": "track_id",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_track_replacements",
+            "name": "track_id"
+          }
+        }
+      },
+      {
+        "name": "phase",
+        "ordinal": 3,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_track_replacements",
+            "name": "phase"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "72124cb604d1ca3edc56e4b660b37e3a72bb71b8ff08c49590a140310953d78b"
+}

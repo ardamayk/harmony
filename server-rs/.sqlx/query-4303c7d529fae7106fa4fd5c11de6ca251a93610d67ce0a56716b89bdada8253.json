@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE managed_import_jobs\n            SET upload_size_bytes = ?1, error_code = NULL, error_field = NULL, error_reason = NULL,\n                updated_at = CURRENT_TIMESTAMP\n            WHERE managed_import_jobs.id = ?2 AND managed_import_jobs.status = 'uploading'\n                AND managed_import_jobs.batch_id IS NOT NULL AND ?1 + COALESCE((\n                    SELECT SUM(sibling.upload_size_bytes) FROM managed_import_jobs AS sibling\n                    WHERE sibling.batch_id = managed_import_jobs.batch_id AND sibling.id != managed_import_jobs.id\n                ), 0) <= ?3",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "4303c7d529fae7106fa4fd5c11de6ca251a93610d67ce0a56716b89bdada8253"
+}

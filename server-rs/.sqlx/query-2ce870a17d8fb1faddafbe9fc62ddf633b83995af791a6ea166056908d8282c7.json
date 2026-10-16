@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM managed_import_jobs WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "2ce870a17d8fb1faddafbe9fc62ddf633b83995af791a6ea166056908d8282c7"
+}

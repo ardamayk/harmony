@@ -76,6 +76,9 @@ pub struct MediaPosition {
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct NormalizedMetadata {
+    /// Overrides the Album identity derived from the credits and title, for
+    /// a separate edition or an Album chosen during a Batch confirmation.
+    pub album_identity_key: String,
     pub title: String,
     pub artists: Vec<String>,
     pub album_artists: Vec<String>,
@@ -176,6 +179,7 @@ pub fn normalize(tags: &Tags, replay_gain: ReplayGain) -> Result<NormalizedMetad
         return Err(failure);
     }
     Ok(NormalizedMetadata {
+        album_identity_key: String::new(),
         title: title?,
         artists: artists?,
         album_artists: album_artists?,

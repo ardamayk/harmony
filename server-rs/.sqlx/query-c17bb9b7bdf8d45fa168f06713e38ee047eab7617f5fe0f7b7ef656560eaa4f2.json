@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO managed_import_jobs (id, status, revision, batch_id, batch_position, client_file_id)\n            SELECT ?1, 'uploading', 1, batches.id, (\n                SELECT COALESCE(MAX(position), 0) + 1 FROM (\n                    SELECT jobs.batch_position AS position FROM managed_import_jobs jobs WHERE jobs.batch_id = ?2\n                    UNION ALL\n                    SELECT canceled.position FROM managed_import_canceled_files canceled WHERE canceled.batch_id = ?2\n                )\n            ), NULLIF(CAST(?3 AS TEXT), '')\n            FROM managed_import_batches batches\n            WHERE batches.id = ?2 AND batches.status = 'uploading' AND NOT EXISTS (\n                SELECT 1 FROM managed_import_canceled_files canceled\n                WHERE canceled.batch_id = ?2 AND canceled.file_id = NULLIF(CAST(?3 AS TEXT), '')\n            )",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "c17bb9b7bdf8d45fa168f06713e38ee047eab7617f5fe0f7b7ef656560eaa4f2"
+}

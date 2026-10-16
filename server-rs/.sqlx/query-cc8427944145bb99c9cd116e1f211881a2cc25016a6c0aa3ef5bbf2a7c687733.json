@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT genres.name FROM track_genres JOIN genres ON genres.id = track_genres.genre_id\n            WHERE track_genres.track_id = ? ORDER BY track_genres.position",
+  "describe": {
+    "columns": [
+      {
+        "name": "name",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "genres",
+            "name": "name"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "cc8427944145bb99c9cd116e1f211881a2cc25016a6c0aa3ef5bbf2a7c687733"
+}

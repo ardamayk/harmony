@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE managed_import_jobs SET updated_at = ? WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "9831b2b44ad141bd5e3feb855028c4a11b7a1d8a2bb07b57db36807d3f6624b3"
+}

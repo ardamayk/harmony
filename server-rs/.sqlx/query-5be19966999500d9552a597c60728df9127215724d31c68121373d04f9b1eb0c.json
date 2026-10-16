@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE managed_import_jobs\n            SET revision = revision + 1,\n                original_filename = COALESCE(NULLIF(CAST(?1 AS TEXT), ''), original_filename),\n                error_code = 'upload_interrupted', error_field = 'file',\n                error_reason = 'upload stream was interrupted; retry this file',\n                outcome = NULL, selected = 0, staged_file_path = NULL, content_sha256 = NULL,\n                preview_json = NULL, upload_size_bytes = 0, validation_progress = 0, updated_at = CURRENT_TIMESTAMP\n            WHERE id = ?2 AND status = 'uploading' AND batch_id IS NOT NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "5be19966999500d9552a597c60728df9127215724d31c68121373d04f9b1eb0c"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM managed_import_history WHERE import_id IN (\n            SELECT import_id FROM managed_import_history ORDER BY completed_at DESC, rowid DESC LIMIT -1 OFFSET ?\n        )",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "f116cbe8959570c3c372d1b6ee2f352ea0f58b0310c792ba2f44f076380fdaa1"
+}

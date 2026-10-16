@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE managed_import_jobs SET preview_json = NULL, staged_file_path = NULL\n        WHERE id = ? AND batch_id IS NULL AND status IN ('committed', 'failed')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "343dc6329dc4e3b0bba5911c62fcd674c66977e2b0d192a675346b4c49246aae"
+}

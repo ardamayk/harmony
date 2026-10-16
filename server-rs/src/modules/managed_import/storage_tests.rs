@@ -32,7 +32,7 @@ fn storage_in(dir: &Path) -> Storage {
 
 fn body(
     chunks: Vec<&[u8]>,
-) -> impl futures_util::Stream<Item = Result<Bytes, std::io::Error>> + Unpin {
+) -> impl futures_util::Stream<Item = super::errors::Result<Bytes>> + Unpin {
     futures_util::stream::iter(
         chunks
             .into_iter()
@@ -136,7 +136,10 @@ async fn rejects_oversized_short_and_failed_uploads_leaving_nothing() {
     assert!(short.is(Sentinel::UploadInterrupted));
     let failing = futures_util::stream::iter(vec![
         Ok(Bytes::from_static(b"a")),
-        Err(std::io::Error::other("connection reset")),
+        Err(super::errors::Error::wrap(
+            Sentinel::UploadInterrupted,
+            "connection reset",
+        )),
     ]);
     let failed = storage.stage_upload(failing, -1).await.unwrap_err();
     assert!(failed.is(Sentinel::UploadInterrupted));

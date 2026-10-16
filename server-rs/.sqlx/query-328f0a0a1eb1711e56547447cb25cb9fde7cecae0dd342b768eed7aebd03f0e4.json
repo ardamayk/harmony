@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO track_genres (track_id, genre_id, position) VALUES (?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "328f0a0a1eb1711e56547447cb25cb9fde7cecae0dd342b768eed7aebd03f0e4"
+}

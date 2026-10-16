@@ -158,6 +158,29 @@ pub fn time(stored: &str) -> String {
     format!("{date_time}{zone}")
 }
 
+/// A stored SQLite DATETIME as the Go server writes the `time.Time` it read
+/// from it back into the database: `2006-01-02 15:04:05.999999999-07:00`.
+pub fn sqlite_time_from_stored(stored: &str) -> String {
+    let (date_time, zone) = split_zone(stored.trim());
+    let date_time = match date_time.split_once('.') {
+        Some((whole, fraction)) => {
+            let fraction = fraction.trim_end_matches('0');
+            if fraction.is_empty() {
+                whole.to_owned()
+            } else {
+                format!("{whole}.{fraction}")
+            }
+        }
+        None => date_time.to_owned(),
+    };
+    let zone = if zone == "Z" {
+        "+00:00".to_owned()
+    } else {
+        zone
+    };
+    format!("{}{zone}", date_time.replacen('T', " ", 1))
+}
+
 fn split_zone(value: &str) -> (&str, String) {
     if let Some(rest) = value.strip_suffix('Z') {
         return (rest, "Z".to_owned());

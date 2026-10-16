@@ -1,0 +1,21 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT COUNT(*) FROM managed_import_jobs\n            WHERE batch_id = ? AND status = 'uploading' AND COALESCE(error_code, '') <> 'upload_interrupted'",
+  "describe": {
+    "columns": [
+      {
+        "name": "COUNT(*)",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "504a9d59fb8674f6d77bac017b2494f69825a108bf5bea9e499c3cc38cdef93b"
+}

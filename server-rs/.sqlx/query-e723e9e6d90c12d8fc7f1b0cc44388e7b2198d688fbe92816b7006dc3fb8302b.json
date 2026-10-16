@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE managed_import_jobs SET replace_track_id = ? WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "e723e9e6d90c12d8fc7f1b0cc44388e7b2198d688fbe92816b7006dc3fb8302b"
+}

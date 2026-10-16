@@ -1,0 +1,28 @@
+{
+  "db_name": "SQLite",
+  "query": "WITH params AS (\n                SELECT CAST(?1 AS INTEGER) AS wanted_disc_total,\n                    CAST(?2 AS INTEGER) AS wanted_disc_number,\n                    CAST(?3 AS INTEGER) AS wanted_track_total\n            ),\n            matching_tracks AS (\n                SELECT tracks.disc_no, tracks.disc_total, tracks.track_no, tracks.track_total\n                FROM albums JOIN tracks ON tracks.album_id = albums.id\n                WHERE albums.identity_key = ?4 AND tracks.missing_at IS NULL AND tracks.id != ?5\n            )\n            SELECT\n                EXISTS (\n                    SELECT 1 FROM matching_tracks m, params p\n                    WHERE p.wanted_disc_total > 0\n                        AND ((m.disc_total IS NOT NULL AND m.disc_total != p.wanted_disc_total) OR m.disc_no > p.wanted_disc_total)\n                ) AS \"has_disc_conflict!: bool\",\n                EXISTS (\n                    SELECT 1 FROM matching_tracks m, params p\n                    WHERE m.disc_no = p.wanted_disc_number AND p.wanted_track_total > 0\n                        AND ((m.track_total IS NOT NULL AND m.track_total != p.wanted_track_total) OR m.track_no > p.wanted_track_total)\n                ) AS \"has_track_conflict!: bool\"",
+  "describe": {
+    "columns": [
+      {
+        "name": "has_disc_conflict!: bool",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": "Expression"
+      },
+      {
+        "name": "has_track_conflict!: bool",
+        "ordinal": 1,
+        "type_info": "Integer",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "f20939211b28d1cfb8a9d68596357580d4cbf3348f7d666207d75c56d452542b"
+}

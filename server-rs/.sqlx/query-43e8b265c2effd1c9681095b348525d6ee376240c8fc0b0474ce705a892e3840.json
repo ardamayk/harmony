@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO album_artwork (\n            id, album_id, source_track_id, content_sha256, media_type, width, height, encoded_size_bytes, file_path\n        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 9
+    },
+    "nullable": []
+  },
+  "hash": "43e8b265c2effd1c9681095b348525d6ee376240c8fc0b0474ce705a892e3840"
+}

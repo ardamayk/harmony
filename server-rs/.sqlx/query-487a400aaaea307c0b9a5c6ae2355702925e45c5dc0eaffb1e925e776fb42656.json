@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE managed_import_jobs\n            SET status = 'failed', revision = revision + 1, original_filename = ?1,\n                content_sha256 = ?2, track_id = ?3, preview_json = ?4,\n                error_code = 'exact_duplicate', error_field = 'file', error_reason = 'file bytes match an existing Track',\n                outcome = CASE WHEN batch_id IS NULL THEN NULL ELSE 'rejected' END, selected = 0,\n                staged_file_path = ?5, upload_size_bytes = ?6,\n                validation_progress = 100, updated_at = CURRENT_TIMESTAMP\n            WHERE id = ?7 AND status = 'uploading'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 7
+    },
+    "nullable": []
+  },
+  "hash": "487a400aaaea307c0b9a5c6ae2355702925e45c5dc0eaffb1e925e776fb42656"
+}

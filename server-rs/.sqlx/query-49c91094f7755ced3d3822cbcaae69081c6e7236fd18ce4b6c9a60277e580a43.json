@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE managed_import_jobs\n            SET status = 'failed', error_code = 'exact_duplicate', error_field = 'file',\n                error_reason = 'file bytes match an existing Track', updated_at = CURRENT_TIMESTAMP\n            WHERE id = ? AND status = 'awaiting_confirmation'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "49c91094f7755ced3d3822cbcaae69081c6e7236fd18ce4b6c9a60277e580a43"
+}

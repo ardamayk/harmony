@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE managed_import_jobs SET selected = 1 WHERE id = ? AND batch_id = ? AND status = 'awaiting_confirmation'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "f62bfe00b87e4efe0be7aa46644d347d325f678646469373df32dc22e63e6ffc"
+}

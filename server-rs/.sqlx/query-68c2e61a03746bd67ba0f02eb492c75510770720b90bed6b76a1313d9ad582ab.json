@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE managed_import_commit_journal SET phase = ?, updated_at = CURRENT_TIMESTAMP\n            WHERE id = ? AND phase NOT IN ('completed', 'rolled_back')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "68c2e61a03746bd67ba0f02eb492c75510770720b90bed6b76a1313d9ad582ab"
+}

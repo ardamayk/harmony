@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO managed_import_jobs (id, status, revision, client_file_id)\n                VALUES (?, 'uploading', 1, NULLIF(CAST(? AS TEXT), ''))",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "e33763d17f46c0cca6d0c91275fa86a772d2b5456a7a5f160790358687b1c45c"
+}

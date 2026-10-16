@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE managed_import_batches SET updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status <> 'completed'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "b2ddd23cb0f5ddf5988a5c8d893c8c285f5790c5c4eb9c99bb422d5c6b6751cb"
+}

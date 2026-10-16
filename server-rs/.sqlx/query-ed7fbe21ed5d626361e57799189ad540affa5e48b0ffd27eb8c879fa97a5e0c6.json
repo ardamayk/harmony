@@ -1,0 +1,21 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT EXISTS(\n                SELECT 1 FROM managed_import_jobs\n                WHERE id = ? AND batch_id IS NULL AND status != 'committed' AND updated_at <= ?\n            ) AS \"is_eligible!: bool\"",
+  "describe": {
+    "columns": [
+      {
+        "name": "is_eligible!: bool",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "ed7fbe21ed5d626361e57799189ad540affa5e48b0ffd27eb8c879fa97a5e0c6"
+}

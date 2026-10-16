@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE managed_import_jobs\n            SET status = ?1, outcome = ?2,\n                error_code = NULLIF(CAST(?3 AS TEXT), ''),\n                error_reason = NULLIF(CAST(?4 AS TEXT), ''),\n                staged_file_path = NULL, updated_at = CURRENT_TIMESTAMP\n            WHERE id = ?5\n                AND (status = 'awaiting_confirmation' OR (status = 'uploading' AND error_code = 'upload_interrupted'))\n                AND outcome IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "f503860bfa087d66ed0a7c76f7403e903ea3477e0404726a25295cc40eb5f27a"
+}

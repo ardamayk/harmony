@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE managed_import_batches SET revision = revision + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "5d9c8bddc3e9229c85b6268f79330033f6bac196cdedcd1ca4f2fefb6b8313d0"
+}

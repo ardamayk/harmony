@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE managed_import_commit_journal\n            SET phase = 'placed', artwork_created = ?, updated_at = CURRENT_TIMESTAMP\n            WHERE id = ? AND phase = 'prepared'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "d46cd1e5cce4614c7c7f5c97389354d87080d25d9677308e5a2e591ff5a63043"
+}

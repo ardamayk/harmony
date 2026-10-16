@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT jobs.batch_id, jobs.status\n            FROM managed_import_jobs jobs\n            LEFT JOIN managed_import_batches batches ON batches.id = jobs.batch_id\n            WHERE jobs.id = ? AND jobs.status != 'committed' AND (jobs.batch_id IS NULL OR batches.status != 'completed')",
+  "describe": {
+    "columns": [
+      {
+        "name": "batch_id",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_import_jobs",
+            "name": "batch_id"
+          }
+        }
+      },
+      {
+        "name": "status",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_import_jobs",
+            "name": "status"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      false
+    ]
+  },
+  "hash": "ec1dcd3d6dc62acb27441ff42082e8e71f17d36024690b23fd19227d9211418f"
+}
