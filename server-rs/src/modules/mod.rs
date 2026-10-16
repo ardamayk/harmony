@@ -1,5 +1,6 @@
 pub mod docs;
 pub mod library;
+pub mod managed_import;
 pub mod playback;
 pub mod playlists;
 pub mod preferences;

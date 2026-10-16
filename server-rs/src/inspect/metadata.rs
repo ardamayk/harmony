@@ -43,6 +43,14 @@ pub fn go_upper(value: &str) -> String {
         .collect()
 }
 
+/// Go's `strings.ToLower`: per-rune simple lower case (İ becomes i).
+pub fn go_lower(value: &str) -> String {
+    value
+        .chars()
+        .map(|c| c.to_lowercase().next().unwrap_or(c))
+        .collect()
+}
+
 /// The key of a raw tag name: trimmed and upper-cased.
 pub fn tag_key(raw: &str) -> String {
     go_upper(raw.trim())
