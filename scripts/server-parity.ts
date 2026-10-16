@@ -12,6 +12,7 @@
 // `mise run server-rs:build`.
 import { type ChildProcess, execFileSync, spawn } from "node:child_process";
 import { copyFileSync, existsSync, mkdtempSync, rmSync } from "node:fs";
+import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -269,6 +270,139 @@ function corpus(ids: Record<string, string>): Probe[] {
 		{ path: "/api/v1/playlists/{favorites}" },
 		{ path: "/api/v1/playlists/missing" },
 		{ path: "/api/v1/radio/stations" },
+		{
+			method: "POST",
+			path: "/api/v1/radio/stations",
+			body: {
+				name: " Parity FM ",
+				streamUrl: " https://radio.example/parity ",
+				tags: ["talk"],
+				bitrate: 96,
+			},
+			capture: "station",
+		},
+		{
+			method: "POST",
+			path: "/api/v1/radio/stations",
+			body: { streamUrl: "https://radio.example/x" },
+		},
+		{ method: "POST", path: "/api/v1/radio/stations", body: { name: "x" } },
+		{
+			method: "POST",
+			path: "/api/v1/radio/stations",
+			body: { name: "x", streamUrl: "http://192.168.1.4/s" },
+		},
+		{
+			method: "POST",
+			path: "/api/v1/radio/stations",
+			body: { name: "x", streamUrl: "ftp://radio.example/s" },
+		},
+		{
+			method: "POST",
+			path: "/api/v1/radio/stations",
+			body: {
+				name: "x",
+				streamUrl: "https://radio.example/s",
+				homepageUrl: "radio.example",
+			},
+		},
+		{
+			method: "POST",
+			path: "/api/v1/radio/stations",
+			body: { name: "x", streamUrl: "https://radio.example/s", bitrate: 1.5 },
+		},
+		{ method: "POST", path: "/api/v1/radio/stations", raw: "[" },
+		{ path: "/api/v1/radio/stations/{$station}" },
+		{ path: "/api/v1/radio/stations/missing" },
+		{
+			method: "PATCH",
+			path: "/api/v1/radio/stations/{$station}",
+			body: {
+				name: " Renamed ",
+				isFavorite: true,
+				tags: ["a", "b"],
+				position: 7,
+			},
+		},
+		{
+			method: "PATCH",
+			path: "/api/v1/radio/stations/{$station}",
+			body: { tags: null, codec: " AAC " },
+		},
+		{
+			method: "PATCH",
+			path: "/api/v1/radio/stations/{$station}",
+			body: { streamUrl: "http://localhost/s" },
+		},
+		{
+			method: "PATCH",
+			path: "/api/v1/radio/stations/missing",
+			body: { name: "x" },
+		},
+		{ path: "/api/v1/radio/stations/{$station}/now-playing" },
+		{ path: "/api/v1/radio/stations/preview:u-1/now-playing" },
+		{ path: "/api/v1/radio/stations/missing/now-playing" },
+		{
+			path: "/api/v1/radio/search?q=%20jazz%20&limit=5&offset=2&country=Germany&minBitrate=128",
+		},
+		{
+			path: "/api/v1/radio/search?q=a+b&tag=r%26b&language=german&limit=abc&offset=-1",
+		},
+		{ path: "/api/v1/radio/search?codec=aac&limit=3&offset=1" },
+		{ path: "/api/v1/radio/search?codecGroup=AAC&limit=2&offset=5" },
+		{ path: "/api/v1/radio/catalog/countries" },
+		{ path: "/api/v1/radio/catalog/tags" },
+		{
+			method: "POST",
+			path: "/api/v1/radio/import",
+			body: { stationUuid: "u-1" },
+			capture: "imported",
+		},
+		{
+			method: "POST",
+			path: "/api/v1/radio/import",
+			body: { stationUuid: "u-1" },
+		},
+		{ method: "POST", path: "/api/v1/radio/import", body: {} },
+		{
+			method: "POST",
+			path: "/api/v1/radio/import",
+			body: { stationUuid: "unknown" },
+		},
+		{
+			method: "POST",
+			path: "/api/v1/radio/import",
+			body: { stationUuid: "broken" },
+		},
+		{
+			method: "POST",
+			path: "/api/v1/radio/import",
+			body: {
+				stationUuid: "unknown",
+				result: {
+					stationUuid: "manual-1",
+					name: "Sent Along",
+					streamUrl: "https://radio.example/sent",
+				},
+			},
+			capture: "sent",
+		},
+		{ path: "/api/v1/radio/stations" },
+		{ path: "/api/v1/radio/preview/u-private/stream" },
+		{ path: "/api/v1/radio/preview/unknown/stream" },
+		{
+			path: "/api/v1/radio/stations/{$station}/stream?url=https%3A%2F%2Fradio.example%2Fx",
+		},
+		{ path: "/api/v1/radio/stations/{$station}/stream?resource=forged.token" },
+		{ path: "/api/v1/radio/stations/missing/stream" },
+		{
+			method: "POST",
+			path: "/api/v1/radio/preview",
+			body: { stationUuid: "u-private" },
+		},
+		{ method: "POST", path: "/api/v1/radio/preview", body: {} },
+		{ method: "DELETE", path: "/api/v1/radio/stations/{$station}" },
+		{ method: "DELETE", path: "/api/v1/radio/stations/{$station}" },
 		{ path: "/api/v1/import-history" },
 	];
 	return probes.map((probe) => ({
@@ -313,6 +447,83 @@ print(json.dumps(dump))
 	);
 }
 
+/**
+ * A stand-in for Radio Browser on loopback, so neither server reaches the
+ * real catalog. Search echoes the query it received as the station name,
+ * which shows whether both servers ask the catalog the same thing.
+ */
+function startFakeRadioBrowser(port: number) {
+	const station = (
+		uuid: string,
+		name: string,
+		extra: Record<string, unknown> = {},
+	) => ({
+		stationuuid: uuid,
+		name,
+		url: "https://radio.example/live",
+		url_resolved: "",
+		homepage: "https://radio.example",
+		favicon: "",
+		country: "Germany",
+		language: "german",
+		tags: "jazz, smooth,,",
+		codec: "MP3",
+		bitrate: 128.7,
+		votes: "42",
+		lastcheckok: 1,
+		lastchecktime_iso8601: "2026-10-01T10:00:00Z",
+		lastcheckoktime_iso8601: " ",
+		...extra,
+	});
+	const server = createServer((request, response) => {
+		const url = new URL(request.url ?? "/", "http://fake");
+		const send = (body: unknown, status = 200) => {
+			response.writeHead(status, { "content-type": "application/json" });
+			response.end(JSON.stringify(body));
+		};
+		if (url.pathname === "/json/stations/search") {
+			const codec = url.searchParams.get("codec");
+			if (codec === "AAC" || codec === "AAC+") {
+				return send([
+					station(`${codec}-b`, `beta ${codec}`, { codec }),
+					station(`${codec}-a`, `Alpha ${codec}`, {
+						codec,
+						lastcheckok: false,
+					}),
+				]);
+			}
+			return send([
+				station("echo", `search ${url.search}`, { lastcheckok: "true" }),
+			]);
+		}
+		if (url.pathname.startsWith("/json/stations/byuuid/")) {
+			const uuid = decodeURIComponent(
+				url.pathname.slice("/json/stations/byuuid/".length),
+			);
+			if (uuid === "broken") return send({ error: "down" }, 500);
+			if (uuid === "u-1") return send([station("u-1", " Jazz One ")]);
+			if (uuid === "u-private") {
+				return send([
+					station("u-private", "Private", { url: "http://10.0.0.1/live" }),
+				]);
+			}
+			return send([]);
+		}
+		if (url.pathname === "/json/countries") {
+			return send([
+				{ name: "Germany", iso_3166_1: "de", stationcount: 120 },
+				{ name: "Türkiye", iso_3166_1: "tr", stationcount: "33" },
+			]);
+		}
+		if (url.pathname === "/json/tags") {
+			return send([{ name: "jazz", stationcount: 7.9 }, { name: "rock" }]);
+		}
+		send([], 404);
+	});
+	server.listen(port, "127.0.0.1");
+	return server;
+}
+
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function start(binary: string, port: number, database: string) {
@@ -322,6 +533,7 @@ async function start(binary: string, port: number, database: string) {
 			...process.env,
 			SERVER_ADDR: `127.0.0.1:${port}`,
 			DATABASE_PATH: database,
+			RADIO_BROWSER_BASE_URL: "http://127.0.0.1:8194",
 			RUST_LOG: "warn",
 		},
 		stdio: "ignore",
@@ -403,6 +615,7 @@ for (const binary of [GO_BINARY, RUST_BINARY]) {
 }
 
 const workspace = mkdtempSync(join(tmpdir(), "earthly-parity-"));
+const fakeRadioBrowser = startFakeRadioBrowser(8194);
 const children: ChildProcess[] = [];
 try {
 	const goDb = join(workspace, "go.db");
@@ -565,6 +778,7 @@ try {
 	process.exitCode = differing > 0 || differingTables.length > 0 ? 1 : 0;
 } finally {
 	for (const child of children) child.kill("SIGTERM");
+	fakeRadioBrowser.close();
 	await sleep(200);
 	rmSync(workspace, { recursive: true, force: true });
 }

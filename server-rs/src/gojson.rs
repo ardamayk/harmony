@@ -44,6 +44,80 @@ pub fn optional_float<S: Serializer>(
     }
 }
 
+/// UTC civil date and time of a Unix timestamp.
+fn civil(seconds: i64) -> (i64, u32, u32, u32, u32, u32) {
+    let days = seconds.div_euclid(86_400);
+    let second_of_day = seconds.rem_euclid(86_400) as u32;
+    // Howard Hinnant's days-to-civil.
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let day_of_era = z.rem_euclid(146_097);
+    let year_of_era =
+        (day_of_era - day_of_era / 1460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
+    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    let month_index = (5 * day_of_year + 2) / 153;
+    let day = (day_of_year - (153 * month_index + 2) / 5 + 1) as u32;
+    let month = if month_index < 10 {
+        month_index + 3
+    } else {
+        month_index - 9
+    } as u32;
+    let year = year_of_era + era * 400 + i64::from(month <= 2);
+    (
+        year,
+        month,
+        day,
+        second_of_day / 3600,
+        second_of_day / 60 % 60,
+        second_of_day % 60,
+    )
+}
+
+fn split_time(time: std::time::SystemTime) -> (i64, u32) {
+    match time.duration_since(std::time::UNIX_EPOCH) {
+        Ok(since) => (since.as_secs() as i64, since.subsec_nanos()),
+        Err(before) => {
+            let before = before.duration();
+            let nanos = before.subsec_nanos();
+            if nanos == 0 {
+                (-(before.as_secs() as i64), 0)
+            } else {
+                (-(before.as_secs() as i64) - 1, 1_000_000_000 - nanos)
+            }
+        }
+    }
+}
+
+fn fraction(nanos: u32) -> String {
+    if nanos == 0 {
+        String::new()
+    } else {
+        format!(".{nanos:09}").trim_end_matches('0').to_owned()
+    }
+}
+
+/// A UTC time as Go's `time.Time` marshals to JSON (RFC 3339, nanoseconds
+/// without trailing zeros).
+pub fn rfc3339_nano(time: std::time::SystemTime) -> String {
+    let (seconds, nanos) = split_time(time);
+    let (year, month, day, hour, minute, second) = civil(seconds);
+    format!(
+        "{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}{}Z",
+        fraction(nanos)
+    )
+}
+
+/// A UTC time as the Go server's SQLite driver stores a `time.Time`:
+/// `2006-01-02 15:04:05.999999999-07:00`.
+pub fn sqlite_time(time: std::time::SystemTime) -> String {
+    let (seconds, nanos) = split_time(time);
+    let (year, month, day, hour, minute, second) = civil(seconds);
+    format!(
+        "{year:04}-{month:02}-{day:02} {hour:02}:{minute:02}:{second:02}{}+00:00",
+        fraction(nanos)
+    )
+}
+
 /// A SQLite DATETIME (`2026-09-06 15:47:56`, optionally with fractional
 /// seconds or a zone) as Go writes the `time.Time` the driver parsed from
 /// it: RFC 3339 with trailing fractional zeros dropped, UTC as `Z`.
@@ -161,6 +235,19 @@ mod tests {
         })
         .expect("json");
         assert_eq!(json, r#"{"rate":1,"sizes":[22,50.5,27.25]}"#);
+    }
+
+    #[test]
+    fn unix_times_format_like_go() {
+        let time = std::time::UNIX_EPOCH + std::time::Duration::new(1_792_141_930, 120_000_000);
+        assert_eq!(rfc3339_nano(time), "2026-10-16T09:12:10.12Z");
+        assert_eq!(sqlite_time(time), "2026-10-16 09:12:10.12+00:00");
+        assert_eq!(rfc3339_nano(std::time::UNIX_EPOCH), "1970-01-01T00:00:00Z");
+        assert_eq!(time_of_leap_day(), "2024-02-29T23:59:59Z");
+    }
+
+    fn time_of_leap_day() -> String {
+        rfc3339_nano(std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_709_251_199))
     }
 
     #[test]

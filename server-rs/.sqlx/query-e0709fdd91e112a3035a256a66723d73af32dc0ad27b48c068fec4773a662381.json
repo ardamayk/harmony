@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO radio_stations (\n                id, user_id, name, stream_url, homepage_url, favicon_url, country, language, tags, codec, bitrate,\n                source, external_id, is_favorite, position\n            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 15
+    },
+    "nullable": []
+  },
+  "hash": "e0709fdd91e112a3035a256a66723d73af32dc0ad27b48c068fec4773a662381"
+}

@@ -25,10 +25,12 @@ pub struct AppState {
     pub db: SqlitePool,
     pub waveforms: Arc<modules::library::WaveformService>,
     pub search: Arc<modules::search::SearchService>,
+    pub radio: Arc<modules::radio::Radio>,
 }
 
 impl AppState {
     pub fn new(config: Config, dependencies: Report, db: SqlitePool) -> Self {
+        let radio = modules::radio::Radio::new(db.clone(), &config.radio_browser_base_url);
         let waveforms = modules::library::WaveformService::new(
             modules::library::Repository::new(db.clone()),
             dependencies.has(crate::dependencies::FFMPEG),
@@ -39,6 +41,7 @@ impl AppState {
             db: db.clone(),
             waveforms: Arc::new(waveforms),
             search: Arc::new(modules::search::SearchService::new(db.clone())),
+            radio: Arc::new(radio),
         }
     }
 }
@@ -53,6 +56,7 @@ pub fn router(state: AppState) -> Router {
         .merge(modules::library::routes())
         .merge(modules::playlists::routes())
         .merge(modules::search::routes())
+        .merge(modules::radio::routes())
         .fallback(static_assets::web)
         .layer(middleware::from_fn(stream_aware_timeout))
         .layer(cors)
