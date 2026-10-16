@@ -57,6 +57,10 @@ export class CoreProcess extends EventEmitter<CoreProcessEvents> {
 		this.child = spawn(executable, args, {
 			env,
 			stdio: ["pipe", "pipe", "pipe"],
+			// Its own process group: Ctrl+C in a terminal reaches only the
+			// shell, which then stops the core through stdin so it can save
+			// the Playback Session. A crashed shell closes stdin all the same.
+			detached: true,
 		});
 		this.exitPromise = new Promise((resolve) => {
 			this.child.once("exit", (code, signal) => {

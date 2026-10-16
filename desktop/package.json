@@ -27,5 +27,6 @@
     "vite": "catalog:",
     "vite-plus": "catalog:",
     "web": "workspace:*"
-  }
+  },
+  "productName": "Earthly Audio"
 }

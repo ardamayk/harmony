@@ -41,7 +41,7 @@ run = ["bash scripts/check-openapi-generation.sh", "cd server && sqlc diff"]
 # --- Build -------------------------------------------------------------------
 
 [tasks.build]
-description = "Build the Music Server (with embedded Web Client and docs) and the Desktop Client"
+description = "Build the Music Server (with embedded Web Client and docs) and the Electron Desktop Client"
 depends = ["server:build", "desktop:build"]
 
 [tasks."web:build"]
@@ -72,9 +72,9 @@ run = [
 ]
 
 [tasks."desktop:build"]
-description = "Build the release Desktop Client with pinned mpv"
+description = "Build the release Desktop Client: Rust core with pinned mpv, Electron shell bundle, Web Client"
 depends = ["web:build"]
-run = "bun run --cwd desktop build:sidecar:prepared"
+run = "bun run --cwd desktop build"
 
 # --- Static checks -----------------------------------------------------------
 
@@ -106,7 +106,7 @@ golangci-lint run
 """
 
 [tasks."desktop:check"]
-description = "rustfmt and Clippy for the Desktop Client"
+description = "rustfmt and Clippy for the Desktop core (the Electron shell's TypeScript is in web:check)"
 run = ["bun run --cwd desktop format:check", "bun run --cwd desktop lint"]
 
 # --- Tests -------------------------------------------------------------------
@@ -125,8 +125,8 @@ dir = "server"
 run = "go test ./..."
 
 [tasks."desktop:test"]
-description = "Run Desktop Client unit tests"
-run = "bun run --cwd desktop test"
+description = "Run Desktop core (Rust) and Electron shell unit tests"
+run = ["bun run --cwd desktop test:core", "bun run --cwd desktop test"]
 
 [tasks."web:test:e2e"]
 description = "Run Web Client Playwright tests"
@@ -139,11 +139,11 @@ env = { RUN_HLS_BROWSER_INTEGRATION = "1" }
 run = "go test ./internal/modules/radio -run TestBrowserHLSProxyIntegration -count=1 -v"
 
 [tasks."desktop:test:mpv"]
-description = "Run Desktop Client tests against pinned mpv"
+description = "Run Desktop core tests against pinned mpv"
 run = ["bun run --cwd desktop prepare:mpv", "bun run --cwd desktop test:mpv"]
 
 [tasks."desktop:test:import-parity"]
-description = "Run Desktop Client Managed Import parity against a real Music Server"
+description = "Run Desktop core Managed Import parity against a real Music Server"
 run = "bun run --cwd desktop test:import-parity"
 
 # --- Security audit ----------------------------------------------------------

@@ -21,10 +21,9 @@ defaults:
 
 env:
   LINUX_NATIVE_PACKAGES: >-
-    build-essential ffmpeg libayatana-appindicator3-dev libass-dev
-    libavcodec-dev libavfilter-dev libavformat-dev libavutil-dev libplacebo-dev
-    librsvg2-dev libssl-dev libswresample-dev libswscale-dev
-    libwebkit2gtk-4.1-dev libxdo-dev meson ninja-build pkg-config
+    build-essential ffmpeg libass-dev libavcodec-dev libavfilter-dev
+    libavformat-dev libavutil-dev libplacebo-dev libssl-dev libswresample-dev
+    libswscale-dev meson ninja-build pkg-config
 
 jobs:
   web:
@@ -61,8 +60,8 @@ jobs:
             ~/.cargo/registry/index
             ~/.cargo/registry/cache
             ~/.cargo/git/db
-            desktop/src-tauri/target
-          key: cargo-${{ runner.os }}-${{ hashFiles('desktop/src-tauri/Cargo.lock') }}
+            desktop/core/target
+          key: cargo-${{ runner.os }}-${{ hashFiles('desktop/core/Cargo.lock') }}
           restore-keys: cargo-${{ runner.os }}-
       - run: bun install --frozen-lockfile
       - run: mise run desktop:check
@@ -105,7 +104,7 @@ jobs:
       - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends $LINUX_NATIVE_PACKAGES
       - id: mpv
-        run: echo "version=$(tr -d '\r\n' < desktop/src-tauri/mpv-version.txt)" >> "$GITHUB_OUTPUT"
+        run: echo "version=$(tr -d '\r\n' < desktop/core/mpv-version.txt)" >> "$GITHUB_OUTPUT"
       - id: mpv-cache
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
