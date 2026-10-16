@@ -121,6 +121,28 @@ func (q *Queries) GetAlbum(ctx context.Context, id string) (GetAlbumRow, error) 
 	return i, err
 }
 
+const getAlbumCoverVariant = `-- name: GetAlbumCoverVariant :one
+SELECT source_sha256, media_type, data FROM album_cover_variants WHERE album_id = ? AND size = ?
+`
+
+type GetAlbumCoverVariantParams struct {
+	AlbumID string
+	Size    int64
+}
+
+type GetAlbumCoverVariantRow struct {
+	SourceSha256 string
+	MediaType    string
+	Data         []byte
+}
+
+func (q *Queries) GetAlbumCoverVariant(ctx context.Context, arg GetAlbumCoverVariantParams) (GetAlbumCoverVariantRow, error) {
+	row := q.db.QueryRowContext(ctx, getAlbumCoverVariant, arg.AlbumID, arg.Size)
+	var i GetAlbumCoverVariantRow
+	err := row.Scan(&i.SourceSha256, &i.MediaType, &i.Data)
+	return i, err
+}
+
 const getEmbeddedAlbumCover = `-- name: GetEmbeddedAlbumCover :one
 SELECT cover_mime, cover_data FROM albums WHERE id = ?
 `
@@ -226,18 +248,19 @@ func (q *Queries) GetTrackWaveform(ctx context.Context, trackID string) (GetTrac
 }
 
 const getVisibleAlbumArtwork = `-- name: GetVisibleAlbumArtwork :one
-SELECT media_type, file_path FROM visible_album_artwork WHERE album_id = ?
+SELECT media_type, file_path, content_sha256 FROM visible_album_artwork WHERE album_id = ?
 `
 
 type GetVisibleAlbumArtworkRow struct {
-	MediaType string
-	FilePath  string
+	MediaType     string
+	FilePath      string
+	ContentSha256 string
 }
 
 func (q *Queries) GetVisibleAlbumArtwork(ctx context.Context, albumID string) (GetVisibleAlbumArtworkRow, error) {
 	row := q.db.QueryRowContext(ctx, getVisibleAlbumArtwork, albumID)
 	var i GetVisibleAlbumArtworkRow
-	err := row.Scan(&i.MediaType, &i.FilePath)
+	err := row.Scan(&i.MediaType, &i.FilePath, &i.ContentSha256)
 	return i, err
 }
 
@@ -806,6 +829,35 @@ func (q *Queries) ListTracks(ctx context.Context, arg ListTracksParams) ([]Libra
 		return nil, err
 	}
 	return items, nil
+}
+
+const putAlbumCoverVariant = `-- name: PutAlbumCoverVariant :exec
+INSERT INTO album_cover_variants (album_id, size, source_sha256, media_type, data, generated_at)
+VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+ON CONFLICT(album_id, size) DO UPDATE SET
+    source_sha256 = excluded.source_sha256,
+    media_type = excluded.media_type,
+    data = excluded.data,
+    generated_at = CURRENT_TIMESTAMP
+`
+
+type PutAlbumCoverVariantParams struct {
+	AlbumID      string
+	Size         int64
+	SourceSha256 string
+	MediaType    string
+	Data         []byte
+}
+
+func (q *Queries) PutAlbumCoverVariant(ctx context.Context, arg PutAlbumCoverVariantParams) error {
+	_, err := q.db.ExecContext(ctx, putAlbumCoverVariant,
+		arg.AlbumID,
+		arg.Size,
+		arg.SourceSha256,
+		arg.MediaType,
+		arg.Data,
+	)
+	return err
 }
 
 const putTrackWaveform = `-- name: PutTrackWaveform :exec

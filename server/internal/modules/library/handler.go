@@ -68,7 +68,16 @@ func (h *Handler) ListAlbums(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) GetAlbumCover(w http.ResponseWriter, r *http.Request) {
 	albumID := chi.URLParam(r, "albumId")
-	mime, data, err := h.service.GetAlbumCover(r.Context(), albumID)
+	size := 0
+	if raw := r.URL.Query().Get("size"); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || !CoverSizes[parsed] {
+			respond.Error(w, http.StatusBadRequest, "bad_request", "size must be one of 64, 128, 256, 512, 1024")
+			return
+		}
+		size = parsed
+	}
+	mime, data, err := h.service.GetAlbumCover(r.Context(), albumID, size)
 	if errors.Is(err, ErrNotFound) {
 		respond.Error(w, http.StatusNotFound, "not_found", "album cover not found")
 		return

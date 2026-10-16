@@ -45,6 +45,15 @@ type AlbumArtwork struct {
 	UpdatedAt        time.Time
 }
 
+type AlbumCoverVariant struct {
+	AlbumID      string
+	Size         int64
+	SourceSha256 string
+	MediaType    string
+	Data         []byte
+	GeneratedAt  time.Time
+}
+
 type AlbumReleaseIdentifier struct {
 	AlbumID string
 	Scheme  string

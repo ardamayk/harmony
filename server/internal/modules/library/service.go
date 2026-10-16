@@ -28,8 +28,14 @@ func (s *Service) ListTracks(ctx context.Context, limit, offset int, artistID, q
 	return s.repo.ListTracks(ctx, limit, offset, artistID, q)
 }
 
-func (s *Service) GetAlbumCover(ctx context.Context, albumID string) (string, []byte, error) {
-	return s.repo.GetAlbumCover(ctx, albumID)
+// GetAlbumCover returns the original cover when size is 0, otherwise a copy
+// scaled down to fit size (one of CoverSizes).
+func (s *Service) GetAlbumCover(ctx context.Context, albumID string, size int) (string, []byte, error) {
+	if size == 0 {
+		return s.repo.GetAlbumCover(ctx, albumID)
+	}
+	cover, err := s.albumCoverVariant(ctx, albumID, size)
+	return cover.MediaType, cover.Data, err
 }
 
 func (s *Service) GetTrack(ctx context.Context, trackID string) (Track, error) {

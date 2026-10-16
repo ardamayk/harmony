@@ -2079,7 +2079,10 @@ export interface operations {
     };
     getAlbumCover: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Longest edge in pixels. The cover is scaled down to fit (never up) and served as JPEG; a cover already within the size is served as is. Omit for the original image. */
+                size?: 64 | 128 | 256 | 512 | 1024;
+            };
             header?: never;
             path: {
                 albumId: components["parameters"]["albumId"];
@@ -2098,6 +2101,7 @@ export interface operations {
                     "image/png": string;
                 };
             };
+            400: components["responses"]["BadRequest"];
             404: components["responses"]["NotFound"];
         };
     };

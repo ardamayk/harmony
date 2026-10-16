@@ -122,7 +122,7 @@ SELECT lyrics FROM tracks WHERE id = ?;
 SELECT file_path, duration_ms FROM library_track_reads WHERE id = ?;
 
 -- name: GetVisibleAlbumArtwork :one
-SELECT media_type, file_path FROM visible_album_artwork WHERE album_id = ?;
+SELECT media_type, file_path, content_sha256 FROM visible_album_artwork WHERE album_id = ?;
 
 -- name: GetEmbeddedAlbumCover :one
 SELECT cover_mime, cover_data FROM albums WHERE id = ?;
@@ -178,4 +178,16 @@ ON CONFLICT(track_id) DO UPDATE SET
     peaks = excluded.peaks,
     source_size_bytes = excluded.source_size_bytes,
     source_modified_at = excluded.source_modified_at,
+    generated_at = CURRENT_TIMESTAMP;
+
+-- name: GetAlbumCoverVariant :one
+SELECT source_sha256, media_type, data FROM album_cover_variants WHERE album_id = ? AND size = ?;
+
+-- name: PutAlbumCoverVariant :exec
+INSERT INTO album_cover_variants (album_id, size, source_sha256, media_type, data, generated_at)
+VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+ON CONFLICT(album_id, size) DO UPDATE SET
+    source_sha256 = excluded.source_sha256,
+    media_type = excluded.media_type,
+    data = excluded.data,
     generated_at = CURRENT_TIMESTAMP;

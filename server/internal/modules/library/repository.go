@@ -2,7 +2,9 @@ package library
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -136,35 +138,76 @@ func (r *Repository) GetTrackFilePath(ctx context.Context, trackID string) (stri
 	return source.FilePath, err
 }
 
+// AlbumCover is an Album's original cover and the SHA-256 of its bytes, which
+// identifies it for scaled-down variants.
+type AlbumCover struct {
+	MediaType    string
+	Data         []byte
+	SourceSHA256 string
+}
+
 // GetAlbumCover prefers managed Album Artwork and falls back to a cover
 // embedded in the album row.
 func (r *Repository) GetAlbumCover(ctx context.Context, albumID string) (mime string, data []byte, err error) {
+	cover, err := r.GetAlbumCoverSource(ctx, albumID)
+	return cover.MediaType, cover.Data, err
+}
+
+// GetAlbumCoverSource is GetAlbumCover plus the cover's content hash.
+func (r *Repository) GetAlbumCoverSource(ctx context.Context, albumID string) (AlbumCover, error) {
 	artwork, err := r.q.GetVisibleAlbumArtwork(ctx, albumID)
 	if err == nil {
-		data, err = os.ReadFile(artwork.FilePath)
+		data, err := os.ReadFile(artwork.FilePath)
 		if err != nil {
-			return "", nil, fmt.Errorf("read Album Artwork %q: %w", albumID, err)
+			return AlbumCover{}, fmt.Errorf("read Album Artwork %q: %w", albumID, err)
 		}
-		return artwork.MediaType, data, nil
+		return AlbumCover{MediaType: artwork.MediaType, Data: data, SourceSHA256: artwork.ContentSha256}, nil
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
-		return "", nil, fmt.Errorf("get Album Artwork %q: %w", albumID, err)
+		return AlbumCover{}, fmt.Errorf("get Album Artwork %q: %w", albumID, err)
 	}
 	cover, err := r.q.GetEmbeddedAlbumCover(ctx, albumID)
 	if errors.Is(err, sql.ErrNoRows) {
-		return "", nil, ErrNotFound
+		return AlbumCover{}, ErrNotFound
 	}
 	if err != nil {
-		return "", nil, err
+		return AlbumCover{}, err
 	}
 	if len(cover.CoverData) == 0 {
-		return "", nil, ErrNotFound
+		return AlbumCover{}, ErrNotFound
 	}
-	mime = "image/jpeg"
+	mime := "image/jpeg"
 	if cover.CoverMime != nil && *cover.CoverMime != "" {
 		mime = *cover.CoverMime
 	}
-	return mime, cover.CoverData, nil
+	sum := sha256.Sum256(cover.CoverData)
+	return AlbumCover{MediaType: mime, Data: cover.CoverData, SourceSHA256: hex.EncodeToString(sum[:])}, nil
+}
+
+// GetAlbumCoverVariant returns a stored scaled-down cover; found is false when
+// none was generated for this size yet.
+func (r *Repository) GetAlbumCoverVariant(ctx context.Context, albumID string, size int) (variant AlbumCover, found bool, err error) {
+	row, err := r.q.GetAlbumCoverVariant(ctx, db.GetAlbumCoverVariantParams{AlbumID: albumID, Size: int64(size)})
+	if errors.Is(err, sql.ErrNoRows) {
+		return AlbumCover{}, false, nil
+	}
+	if err != nil {
+		return AlbumCover{}, false, fmt.Errorf("get cover variant %q at %d: %w", albumID, size, err)
+	}
+	return AlbumCover{MediaType: row.MediaType, Data: row.Data, SourceSHA256: row.SourceSha256}, true, nil
+}
+
+func (r *Repository) PutAlbumCoverVariant(ctx context.Context, albumID string, size int, variant AlbumCover) error {
+	if err := r.q.PutAlbumCoverVariant(ctx, db.PutAlbumCoverVariantParams{
+		AlbumID:      albumID,
+		Size:         int64(size),
+		SourceSha256: variant.SourceSHA256,
+		MediaType:    variant.MediaType,
+		Data:         variant.Data,
+	}); err != nil {
+		return fmt.Errorf("put cover variant %q at %d: %w", albumID, size, err)
+	}
+	return nil
 }
 
 func (r *Repository) GetTrackWaveformSource(ctx context.Context, trackID string) (WaveformSource, error) {
