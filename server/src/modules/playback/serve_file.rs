@@ -89,6 +89,11 @@ fn parse_range(header: &str, size: u64) -> Result<Vec<Range>, RangeError> {
                 return Err(RangeError::Invalid);
             }
             let suffix = (suffix as u64).min(size);
+            // `bytes=-0` (or any suffix of an empty file) selects no bytes.
+            if suffix == 0 {
+                no_overlap = true;
+                continue;
+            }
             ranges.push(Range {
                 start: size - suffix,
                 length: suffix,
@@ -474,15 +479,28 @@ pub async fn serve(
                 .then(move |(header, range)| {
                     let path = path.clone();
                     async move {
-                        let mut file = tokio::fs::File::open(&path).await?;
-                        file.seek(std::io::SeekFrom::Start(range.start)).await?;
-                        let mut data = vec![0; range.length as usize];
-                        file.read_exact(&mut data).await?;
-                        let mut part = header.into_bytes();
-                        part.extend_from_slice(&data);
-                        Ok::<_, std::io::Error>(bytes::Bytes::from(part))
+                        // Each part streams from the file, so a large range is never
+                        // held in memory at once.
+                        let head =
+                            futures_util::stream::once(std::future::ready(
+                                Ok::<_, std::io::Error>(bytes::Bytes::from(header)),
+                            ));
+                        let opened = async {
+                            let mut file = tokio::fs::File::open(&path).await?;
+                            file.seek(std::io::SeekFrom::Start(range.start)).await?;
+                            Ok::<_, std::io::Error>(file)
+                        };
+                        match opened.await {
+                            Ok(file) => head
+                                .chain(ReaderStream::new(file.take(range.length)))
+                                .left_stream(),
+                            Err(error) => head
+                                .chain(futures_util::stream::once(std::future::ready(Err(error))))
+                                .right_stream(),
+                        }
                     }
                 })
+                .flatten()
                 .chain(futures_util::stream::once(async move {
                     Ok::<_, std::io::Error>(bytes::Bytes::from(closing))
                 }));
@@ -516,6 +534,8 @@ mod tests {
             Ok(vec![range(0, 2), range(5, 2)])
         );
         assert_eq!(parse_range("bytes=2000-", 1000), Err(RangeError::NoOverlap));
+        assert_eq!(parse_range("bytes=-0", 1000), Err(RangeError::NoOverlap));
+        assert_eq!(parse_range("bytes=-0,0-0", 1000), Ok(vec![range(0, 1)]));
         assert_eq!(parse_range("bytes=2000-,0-0", 1000), Ok(vec![range(0, 1)]));
         assert_eq!(parse_range("items=0-1", 1000), Err(RangeError::Invalid));
         assert_eq!(parse_range("bytes=5-1", 1000), Err(RangeError::Invalid));
