@@ -29,6 +29,11 @@ type Probe = {
 	body?: unknown;
 	/** A request body sent as is, for malformed JSON. */
 	raw?: string;
+	/**
+	 * Remembers this answer's `id` under a name, separately per server, for
+	 * later probes to use as {$name}: each server creates its own IDs.
+	 */
+	capture?: string;
 	headers?: Record<string, string>;
 };
 
@@ -78,6 +83,8 @@ function describeImage(bytes: Uint8Array): string {
 function corpus(ids: Record<string, string>): Probe[] {
 	const fill = (path: string) =>
 		path.replace(/\{(\w+)\}/g, (_, key: string) => ids[key] ?? "missing");
+	const fillBody = (body: unknown) =>
+		body === undefined ? undefined : JSON.parse(fill(JSON.stringify(body)));
 	const probes: Probe[] = [
 		{ path: "/api/v1/health" },
 		{ path: "/api/v1/me" },
@@ -149,10 +156,66 @@ function corpus(ids: Record<string, string>): Probe[] {
 		{ path: "/api/v1/library/search?q={query}" },
 		{ path: "/api/v1/playback/queue" },
 		{ path: "/api/v1/playlists" },
+		{
+			method: "POST",
+			path: "/api/v1/playlists",
+			body: { name: " Parity Mix " },
+			capture: "mix",
+		},
+		{ method: "POST", path: "/api/v1/playlists", body: { name: "   " } },
+		{ method: "POST", path: "/api/v1/playlists", body: { name: "Parity Mix" } },
+		{ method: "POST", path: "/api/v1/playlists", raw: "nope" },
+		{ path: "/api/v1/playlists/{$mix}" },
+		{
+			method: "POST",
+			path: "/api/v1/playlists/{$mix}/tracks",
+			body: { trackId: "{track}" },
+		},
+		{
+			method: "POST",
+			path: "/api/v1/playlists/{$mix}/tracks",
+			body: { trackId: "{track}" },
+		},
+		{
+			method: "POST",
+			path: "/api/v1/playlists/{$mix}/tracks",
+			body: { trackId: "{secondTrack}" },
+		},
+		{
+			method: "POST",
+			path: "/api/v1/playlists/{$mix}/tracks",
+			body: { trackId: "" },
+		},
+		{
+			method: "POST",
+			path: "/api/v1/playlists/{$mix}/tracks",
+			body: { trackId: "missing" },
+		},
+		{
+			method: "POST",
+			path: "/api/v1/playlists/missing/tracks",
+			body: { trackId: "{track}" },
+		},
+		{ path: "/api/v1/playlists" },
+		{ method: "DELETE", path: "/api/v1/playlists/{$mix}/tracks/{track}" },
+		{ method: "DELETE", path: "/api/v1/playlists/{$mix}/tracks/{secondTrack}" },
+		{ path: "/api/v1/playlists/{$mix}" },
+		{
+			method: "POST",
+			path: "/api/v1/playlists/{favorites}/tracks",
+			body: { trackId: "{track}" },
+		},
+		{ method: "DELETE", path: "/api/v1/playlists/{favorites}/tracks/{track}" },
+		{ path: "/api/v1/playlists/{favorites}" },
+		{ path: "/api/v1/playlists/missing" },
 		{ path: "/api/v1/radio/stations" },
 		{ path: "/api/v1/import-history" },
 	];
-	return probes.map((probe) => ({ ...probe, path: fill(probe.path) }));
+	return probes.map((probe) => ({
+		...probe,
+		path: fill(probe.path),
+		body: fillBody(probe.body),
+	}));
 }
 
 /**
@@ -317,13 +380,48 @@ try {
 		),
 	};
 
+	const goIds = new Map<string, string>();
+	const rustIds = new Map<string, string>();
+	const withIds = (probe: Probe, captured: Map<string, string>): Probe => {
+		const fill = (text: string) =>
+			text.replace(
+				/\{\$(\w+)\}/g,
+				(_, key: string) => captured.get(key) ?? "missing",
+			);
+		return {
+			...probe,
+			path: fill(probe.path),
+			body:
+				probe.body === undefined
+					? undefined
+					: JSON.parse(fill(JSON.stringify(probe.body))),
+		};
+	};
+	/** Rust's own IDs replaced by the Go server's for the same probes. */
+	const asGoIds = (text: string) => {
+		for (const [name, rustId] of rustIds) {
+			const goId = goIds.get(name);
+			if (goId) text = text.split(rustId).join(goId);
+		}
+		return text;
+	};
+
 	let matched = 0;
 	let differing = 0;
 	let notPorted = 0;
 	for (const probe of corpus(ids)) {
 		const label = `${probe.method ?? "GET"} ${probe.path}`;
-		const goAnswer = await ask(go.base, probe);
-		const rustAnswer = await ask(rust.base, probe);
+		const goAnswer = await ask(go.base, withIds(probe, goIds));
+		const rustAnswer = await ask(rust.base, withIds(probe, rustIds));
+		if (probe.capture) {
+			const idOf = (answer: Answer) =>
+				(answer.body as { id?: string } | null)?.id;
+			const goId = idOf(goAnswer);
+			const rustId = idOf(rustAnswer);
+			if (goId) goIds.set(probe.capture, goId);
+			if (rustId) rustIds.set(probe.capture, rustId);
+		}
+		rustAnswer.body = JSON.parse(asGoIds(JSON.stringify(rustAnswer.body)));
 		if (rustAnswer.isSpa && !goAnswer.isSpa) {
 			notPorted += 1;
 			console.log(`  ·  ${label}  (not ported)`);
@@ -347,7 +445,12 @@ try {
 	for (const child of children) child.kill("SIGTERM");
 	await sleep(500);
 	const goTables = dumpDatabase(goDb);
-	const rustTables = dumpDatabase(rustDb);
+	const rustTables = new Map(
+		[...dumpDatabase(rustDb)].map(([table, rows]) => [
+			table,
+			rows.map(asGoIds).sort(),
+		]),
+	);
 	const differingTables: string[] = [];
 	for (const [table, goRows] of goTables) {
 		const rustRows = rustTables.get(table) ?? [];

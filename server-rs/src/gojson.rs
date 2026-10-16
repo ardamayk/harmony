@@ -89,6 +89,28 @@ fn split_zone(value: &str) -> (&str, String) {
     (value, "Z".to_owned())
 }
 
+/// A SQLite error as the Go server's driver (modernc.org/sqlite) words it,
+/// for the few handlers that pass a database error to the client:
+/// `"<sqlite3_errstr(code)>: <sqlite3_errmsg> (<code>)"`.
+pub fn sqlite_error(error: &sqlx::Error) -> String {
+    let Some(database) = error.as_database_error() else {
+        return error.to_string();
+    };
+    let Some(code) = database.code().and_then(|code| code.parse::<i32>().ok()) else {
+        return database.message().to_owned();
+    };
+    // SAFETY: sqlite3_errstr returns a static, NUL-terminated string.
+    let description = unsafe { std::ffi::CStr::from_ptr(libsqlite3_sys::sqlite3_errstr(code)) }
+        .to_string_lossy()
+        .into_owned();
+    let message = database.message();
+    if message == description {
+        format!("{description} ({code})")
+    } else {
+        format!("{description}: {message} ({code})")
+    }
+}
+
 /// Reads a request body the way `json.NewDecoder(body).Decode(&value)`
 /// does: the first JSON value counts and anything after it is ignored, and
 /// `null` leaves the value at its default. Any failure answers 400 with

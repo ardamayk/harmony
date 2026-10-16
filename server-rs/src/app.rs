@@ -49,6 +49,7 @@ pub fn router(state: AppState) -> Router {
         .merge(modules::docs::routes())
         .merge(modules::preferences::routes())
         .merge(modules::library::routes())
+        .merge(modules::playlists::routes())
         .fallback(static_assets::web)
         .layer(middleware::from_fn(stream_aware_timeout))
         .layer(cors)
