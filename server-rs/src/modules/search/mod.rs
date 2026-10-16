@@ -49,6 +49,17 @@ impl SearchService {
     }
 
     async fn current_index(&self, user_id: &str) -> Result<Arc<Index>, IndexError> {
+        // The common case, an unchanged library, costs one SELECT and no
+        // lock held across the database.
+        let revision = index::current_revision(&self.pool).await?;
+        if let Some(current) = self.snapshot.lock().await.as_ref()
+            && current.revision == revision
+            && current.user_id == user_id
+        {
+            return Ok(current.index.clone());
+        }
+        // A reload reads the revision again with the fields, in one
+        // transaction, and only one request reloads at a time.
         let mut snapshot = self.snapshot.lock().await;
         let (index, revision) = index::load(&self.pool, user_id, |revision| {
             snapshot

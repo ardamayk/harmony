@@ -23,10 +23,32 @@ pub enum DbError {
     SearchData(String),
 }
 
+/// Turns off SQLite's memory statistics, process-wide and before the first
+/// connection. They take one global mutex on every allocation, which
+/// serialized concurrent requests across the pool (eight connections served
+/// no more than one).
+fn disable_memory_statistics() {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| {
+        // SAFETY: sqlite3_config is called once, before SQLite initializes
+        // (no connection exists yet), with the documented int argument.
+        let code = unsafe {
+            libsqlite3_sys::sqlite3_config(
+                libsqlite3_sys::SQLITE_CONFIG_MEMSTATUS,
+                0 as std::ffi::c_int,
+            )
+        };
+        if code != libsqlite3_sys::SQLITE_OK {
+            tracing::warn!(code, "SQLite memory statistics stay on");
+        }
+    });
+}
+
 pub async fn open_and_migrate(
     database_path: &str,
     migrations_directory: &Path,
 ) -> Result<SqlitePool, DbError> {
+    disable_memory_statistics();
     if let Some(parent) = Path::new(database_path).parent()
         && !parent.as_os_str().is_empty()
     {

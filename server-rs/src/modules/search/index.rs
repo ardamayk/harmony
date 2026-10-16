@@ -78,6 +78,15 @@ pub enum IndexError {
     Invalid(String),
 }
 
+/// The current search revision, read on its own (no transaction).
+pub async fn current_revision(pool: &SqlitePool) -> Result<i64, IndexError> {
+    Ok(sqlx::query_scalar!(
+        r#"SELECT revision AS "revision!: i64" FROM library_search_revision WHERE singleton = 1"#
+    )
+    .fetch_one(pool)
+    .await?)
+}
+
 /// Reads the revision and, unless `reuse` accepts it, every field from one
 /// SQLite snapshot, so an index never mixes pre- and post-commit data.
 pub async fn load(
