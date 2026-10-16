@@ -1,6 +1,7 @@
 // Load snapshot of a built Music Server: startup time, idle footprint,
 // latency and throughput of the read-only endpoints the clients hit most,
-// peak memory under load, and unthrottled stream throughput. It only reads
+// peak memory, CPU and disk I/O under load, and unthrottled stream
+// throughput. It only reads
 // (album cover variants may be cached on first request), so it can run
 // against a real library. Compare runs before and after server changes, or
 // across server implementations (EARTHLY_SERVER_BINARY).
@@ -14,7 +15,7 @@ import { join } from "node:path";
 const ROOT = join(import.meta.dirname, "..");
 const ADDRESS = process.env.PERF_SERVER_ADDR ?? "127.0.0.1:8097";
 const BASE_URL = `http://${ADDRESS}`;
-const REQUESTS = Number(process.env.PERF_REQUESTS ?? 400);
+const REQUESTS = Number(process.env.PERF_REQUESTS ?? 1000);
 const CONCURRENCY = Number(process.env.PERF_CONCURRENCY ?? 8);
 const IDLE_SECONDS = Number(process.env.PERF_IDLE_SECONDS ?? 15);
 const CLOCK_TICKS = 100; // USER_HZ on Linux
@@ -33,11 +34,22 @@ function memoryMb(pid: number): number {
 	return Number(/^Pss:\s+(\d+) kB/m.exec(rollup)?.[1] ?? 0) / 1024;
 }
 
-/** Samples CPU and memory every 250ms until `stop` resolves. */
+/** Bytes the process made the storage layer read and write (page cache hits excluded). */
+function diskBytes(pid: number): { read: number; write: number } {
+	const io = readFileSync(`/proc/${pid}/io`, "utf8");
+	const field = (name: string) =>
+		Number(new RegExp(`^${name}: (\\d+)`, "m").exec(io)?.[1] ?? 0);
+	return { read: field("read_bytes"), write: field("write_bytes") };
+}
+
+const mb = (bytes: number) => (bytes / 1024 / 1024).toFixed(1);
+
+/** Samples CPU, memory and disk I/O every 250ms while `work` runs. */
 async function sampleWhile<T>(pid: number, work: () => Promise<T>) {
 	let peakMb = memoryMb(pid);
 	let running = true;
 	const startTicks = cpuTicks(pid);
+	const startDisk = diskBytes(pid);
 	const started = performance.now();
 	const sampler = (async () => {
 		while (running) {
@@ -51,7 +63,12 @@ async function sampleWhile<T>(pid: number, work: () => Promise<T>) {
 	const seconds = (performance.now() - started) / 1000;
 	const cpuPercent =
 		((cpuTicks(pid) - startTicks) / CLOCK_TICKS / seconds) * 100;
-	return { result, peakMb, cpuPercent, seconds };
+	const endDisk = diskBytes(pid);
+	const disk = {
+		read: endDisk.read - startDisk.read,
+		write: endDisk.write - startDisk.write,
+	};
+	return { result, peakMb, cpuPercent, seconds, disk };
 }
 
 function percentile(sorted: number[], p: number): number {
@@ -82,7 +99,9 @@ async function load(path: string) {
 	latencies.sort((a, b) => a - b);
 	return {
 		p50: percentile(latencies, 0.5),
+		p90: percentile(latencies, 0.9),
 		p95: percentile(latencies, 0.95),
+		p99: percentile(latencies, 0.99),
 		rps: latencies.length / seconds,
 		failures,
 	};
@@ -127,7 +146,7 @@ try {
 	const idle = await sampleWhile(pid, () => sleep(IDLE_SECONDS * 1000));
 	console.log(`Music Server load snapshot (${binary})`);
 	console.log(
-		`  startup ${startupMs.toFixed(0)} ms · idle ${idle.peakMb.toFixed(0)} MB, CPU ${idle.cpuPercent.toFixed(1)}%`,
+		`  startup ${startupMs.toFixed(0)} ms · idle ${idle.peakMb.toFixed(0)} MB, CPU ${idle.cpuPercent.toFixed(1)}%, disk read ${mb(idle.disk.read)} MB / write ${mb(idle.disk.write)} MB over ${IDLE_SECONDS}s`,
 	);
 
 	const albums = await json<{ items: Array<{ id: string }> }>(
@@ -160,20 +179,23 @@ try {
 		`\n  ${REQUESTS} requests per endpoint, ${CONCURRENCY} concurrent`,
 	);
 	console.log(
-		`  ${"endpoint".padEnd(20)}${"p50".padStart(9)}${"p95".padStart(9)}${"req/s".padStart(9)}  fails`,
+		`  ${"endpoint".padEnd(20)}${["p50", "p90", "p95", "p99", "req/s"].map((h) => h.padStart(9)).join("")}  errors`,
 	);
 	const underLoad = await sampleWhile(pid, async () => {
 		for (const [label, path] of endpoints) {
 			// One warm-up request so cover variants and caches exist.
 			await fetch(`${BASE_URL}${path}`).then((r) => r.arrayBuffer());
-			const { p50, p95, rps, failures } = await load(path);
+			const { p50, p90, p95, p99, rps, failures } = await load(path);
+			const latency = [p50, p90, p95, p99]
+				.map((ms) => `${ms.toFixed(1)}ms`.padStart(9))
+				.join("");
 			console.log(
-				`  ${label.padEnd(20)}${`${p50.toFixed(1)}ms`.padStart(9)}${`${p95.toFixed(1)}ms`.padStart(9)}${rps.toFixed(0).padStart(9)}  ${failures}`,
+				`  ${label.padEnd(20)}${latency}${rps.toFixed(0).padStart(9)}  ${failures} (${((failures / REQUESTS) * 100).toFixed(1)}%)`,
 			);
 		}
 	});
 	console.log(
-		`  under load: peak ${underLoad.peakMb.toFixed(0)} MB, CPU ${underLoad.cpuPercent.toFixed(0)}% (of one core) over ${underLoad.seconds.toFixed(1)}s`,
+		`  under load: peak ${underLoad.peakMb.toFixed(0)} MB, CPU ${underLoad.cpuPercent.toFixed(0)}% (of one core), disk read ${mb(underLoad.disk.read)} MB / write ${mb(underLoad.disk.write)} MB over ${underLoad.seconds.toFixed(1)}s`,
 	);
 
 	const stream = await sampleWhile(pid, async () => {
@@ -184,7 +206,7 @@ try {
 	});
 	const megabytes = stream.result / 1024 / 1024;
 	console.log(
-		`  stream "${track.title}": ${megabytes.toFixed(1)} MB in ${(stream.seconds * 1000).toFixed(0)} ms (${(megabytes / stream.seconds).toFixed(0)} MB/s), peak ${stream.peakMb.toFixed(0)} MB`,
+		`  stream "${track.title}": ${megabytes.toFixed(1)} MB in ${(stream.seconds * 1000).toFixed(0)} ms (${(megabytes / stream.seconds).toFixed(0)} MB/s), peak ${stream.peakMb.toFixed(0)} MB, disk read ${mb(stream.disk.read)} MB`,
 	);
 } finally {
 	server.kill("SIGTERM");
