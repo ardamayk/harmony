@@ -51,9 +51,22 @@ async fn run() -> Result<(), String> {
         tracing::error!(%error, "Managed Import startup cleanup failed");
     }
     let router = app::router(state.clone());
-    let listener = tokio::net::TcpListener::bind(address)
-        .await
-        .map_err(|error| format!("server error: listen tcp {address}: {error}"))?;
+    // Go's net.Listen asks for net.core.somaxconn; tokio's bind asks for 1024 and
+    // overflowed at 512 concurrent clients. The kernel caps this at somaxconn.
+    let listener = {
+        let socket = if address.is_ipv4() {
+            tokio::net::TcpSocket::new_v4()
+        } else {
+            tokio::net::TcpSocket::new_v6()
+        };
+        socket
+            .and_then(|socket| {
+                socket.set_reuseaddr(true)?;
+                socket.bind(address)?;
+                socket.listen(4096)
+            })
+            .map_err(|error| format!("server error: listen tcp {address}: {error}"))?
+    };
     tracing::info!(addr = %state.config.addr, "server listening");
     axum::serve(listener, router)
         .with_graceful_shutdown(shutdown_signal())
