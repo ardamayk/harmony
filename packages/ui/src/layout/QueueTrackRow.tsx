@@ -47,8 +47,6 @@ export function QueueTrackRow({
 			}}
 			className={cn(
 				"group relative flex cursor-pointer items-center gap-3 rounded-r-sm py-2 pr-3 pl-6 -outline-offset-2 hover:bg-player-pill/60 focus-visible:outline-2 focus-visible:outline-player-control-primary",
-				state === "played" &&
-					"opacity-50 hover:opacity-100 focus-within:opacity-100",
 				// Margin plus padding match other rows' `pl-6` / `pr-3`, so number and duration columns stay put.
 				isCurrent &&
 					"my-1 mr-1 ml-2 rounded-sm bg-player-pill/70 pr-2 pl-4 ring-1 ring-player-control-primary shadow-md shadow-player-control-shadow",
@@ -65,14 +63,24 @@ export function QueueTrackRow({
 				<AlbumArt
 					coverUrl={coverUrl}
 					title={item.track.title}
-					className="size-8 shrink-0 rounded-sm text-xs"
+					className={cn(
+						"size-8 shrink-0 rounded-sm text-xs",
+						state === "played" &&
+							"opacity-50 group-hover:opacity-100 group-focus-within:opacity-100",
+					)}
 				/>
 			)}
 			<span className="min-w-0 flex-1">
 				<span
+					// Played rows step the title down a text tier instead of fading the
+					// row, so their text keeps 4.5:1.
 					className={cn(
-						"block truncate text-sm text-heading leading-5",
-						isCurrent && "font-semibold text-player-control-primary",
+						"block truncate text-sm leading-5",
+						isCurrent
+							? "font-semibold text-player-control-primary"
+							: state === "played"
+								? "text-caption group-hover:text-heading group-focus-within:text-heading"
+								: "text-heading",
 					)}
 					title={item.track.title}
 				>
