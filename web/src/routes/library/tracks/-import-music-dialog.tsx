@@ -129,7 +129,7 @@ export function ImportMusicDialog({
 										<p
 											key={problem}
 											aria-live="polite"
-											className="px-4 py-1 text-amber-600 text-sm sm:px-6"
+											className="px-4 py-1 text-warning text-sm sm:px-6"
 										>
 											{problem}
 										</p>
@@ -756,7 +756,7 @@ function DuplicateReview({
 	const candidates = preview.matchingTracks ?? [];
 	if (!candidates.length)
 		return preview.file.artworkWarning ? (
-			<p className="text-amber-600 text-sm">{preview.file.artworkWarning}</p>
+			<p className="text-warning text-sm">{preview.file.artworkWarning}</p>
 		) : null;
 	if (
 		candidates.some(

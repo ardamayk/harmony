@@ -1273,7 +1273,7 @@ function HealthChip({ status }: { status?: string }) {
 	return (
 		<MetaChip
 			className={cn(
-				normalized === "healthy" && "text-emerald-300",
+				normalized === "healthy" && "text-success",
 				normalized === "broken" && "text-destructive",
 			)}
 		>
@@ -1296,7 +1296,7 @@ function CardHealthStatus({ status }: { status?: string }) {
 			<span
 				className={cn(
 					"size-2 rounded-full",
-					normalized === "healthy" && "bg-emerald-400 text-emerald-400",
+					normalized === "healthy" && "bg-success text-success",
 					normalized === "broken" && "bg-destructive text-destructive",
 					normalized !== "healthy" &&
 						normalized !== "broken" &&

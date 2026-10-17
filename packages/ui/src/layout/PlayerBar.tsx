@@ -669,7 +669,7 @@ export function PlayerBar({
 								key={artworkUrl ?? "none"}
 								coverUrl={artworkUrl}
 								title={nowPlayingTitle}
-								className="player-cover-enter size-14 rounded-sm border border-shell-subtle-border bg-player-artwork text-sm sm:size-16"
+								className="motion-safe:animate-player-cover size-14 rounded-sm border border-shell-subtle-border bg-player-artwork text-sm sm:size-16"
 							/>
 						</button>
 					) : (
@@ -677,14 +677,14 @@ export function PlayerBar({
 							key={artworkUrl ?? "none"}
 							coverUrl={artworkUrl}
 							title={nowPlayingTitle}
-							className="player-cover-enter size-14 shrink-0 rounded-sm border border-shell-subtle-border bg-player-artwork text-sm sm:size-16"
+							className="motion-safe:animate-player-cover size-14 shrink-0 rounded-sm border border-shell-subtle-border bg-player-artwork text-sm sm:size-16"
 						/>
 					)}
 					<div className="min-w-0 flex-1 overflow-hidden">
 						<div className="flex max-w-full min-w-0 items-center">
 							<p
 								key={nowPlayingTitle}
-								className="player-title-enter min-w-0 truncate font-medium text-player-title text-sm sm:leading-6"
+								className="motion-safe:animate-player-title min-w-0 truncate font-medium text-player-title text-sm sm:leading-6"
 								title={nowPlayingTitle}
 							>
 								{nowPlayingTitle}

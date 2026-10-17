@@ -193,12 +193,15 @@ function PrimaryPlaybackButton({
 			{isPlaying ? (
 				<Pause
 					key="pause"
-					className={cn(CONTROL_ICON_CLASS, "player-glyph-enter")}
+					className={cn(CONTROL_ICON_CLASS, "motion-safe:animate-player-glyph")}
 				/>
 			) : (
 				<Play
 					key="play"
-					className={cn(CONTROL_ICON_CLASS, "player-glyph-enter ml-0.5")}
+					className={cn(
+						CONTROL_ICON_CLASS,
+						"motion-safe:animate-player-glyph ml-0.5",
+					)}
 				/>
 			)}
 		</button>

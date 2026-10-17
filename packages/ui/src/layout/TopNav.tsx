@@ -65,7 +65,7 @@ export function TopNav({
 			>
 				<Link
 					to="/library/albums"
-					className="display-title shrink-0 font-semibold text-shell-brand text-xl tracking-tight"
+					className="font-display shrink-0 font-semibold text-shell-brand text-xl tracking-tight"
 				>
 					Earthly Audio
 				</Link>

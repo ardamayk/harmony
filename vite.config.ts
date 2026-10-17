@@ -44,7 +44,19 @@ export default defineConfig({
 		rules: {
 			"shadcn/no-arbitrary-values": "warn",
 			"shadcn/no-raw-colors": "warn",
-			"shadcn/no-unknown-classes": "warn",
+			// Range-input and equalizer styling needs ::-webkit-slider-* and
+			// keyframe rules that stay as plain CSS classes in web/src/styles.css.
+			"shadcn/no-unknown-classes": [
+				"warn",
+				{
+					allow: [
+						"player-seek-slider",
+						"player-seek-slider--waveform",
+						"player-volume-slider",
+						"queue-equalizer",
+					],
+				},
+			],
 			"shadcn/no-inline-styles": "warn",
 			"shadcn/require-static-classes": "warn",
 			"shadcn/no-restyle": ["warn", { allow: ["layout"] }],

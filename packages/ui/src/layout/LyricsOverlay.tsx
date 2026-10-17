@@ -78,7 +78,7 @@ export function LyricsOverlay({
 			aria-modal="true"
 			aria-label="Lyrics"
 			tabIndex={-1}
-			className="lyrics-view-enter fixed inset-0 z-fullscreen flex flex-col bg-background text-foreground outline-none"
+			className="motion-safe:animate-lyrics-view fixed inset-0 z-fullscreen flex flex-col bg-background text-foreground outline-none"
 		>
 			<header className="flex shrink-0 items-center justify-between gap-4 border-border border-b px-6 py-3">
 				<div className="flex min-w-0 items-center gap-3">
