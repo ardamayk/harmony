@@ -52,10 +52,10 @@ export function AlbumGrid({ albums }: { albums: Album[] }) {
 							/>
 							<div
 								data-album-card-overlay
-								className="absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-background/95 via-background/75 to-transparent p-2 text-foreground"
+								className="absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-background/97 via-background/86 via-45% to-transparent px-2 pt-12 pb-2 text-foreground"
 							>
 								<p
-									className="truncate font-medium text-heading text-xs leading-tight"
+									className="truncate font-semibold text-heading text-xs leading-tight"
 									title={album.title}
 								>
 									{album.title}

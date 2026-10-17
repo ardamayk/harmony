@@ -69,7 +69,7 @@ export function GenresPage() {
 							/>
 							<div
 								data-genre-card-overlay
-								className="absolute inset-x-0 bottom-0 z-50 bg-gradient-to-t from-background/95 via-background/70 to-transparent px-3 pt-12 pb-3 text-foreground"
+								className="absolute inset-x-0 bottom-0 z-50 bg-gradient-to-t from-background/97 via-background/86 via-45% to-transparent px-3 pt-12 pb-3 text-foreground"
 							>
 								<p className="truncate font-semibold text-heading text-sm leading-tight tracking-tight">
 									{genre.name}
