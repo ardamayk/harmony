@@ -640,7 +640,7 @@ export function PlayerBar({
 			data-testid="player-bar"
 			data-shell-surface
 			style={accentStyle}
-			className="relative h-21.5 rounded-lg border border-player-border bg-player px-6 text-player-foreground shadow-[0_-10px_32px_-6px_var(--player-shadow),0_14px_40px_-8px_var(--player-shadow)]"
+			className="relative h-21.5 rounded-lg border border-player-border bg-player px-6 text-player-foreground shadow-shell"
 		>
 			{playbackError ? (
 				<PlaybackErrorBanner error={playbackError} recovery={errorRecovery} />

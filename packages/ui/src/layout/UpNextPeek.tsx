@@ -53,11 +53,11 @@ export function UpNextPeek() {
 				className="size-8 shrink-0 rounded-sm text-xs"
 			/>
 			<span className="min-w-0">
-				<span className="flex items-center gap-1 text-[10px]/[14px] text-caption uppercase tracking-[0.06em]">
+				<span className="flex items-center gap-1 text-xs/4 text-caption uppercase tracking-wider">
 					<SkipForward className="size-2.5" aria-hidden />
 					Up next
 				</span>
-				<span className="block truncate text-[11px]/[15px] text-player-title">
+				<span className="block truncate text-xs/4 text-player-title">
 					{next.track.title}
 				</span>
 			</span>

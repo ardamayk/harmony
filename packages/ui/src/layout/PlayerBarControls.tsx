@@ -185,7 +185,7 @@ function PrimaryPlaybackButton({
 		<button
 			type="button"
 			data-player-control
-			className="inline-flex size-11 items-center justify-center rounded-full bg-player-control-primary text-player-control-primary-foreground shadow-[0px_10px_15px_-3px_var(--player-control-shadow),0px_4px_6px_-4px_var(--player-control-shadow)] transition hover:scale-105 hover:opacity-95 disabled:opacity-50 disabled:hover:scale-100"
+			className="inline-flex size-11 items-center justify-center rounded-full bg-player-control-primary text-player-control-primary-foreground shadow-lg shadow-player-control-shadow transition hover:scale-105 hover:opacity-95 disabled:opacity-50 disabled:hover:scale-100"
 			onClick={onClick}
 			disabled={disabled}
 			aria-label={isPlaying ? "Pause" : "Play"}
@@ -533,7 +533,7 @@ function VolumeControl({
 					touchOpen && "pointer-events-auto opacity-100",
 				)}
 			>
-				<div className="flex h-32 w-9 items-center justify-center rounded-lg border border-player-border bg-player px-2 py-3 shadow-[0_8px_24px_-4px_var(--player-shadow)]">
+				<div className="flex h-32 w-9 items-center justify-center rounded-lg border border-player-border bg-player px-2 py-3 shadow-lg">
 					<div className="relative h-full w-4">
 						<input
 							type="range"

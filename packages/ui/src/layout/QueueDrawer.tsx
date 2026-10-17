@@ -29,7 +29,7 @@ export function QueueDrawer({ abovePlayerBar }: { abovePlayerBar: boolean }) {
 			aria-hidden={!open}
 			inert={!open}
 			className={cn(
-				"absolute z-40 overflow-hidden rounded-lg border border-player-border shadow-[0_-16px_48px_-12px_var(--player-shadow),0_14px_40px_-8px_var(--player-shadow)] transition-slide duration-300 ease-out",
+				"absolute z-40 overflow-hidden rounded-lg border border-player-border shadow-shell transition-slide duration-300 ease-out",
 				// Closed: slides below the viewport, then goes fully invisible so
 				// it can never peek out under the Player Bar, whatever the host
 				// window's geometry does to the shell.

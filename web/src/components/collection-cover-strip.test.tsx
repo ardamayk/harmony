@@ -254,11 +254,9 @@ describe("CollectionCoverStrip", () => {
 		for (const cover of covers) {
 			expect(cover.className).toContain("border-r");
 			expect(cover.className).toContain("border-background/30");
-			expect(cover.className).toContain(
-				"shadow-[10px_0_20px_rgb(0_0_0_/_35%)]",
-			);
-			expect(cover.className).toContain("duration-[260ms]");
-			expect(cover.className).toContain("hover:delay-[60ms]");
+			expect(cover.className).toContain("shadow-cover-strip");
+			expect(cover.className).toContain("duration-300");
+			expect(cover.className).toContain("hover:delay-75");
 			expect(cover.className).toContain("motion-reduce:transition-none");
 		}
 	});

@@ -1295,7 +1295,7 @@ function CardHealthStatus({ status }: { status?: string }) {
 		<span className="absolute top-4 right-4 inline-flex items-center gap-2 text-caption text-xs">
 			<span
 				className={cn(
-					"size-2 rounded-full shadow-[0_0_12px_currentColor]",
+					"size-2 rounded-full",
 					normalized === "healthy" && "bg-emerald-400 text-emerald-400",
 					normalized === "broken" && "bg-destructive text-destructive",
 					normalized !== "healthy" &&

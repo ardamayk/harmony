@@ -51,7 +51,7 @@ export function NowPlayingView({
 			className="lyrics-view-enter fixed inset-0 z-fullscreen flex flex-col overflow-hidden bg-background text-foreground outline-none"
 		>
 			<header className="relative flex shrink-0 items-center justify-between gap-4 px-6 py-3">
-				<p className="text-caption text-xs uppercase tracking-[0.2em]">
+				<p className="text-caption text-xs uppercase tracking-widest">
 					Now playing
 				</p>
 				<button

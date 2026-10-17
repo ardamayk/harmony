@@ -53,7 +53,7 @@ export function QueueTrackRow({
 				state === "played" &&
 					"opacity-50 hover:opacity-100 focus-within:opacity-100",
 				isCurrent &&
-					"my-1 mr-2 ml-2 rounded-sm bg-player-pill/70 py-2 pr-3 pl-4 shadow-[0_0_0_1px_var(--player-control-primary),0_6px_18px_-6px_var(--player-control-shadow)]",
+					"my-1 mr-2 ml-2 rounded-sm bg-player-pill/70 py-2 pr-3 pl-4 ring-1 ring-player-control-primary shadow-md shadow-player-control-shadow",
 			)}
 		>
 			{isCurrent ? (

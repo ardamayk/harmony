@@ -37,7 +37,7 @@ export const COLLECTION_GRID_CLASS =
 // `transform-gpu backface-hidden` keeps the desktop webview from flickering
 // card edges while they move.
 export const CARD_INTERACTION_CLASS =
-	"transform-gpu backface-hidden outline-none transition duration-300 ease-out hover:-translate-y-1 hover:border-shell-active-foreground/35 hover:shadow-[0_18px_40px_-18px_rgb(0_0_0/0.75)] focus-visible:-translate-y-1 focus-visible:border-shell-active-foreground/60 focus-visible:shadow-[0_18px_40px_-18px_rgb(0_0_0/0.75)] motion-reduce:transform-none motion-reduce:transition-none";
+	"transform-gpu backface-hidden outline-none transition duration-300 ease-out hover:-translate-y-1 hover:border-shell-active-foreground/35 hover:shadow-card-lift focus-visible:-translate-y-1 focus-visible:border-shell-active-foreground/60 focus-visible:shadow-card-lift motion-reduce:transform-none motion-reduce:transition-none";
 
 export function CollectionPageContainer({
 	className,

@@ -21,7 +21,7 @@ const CARD_COVER_LAYOUTS: Record<number, string[]> = {
 	],
 };
 const CARD_COVER_LAYER_CLASS =
-	"absolute top-0 h-11/12 overflow-hidden rounded-sm border-0 border-background/30 border-r bg-muted shadow-[10px_0_20px_rgb(0_0_0_/_35%)] transition-all delay-0 duration-[260ms] ease-[cubic-bezier(.22,.8,.24,1)] hover:left-0 hover:z-50 hover:w-full hover:rounded-sm hover:border-r-transparent hover:brightness-[1.025] hover:saturate-[1.04] hover:shadow-none hover:delay-[60ms] motion-reduce:delay-0 motion-reduce:transition-none";
+	"absolute top-0 h-11/12 overflow-hidden rounded-sm border-0 border-background/30 border-r bg-muted shadow-cover-strip transition-all delay-0 duration-300 ease-out hover:left-0 hover:z-50 hover:w-full hover:rounded-sm hover:border-r-transparent hover:shadow-none hover:delay-75 motion-reduce:delay-0 motion-reduce:transition-none";
 const CARD_COVER_PLACEHOLDER_CLASS =
 	"pointer-events-none absolute inset-0 bg-muted transition-opacity duration-150 ease-out motion-reduce:animate-none motion-reduce:transition-none";
 const CARD_COVER_ART_CLASS =
