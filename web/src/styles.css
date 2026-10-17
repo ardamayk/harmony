@@ -390,9 +390,10 @@ html[data-window-maximized] body::after {
 		   page's 1.5rem top padding and half of a 250px collection card. */
 		--library-search-top: calc(5.5rem + 125px);
 		top: var(--library-search-top);
-		/* At most 36rem tall, and always clear of the Player Bar. */
+		/* At most three album rows tall (250px cards, 0.75rem gaps), so the bottom
+		   edge meets the middle of the fourth row; always clear of the Player Bar. */
 		max-height: min(
-			36rem,
+			3 * (250px + 0.75rem),
 			calc(
 				100dvh - var(--library-search-top) -
 					var(--player-dock-clearance, 1rem) - 1.5rem
