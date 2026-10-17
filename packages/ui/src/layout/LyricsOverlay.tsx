@@ -3,6 +3,7 @@ import { ChevronDown } from "lucide-react";
 import {
 	type CSSProperties,
 	type ReactNode,
+	useCallback,
 	useEffect,
 	useLayoutEffect,
 	useRef,
@@ -63,20 +64,24 @@ export function LyricsOverlay({
 	// The Queue preview's first row lines up with the top of the centered cover.
 	const stageRef = useRef<HTMLDivElement>(null);
 	const [coverTop, setCoverTop] = useState(0);
-	useLayoutEffect(() => {
+	// The cover element is looked up on every measure: AlbumArt swaps its
+	// placeholder for the image, and a new title can move the cover.
+	const measureCoverTop = useCallback(() => {
 		const stage = stageRef.current;
 		const cover = stage?.querySelector("section")?.firstElementChild;
-		if (!stage || !cover || typeof ResizeObserver === "undefined")
-			return undefined;
-		const measure = () =>
-			setCoverTop(
-				cover.getBoundingClientRect().top - stage.getBoundingClientRect().top,
-			);
-		const observer = new ResizeObserver(measure);
-		observer.observe(stage);
-		observer.observe(cover);
-		return () => observer.disconnect();
+		if (!stage || !cover) return;
+		setCoverTop(
+			cover.getBoundingClientRect().top - stage.getBoundingClientRect().top,
+		);
 	}, []);
+	useLayoutEffect(measureCoverTop);
+	useLayoutEffect(() => {
+		const stage = stageRef.current;
+		if (!stage || typeof ResizeObserver === "undefined") return undefined;
+		const observer = new ResizeObserver(measureCoverTop);
+		observer.observe(stage);
+		return () => observer.disconnect();
+	}, [measureCoverTop]);
 	const closeRef = useRef(onClose);
 	useFocusTrap(rootRef);
 
