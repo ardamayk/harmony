@@ -169,18 +169,20 @@ function SyncedLyrics({ lyrics }: { lyrics: ParsedLyrics }) {
 		});
 	}, [active]);
 
+	// Lines inherit text-lyrics from here: tailwind-merge reads it as a color
+	// and would drop it next to a line's text-heading.
 	return (
 		<section
 			ref={scrollerRef}
 			aria-label="Lyrics text"
 			className={cn(
-				"relative min-w-0 flex-1 overflow-y-auto scrollbar-hidden",
+				"relative min-w-0 flex-1 overflow-y-auto text-lyrics scrollbar-hidden",
 				lyrics.synced ? "py-lyrics-edge" : "py-12",
 			)}
 		>
 			{lyrics.lines.map((line, index) => {
 				const className =
-					"block min-h-6 max-w-3xl py-2 text-left font-semibold text-2xl leading-snug tracking-tight transition-colors duration-300 ease-out xl:text-3xl";
+					"block min-h-6 max-w-3xl py-2 text-left font-semibold tracking-tight transition-colors duration-300 ease-out";
 				const time = line.time;
 				if (time === undefined)
 					return (

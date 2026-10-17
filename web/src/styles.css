@@ -59,6 +59,10 @@ html[data-theme-preset] {
 	--color-warning: var(--warning);
 	--color-success: var(--success);
 	--font-display: "Fraunces", Georgia, serif;
+	/* Full-screen lyrics read from across the room: one display step above
+     the type scale that grows with the window. */
+	--text-lyrics: clamp(1.875rem, 1rem + 1.6vw, 3rem);
+	--text-lyrics--line-height: 1.2;
 	/* Enter animations; used behind motion-safe: so reduced motion gets an
      instant swap. Keyframes live with the components layer below. */
 	--animate-lyrics-view: lyrics-view-enter 300ms

@@ -34,8 +34,8 @@ import {
 import { SeekBar } from "./SeekBar";
 
 const CONTROL_BUTTON_CLASS =
-	"inline-flex size-6 items-center justify-center rounded-sm text-player-foreground hover:text-player-control-primary disabled:opacity-40";
-const CONTROL_ICON_CLASS = "size-4.5";
+	"inline-flex size-6 items-center justify-center rounded-sm text-player-foreground hover:text-player-control-primary disabled:opacity-40 group-data-stage/controls:size-11";
+const CONTROL_ICON_CLASS = "size-4.5 group-data-stage/controls:size-6";
 // The right cluster sits alone at the edge, so its icons run one step larger.
 const SIDE_ICON_CLASS = "size-5";
 const SIDE_BUTTON_CLASS = "size-7";
@@ -63,13 +63,16 @@ type PlaybackControlsProps = {
 	onPrevious: () => void;
 	onNext: () => void;
 	onSeek: (seconds: number) => void;
+	/** Full-screen views show the controls one size up. */
+	stage?: boolean;
 };
 
 export function PlaybackControls(props: PlaybackControlsProps) {
 	return (
 		<section
 			aria-label="Playback controls"
-			className="flex min-w-px max-w-112 translate-y-1.25 grow shrink-0 basis-0 flex-col items-center justify-center justify-self-center"
+			data-stage={props.stage || undefined}
+			className="group/controls flex min-w-px max-w-112 translate-y-1.25 grow shrink-0 basis-0 flex-col items-center justify-center justify-self-center data-stage:max-w-xl data-stage:translate-y-0"
 		>
 			<TransportControls {...props} />
 			<PlaybackProgress {...props} />
@@ -90,7 +93,7 @@ function TransportControls({
 	onNext,
 }: PlaybackControlsProps) {
 	return (
-		<div className="flex items-center gap-6">
+		<div className="flex items-center gap-6 group-data-stage/controls:gap-8">
 			<ShuffleButton
 				isEnabled={shuffleEnabled}
 				disabled={!hasCurrentTrack}
@@ -185,7 +188,7 @@ function PrimaryPlaybackButton({
 		<button
 			type="button"
 			data-player-control
-			className="inline-flex size-11 items-center justify-center rounded-full bg-player-control-primary text-player-control-primary-foreground shadow-lg shadow-player-control-shadow transition hover:scale-105 hover:opacity-95 disabled:opacity-50 disabled:hover:scale-100"
+			className="inline-flex size-11 items-center justify-center rounded-full bg-player-control-primary group-data-stage/controls:size-16 text-player-control-primary-foreground shadow-lg shadow-player-control-shadow transition hover:scale-105 hover:opacity-95 disabled:opacity-50 disabled:hover:scale-100"
 			onClick={onClick}
 			disabled={disabled}
 			aria-label={isPlaying ? "Pause" : "Play"}
@@ -279,8 +282,8 @@ function PlaybackProgress({
 	onSeek: (seconds: number) => void;
 }) {
 	return (
-		<div className="mt-1 flex w-full min-w-0 items-center gap-2 text-xs tabular-nums">
-			<span className="w-8 shrink-0 text-right text-player-foreground">
+		<div className="mt-1 flex w-full min-w-0 items-center gap-2 text-xs tabular-nums group-data-stage/controls:mt-4 group-data-stage/controls:gap-3 group-data-stage/controls:text-sm">
+			<span className="w-8 shrink-0 text-right text-player-foreground group-data-stage/controls:w-12">
 				{isRadioPlaying ? "LIVE" : formatTime(currentTime)}
 			</span>
 			{isRadioPlaying ? (
@@ -299,7 +302,7 @@ function PlaybackProgress({
 				/>
 			)}
 			{isRadioPlaying ? null : (
-				<span className="w-8 shrink-0 text-player-foreground">
+				<span className="w-8 shrink-0 text-player-foreground group-data-stage/controls:w-12">
 					{formatTime(effectiveDuration)}
 				</span>
 			)}
