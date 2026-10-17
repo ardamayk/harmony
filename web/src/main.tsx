@@ -3,6 +3,7 @@ import { createRouter, RouterProvider } from "@tanstack/react-router";
 import { lazy, StrictMode, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import { hasDesktopBridge } from "./desktop/desktop-api";
+import { suppressEscapeFocusRing } from "./lib/escape-focus-ring";
 import { routeTree } from "./routeTree.gen";
 import "./styles.css";
 
@@ -35,6 +36,8 @@ const rootElement = document.getElementById("root");
 if (!rootElement) {
 	throw new Error("Root element not found");
 }
+
+suppressEscapeFocusRing();
 
 const shouldRenderQueryDevtools = import.meta.env.DEV && !hasDesktopBridge();
 
