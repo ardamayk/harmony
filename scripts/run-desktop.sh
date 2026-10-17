@@ -16,8 +16,15 @@ readonly targetDirectory="${CARGO_TARGET_DIR:-$desktopDirectory/../target}"
 readonly devServerUrl="http://localhost:3000"
 readonly devServerStartupAttempts=300
 
+# On Wayland, Chromium's GPU process logs "Frame latency is negative" at ERROR
+# level whenever a presentation timestamp lands a few microseconds early. It is
+# harmless and floods the terminal; every other line still goes to stderr.
+filterChromiumNoise() {
+	grep --line-buffered -v 'components/viz/service/display/display.cc.*Frame latency is negative' >&2
+}
+
 launchElectron() {
-	exec ./node_modules/.bin/electron . "$@"
+	exec ./node_modules/.bin/electron . "$@" 2> >(filterChromiumNoise)
 }
 
 case "$command" in
@@ -36,7 +43,7 @@ case "$command" in
 		done
 		EARTHLY_AUDIO_CORE_PATH="$targetDirectory/debug/earthly-audio-core" \
 			EARTHLY_AUDIO_DEV_SERVER_URL="$devServerUrl" \
-			./node_modules/.bin/electron . "$@"
+			./node_modules/.bin/electron . "$@" 2> >(filterChromiumNoise)
 		;;
 	build)
 		./scripts/prepare-mpv-sidecar.sh
