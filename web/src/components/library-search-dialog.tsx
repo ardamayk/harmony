@@ -449,7 +449,7 @@ export function LibrarySearchDialog({
 																role="option"
 																aria-selected={isActive}
 																tabIndex={-1}
-																className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-md p-3 text-left outline-none sm:gap-4"
+																className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-left outline-none"
 																onMouseEnter={() => setActiveKey(result.key)}
 																onMouseDown={(event) => event.preventDefault()}
 																onClick={result.action}
@@ -461,17 +461,17 @@ export function LibrarySearchDialog({
 																			128,
 																		)}
 																		title={result.title}
-																		className="size-11 shrink-0 rounded-sm sm:size-12"
+																		className="size-10 shrink-0 rounded-sm"
 																	/>
 																) : (
-																	<span className="flex size-11 shrink-0 items-center justify-center rounded-sm bg-muted/50 text-caption sm:size-12">
-																		<group.icon className="size-5" />
+																	<span className="flex size-10 shrink-0 items-center justify-center rounded-sm bg-muted/50 text-caption">
+																		<group.icon className="size-4" />
 																	</span>
 																)}
 																<span className="min-w-0 flex-1">
 																	<span
 																		className={cn(
-																			"block truncate text-base",
+																			"block truncate text-sm",
 																			isActive &&
 																				"text-shell-active-foreground",
 																		)}
@@ -479,7 +479,7 @@ export function LibrarySearchDialog({
 																		{result.title}
 																	</span>
 																	{result.subtitle ? (
-																		<span className="mt-0.5 block truncate text-caption text-sm">
+																		<span className="mt-0.5 block truncate text-caption text-xs">
 																			{result.subtitle}
 																		</span>
 																	) : null}
@@ -513,12 +513,12 @@ export function LibrarySearchDialog({
 																	onClick={() => {
 																		void queueResult(result);
 																	}}
-																	className="flex size-11 shrink-0 items-center justify-center rounded-md text-caption outline-none hover:bg-foreground/10 hover:text-shell-active-foreground focus-visible:bg-foreground/10 focus-visible:text-shell-active-foreground aria-disabled:opacity-50"
+																	className="flex size-10 shrink-0 items-center justify-center rounded-md text-caption outline-none hover:bg-foreground/10 hover:text-shell-active-foreground focus-visible:bg-foreground/10 focus-visible:text-shell-active-foreground aria-disabled:opacity-50"
 																>
 																	{pendingTracks.has(result.trackId) ? (
-																		<LoaderCircle className="size-5 motion-safe:animate-spin" />
+																		<LoaderCircle className="size-4 motion-safe:animate-spin" />
 																	) : (
-																		<ListPlus className="size-5" />
+																		<ListPlus className="size-4" />
 																	)}
 																</button>
 															) : null}
