@@ -1,23 +1,50 @@
 /* Vintage Harbor: Figma shell bar treatment for sidebar and playback chrome. */
 [data-theme-preset="vintage-harbor"].dark,
 [data-theme-preset="vintage-harbor"]:not(.dark) {
+	--sidebar-accent-foreground: #e6bf9e;
+	--sidebar-border: rgba(255, 255, 255, 0.1);
+	--shell-brand: #e6bf9e;
+	--shell-active-foreground: #e6bf9e;
+	--shell-subtle-border: rgba(255, 255, 255, 0.05);
+	--player-control-primary: #e6bf9e;
+	--player-control-primary-foreground: #132030;
+	--player-control-shadow: rgba(230, 191, 158, 0.2);
+	/* One accent: the seek bar fills with the play button's colour. */
+	--player-live-progress: #e6bf9e;
+}
+
+/* Light mode keeps the shell bars dark against the light page, with their
+   own light text (contrast.css re-scopes the text tokens inside them). */
+[data-theme-preset="vintage-harbor"]:not(.dark) {
 	--sidebar: #132030;
 	--sidebar-foreground: #d3c4b9;
 	--sidebar-heading: #e6bf9e;
 	--sidebar-accent: rgba(40, 54, 70, 0.5);
-	--sidebar-accent-foreground: #e6bf9e;
-	--sidebar-border: rgba(255, 255, 255, 0.1);
 	--player: rgba(30, 43, 59, 0.95);
 	--player-foreground: #d3c4b9;
-	--shell-brand: #e6bf9e;
 	--shell-active: rgba(40, 54, 70, 0.5);
-	--shell-active-foreground: #e6bf9e;
-	--shell-subtle-border: rgba(255, 255, 255, 0.05);
 	--player-title: #d6e4f9;
 	--player-artwork: #283646;
-	--player-control-primary: #e6bf9e;
-	--player-control-primary-foreground: #132030;
-	--player-control-shadow: rgba(230, 191, 158, 0.2);
-	--player-live-progress: #ffb4ab;
 	--player-pill: rgba(19, 32, 48, 0.5);
+}
+
+/* Dark mode: the shell is the page's own navy, not a greyer material.
+   Surfaces climb one value ladder in equal OKLCH steps of 4 L: page and
+   Top Nav (theme-1, L 23.5), cards, Player Bar and Queue Drawer (theme-2,
+   L 27.5), raised controls 31.5, active 39.5. Text takes three warm tiers
+   of one hue (93 / 80 / 70) that keep 4.5:1 up to raised controls. */
+[data-theme-preset="vintage-harbor"].dark {
+	--heading: oklch(93% 0.02 80);
+	--text: oklch(80% 0.02 80);
+	--caption: oklch(70% 0.02 80);
+	--sidebar: var(--theme-1);
+	--sidebar-foreground: var(--text);
+	--sidebar-heading: var(--heading);
+	--sidebar-accent: oklch(39.5% 0.055 252);
+	--player: var(--theme-2);
+	--player-foreground: var(--text);
+	--shell-active: var(--sidebar-accent);
+	--player-title: var(--heading);
+	--player-artwork: var(--muted);
+	--player-pill: oklch(31.5% 0.055 252);
 }
