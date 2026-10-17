@@ -17,16 +17,20 @@ import { useFocusTrap } from "../lib/use-focus-trap";
 import { cn } from "../lib/utils";
 import { usePlayback } from "../playback/PlaybackProvider";
 import { CurrentTrackPanel } from "./CurrentTrackPanel";
-import { QueuePanel } from "./QueuePanel";
+import { QueuePreview } from "./QueuePreview";
 
-/**
- * Full-screen listening view with current Track, stored lyrics, and shared Queue.
- */
+/** Matches --animate-lyrics-view-exit in web/src/styles.css. */
+const EXIT_MS = 250;
+
 type LyricsState =
 	| { status: "loading" }
 	| { status: "loaded"; lyrics: string }
 	| { status: "failed" };
 
+/**
+ * Full-screen listening view with the current Track, its lyrics and a
+ * preview of the Queue around it.
+ */
 export function LyricsOverlay({
 	track,
 	coverUrl,
@@ -51,6 +55,7 @@ export function LyricsOverlay({
 	else if (loaded?.trackId === track.id) state = loaded.state;
 	const lyrics = state.status === "loaded" ? parseLyrics(state.lyrics) : null;
 	const rootRef = useRef<HTMLDivElement>(null);
+	const closeRef = useRef(onClose);
 	useFocusTrap(rootRef);
 
 	useEffect(() => {
@@ -77,9 +82,30 @@ export function LyricsOverlay({
 		};
 	}, [loadLyrics, track.id]);
 
+	// Closing plays the enter animation in reverse, then unmounts.
+	const [closing, setClosing] = useState(false);
+	const onCloseRef = useRef(onClose);
 	useEffect(() => {
+		onCloseRef.current = onClose;
+	}, [onClose]);
+	useEffect(() => {
+		if (!closing) return undefined;
+		// The host re-renders on every playback tick with a new onClose, so
+		// the timer reads it from a ref instead of restarting.
+		const timer = window.setTimeout(() => onCloseRef.current(), EXIT_MS);
+		return () => window.clearTimeout(timer);
+	}, [closing]);
+	useEffect(() => {
+		const requestClose = () => {
+			const animate = window.matchMedia?.(
+				"(prefers-reduced-motion: no-preference)",
+			).matches;
+			if (animate) setClosing(true);
+			else onClose();
+		};
+		closeRef.current = requestClose;
 		const closeOnEscape = (event: KeyboardEvent) => {
-			if (event.key === "Escape") onClose();
+			if (event.key === "Escape") requestClose();
 		};
 		document.addEventListener("keydown", closeOnEscape);
 		return () => document.removeEventListener("keydown", closeOnEscape);
@@ -94,9 +120,19 @@ export function LyricsOverlay({
 			aria-modal="true"
 			aria-label="Lyrics"
 			tabIndex={-1}
-			style={{ "--player-accent": accent["--player-accent"] } as CSSProperties}
+			style={
+				{
+					"--player-accent": accent["--player-accent"],
+					"--lyrics-accent": accent["--player-accent"] ?? "var(--heading)",
+				} as CSSProperties
+			}
 			// Without a cover accent the gradient is invalid and the flat background shows.
-			className="motion-safe:animate-lyrics-view fixed inset-0 z-fullscreen flex flex-col bg-background bg-linear-to-b from-(--player-accent)/40 to-background to-70% text-foreground outline-none"
+			className={cn(
+				closing
+					? "motion-safe:animate-lyrics-view-exit"
+					: "motion-safe:animate-lyrics-view",
+				"fixed inset-0 z-fullscreen flex flex-col bg-background bg-linear-to-b from-(--player-accent)/40 to-background to-70% text-foreground outline-none",
+			)}
 		>
 			<header className="flex shrink-0 items-center justify-between gap-4 px-6 py-3">
 				<p className="text-caption text-xs uppercase tracking-widest">Lyrics</p>
@@ -105,7 +141,7 @@ export function LyricsOverlay({
 					className="inline-flex size-9 items-center justify-center rounded-full text-foreground hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
 					aria-label="Close lyrics"
 					title="Close lyrics"
-					onClick={onClose}
+					onClick={() => closeRef.current()}
 				>
 					<ChevronDown className="size-5" />
 				</button>
@@ -114,11 +150,11 @@ export function LyricsOverlay({
 				<div className="flex shrink-0 md:w-2/5 md:overflow-y-auto xl:w-1/3 scrollbar-hidden">
 					<CurrentTrackPanel track={track} coverUrl={coverUrl} />
 				</div>
-				{/* Lyrics and the Queue share the right side; without lyrics the
-				    Queue takes it whole under a short note, so no column stands empty. */}
+				{/* Lyrics and a Queue preview share the right side; without lyrics
+				    the preview sits under a short note, so no column stands empty. */}
 				<div
 					className={cn(
-						"flex min-h-96 min-w-0 flex-1 gap-6 md:min-h-0",
+						"flex min-h-96 min-w-0 flex-1 gap-6 md:min-h-0 lg:gap-12",
 						lyrics ? "flex-row" : "flex-col",
 					)}
 				>
@@ -129,14 +165,12 @@ export function LyricsOverlay({
 							<LyricsStatus state={state} />
 						</section>
 					)}
-					<aside
+					<QueuePreview
 						className={cn(
-							"min-h-0 overflow-hidden rounded-lg border border-border bg-queue text-queue-foreground",
-							lyrics ? "hidden w-lyrics-aside shrink-0 lg:block" : "flex-1",
+							"min-h-0 shrink-0",
+							lyrics ? "hidden w-queue-preview lg:flex" : "w-queue-preview",
 						)}
-					>
-						<QueuePanel embedded />
-					</aside>
+					/>
 				</div>
 			</div>
 		</div>,
@@ -182,7 +216,7 @@ function SyncedLyrics({ lyrics }: { lyrics: ParsedLyrics }) {
 		>
 			{lyrics.lines.map((line, index) => {
 				const className =
-					"block min-h-6 max-w-3xl py-2 text-left font-semibold tracking-tight transition-colors duration-300 ease-out";
+					"block min-h-6 py-2 text-left font-semibold tracking-tight transition-colors duration-300 ease-out";
 				const time = line.time;
 				if (time === undefined)
 					return (

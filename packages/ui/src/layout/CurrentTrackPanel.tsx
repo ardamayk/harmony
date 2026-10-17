@@ -37,7 +37,7 @@ export function CurrentTrackPanel({
 	return (
 		<section
 			aria-label="Current track"
-			className="flex min-h-0 min-w-0 flex-1 flex-col items-center justify-center gap-8 p-6"
+			className="flex min-h-0 min-w-0 flex-1 flex-col items-center justify-center gap-12 p-6"
 		>
 			{isArtworkFocused ? (
 				<TiltingArtwork coverUrl={coverUrl} title={track.title} />
@@ -50,17 +50,17 @@ export function CurrentTrackPanel({
 			)}
 			<div className="w-full max-w-xl text-center">
 				<h1
-					className="truncate font-semibold text-3xl text-heading"
+					className="truncate font-semibold text-heading text-lyrics"
 					title={track.title}
 				>
 					{track.title}
 				</h1>
-				<p className="mt-2 truncate text-caption text-xl">
+				<p className="mt-3 truncate text-caption text-2xl">
 					{track.artistName}
 					{track.albumTitle ? ` · ${track.albumTitle}` : ""}
 				</p>
 			</div>
-			<div className="w-full max-w-xl player-neutral">
+			<div className="-mt-4 w-full max-w-xl player-neutral">
 				<PlaybackControls
 					stage
 					isRadioPlaying={false}

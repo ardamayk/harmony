@@ -40,7 +40,7 @@ html[data-theme-preset] {
 	--spacing-dialog-body-height: 65dvh;
 	--spacing-search-card-height: min(85dvh, 56rem);
 	--spacing-artwork-stage: min(100%, 65vh);
-	--spacing-lyrics-aside: clamp(14rem, 22vw, 18rem);
+	--spacing-queue-preview: clamp(20rem, 26vw, 30rem);
 	/* Room above and below synced lyrics so the first and last line can sit in the middle. */
 	--spacing-lyrics-edge: 40vh;
 	--spacing-top-nav-offset: max(0px, calc(var(--shell-inset, 2rem) - 7.5rem));
@@ -67,6 +67,8 @@ html[data-theme-preset] {
      instant swap. Keyframes live with the components layer below. */
 	--animate-lyrics-view: lyrics-view-enter 300ms
 		cubic-bezier(0.22, 0.8, 0.24, 1) both;
+	--animate-lyrics-view-exit: lyrics-view-exit 250ms cubic-bezier(0.4, 0, 1, 1)
+		both;
 	--animate-player-cover: player-cover-crossfade 250ms ease-out both;
 	--animate-player-title: player-title-slide 200ms
 		cubic-bezier(0.22, 0.8, 0.24, 1) both;
@@ -566,6 +568,16 @@ html[data-window-maximized] body::after {
 		to {
 			transform: translate3d(0, 0, 0);
 			opacity: 1;
+		}
+	}
+	@keyframes lyrics-view-exit {
+		from {
+			transform: translate3d(0, 0, 0);
+			opacity: 1;
+		}
+		to {
+			transform: translate3d(0, 100%, 0);
+			opacity: 0.6;
 		}
 	}
 
