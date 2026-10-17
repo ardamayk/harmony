@@ -1,5 +1,5 @@
 import type { QueueItem } from "@repo/api-client";
-import type { ReactNode, Ref } from "react";
+import type { Ref } from "react";
 import { cn } from "../lib/utils";
 import { AlbumArt } from "./AlbumArt";
 import { useQueueRowMenu } from "./QueueRowMenuProvider";
@@ -28,17 +28,14 @@ export function QueueTrackRow({
 }: QueueTrackRowProps) {
 	const renderMenu = useQueueRowMenu();
 	const isCurrent = state === "current";
-	const renderRow = (menuTrigger: ReactNode) => (
+	const row = (
 		<li
 			ref={ref}
 			role="button"
 			tabIndex={0}
 			aria-current={isCurrent ? "true" : undefined}
 			data-queue-state={state}
-			onClick={(event) => {
-				if (!(event.target as HTMLElement).closest("[data-queue-menu-trigger]"))
-					onPlay();
-			}}
+			onClick={onPlay}
 			onKeyDown={(event) => {
 				if (
 					event.target === event.currentTarget &&
@@ -89,20 +86,12 @@ export function QueueTrackRow({
 					</span>
 				)}
 			</span>
-			<span
-				className={cn(
-					"shrink-0 text-xs text-caption tabular-nums",
-					renderMenu && "group-hover:opacity-0 group-focus-within:opacity-0",
-				)}
-			>
+			<span className="shrink-0 text-xs text-caption tabular-nums">
 				{formatQueueDuration(item.track.durationMs)}
 			</span>
-			{menuTrigger}
 		</li>
 	);
-	return renderMenu
-		? renderMenu({ item, children: renderRow })
-		: renderRow(null);
+	return renderMenu ? renderMenu({ item, children: row }) : row;
 }
 
 function QueueEqualizer({ isPlaying }: { isPlaying: boolean }) {

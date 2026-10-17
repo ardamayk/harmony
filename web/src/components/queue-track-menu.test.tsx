@@ -62,21 +62,18 @@ function renderMenu(menuItem = item) {
 		<QueryClientProvider client={queryClient}>
 			<ul>
 				<QueueTrackMenu item={menuItem}>
-					{(trigger) => (
-						// biome-ignore lint/a11y/useSemanticElements: Reproduce the host's focusable queue row contract.
-						<li
-							// biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: Reproduce the host's focusable queue row contract.
-							role="button"
-							tabIndex={0}
-							onClick={mocks.playRow}
-							onKeyDown={(event) => {
-								if (event.key === "Enter" || event.key === " ") mocks.playRow();
-							}}
-						>
-							{item.track.title}
-							{trigger}
-						</li>
-					)}
+					{/* biome-ignore lint/a11y/useSemanticElements: Reproduce the host's focusable queue row contract. */}
+					<li
+						// biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: Reproduce the host's focusable queue row contract.
+						role="button"
+						tabIndex={0}
+						onClick={mocks.playRow}
+						onKeyDown={(event) => {
+							if (event.key === "Enter" || event.key === " ") mocks.playRow();
+						}}
+					>
+						{item.track.title}
+					</li>
 				</QueueTrackMenu>
 			</ul>
 		</QueryClientProvider>,
@@ -84,18 +81,8 @@ function renderMenu(menuItem = item) {
 	return queryClient;
 }
 
-function openDropdown() {
-	const trigger = screen.getByRole("button", {
-		name: "Queue actions for Track one",
-	});
-	trigger.focus();
-	pressButton(trigger, "Enter");
-}
-
-// A native button turns Enter and Space into a click; jsdom does not.
-function pressButton(button: HTMLElement, key: string) {
-	fireEvent.keyDown(button, { key });
-	fireEvent.click(button);
+function openContextMenu() {
+	fireEvent.contextMenu(screen.getByRole("button", { name: "Track one" }));
 }
 
 async function openPlaylists() {
@@ -120,9 +107,9 @@ afterEach(() => {
 });
 
 describe("QueueTrackMenu", () => {
-	it("opens the visible trigger with the keyboard and plays next without playing the row", async () => {
+	it("plays next without playing the row", async () => {
 		renderMenu();
-		openDropdown();
+		openContextMenu();
 		const action = await screen.findByRole("menuitem", { name: "Play next" });
 		action.focus();
 		fireEvent.keyDown(action, { key: "Enter" });
@@ -147,34 +134,10 @@ describe("QueueTrackMenu", () => {
 		},
 	);
 
-	it.each(["pointer", " "])(
-		"opens the visible trigger via %s without playing the row",
-		async (method) => {
-			renderMenu();
-			const trigger = screen.getByRole("button", {
-				name: "Queue actions for Track one",
-			});
-			if (method === "pointer") {
-				fireEvent(
-					trigger,
-					new MouseEvent("pointerdown", { bubbles: true, button: 0 }),
-				);
-				fireEvent.click(trigger);
-			} else {
-				trigger.focus();
-				pressButton(trigger, method);
-			}
-			expect(
-				await screen.findByRole("menuitem", { name: "Play next" }),
-			).toBeTruthy();
-			expect(mocks.playRow).not.toHaveBeenCalled();
-		},
-	);
-
 	it("adds to a playlist and invalidates host playlist queries", async () => {
 		const queryClient = renderMenu();
 		const invalidate = vi.spyOn(queryClient, "invalidateQueries");
-		openDropdown();
+		openContextMenu();
 		await openPlaylists();
 		fireEvent.click(await screen.findByRole("menuitem", { name: "Favorites" }));
 		await waitFor(() =>
@@ -202,52 +165,45 @@ describe("QueueTrackMenu", () => {
 		],
 	])("navigates using %s", async (label, destination) => {
 		renderMenu();
-		openDropdown();
+		openContextMenu();
 		fireEvent.click(await screen.findByRole("menuitem", { name: label }));
 		expect(mocks.navigate).toHaveBeenCalledWith(destination);
 		expect(mocks.playRow).not.toHaveBeenCalled();
 	});
 
-	it.each(["dropdown", "context"])(
-		"chooses an exact credit from the %s artist menu",
-		async (mode) => {
-			renderMenu({
-				...item,
-				track: {
-					...item.track,
-					artistName: "Artist one & Guest / Band",
-					artists: [
-						...item.track.artists,
-						{ id: "guest-id", name: "Guest / Band" },
-					],
-				},
-			});
-			if (mode === "dropdown") openDropdown();
-			else
-				fireEvent.contextMenu(
-					screen.getByRole("button", { name: "Track one" }),
-				);
-			const trigger = await screen.findByRole("menuitem", {
-				name: "Go to artist",
-			});
-			trigger.focus();
-			fireEvent.keyDown(trigger, { key: "ArrowRight" });
-			expect(mocks.navigate).not.toHaveBeenCalled();
-			expect(
-				await screen.findByRole("menuitem", { name: "Artist one" }),
-			).toBeTruthy();
-			const guest = await screen.findByRole("menuitem", {
-				name: "Guest / Band",
-			});
-			guest.focus();
-			fireEvent.keyDown(guest, { key: "Enter" });
-			expect(mocks.navigate).toHaveBeenCalledWith({
-				to: "/library/tracks",
-				search: { artistId: "guest-id" },
-			});
-			expect(mocks.playRow).not.toHaveBeenCalled();
-		},
-	);
+	it("chooses an exact credit from the artist menu", async () => {
+		renderMenu({
+			...item,
+			track: {
+				...item.track,
+				artistName: "Artist one & Guest / Band",
+				artists: [
+					...item.track.artists,
+					{ id: "guest-id", name: "Guest / Band" },
+				],
+			},
+		});
+		openContextMenu();
+		const trigger = await screen.findByRole("menuitem", {
+			name: "Go to artist",
+		});
+		trigger.focus();
+		fireEvent.keyDown(trigger, { key: "ArrowRight" });
+		expect(mocks.navigate).not.toHaveBeenCalled();
+		expect(
+			await screen.findByRole("menuitem", { name: "Artist one" }),
+		).toBeTruthy();
+		const guest = await screen.findByRole("menuitem", {
+			name: "Guest / Band",
+		});
+		guest.focus();
+		fireEvent.keyDown(guest, { key: "Enter" });
+		expect(mocks.navigate).toHaveBeenCalledWith({
+			to: "/library/tracks",
+			search: { artistId: "guest-id" },
+		});
+		expect(mocks.playRow).not.toHaveBeenCalled();
+	});
 
 	it.each(
 		[
@@ -260,7 +216,7 @@ describe("QueueTrackMenu", () => {
 		"disables artist navigation without real credit IDs ($artists)",
 		async ({ artists }) => {
 			renderMenu({ ...item, track: { ...item.track, artists } } as QueueItem);
-			openDropdown();
+			openContextMenu();
 			const action = await screen.findByRole("menuitem", {
 				name: "Go to artist",
 			});
@@ -275,7 +231,7 @@ describe("QueueTrackMenu", () => {
 		mocks.playNext.mockRejectedValue(error);
 		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 		renderMenu();
-		openDropdown();
+		openContextMenu();
 		fireEvent.click(await screen.findByRole("menuitem", { name: "Play next" }));
 		await waitFor(() =>
 			expect(mocks.toastError).toHaveBeenCalledWith(
@@ -292,7 +248,7 @@ describe("QueueTrackMenu", () => {
 		mocks.listPlaylists.mockRejectedValueOnce(new Error("offline"));
 		vi.spyOn(console, "warn").mockImplementation(() => {});
 		renderMenu();
-		openDropdown();
+		openContextMenu();
 		await openPlaylists();
 		fireEvent.click(
 			await screen.findByRole("menuitem", { name: "Retry loading playlists" }),

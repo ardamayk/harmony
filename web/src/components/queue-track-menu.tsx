@@ -8,8 +8,6 @@ import {
 } from "@repo/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { Menu } from "@base-ui/react/menu";
-import { MoreHorizontal } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
 	ContextMenu,
@@ -17,13 +15,10 @@ import {
 	ContextMenuTrigger,
 } from "#/components/ui/context-menu";
 import {
-	DropdownMenu,
-	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuSub,
 	DropdownMenuSubContent,
 	DropdownMenuSubTrigger,
-	DropdownMenuTrigger,
 } from "#/components/ui/dropdown-menu";
 import {
 	invalidatePlaylistCache,
@@ -32,69 +27,37 @@ import {
 
 export function QueueTrackMenu({ item, children }: QueueRowMenuProps) {
 	const [isContextOpen, setIsContextOpen] = useState(false);
-	const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-	// The dropdown trigger sits inside the context menu's trigger row; a handle
-	// keeps the dropdown its own menu instead of a child of the context menu.
-	const [dropdown] = useState(() => Menu.createHandle());
-	const trigger = (
-		<DropdownMenuTrigger
-			handle={dropdown}
-			data-queue-menu-trigger
-			aria-label={`Queue actions for ${item.track.title}`}
-			className="absolute top-1/2 right-2 inline-flex size-8 -translate-y-1/2 items-center justify-center rounded-sm text-caption opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 hover:bg-player-pill hover:text-heading focus-visible:outline focus-visible:outline-2 data-popup-open:opacity-100"
-			onClick={(event) => event.stopPropagation()}
-			onPointerDown={(event) => event.stopPropagation()}
-			onKeyDown={(event) => event.stopPropagation()}
-		>
-			<MoreHorizontal className="size-4" aria-hidden />
-		</DropdownMenuTrigger>
-	);
 
 	return (
-		<>
-			<ContextMenu onOpenChange={setIsContextOpen}>
-				<ContextMenuTrigger
-					render={children(trigger)}
-					onKeyDownCapture={(event) => {
-						if (
-							event.key !== "ContextMenu" &&
-							!(event.shiftKey && event.key === "F10")
-						)
-							return;
-						event.preventDefault();
-						event.stopPropagation();
-						const bounds = event.currentTarget.getBoundingClientRect();
-						event.currentTarget.dispatchEvent(
-							new MouseEvent("contextmenu", {
-								bubbles: true,
-								cancelable: true,
-								clientX: bounds.left,
-								clientY: bounds.bottom,
-							}),
-						);
-					}}
-				/>
-				<ContextMenuContent
-					onClick={(event) => event.stopPropagation()}
-					onKeyDown={(event) => event.stopPropagation()}
-				>
-					{isContextOpen && <QueueMenuActions item={item} />}
-				</ContextMenuContent>
-			</ContextMenu>
-			<DropdownMenu
-				handle={dropdown}
-				open={isDropdownOpen}
-				onOpenChange={setIsDropdownOpen}
+		<ContextMenu onOpenChange={setIsContextOpen}>
+			<ContextMenuTrigger
+				render={children}
+				onKeyDownCapture={(event) => {
+					if (
+						event.key !== "ContextMenu" &&
+						!(event.shiftKey && event.key === "F10")
+					)
+						return;
+					event.preventDefault();
+					event.stopPropagation();
+					const bounds = event.currentTarget.getBoundingClientRect();
+					event.currentTarget.dispatchEvent(
+						new MouseEvent("contextmenu", {
+							bubbles: true,
+							cancelable: true,
+							clientX: bounds.left,
+							clientY: bounds.bottom,
+						}),
+					);
+				}}
+			/>
+			<ContextMenuContent
+				onClick={(event) => event.stopPropagation()}
+				onKeyDown={(event) => event.stopPropagation()}
 			>
-				<DropdownMenuContent
-					align="end"
-					onClick={(event) => event.stopPropagation()}
-					onKeyDown={(event) => event.stopPropagation()}
-				>
-					{isDropdownOpen && <QueueMenuActions item={item} />}
-				</DropdownMenuContent>
-			</DropdownMenu>
-		</>
+				{isContextOpen && <QueueMenuActions item={item} />}
+			</ContextMenuContent>
+		</ContextMenu>
 	);
 }
 
