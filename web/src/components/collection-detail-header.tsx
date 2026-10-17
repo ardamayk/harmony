@@ -1,9 +1,9 @@
 import type { Track } from "@repo/api-client";
+import { SearchField } from "#/components/search-field";
 import {
 	ListMusic,
 	Music2,
 	Play,
-	Search,
 	Shuffle,
 	SkipForward,
 	Tags,
@@ -11,7 +11,6 @@ import {
 import { CollectionCoverStack } from "#/components/collection-cover-strip";
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
-import { Input } from "#/components/ui/input";
 
 export function CollectionDetailHeader({
 	kind,
@@ -68,7 +67,7 @@ export function CollectionDetailHeader({
 					<div className="mt-4 flex flex-wrap items-center gap-2 text-foreground text-sm">
 						<Music2 className="size-4 shrink-0" />
 						{metaTags.map((tag) => (
-							<Badge key={tag} variant="secondary" className="font-normal">
+							<Badge key={tag} variant="secondary">
 								{tag}
 							</Badge>
 						))}
@@ -100,17 +99,14 @@ export function CollectionDetailHeader({
 							</Button>
 						</div>
 						{showSearch ? (
-							<div className="relative ml-auto w-full sm:max-w-xs">
-								<Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-caption" />
-								<Input
-									className="pl-8"
-									placeholder={
-										searchPlaceholder ?? `Search ${kind.toLowerCase()}…`
-									}
-									value={searchValue}
-									onChange={(event) => onSearchChange(event.target.value)}
-								/>
-							</div>
+							<SearchField
+								className="ml-auto w-full sm:max-w-xs"
+								placeholder={
+									searchPlaceholder ?? `Search ${kind.toLowerCase()}…`
+								}
+								value={searchValue}
+								onChange={(event) => onSearchChange(event.target.value)}
+							/>
 						) : null}
 					</div>
 				</div>

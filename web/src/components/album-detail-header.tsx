@@ -92,7 +92,7 @@ export function AlbumDetailHeader({
 							<div className="mt-4 flex flex-wrap items-center gap-2 text-foreground text-sm">
 								<Music2 className="size-4 shrink-0" />
 								{metaTags.map((tag) => (
-									<Badge key={tag} variant="secondary" className="font-normal">
+									<Badge key={tag} variant="secondary">
 										{tag}
 									</Badge>
 								))}
@@ -127,7 +127,7 @@ export function AlbumDetailHeader({
 								{genres.length > 0 ? (
 									<div className="flex flex-wrap gap-2">
 										{genres.map((genre) => (
-											<Badge key={genre} variant="outline" className="text-sm">
+											<Badge key={genre} variant="outline">
 												{genre}
 											</Badge>
 										))}

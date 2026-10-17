@@ -180,7 +180,7 @@ function AlbumDestination({
 					>
 						<SelectTrigger
 							aria-label={`Album destination for ${album.title}`}
-							className="w-full bg-secondary/40 text-foreground"
+							className="w-full"
 						>
 							<SelectValue placeholder="Choose an existing album" />
 						</SelectTrigger>

@@ -118,18 +118,11 @@ export function CollectionGridState({
 	return (
 		<Empty
 			role={isError ? "alert" : undefined}
-			className={cn(
-				"min-h-72 border",
-				isError ? "border-destructive/30" : "border-border/70 bg-card/30",
-			)}
+			variant={isError ? "error" : "card"}
+			className="min-h-72"
 		>
 			<EmptyHeader>
-				<EmptyMedia
-					variant="icon"
-					className={isError ? "text-destructive" : undefined}
-				>
-					{icon}
-				</EmptyMedia>
+				<EmptyMedia variant="icon">{icon}</EmptyMedia>
 				<EmptyTitle>{title}</EmptyTitle>
 				<EmptyDescription>{description}</EmptyDescription>
 			</EmptyHeader>

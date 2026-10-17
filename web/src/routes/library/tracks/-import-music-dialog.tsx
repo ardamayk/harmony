@@ -10,7 +10,6 @@ import {
 } from "lucide-react";
 import { Dialog as DialogPrimitive } from "radix-ui";
 import { type CSSProperties, memo, useId, useState } from "react";
-import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import { isDesktopClient } from "#/desktop/bridge";
 import { cn } from "#/lib/utils.ts";
@@ -49,7 +48,7 @@ export function ImportMusicDialog({
 				<Button
 					type="button"
 					onClick={() => onOpenChange(true)}
-					className="fixed bottom-24 right-6 z-40 shadow-lg"
+					className="fixed bottom-24 right-6 z-40"
 					aria-label="Open current import"
 				>
 					{workflow.isCompleted
@@ -558,9 +557,8 @@ const ImportFileRow = memo(function ImportFileRow({
 					<StatusBadge entry={entry} isConfirming={isConfirming} />
 					<Button
 						type="button"
-						variant="ghost"
-						size="icon"
-						className="size-8 text-caption"
+						variant="muted"
+						size="icon-sm"
 						aria-label={`Details for ${filename}`}
 						aria-expanded={isExpanded}
 						aria-controls={isExpanded ? detailsId : undefined}
@@ -698,16 +696,15 @@ function StatusBadge({
 		? outcomeBadges[entry.outcome]
 		: stateBadges[entry.state];
 	return (
-		<Badge
-			variant={badge.variant}
+		<span
 			className={cn(
-				"border-0 bg-transparent px-0 font-normal text-xs dark:bg-transparent",
+				"inline-flex items-center gap-1 text-xs [&>svg]:size-3",
 				badge.variant === "destructive" ? "text-destructive" : "text-caption",
 			)}
 		>
 			<badge.Icon aria-hidden="true" className={badge.iconClassName} />
 			{entry.state === "unresolved" ? importPhaseLabel(entry) : badge.label}
-		</Badge>
+		</span>
 	);
 }
 

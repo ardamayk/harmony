@@ -1,8 +1,9 @@
 import type { RadioNowPlaying, RadioStation } from "@repo/api-client";
+import { SearchField } from "#/components/search-field";
 import { usePlayback } from "@repo/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { Headphones, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { Headphones, Pencil, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import {
 	COLLECTION_PAGE_CONTAINER_CLASS,
@@ -19,10 +20,7 @@ import {
 } from "#/components/ui/context-menu";
 import { Input } from "#/components/ui/input";
 import { apiClient } from "#/lib/api";
-import {
-	HEADER_SEARCH_CONTAINER_CLASS,
-	HEADER_SEARCH_INPUT_CLASS,
-} from "#/lib/page-layout-classes";
+import { HEADER_SEARCH_CONTAINER_CLASS } from "#/lib/page-layout-classes";
 import { radioQueryKeys } from "#/lib/radio-query-keys";
 import { matchesLocalStationFilter } from "#/lib/radio-station-filter";
 import { cn } from "#/lib/utils";
@@ -78,22 +76,15 @@ export function RadioPage() {
 					innerClassName={COLLECTION_PAGE_CONTAINER_CLASS}
 					actions={
 						<>
-							<div className={HEADER_SEARCH_CONTAINER_CLASS}>
-								<Search className="-translate-y-1/2 pointer-events-none absolute top-1/2 left-3 size-4 text-caption" />
-								<Input
-									className={`${HEADER_SEARCH_INPUT_CLASS} border-border text-player-foreground placeholder:text-player-foreground/55`}
-									value={localFilter}
-									onChange={(event) => setLocalFilter(event.target.value)}
-									placeholder="Search stations..."
-									type="search"
-								/>
-							</div>
-							<Button
-								aria-label="Add radio station"
-								asChild
-								className="size-10 rounded-lg bg-player-control-primary text-player-control-primary-foreground hover:opacity-90"
-								size="icon"
-							>
+							<SearchField
+								className={HEADER_SEARCH_CONTAINER_CLASS}
+								variant="shell"
+								value={localFilter}
+								onChange={(event) => setLocalFilter(event.target.value)}
+								placeholder="Search stations..."
+								type="search"
+							/>
+							<Button aria-label="Add radio station" asChild size="icon-lg">
 								<Link to="/radio/discover">
 									<Plus className="size-5" />
 								</Link>

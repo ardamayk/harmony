@@ -1,4 +1,5 @@
 import type { RadioCatalogOption, RadioSearchResult } from "@repo/api-client";
+import { SearchField } from "#/components/search-field";
 import { usePlayback } from "@repo/ui";
 import {
 	useInfiniteQuery,
@@ -16,7 +17,6 @@ import {
 	List,
 	MapPin,
 	Radio,
-	Search,
 	ShieldAlert,
 	ShieldQuestion,
 	SlidersHorizontal,
@@ -37,12 +37,8 @@ import {
 	ContextMenuSeparator,
 	ContextMenuTrigger,
 } from "#/components/ui/context-menu";
-import { Input } from "#/components/ui/input";
 import { apiClient } from "#/lib/api";
-import {
-	HEADER_SEARCH_CONTAINER_CLASS,
-	HEADER_SEARCH_INPUT_CLASS,
-} from "#/lib/page-layout-classes";
+import { HEADER_SEARCH_CONTAINER_CLASS } from "#/lib/page-layout-classes";
 import { cn } from "#/lib/utils";
 
 const PAGE_SIZE = 40;
@@ -490,10 +486,9 @@ export function RadioDiscoverPage() {
 								className={HEADER_SEARCH_CONTAINER_CLASS}
 								htmlFor="radio-discover-search"
 							>
-								<Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-caption" />
-								<Input
+								<SearchField
 									id="radio-discover-search"
-									className={`${HEADER_SEARCH_INPUT_CLASS} text-player-foreground placeholder:text-player-foreground/55`}
+									variant="shell"
 									value={filters.q}
 									onChange={(event) =>
 										setFilters((current) => ({
@@ -507,10 +502,9 @@ export function RadioDiscoverPage() {
 							</label>
 							<Button
 								type="button"
-								variant="ghost"
-								size="icon"
+								variant="muted"
+								size="icon-lg"
 								aria-label="Filters"
-								className="size-10 text-caption hover:text-heading"
 								onClick={() => setAreFiltersOpen(true)}
 							>
 								<SlidersHorizontal className="size-5" />
@@ -811,17 +805,15 @@ function NativeOptionSelect({
 			</button>
 			{isOpen ? (
 				<div className="absolute top-full left-0 z-50 mt-2 flex max-h-80 w-80 flex-col overflow-hidden rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-lg">
-					<label className="relative m-1 mb-2 block" htmlFor={searchInputId}>
-						<Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-caption" />
-						<Input
-							id={searchInputId}
-							className="h-10 rounded-md bg-player pl-8 text-sm"
-							placeholder={searchPlaceholder}
-							type="search"
-							value={query}
-							onChange={(event) => setQuery(event.target.value)}
-						/>
-					</label>
+					<SearchField
+						className="m-1 mb-2"
+						id={searchInputId}
+						variant="shell"
+						placeholder={searchPlaceholder}
+						type="search"
+						value={query}
+						onChange={(event) => setQuery(event.target.value)}
+					/>
 					<div className="overflow-y-auto scrollbar-hidden">
 						<FilterOptionButton
 							label={allLabel}
@@ -1026,11 +1018,10 @@ function ViewButton({
 	return (
 		<Button
 			type="button"
-			size="icon"
+			size="icon-sm"
 			variant={isActive ? "default" : "ghost"}
 			aria-label={label}
 			aria-pressed={isActive}
-			className="size-8 rounded-sm"
 			onClick={onClick}
 		>
 			{children}

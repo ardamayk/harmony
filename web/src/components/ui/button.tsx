@@ -19,6 +19,9 @@ const buttonVariants = cva(
 				ghost:
 					"text-foreground hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
 				link: "text-foreground underline-offset-4 hover:text-heading hover:underline",
+				// Quiet control beside content: caption color until hovered.
+				muted:
+					"text-caption hover:bg-accent hover:text-heading dark:hover:bg-accent/50",
 			},
 			size: {
 				default: "h-9 px-4 py-2 has-[>svg]:px-3",

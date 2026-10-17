@@ -15,5 +15,3 @@ export const PAGE_CONTENT_PADDING_CLASS = "px-(--shell-inset) py-6";
 export const PAGE_CONTENT_WIDTH_CLASS = "page-content-column w-full";
 
 export const HEADER_SEARCH_CONTAINER_CLASS = "relative w-full sm:w-[28rem]";
-export const HEADER_SEARCH_INPUT_CLASS =
-	"h-11 rounded-lg bg-player pl-8 text-sm";
