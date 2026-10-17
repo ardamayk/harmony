@@ -189,7 +189,7 @@ function PrimaryPlaybackButton({
 		<button
 			type="button"
 			data-player-control
-			className="inline-flex size-11 items-center justify-center rounded-full bg-player-control-primary group-data-stage/controls:size-14 group-data-stage/controls:2xl:size-20 text-player-control-primary-foreground shadow-lg shadow-player-control-shadow transition hover:scale-105 hover:opacity-95 disabled:opacity-50 disabled:hover:scale-100"
+			className="inline-flex size-11 items-center justify-center rounded-full bg-player-control-primary group-data-stage/controls:size-14 group-data-stage/controls:2xl:size-20 text-player-control-primary-foreground shadow-lg shadow-player-control-shadow transition hover:scale-105 hover:opacity-95 disabled:bg-player-pill disabled:text-caption disabled:shadow-none disabled:hover:scale-100"
 			onClick={onClick}
 			disabled={disabled}
 			aria-label={isPlaying ? "Pause" : "Play"}
