@@ -251,7 +251,16 @@ html[data-desktop-window] body::after {
 	border-radius: var(--radius-md);
 }
 
+/* Full-screen views portal to body, outside #root's clip, so they draw the
+   window corners and edge themselves. */
+html[data-desktop-window] :is(.z-fullscreen, .z-above-fullscreen) {
+	overflow: hidden;
+	border: 1px solid color-mix(in srgb, var(--foreground) 12%, transparent);
+	border-radius: var(--radius-md);
+}
+
 html[data-window-maximized] #root,
+html[data-window-maximized] :is(.z-fullscreen, .z-above-fullscreen),
 html[data-window-maximized] body::before,
 html[data-window-maximized] body::after {
 	border: 0;
