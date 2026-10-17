@@ -47,6 +47,43 @@ describe("cover accent", () => {
 		).toBeNull();
 	});
 
+	it("takes a pale colour when the soft pixels agree on one hue", () => {
+		const accent = accentFromPixels(
+			pixels([
+				[142, 133, 146],
+				[150, 140, 155],
+				[30, 30, 30],
+			]),
+		);
+		expect(accent?.muted).toBeUndefined();
+		expect(accent?.soft).toBe(true);
+		expect(accent?.s).toBeLessThan(0.2);
+		expect(Math.round(accent?.h ?? -1)).toBeGreaterThan(270);
+		expect(Math.round(accent?.h ?? -1)).toBeLessThan(295);
+		expect(
+			accentCssVariables(accent, "dark")["--player-control-primary"],
+		).toMatch(/^hsl\(2[789]\d 1\d% /);
+	});
+
+	it("gives neutral controls when soft hues scatter", () => {
+		const accent = accentFromPixels(
+			pixels([
+				[110, 100, 100],
+				[100, 110, 100],
+				[100, 100, 110],
+				[90, 90, 90],
+			]),
+		);
+		expect(accent?.muted).toBe(true);
+		const dark = accentCssVariables(accent, "dark");
+		expect(dark["--player-control-primary"]).toBe("hsl(0 0% 70%)");
+		expect(dark["--player-control-primary-foreground"]).toBe("#111111");
+		expect(dark["--cover-tint"]).toMatch(/^hsl\(\d+ \d+% 55%\)$/);
+		const light = accentCssVariables(accent, "light");
+		expect(light["--player-control-primary"]).toBe("hsl(0 0% 30%)");
+		expect(light["--player-control-primary-foreground"]).toBe("#ffffff");
+	});
+
 	it("clamps lightness into the theme band", () => {
 		expect(clampAccent({ h: 200, s: 0.9, l: 0.1 }, "dark").l).toBe(0.55);
 		expect(clampAccent({ h: 200, s: 0.9, l: 0.95 }, "light").l).toBe(0.45);

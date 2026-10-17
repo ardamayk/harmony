@@ -3,7 +3,15 @@
  * tints the Player Bar's primary control; lightness is clamped per theme so
  * the result always keeps contrast against the bar and its foreground.
  */
-export type Accent = { h: number; s: number; l: number };
+export type Accent = {
+	h: number;
+	s: number;
+	l: number;
+	/** No hue at all: neutral controls, the cover's mean colour as backdrop tint. */
+	muted?: boolean;
+	/** A pale colour the soft pixels agree on; it stays pale on the controls. */
+	soft?: boolean;
+};
 
 export type AccentThemeMode = "light" | "dark";
 
@@ -11,6 +19,13 @@ const SAMPLE_SIZE = 32;
 const MIN_SATURATION = 0.2;
 const MIN_LIGHTNESS = 0.12;
 const MAX_LIGHTNESS = 0.9;
+// Below this a pixel's hue is noise; it does not vote.
+const HUE_VOTE_SATURATION = 0.03;
+// A soft cover colour counts when this share of pixels agrees on one hue.
+const MIN_HUE_SHARE = 0.3;
+const MIN_HUE_AGREEMENT = 0.85;
+// A soft accent is lifted only this far, so a pale lilac does not turn purple.
+const MAX_SOFT_SATURATION = 0.2;
 
 const ACCENT_LIGHTNESS_RANGE: Record<AccentThemeMode, [number, number]> = {
 	dark: [0.55, 0.7],
@@ -37,7 +52,10 @@ export function rgbToHsl(r: number, g: number, b: number): Accent {
 /**
  * Picks the accent from raw RGBA pixels: the hue bucket with the most
  * saturated weight wins, and the accent is that bucket's weighted mean.
- * Returns null when the image is effectively monochrome.
+ * Without saturated pixels, soft pixels that agree on one hue (a pale
+ * tinted backdrop) still give an accent; otherwise the cover's mean colour
+ * comes back marked muted, and null only when every pixel is near black
+ * or white.
  */
 export function accentFromPixels(data: Uint8ClampedArray): Accent | null {
 	const buckets = new Map<
@@ -61,11 +79,68 @@ export function accentFromPixels(data: Uint8ClampedArray): Accent | null {
 	for (const entry of buckets.values()) {
 		if (!best || entry.weight > best.weight) best = entry;
 	}
-	if (!best || best.weight === 0) return null;
+	if (!best || best.weight === 0)
+		return agreedSoftHue(data) ?? mutedFromPixels(data);
 	return {
 		h: best.h / best.weight,
 		s: best.s / best.weight,
 		l: best.l / best.weight,
+	};
+}
+
+/**
+ * Soft pixels' hues as unit vectors: their mean's length says how far they
+ * agree (1 = one hue, near 0 = scattered noise), its angle is the hue.
+ */
+function agreedSoftHue(data: Uint8ClampedArray): Accent | null {
+	let counted = 0;
+	let votes = 0;
+	let x = 0;
+	let y = 0;
+	let saturation = 0;
+	let lightness = 0;
+	for (let index = 0; index + 3 < data.length; index += 4) {
+		if (data[index + 3] < 128) continue;
+		const { h, s, l } = rgbToHsl(data[index], data[index + 1], data[index + 2]);
+		if (l < MIN_LIGHTNESS || l > MAX_LIGHTNESS) continue;
+		counted += 1;
+		if (s < HUE_VOTE_SATURATION) continue;
+		votes += 1;
+		const angle = (h * Math.PI) / 180;
+		x += Math.cos(angle);
+		y += Math.sin(angle);
+		saturation += s;
+		lightness += l;
+	}
+	if (votes === 0 || votes / counted < MIN_HUE_SHARE) return null;
+	if (Math.hypot(x, y) / votes < MIN_HUE_AGREEMENT) return null;
+	const hue = (Math.atan2(y, x) * 180) / Math.PI;
+	return {
+		h: hue < 0 ? hue + 360 : hue,
+		s: saturation / votes,
+		l: lightness / votes,
+		soft: true,
+	};
+}
+
+function mutedFromPixels(data: Uint8ClampedArray): Accent | null {
+	let count = 0;
+	let red = 0;
+	let green = 0;
+	let blue = 0;
+	for (let index = 0; index + 3 < data.length; index += 4) {
+		if (data[index + 3] < 128) continue;
+		const { l } = rgbToHsl(data[index], data[index + 1], data[index + 2]);
+		if (l < MIN_LIGHTNESS || l > MAX_LIGHTNESS) continue;
+		count += 1;
+		red += data[index];
+		green += data[index + 1];
+		blue += data[index + 2];
+	}
+	if (count === 0) return null;
+	return {
+		...rgbToHsl(red / count, green / count, blue / count),
+		muted: true,
 	};
 }
 
@@ -74,7 +149,9 @@ export function clampAccent(accent: Accent, mode: AccentThemeMode): Accent {
 	const [min, max] = ACCENT_LIGHTNESS_RANGE[mode];
 	return {
 		h: accent.h,
-		s: Math.min(0.85, Math.max(0.35, accent.s)),
+		s: accent.soft
+			? Math.min(MAX_SOFT_SATURATION, accent.s * 2)
+			: Math.min(0.85, Math.max(0.35, accent.s)),
 		l: Math.min(max, Math.max(min, accent.l)),
 	};
 }
@@ -89,14 +166,27 @@ export function accentCssVariables(
 	mode: AccentThemeMode,
 ): Record<string, string> {
 	if (!accent) return {};
-	const clamped = clampAccent(accent, mode);
+	const [min, max] = ACCENT_LIGHTNESS_RANGE[mode];
+	// A colourless cover gets neutral controls, at the band's end farthest
+	// from the bar; its backdrop keeps the cover's own faint mean colour.
+	const clamped = accent.muted
+		? { h: 0, s: 0, l: mode === "dark" ? max : min }
+		: clampAccent(accent, mode);
 	const color = accentToCss(clamped);
+	const tint = accent.muted
+		? accentToCss({
+				h: accent.h,
+				s: accent.s,
+				l: Math.min(max, Math.max(min, accent.l)),
+			})
+		: color;
 	// Text on the accent: dark on light accents, light on dark ones.
 	const foreground = clamped.l > 0.55 ? "#111111" : "#ffffff";
 	// The control tokens are set directly on the bar element so a theme
 	// preset that hard-codes them at :root cannot mask the accent.
 	return {
 		"--player-accent": color,
+		"--cover-tint": tint,
 		"--player-accent-foreground": foreground,
 		"--player-control-primary": color,
 		"--player-control-primary-foreground": foreground,

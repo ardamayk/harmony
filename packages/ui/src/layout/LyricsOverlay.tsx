@@ -150,6 +150,7 @@ export function LyricsOverlay({
 			style={
 				{
 					"--player-accent": accent["--player-accent"],
+					"--cover-tint": accent["--cover-tint"],
 					"--lyrics-accent": accent["--player-accent"] ?? "var(--heading)",
 					"--cover-top": `${coverTop}px`,
 					// Lyrics reach three lines (1.2em text plus py-2 each) past the
@@ -166,7 +167,7 @@ export function LyricsOverlay({
 				closing
 					? "motion-safe:animate-lyrics-view-exit"
 					: "motion-safe:animate-lyrics-view",
-				"fixed inset-0 z-fullscreen flex flex-col bg-background bg-linear-to-b from-(--player-accent)/40 to-background to-70% text-foreground outline-none",
+				"fixed inset-0 z-fullscreen flex flex-col bg-background bg-linear-to-b from-(--cover-tint)/40 to-background to-70% text-foreground outline-none",
 			)}
 		>
 			<header
