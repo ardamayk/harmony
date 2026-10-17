@@ -56,7 +56,7 @@ Every visual change in `web/src` and `packages/ui/src` (Tailwind classes and CSS
 ## Keyboard and focus
 
 - Everything a mouse can do, the keyboard can do. Tab order follows the reading order; nothing is reachable only by hover.
-- Dialogs, drawers and full-screen views move focus inside when they open, keep it there, close on `Escape`, and give focus back to the control that opened them. The `radix-ui` Dialog, Popover and menu primitives do this; build overlays on them, and a hand-built one matches them.
+- Dialogs, drawers and full-screen views move focus inside when they open, keep it there, close on `Escape`, and give focus back to the control that opened them. The shadcn components in `web/src/components/ui`, built on Base UI (`@base-ui/react`), do this; build overlays on them, and a hand-built one matches them.
 - Menus and lists move with the arrow keys; `Enter` or `Space` acts.
 - A new keyboard shortcut is listed in the shortcut help overlay (`ShortcutHelpOverlay`) and never fires while the focus is in a text field.
 
@@ -105,7 +105,7 @@ Stacking order uses a few steps, from back to front:
 | Full screen | `z-[60]` | Now Playing view, Lyrics view |
 | Above full screen | `z-[70]` | The shortcut help overlay |
 
-A new layer takes one of these steps instead of a new number. A popover inside a component portals to the body (Radix does this) rather than raising its own `z-index`.
+A new layer takes one of these steps instead of a new number. A popover inside a component portals to the body (Base UI does this) rather than raising its own `z-index`.
 
 ## Depth and elevation
 
@@ -145,7 +145,7 @@ Every page meets these budgets, measured on a production build:
 - Design values are CSS variables exposed to Tailwind as theme tokens in `@theme inline` in `web/src/styles.css`: colors as `--color-*`, corner radii as `--radius-*`. Theme presets in `web/src/themes/` set the variables' values; components never pick values themselves.
 - Use the token class: `bg-player-pill`, `text-shell-active-foreground`, `border-player-border`, with an opacity modifier where needed (`border-shell-active-foreground/35`). **Enforced:** `bg-[var(--x)]` and the like fail when `--color-x` exists.
 - A new color is a new variable in `web/src/themes/layers.css` (plus preset overrides where they differ) registered as `--color-<name>` in `@theme inline`; then use its class.
-- An arbitrary `[var(--…)]` stays only for values that are not tokens: a variable set per element at runtime (`--queue-group-color`), layout geometry (`--shell-inset`, `--queue-drawer-clearance`) and third-party variables (Radix).
+- An arbitrary `[var(--…)]` stays only for values that are not tokens: a variable set per element at runtime (`--queue-group-color`), layout geometry (`--shell-inset`, `--queue-drawer-clearance`) and third-party variables (Base UI's `--anchor-width`, `--available-height`, `--transform-origin`).
 
 ## Player Bar accent from the cover
 
