@@ -39,7 +39,9 @@ html[data-theme-preset] {
 	--spacing-dialog-height: 85dvh;
 	--spacing-dialog-body-height: 65dvh;
 	--spacing-search-card-height: min(85dvh, 56rem);
-	--spacing-artwork-stage: min(100%, 65vh);
+	/* The cover leaves the window room for the title and transport under it
+     (about 24rem with the view header), so short windows shrink the cover. */
+	--spacing-artwork-stage: min(100%, 65vh, max(10rem, 100dvh - 24rem));
 	--spacing-queue-preview: clamp(18rem, 22vw, 26rem);
 	--spacing-top-nav-offset: max(0px, calc(var(--shell-inset, 2rem) - 7.5rem));
 	--spacing-queue-drawer-max: calc(100% - 2 * var(--shell-inset, 2rem));
