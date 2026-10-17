@@ -1,6 +1,8 @@
 # Design rules
 
-Every visual change in `web/src` and `packages/ui/src` (Tailwind classes and CSS) follows these rules. They cover the whole app as one design: the Top Nav, the page content, the Queue Drawer, the Player Bar, every page, and the Desktop Client's window frame. No part gets its own look; a part that needs something new gets a rule here first, then the code. Rules marked **enforced** are checked by `web/src/design-rules.test.ts`; a failing check means the change breaks the rule, not that the check needs loosening.
+> **Reference only.** This file defines the app's general design rules: limits, scales and principles. It informs; it does not prescribe code. Read it as what the app must preserve, and decide in the code how to preserve it. Agents read this file but do not edit it; changes to it come from the maintainer.
+
+Every visual change in `web/src` and `packages/ui/src` (Tailwind classes and CSS) stays within these rules. They cover the whole app as one design: the Top Nav, the page content, the Queue Drawer, the Player Bar, every page, and the Desktop Client's window frame. No part gets its own look; a part that needs something new that these rules do not cover is raised with the maintainer before the code. Rules marked **enforced** are checked by `web/src/design-rules.test.ts`; a failing check means the change breaks the rule, not that the check needs loosening.
 
 ## Product principles
 
@@ -49,7 +51,7 @@ Every visual change in `web/src` and `packages/ui/src` (Tailwind classes and CSS
 
 - Contrast is measured: at least 4.5:1 for normal text and 3:1 for large text and icons (WCAG AA). Grey on grey in the dark themes is where this breaks most often; check muted and caption text against its actual background.
 - Never rely on color alone. A state also shows through an icon, text or shape (the pin icon changes shape, not only color).
-- Hit areas are at least 32px, preferably 44px, even when the visible icon is smaller. A control that must look small keeps its size and extends its hit area with an invisible pseudo-element (`relative after:absolute after:-inset-1 after:content-['']`).
+- Hit areas are at least 32px, preferably 44px, even when the visible icon is smaller: a control may look small, but the area that takes the click does not shrink.
 - Use the element that matches the job: `<button>` for actions, `<a>`/router `Link` for navigation, real headings in order, lists for lists. A clickable `<div>` is a bug.
 - An icon-only control has an `aria-label` that names the action ("Pin queue", not "Pin icon") and a tooltip with the same words.
 
@@ -136,8 +138,8 @@ Every page meets these budgets, measured on a production build:
 - `mise run web:lighthouse` builds the Music Server with the embedded Web Client, starts it and runs Lighthouse against the main pages; it fails when a budget is exceeded. Run it after changes that can affect loading: new dependencies, fonts, large components, images or page layout.
 - The check uses Lighthouse's **desktop** profile only, because this UI targets the Web Client on desktop browsers and the Desktop Client. If the project ever targets mobile with this UI, add a run with the mobile profile (`--form-factor=mobile` with mobile throttling) and hold it to the same budgets; the separate mobile client app gets its own performance checks.
 - Lighthouse measures a page load without a user, so it cannot measure INP directly. It reports Total Blocking Time (TBT) instead, the lab stand-in for INP, and the check holds TBT to the same 200ms. A change to a heavy interaction (search, queue, large lists) is also checked by hand in the browser's performance panel.
-- `mise run perf:snapshot` (after `mise run build`, Linux) prints CPU and memory of the built Music Server, idle and while one client streams a Track at playback speed, plus a Desktop Client that is already running (memory as PSS, broken down by process). It sets no thresholds yet; compare its numbers before and after changes that can affect resource use, and add budgets here once typical values are known.
-- Artwork loads at the size it is shown. Album covers are requested with `getAlbumCoverUrl(albumId, size)`, where `size` is the step (64, 128, 256, 512, 1024) at or above the displayed size times two; the server scales and caches them. An original-size cover is only for a full-screen view. **Enforced** (a call without a size fails the design check). Memory follows pixels, not file format, so a smaller format (WebP, AVIF) cuts transfer but not the webview's memory.
+- `mise run perf:snapshot` (after `mise run build`, Linux) prints CPU and memory of the built Music Server, idle and while one client streams a Track at playback speed, plus a Desktop Client that is already running (memory as PSS, broken down by process). It sets no thresholds yet; compare its numbers before and after changes that can affect resource use, and budgets follow once typical values are known.
+- Artwork loads at the size it is shown. Album covers are requested at a size step (64, 128, 256, 512, 1024) at or above the displayed size times two; the server scales and caches them. An original-size cover is only for a full-screen view. **Enforced.** Memory follows pixels, not file format, so a smaller format (WebP, AVIF) cuts transfer but not the webview's memory.
 - Layout stability (CLS) comes from reserving space: images and artwork have a fixed aspect ratio or size, and loading states use skeletons of the final size.
 
 ## Tailwind tokens
@@ -151,13 +153,11 @@ Every page meets these budgets, measured on a production build:
 
 The Player Bar takes its accent color from the playing album's cover. The `playback.accentFromCover` preference (Settings) turns it on or off.
 
-1. `useCoverAccent` (`packages/ui/src/playback/use-cover-accent.ts`) loads the cover with CORS so the canvas stays readable.
-2. `extractAccent` (`packages/ui/src/lib/cover-accent.ts`) draws it onto a 32×32 canvas and groups the pixels into 30° hue buckets. It skips pixels that are nearly grey (saturation under 20%), very dark or very light. The bucket with the most saturated weight wins, and its weighted average becomes the accent.
-3. The accent is clamped so it stays readable on the bar: saturation 35–85%, and lightness 55–70% in dark themes or 30–45% in light ones. Text on the accent turns dark on light accents and light on dark ones.
-4. The result is set as CSS variables on the Player Bar's root element only: `--player-accent`, `--player-control-primary` (each with a `-foreground`), `--player-live-progress` and `--player-control-shadow`. Inside the bar they override the theme's defaults; outside it nothing changes. The Now Playing view receives the same variables but keeps its primary control neutral (its always-dark palette sits under `[data-now-playing-surface]` in `web/src/styles.css`).
-5. Each accent is cached per album, so tracks from the same album never flicker. While a new cover loads, the previous accent stays. A monochrome cover or a failed load falls back to the theme's colors.
-
-Rules for it: controls inside the bar read these variables through token classes (`bg-player-control-primary`, `text-player-control-primary-foreground`) and never compute colors of their own. The accent stays scoped to the Player Bar and the Now Playing view and does not tint the rest of the app. The computed foreground colors in `cover-accent.ts` are the only color literals this feature may produce.
+- The accent is the cover's dominant saturated hue; nearly grey, very dark and very light pixels do not count.
+- It stays readable on the bar: its saturation and lightness are clamped per theme mode, and text on it turns dark on light accents and light on dark ones.
+- It is scoped to the Player Bar and the Now Playing view and does not tint the rest of the app. Inside the bar it overrides the theme's accent tokens; controls read those tokens and never compute colors of their own. The Now Playing view keeps its primary control neutral.
+- Tracks from the same album never flicker: the accent is cached per album, and while a new cover loads the previous accent stays. A monochrome cover or a failed load falls back to the theme's colors.
+- The accent's computed colors are the only color literals this feature may produce.
 
 ## Corner radius: three steps (enforced)
 
@@ -177,13 +177,13 @@ Rules for it: controls inside the bar read these variables through token classes
 
 - Colors come from theme tokens (see Tailwind tokens). New code does not add hex, `rgb()` or `white`/`black` color literals; existing ones move to tokens when their component is touched.
 - The exceptions are shadow color, `rgb(0 0 0 / alpha)` inside `shadow-[…]`, and the cover accent's computed colors.
-- Translucent tints mix a token: `color-mix(in srgb, var(--heading) 12%, transparent)`.
+- A translucent tint is an opacity step of a token, not a new color.
 
 ## Interaction states
 
-- Hover and keyboard focus look the same: `focus-visible:` repeats the hover background, and `focus-visible:outline-none` replaces the browser ring. Never remove a focus style without that replacement.
-- The open section, the current page and a pressed control get the lit pill: `color-mix(--heading 12%)` background, `text-heading`, an inset top highlight and a soft drop shadow. Reuse `TOP_NAV_ICON_BUTTON_CLASS` or the Top Nav link classes rather than restyling.
-- Collection and station cards on hover and focus: lift `-translate-y-1`, border `shell-active-foreground` at 35% (60% on focus), a soft dark drop shadow, artwork scaled to `1.04`. Titles are not underlined. Every card takes this from `CARD_INTERACTION_CLASS` (`web/src/components/collection-grid-layout.tsx`), which also keeps `transform-gpu backface-hidden` so the desktop webview does not flicker card edges.
+- Hover and keyboard focus look the same. A focus style is never removed without a visible replacement.
+- The open section, the current page and a pressed control share one lit look: a 12% `heading` tint background, `heading` text, an inset top highlight and a soft drop shadow.
+- Collection and station cards share one hover and focus look: a 4px lift, a `shell-active-foreground` border at 35% (60% on focus), a soft dark drop shadow and artwork scaled to 1.04. Titles are not underlined.
 
 ## Motion
 
