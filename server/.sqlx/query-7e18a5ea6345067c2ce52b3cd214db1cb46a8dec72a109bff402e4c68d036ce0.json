@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO managed_import_jobs (id, status, revision, replace_track_id) VALUES (?, 'uploading', 1, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "7e18a5ea6345067c2ce52b3cd214db1cb46a8dec72a109bff402e4c68d036ce0"
+}

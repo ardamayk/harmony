@@ -69,23 +69,23 @@ export function AlbumDetailHeader({
 	return (
 		<ContextMenu>
 			<ContextMenuTrigger asChild>
-				<div className="relative overflow-hidden rounded-xl border border-border/60 bg-card/40">
+				<div className="@container relative overflow-hidden rounded-lg border border-border/60 bg-card/40">
 					<div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/20 via-background/40 to-background" />
-					<div className="relative grid gap-8 p-6 lg:grid-cols-[auto_minmax(0,1fr)_220px] lg:items-start">
+					<div className="relative grid gap-8 p-6 @xl:grid-cols-[auto_minmax(0,1fr)] @xl:items-start @4xl:grid-cols-[auto_minmax(0,1fr)_220px]">
 						<AlbumArt
-							coverUrl={apiClient.getAlbumCoverUrl(album.id)}
+							coverUrl={apiClient.getAlbumCoverUrl(album.id, 1024)}
 							title={album.title}
-							className="size-44 shrink-0 rounded-lg shadow-lg text-5xl sm:size-52"
+							className="aspect-square w-full shrink-0 rounded-md shadow-lg text-3xl @xl:size-52"
 						/>
 
 						<div className="min-w-0 pt-1">
 							<p className="mb-2 font-semibold text-caption text-xs uppercase tracking-widest">
 								Album
 							</p>
-							<h1 className="font-semibold text-3xl tracking-tight sm:text-4xl">
+							<h1 className="font-semibold text-3xl tracking-tight">
 								{album.title}
 							</h1>
-							<p className="mt-2 font-medium text-foreground text-lg">
+							<p className="mt-2 font-medium text-foreground text-xl">
 								{artistName}
 							</p>
 
@@ -119,7 +119,7 @@ export function AlbumDetailHeader({
 							</div>
 						</div>
 
-						<div className="flex flex-col gap-6 lg:pt-2">
+						<div className="flex flex-wrap gap-x-12 gap-y-6 @xl:col-span-2 @4xl:col-span-1 @4xl:flex-col @4xl:flex-nowrap @4xl:pt-2">
 							<div>
 								<p className="mb-2 font-semibold text-caption text-xs uppercase tracking-widest">
 									Genres
@@ -155,7 +155,7 @@ export function AlbumDetailHeader({
 								</div>
 							</div>
 
-							<div className="flex items-center gap-2 text-caption text-xs">
+							<div className="flex items-center gap-2 self-end text-caption text-xs @4xl:self-auto">
 								<Clock className="size-3.5" />
 								<span>
 									{totalDurationMs > 0

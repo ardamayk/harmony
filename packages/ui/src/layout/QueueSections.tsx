@@ -26,7 +26,7 @@ export function QueueSections({
 	currentIndex: number;
 	isPlaying: boolean;
 	isUpdating: boolean;
-	getAlbumCoverUrl: (albumId: string) => string;
+	getAlbumCoverUrl: (albumId: string, size?: 64) => string;
 	onPlay: (index: number) => void;
 	onDismiss: (items: QueueItem[]) => void;
 }) {
@@ -60,14 +60,14 @@ export function QueueSections({
 			<section
 				key={group.items[0].id}
 				aria-label={details.title}
-				className="mb-2 overflow-hidden rounded-lg last:mb-0"
+				className="mb-2 overflow-hidden rounded-md last:mb-0"
 				style={{ "--queue-group-color": details.color } as CSSProperties}
 			>
 				<QueueGroupHeader
 					sourceTitles={sourceTitles}
 					group={group}
 					queue={queue}
-					coverUrl={getAlbumCoverUrl(group.items[0].track.albumId)}
+					coverUrl={getAlbumCoverUrl(group.items[0].track.albumId, 64)}
 					isUpdating={isUpdating}
 					onDismiss={() => onDismiss(group.items)}
 				/>
@@ -89,7 +89,7 @@ export function QueueSections({
 											: "upcoming"
 								}
 								isPlaying={isPlaying}
-								coverUrl={getAlbumCoverUrl(item.track.albumId)}
+								coverUrl={getAlbumCoverUrl(item.track.albumId, 64)}
 								onPlay={() => onPlay(queueIndex)}
 							/>
 						);
@@ -129,21 +129,24 @@ function QueueGroupHeader({
 				<AlbumArt
 					coverUrl={coverUrl}
 					title={details.title}
-					className="size-7 shrink-0 rounded text-[10px]"
+					className="size-7 shrink-0 rounded-sm text-xs"
 				/>
 			) : (
 				<span className="flex size-7 shrink-0 items-center justify-center text-[var(--queue-group-color)]">
 					<Icon className="size-3.5" />
 				</span>
 			)}
-			<span className="min-w-0 flex-1 truncate font-semibold text-heading text-sm leading-5">
+			<span
+				className="min-w-0 flex-1 truncate font-semibold text-heading text-sm leading-5"
+				title={details.title}
+			>
 				{details.title}
 			</span>
 		</>
 	);
 	return (
 		<div
-			className="flex items-center gap-2 border-[var(--queue-group-color)] border-l-2 bg-[var(--player-pill)] py-2 pr-3 pl-6"
+			className="flex items-center gap-2 border-[var(--queue-group-color)] border-l-2 bg-player-pill py-2 pr-3 pl-6"
 			title={details.meta}
 		>
 			{details.href ? (
@@ -164,7 +167,7 @@ function QueueGroupHeader({
 						}
 					}}
 					aria-label={`${details.title}: ${details.meta}`}
-					className="flex min-w-0 flex-1 items-center gap-2 rounded outline-offset-2 hover:underline"
+					className="flex min-w-0 flex-1 items-center gap-2 rounded-sm outline-offset-2 hover:underline"
 				>
 					{label}
 				</a>
@@ -184,7 +187,7 @@ function QueueGroupHeader({
 					type="button"
 					disabled={isUpdating}
 					onClick={onDismiss}
-					className="h-5 shrink-0 rounded-[5px] border border-[var(--sidebar-border)] px-[7px] text-[11px] text-caption hover:text-heading disabled:opacity-40"
+					className="relative h-5 shrink-0 after:absolute after:-inset-y-2 after:inset-x-0 after:content-[''] rounded-sm border border-sidebar-border px-2 text-xs text-caption hover:text-heading disabled:opacity-40"
 				>
 					Not now
 				</button>

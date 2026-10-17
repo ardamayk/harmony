@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE user_preferences\n             SET theme = ?, layout_json = ?, playback_json = ?, updated_at = CURRENT_TIMESTAMP\n             WHERE user_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "4d523bf3e60b13e25f07a1191fdc1cd552bb1b6e28fe0741525643abf4042317"
+}

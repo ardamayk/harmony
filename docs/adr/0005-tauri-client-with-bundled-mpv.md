@@ -1,5 +1,7 @@
 # Tauri client with bundled UI and mpv
 
+> The Tauri shell is superseded by [ADR 0024](0024-electron-shell-with-rust-core.md); the bundled UI, pinned mpv and separate Music Server decisions stand.
+
 The Linux-first Desktop Client uses Tauri, bundles the React UI built from the same source as the Web Client, and connects to a configurable, separately deployed Music Server. It also bundles a pinned mpv executable and controls it as an isolated child process through JSON IPC instead of linking libmpv or implementing a custom audio engine. The first release is development-only, restricts the unauthenticated Music Server to the local machine, and targets Playback Parity across library Tracks, saved Radio Stations, and Catalog Previews.
 
 ## Considered Options

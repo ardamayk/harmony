@@ -17,7 +17,7 @@ export function Slot({
 					return (
 						<div
 							key={id}
-							className="rounded border border-destructive/50 p-2 text-xs text-destructive"
+							className="rounded-sm border border-destructive/50 p-2 text-xs text-destructive"
 						>
 							Unknown widget: {id}
 						</div>
@@ -46,7 +46,7 @@ export function Panel({
 				<button
 					type="button"
 					onClick={onToggle}
-					className="rounded px-1 text-xs hover:bg-muted"
+					className="rounded-sm px-1 text-xs hover:bg-muted"
 					aria-label={`Expand ${side} panel`}
 				>
 					{side === "left" ? "›" : "‹"}

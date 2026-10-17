@@ -1,0 +1,45 @@
+{
+  "db_name": "SQLite",
+  "query": "WITH params AS (SELECT CAST(?1 AS TEXT) AS q),\n            active_artist_albums AS (\n                SELECT album_artists.artist_id, album_artists.album_id FROM album_artists\n                WHERE EXISTS (SELECT 1 FROM visible_tracks WHERE visible_tracks.album_id = album_artists.album_id)\n            )\n            SELECT a.id AS \"id!\", a.name AS \"name!\", COUNT(credits.album_id) AS \"album_count!: i64\"\n            FROM params p, artists a\n            INNER JOIN active_artist_albums credits ON credits.artist_id = a.id\n            WHERE p.q = '' OR a.name LIKE '%' || p.q || '%'\n            GROUP BY a.id, a.name\n            ORDER BY (p.q != '' AND a.name = p.q COLLATE NOCASE) DESC, a.name_sort, a.id\n            LIMIT ?2 OFFSET ?3",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artists",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "name!",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artists",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "name": "album_count!: i64",
+        "ordinal": 2,
+        "type_info": "Integer",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "449cd764e26cdb753f314a68dbad80b9a8e9181c4d8efb7c7d635db9d0506a6c"
+}

@@ -1,0 +1,57 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT p.id AS \"id!\", p.name AS \"name!\", p.is_default AS \"is_default!: bool\",\n                COUNT(pt.track_id) AS \"track_count!: i64\"\n            FROM playlists p\n            LEFT JOIN playlist_tracks pt ON pt.playlist_id = p.id\n            WHERE p.user_id = ? AND p.id = ?\n            GROUP BY p.id, p.name, p.is_default",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "playlists",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "name!",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "playlists",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "name": "is_default!: bool",
+        "ordinal": 2,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "playlists",
+            "name": "is_default"
+          }
+        }
+      },
+      {
+        "name": "track_count!: i64",
+        "ordinal": 3,
+        "type_info": "Integer",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "3c3e8fa9bff255c25de06632bfafafb2680c0aafad62a72a33c70669783b2a16"
+}

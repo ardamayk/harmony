@@ -1,0 +1,21 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT EXISTS(\n                SELECT 1 FROM managed_import_batches WHERE id = ? AND status != 'completed' AND updated_at <= ?\n            ) AS \"is_eligible!: bool\"",
+  "describe": {
+    "columns": [
+      {
+        "name": "is_eligible!: bool",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "abe132370d3da557102824411242babf39c6005d28cf25e9f24c3a31c22702e3"
+}

@@ -6,7 +6,7 @@ import { PlaybackControls } from "./PlayerBarControls";
 
 /**
  * Contents of the always-on-top mini player window: cover, title, transport
- * and a thin seek bar. The root carries `data-tauri-drag-region` so the
+ * and a thin seek bar. The root carries `data-window-drag-region` so the
  * undecorated window can be moved by dragging any non-interactive area.
  */
 export function MiniPlayerWindow({
@@ -41,7 +41,7 @@ export function MiniPlayerWindow({
 		currentTrack?.artistName ??
 		(isRadioPlaying ? "Live radio" : "Select a track in the main window");
 	const artworkUrl = currentTrack
-		? getAlbumCoverUrl(currentTrack.albumId)
+		? getAlbumCoverUrl(currentTrack.albumId, 128)
 		: (currentRadioStation?.faviconUrl ?? null);
 	const effectiveDuration =
 		duration > 0
@@ -52,30 +52,30 @@ export function MiniPlayerWindow({
 
 	return (
 		<div
-			data-tauri-drag-region
+			data-window-drag-region
 			data-testid="mini-player-window"
 			className="flex h-screen w-screen select-none items-center gap-3 overflow-hidden bg-player px-3 text-player-foreground"
 		>
 			<AlbumArt
 				coverUrl={artworkUrl}
 				title={title}
-				className="pointer-events-none size-16 shrink-0 rounded-md text-sm"
+				className="pointer-events-none size-16 shrink-0 rounded-sm text-sm"
 			/>
 			<div className="flex min-w-0 flex-1 flex-col gap-1">
 				<div
-					data-tauri-drag-region
+					data-window-drag-region
 					className="flex min-w-0 items-center justify-between gap-2"
 				>
-					<div data-tauri-drag-region className="min-w-0">
+					<div data-window-drag-region className="min-w-0">
 						<p
-							data-tauri-drag-region
-							className="truncate font-medium text-[var(--player-title)] text-sm"
+							data-window-drag-region
+							className="truncate font-medium text-player-title text-sm"
 							title={title}
 						>
 							{title}
 						</p>
 						<p
-							data-tauri-drag-region
+							data-window-drag-region
 							className="truncate text-player-foreground text-xs"
 						>
 							{subtitle}
@@ -87,7 +87,7 @@ export function MiniPlayerWindow({
 								type="button"
 								data-player-control
 								className={cn(
-									"inline-flex size-6 items-center justify-center rounded text-player-foreground hover:text-[var(--player-control-primary)]",
+									"inline-flex size-6 relative after:absolute after:-inset-1 after:content-[''] items-center justify-center rounded-sm text-player-foreground hover:text-player-control-primary",
 								)}
 								aria-label="Open main window"
 								onClick={onExpand}
@@ -99,7 +99,7 @@ export function MiniPlayerWindow({
 							<button
 								type="button"
 								data-player-control
-								className="inline-flex size-6 items-center justify-center rounded text-player-foreground hover:text-[var(--player-control-primary)]"
+								className="inline-flex size-6 relative after:absolute after:-inset-1 after:content-[''] items-center justify-center rounded-sm text-player-foreground hover:text-player-control-primary"
 								aria-label="Close mini player"
 								onClick={onClose}
 							>

@@ -201,7 +201,9 @@ describe("radio discover route", () => {
 		expect(swissPop.className).toContain("duration-300");
 		expect(swissPop.className).toContain("ease-out");
 		expect(swissPop.className).toContain("hover:-translate-y-1");
-		expect(swissPop.className).toContain("hover:shadow-lg");
+		expect(swissPop.className).toContain(
+			"hover:border-shell-active-foreground/35",
+		);
 	});
 
 	it(
@@ -414,7 +416,7 @@ describe("radio discover route", () => {
 		expect(header?.className).toContain("py-3");
 		expect(header?.firstElementChild?.className).toContain("gap-2");
 		expect(searchInput.className).toContain("h-11");
-		expect(searchInput.className).toContain("rounded-xl");
+		expect(searchInput.className).toContain("rounded-lg");
 		expect(filterButton.className).toContain("size-10");
 		expect(description.parentElement?.className).toContain("items-center");
 		expect(description.className).toContain("text-xs");

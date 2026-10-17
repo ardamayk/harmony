@@ -117,8 +117,8 @@ export function TrackList({
 		}
 	};
 
-	const rowPadding = compact ? "px-3 py-1.5" : "px-3 py-2.5";
-	const favoritePadding = compact ? "px-2 py-1.5" : "px-2 py-2.5";
+	const rowPadding = compact ? "px-3 py-2" : "px-3 py-3";
+	const favoritePadding = compact ? "px-2 py-2" : "px-2 py-3";
 	const shouldShowArtistLine = !albumId;
 	const shouldShowAlbumCover = !albumId;
 	const hasMultipleDiscs = tracks.some((track) => track.discNo > 1);
@@ -131,7 +131,7 @@ export function TrackList({
 				className={cn("w-full outline-none", compact ? "text-xs" : "text-sm")}
 			>
 				<thead>
-					<tr className="border-border border-b text-left text-caption text-[11px]">
+					<tr className="border-border border-b text-left text-caption text-xs">
 						<th className={cn("w-10 font-medium", rowPadding)}>#</th>
 						<th className={cn("font-medium", rowPadding)}>Title</th>
 						<th className={cn("w-16 text-right font-medium", rowPadding)}>
@@ -191,8 +191,8 @@ export function TrackList({
 												{shouldShowAlbumCover ? (
 													<img
 														alt=""
-														src={getAlbumCoverUrl(track.albumId)}
-														className="size-8 shrink-0 rounded object-cover text-xs"
+														src={getAlbumCoverUrl(track.albumId, 64)}
+														className="size-8 shrink-0 rounded-sm object-cover text-xs"
 													/>
 												) : null}
 												<div className="min-w-0">
@@ -206,7 +206,7 @@ export function TrackList({
 														{track.title}
 													</span>
 													{shouldShowArtistLine ? (
-														<span className="mt-0.5 block truncate text-caption text-[11px] leading-tight">
+														<span className="mt-0.5 block truncate text-caption text-xs leading-tight">
 															{getTrackArtistName(track)}
 														</span>
 													) : null}
@@ -231,7 +231,7 @@ export function TrackList({
 															: "Add to favorites"
 													}
 													className={cn(
-														"inline-flex size-7 items-center justify-center rounded-full text-caption transition hover:bg-muted hover:text-heading",
+														"inline-flex size-8 items-center justify-center rounded-full text-caption transition hover:bg-muted hover:text-heading",
 														favorited && "text-heading",
 													)}
 													onClick={(event) => {
@@ -372,7 +372,7 @@ function TrackDetailsDialog({
 				<DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-background/70" />
 				<DialogPrimitive.Content
 					onCloseAutoFocus={onCloseAutoFocus}
-					className="-translate-x-1/2 -translate-y-1/2 fixed top-1/2 left-1/2 z-50 max-h-[80vh] w-[calc(100vw-2rem)] max-w-2xl overflow-hidden rounded-lg border border-border bg-popover text-popover-foreground shadow-xl outline-none"
+					className="-translate-x-1/2 -translate-y-1/2 fixed top-1/2 left-1/2 z-50 max-h-[80vh] w-[calc(100vw-2rem)] max-w-2xl overflow-hidden rounded-md border border-border bg-popover text-popover-foreground shadow-xl outline-none"
 				>
 					<div className="flex items-center justify-between gap-3 border-border border-b p-4">
 						<DialogPrimitive.Title className="truncate font-semibold text-heading text-xl">

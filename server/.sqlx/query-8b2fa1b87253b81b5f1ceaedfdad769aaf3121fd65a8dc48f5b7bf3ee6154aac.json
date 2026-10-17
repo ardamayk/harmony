@@ -1,0 +1,33 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT user_id AS \"user_id!\", COUNT(*) AS \"item_count!: i64\" FROM playback_queue\n        WHERE track_id = ? GROUP BY user_id ORDER BY user_id",
+  "describe": {
+    "columns": [
+      {
+        "name": "user_id!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "playback_queue",
+            "name": "user_id"
+          }
+        }
+      },
+      {
+        "name": "item_count!: i64",
+        "ordinal": 1,
+        "type_info": "Integer",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "8b2fa1b87253b81b5f1ceaedfdad769aaf3121fd65a8dc48f5b7bf3ee6154aac"
+}

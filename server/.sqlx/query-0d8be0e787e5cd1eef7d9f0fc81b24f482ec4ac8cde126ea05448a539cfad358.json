@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT OR IGNORE INTO managed_import_history (\n            import_id, started_at, completed_at, result_code, total_count, imported_count,\n            rejected_count, failed_count, replaced_count, not_attempted_count, canceled_count\n        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 11
+    },
+    "nullable": []
+  },
+  "hash": "0d8be0e787e5cd1eef7d9f0fc81b24f482ec4ac8cde126ea05448a539cfad358"
+}

@@ -1,0 +1,64 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT track_id AS \"track_id!\", file_path, content_sha256,\n                COALESCE(artwork_file_path, '') AS \"artwork_file_path!: String\",\n                COALESCE(artwork_content_sha256, '') AS \"artwork_content_sha256!: String\"\n            FROM permanent_track_deletions ORDER BY created_at, track_id",
+  "describe": {
+    "columns": [
+      {
+        "name": "track_id!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "permanent_track_deletions",
+            "name": "track_id"
+          }
+        }
+      },
+      {
+        "name": "file_path",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "permanent_track_deletions",
+            "name": "file_path"
+          }
+        }
+      },
+      {
+        "name": "content_sha256",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "permanent_track_deletions",
+            "name": "content_sha256"
+          }
+        }
+      },
+      {
+        "name": "artwork_file_path!: String",
+        "ordinal": 3,
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "name": "artwork_content_sha256!: String",
+        "ordinal": 4,
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "4d340566a30c05e454043bf5bbbb90e30d5156710b1bd3f39f32848107a04c4a"
+}

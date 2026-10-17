@@ -5,13 +5,11 @@ const { invokeMock, listenMock } = vi.hoisted(() => ({
 	listenMock: vi.fn(),
 }));
 
-vi.mock("@tauri-apps/api/core", () => ({
-	Channel: class {
-		onmessage = (_message: unknown) => {};
-	},
+vi.mock("./desktop-api", () => ({
+	hasDesktopBridge: () => true,
 	invoke: invokeMock,
+	listen: listenMock,
 }));
-vi.mock("@tauri-apps/api/event", () => ({ listen: listenMock }));
 
 import {
 	cancelDesktopImportUpload,
@@ -33,6 +31,7 @@ describe("desktop bridge", () => {
 	beforeEach(() => {
 		invokeMock.mockReset();
 		listenMock.mockReset();
+		listenMock.mockReturnValue(vi.fn());
 	});
 
 	it("exposes renderer connection commands", async () => {
@@ -90,9 +89,22 @@ describe("desktop bridge", () => {
 	});
 
 	it("uploads an opaque native selection with progress and cancellation", async () => {
+		const progressListeners: Array<(payload: unknown) => void> = [];
+		const stopProgress = vi.fn();
+		listenMock.mockImplementation(
+			(name: string, listener: (payload: unknown) => void) => {
+				if (name === "desktop-import-progress")
+					progressListeners.push(listener);
+				return stopProgress;
+			},
+		);
 		invokeMock.mockImplementation(async (command, args) => {
 			if (command === "desktop_upload_import_file") {
-				args.onProgress.onmessage({ sentBytes: 5, totalBytes: 10 });
+				for (const listener of progressListeners) {
+					// Progress of another upload is not this one's.
+					listener({ uploadId: "other", sentBytes: 9, totalBytes: 10 });
+					listener({ uploadId: args.uploadId, sentBytes: 5, totalBytes: 10 });
+				}
 				return {
 					status: 200,
 					headers: { "content-type": "application/json" },
@@ -111,6 +123,8 @@ describe("desktop bridge", () => {
 		);
 		expect(await response.json()).toEqual({ jobId: "job-1" });
 		expect(onProgress).toHaveBeenCalledWith(50, 5);
+		expect(onProgress).not.toHaveBeenCalledWith(90, 9);
+		expect(stopProgress).toHaveBeenCalledOnce();
 		const uploadCall = invokeMock.mock.calls.find(
 			([command]) => command === "desktop_upload_import_file",
 		);
@@ -182,6 +196,24 @@ describe("desktop bridge", () => {
 		});
 	});
 
+	it("sends the body of a Request object", async () => {
+		invokeMock.mockResolvedValue({ status: 204, headers: {}, body: [] });
+
+		await desktopFetch(
+			new Request("http://127.0.0.1:8090/api/v1/playlists", {
+				method: "POST",
+				body: "hi",
+			}),
+		);
+
+		expect(invokeMock).toHaveBeenCalledWith("desktop_http_request", {
+			request: expect.objectContaining({
+				method: "POST",
+				body: Array.from(new TextEncoder().encode("hi")),
+			}),
+		});
+	});
+
 	it("adapts bodyless desktop HTTP responses", async () => {
 		invokeMock.mockResolvedValue({ status: 204, headers: {}, body: [] });
 
@@ -195,7 +227,6 @@ describe("desktop bridge", () => {
 
 	it("subscribes to the server connection event", async () => {
 		const callback = vi.fn();
-		listenMock.mockResolvedValue(vi.fn());
 
 		await listenForServerConnectionChanges(callback);
 
@@ -206,11 +237,11 @@ describe("desktop bridge", () => {
 	});
 
 	it("subscribes to native Queue events and errors", async () => {
-		const listeners = new Map<string, (event: { payload: unknown }) => void>();
+		const listeners = new Map<string, (payload: unknown) => void>();
 		const unlistenQueue = vi.fn();
 		const unlistenError = vi.fn();
 		listenMock.mockImplementation(
-			async (name: string, callback: (event: { payload: unknown }) => void) => {
+			(name: string, callback: (payload: unknown) => void) => {
 				listeners.set(name, callback);
 				return name === "desktop-queue-invalidated"
 					? unlistenQueue
@@ -223,11 +254,11 @@ describe("desktop bridge", () => {
 		const unsubscribe = await listenForQueueEvents(onEvent, onError);
 		expect(invokeMock).toHaveBeenCalledWith("desktop_reconnect_queue_events");
 		listeners.get("desktop-queue-invalidated")?.({
-			payload: { revision: "opaque-2", sequence: "2", invalidates: ["queue"] },
+			revision: "opaque-2",
+			sequence: "2",
+			invalidates: ["queue"],
 		});
-		listeners.get("desktop-queue-events-error")?.({
-			payload: "connection lost",
-		});
+		listeners.get("desktop-queue-events-error")?.("connection lost");
 
 		expect(onEvent).toHaveBeenCalledWith({
 			revision: "opaque-2",

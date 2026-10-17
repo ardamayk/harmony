@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT OR IGNORE INTO playlists (id, user_id, name, is_default) VALUES (?, ?, ?, 1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "bea1818fd44f191b81d8a0b7c2dcc56174a45202b5295383d0c67165f63f6ffd"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM radio_stations WHERE user_id = ? AND id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "5cd5732336be4c88bc54db057953544ea3d7c01c91c164d0ef1a3f6200885a3b"
+}

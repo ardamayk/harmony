@@ -53,23 +53,24 @@ export function PageHeader({
 	className?: string;
 	innerClassName?: string;
 }) {
+	// The open section is already lit in the Top Nav, so the page title stays
+	// for screen readers only; a header with nothing visible collapses away.
+	const hasVisibleContent = Boolean(actions || footer);
 	return (
 		<header
 			className={cn(
-				"sticky top-0 z-40 shrink-0 bg-background/80 py-3 backdrop-blur",
-				PAGE_CONTENT_PADDING_CLASS.replace("py-5", ""),
+				hasVisibleContent
+					? "sticky top-0 z-40 shrink-0 bg-background/80 py-3 backdrop-blur"
+					: "sr-only",
+				PAGE_CONTENT_PADDING_CLASS.replace("py-6", ""),
 				className,
 			)}
 		>
 			<div className={cn("flex flex-col gap-2", innerClassName)}>
-				<div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
-					<div className="min-w-0">
-						<h1 className="font-semibold text-2xl text-heading tracking-normal">
-							{title}
-						</h1>
-					</div>
+				<div className="flex items-start justify-between gap-3">
+					<h1 className="sr-only">{title}</h1>
 					{actions ? (
-						<div className="flex min-w-0 items-center gap-2 xl:justify-end">
+						<div className="ml-auto flex min-w-0 items-center justify-end gap-2">
 							{actions}
 						</div>
 					) : null}

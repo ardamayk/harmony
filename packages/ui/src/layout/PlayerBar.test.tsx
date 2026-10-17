@@ -753,9 +753,7 @@ describe("PlayerBar", () => {
 			fireEvent.click(toggle);
 			expect(toggle.textContent).toBe("");
 			expect(toggle.getAttribute("aria-expanded")).toBe("true");
-			expect(toggle.className).toContain(
-				"text-[var(--player-control-primary)]",
-			);
+			expect(toggle.className).toContain("text-player-control-primary");
 		},
 	);
 
@@ -1182,7 +1180,12 @@ describe("PlayerBar", () => {
 
 		fireEvent.click(screen.getByRole("button", { name: "Repeat off" }));
 		expect(screen.getByRole("button", { name: "Repeat once" })).toBeTruthy();
-		expect(screen.getByText("1")).toBeTruthy();
+		// Repeat once shows the repeat-1 glyph rather than a number badge.
+		expect(
+			screen
+				.getByRole("button", { name: "Repeat once" })
+				.querySelector(".lucide-repeat-1"),
+		).toBeTruthy();
 
 		fireEvent.click(screen.getByRole("button", { name: "Repeat once" }));
 		expect(screen.getByRole("button", { name: "Repeat loop" })).toBeTruthy();

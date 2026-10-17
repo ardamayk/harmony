@@ -77,8 +77,8 @@ export function buildQualityDetailRows({
 
 /**
  * Wraps the quality pill and reveals the stream details on hover or focus.
- * The card hides itself as soon as the pill is clicked so it never sits on
- * top of the output-mode menu that click opens.
+ * The card hides itself as soon as the pill is clicked, and stays hidden
+ * while the output-mode menu is open, so the two never stack.
  */
 export function QualityDetailsCard({
 	rows,
@@ -107,7 +107,9 @@ export function QualityDetailsCard({
 				role="tooltip"
 				data-testid="quality-details"
 				className={cn(
-					"pointer-events-none absolute right-0 bottom-full z-40 mb-2 w-64 rounded-md border border-border bg-popover p-3 text-popover-foreground text-xs opacity-0 shadow-lg",
+					// An open menu inside (the output-mode menu) always wins over the
+					// card, however the menu was opened or wherever the pointer is.
+					"pointer-events-none absolute right-0 bottom-full z-40 mb-2 w-64 rounded-md border border-border bg-popover p-3 text-popover-foreground text-xs opacity-0 shadow-lg group-has-[[aria-expanded=true]]/quality:invisible",
 					!suppressed &&
 						"group-focus-within/quality:opacity-100 group-hover/quality:opacity-100",
 				)}

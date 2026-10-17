@@ -1,0 +1,21 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT EXISTS (\n                SELECT 1 FROM albums JOIN tracks ON tracks.album_id = albums.id\n                WHERE albums.identity_key = ? AND tracks.missing_at IS NULL AND tracks.id != ?\n                    AND (tracks.disc_no > 1 OR tracks.disc_total > 1)\n            ) AS \"requires!: bool\"",
+  "describe": {
+    "columns": [
+      {
+        "name": "requires!: bool",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "35aedc502a5e26c2c1cea5e2ee5275af7eddf6b94928a8a1fd6b04ea938a5a74"
+}

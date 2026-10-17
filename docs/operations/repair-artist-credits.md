@@ -5,7 +5,7 @@ Use the repair command from the same server version as the database. Stop the Mu
 From `server/`, report only (default):
 
 ```sh
-go run ./cmd/repair-artist-credits --db /absolute/path/app.sqlite --managed-root /absolute/path/managed
+cargo run --release --bin repair-artist-credits -- --db /absolute/path/app.sqlite --managed-root /absolute/path/managed
 ```
 
 Review the JSON `changes`, `skipped`, and `conflicts`. `changes` are proposed until `applied` is true. Obtain separate user approval before applying to a real library. This command has only been validated on temporary test libraries, not a user's database.
@@ -13,7 +13,7 @@ Review the JSON `changes`, `skipped`, and `conflicts`. `changes` are proposed un
 Explicit apply, with a **new** backup filename:
 
 ```sh
-go run ./cmd/repair-artist-credits --db /absolute/path/app.sqlite --managed-root /absolute/path/managed --apply --backup /absolute/path/app.before-credit-repair.sqlite
+cargo run --release --bin repair-artist-credits -- --db /absolute/path/app.sqlite --managed-root /absolute/path/managed --apply --backup /absolute/path/app.before-credit-repair.sqlite
 ```
 
 Apply repeats inspection; it does not accept an edited or saved JSON report. Before metadata writes it creates a consistent SQLite `VACUUM INTO` backup, including committed WAL contents, syncs it, checks integrity and foreign keys. An existing destination is never overwritten. A failed verification may leave a diagnostic backup file; use a new destination after resolving the failure. A later repair failure retains the verified backup. No changes means no backup or writes.

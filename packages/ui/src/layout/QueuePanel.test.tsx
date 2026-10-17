@@ -332,7 +332,10 @@ describe("QueuePanel", () => {
 		expect(
 			within(group).getAllByTitle("Based on Track 1, Loading track…").length,
 		).toBeGreaterThan(0);
-		expect(api.getTrack).toHaveBeenCalledExactlyOnceWith("external-seed");
+		// The seed lookup starts in an effect after the first render.
+		await waitFor(() =>
+			expect(api.getTrack).toHaveBeenCalledExactlyOnceWith("external-seed"),
+		);
 
 		await act(async () =>
 			seedResponse.resolve({

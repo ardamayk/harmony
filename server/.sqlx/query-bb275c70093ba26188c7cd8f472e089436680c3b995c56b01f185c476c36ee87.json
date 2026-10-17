@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE managed_track_replacements SET phase = 'rolled_back', recovery_reason = ?, updated_at = CURRENT_TIMESTAMP\n            WHERE id = ? AND phase NOT IN ('database_committed', 'completed', 'rolled_back')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "bb275c70093ba26188c7cd8f472e089436680c3b995c56b01f185c476c36ee87"
+}

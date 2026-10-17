@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id AS \"id!\" FROM tracks\n            WHERE album_id = ? AND missing_at IS NULL AND is_pending_commit = 0\n            ORDER BY COALESCE(disc_no, 1), track_no, title_sort, id",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tracks",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "6e3a4cd91a544df86b1578012471171e5d343d01b7d0aaf673335b4aaf0effc2"
+}

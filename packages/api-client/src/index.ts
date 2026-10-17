@@ -5,6 +5,12 @@ import {
 	subscribeQueueEvents,
 } from "./queue-events";
 
+/**
+ * Longest-edge sizes the server scales covers to. Pick the one at or above
+ * the displayed size times the device pixel ratio (2x).
+ */
+export type CoverSize = 64 | 128 | 256 | 512 | 1024;
+
 export * from "./capabilities";
 export type { QueueEvent, QueueEventSource } from "./queue-events";
 export { QUEUE_EVENTS_CAPABILITY } from "./queue-events";
@@ -669,8 +675,9 @@ export function createApiClient(config: ApiClientConfig) {
 			);
 			return { status: response.status };
 		},
-		getAlbumCoverUrl: (albumId: string) =>
-			`${getMediaBaseUrl()}/api/v1/library/albums/${albumId}/cover`,
+		/** `size` fits the cover into that many pixels; omit for the original. */
+		getAlbumCoverUrl: (albumId: string, size?: CoverSize) =>
+			`${getMediaBaseUrl()}/api/v1/library/albums/${albumId}/cover${size ? `?size=${size}` : ""}`,
 	};
 }
 

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE tracks SET is_pending_commit = 1 WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "04be94bc86cffafb5994fdb7ae03a1c91a83305dbb140c2e23d863ab55755437"
+}

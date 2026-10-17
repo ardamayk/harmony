@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE albums SET artist_id = ?, identity_key = ?, revision = revision + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "36235b9928a513787f929f5a9446816839df15cb18ca4a75da4150275ae592c5"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM artists WHERE artists.id = ?1\n                AND NOT EXISTS (SELECT 1 FROM track_artists WHERE track_artists.artist_id = ?1)\n                AND NOT EXISTS (SELECT 1 FROM album_artists WHERE album_artists.artist_id = ?1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "b0a80f152a4fc2820ac3516489c383d254de9fefac4dd498e63a5b7f27b538a6"
+}

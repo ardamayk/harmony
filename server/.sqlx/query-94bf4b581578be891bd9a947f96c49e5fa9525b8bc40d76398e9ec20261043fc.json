@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE radio_stations\n            SET last_now_playing_title = ?, last_now_playing_artist = ?, last_now_playing_raw = ?,\n                last_now_playing_updated_at = ?, updated_at = CURRENT_TIMESTAMP\n            WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "94bf4b581578be891bd9a947f96c49e5fa9525b8bc40d76398e9ec20261043fc"
+}

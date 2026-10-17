@@ -1,9 +1,8 @@
 [tools]
-go = "1.26.9"
 node = "24"
-bun = "1.4.2"
-golangci-lint = "2.12.2"
-sqlc = "1.31.1"
+pnpm = "12.13.0"
+"cargo:sqlx-cli" = { version = "0.9.0", default-features = false, features = "sqlite,completions,rustls" }
+"cargo:cargo-audit" = "0.22.1"
 
 [env]
 # Use the workspace-pinned Vite+ (`vp`) and other local binaries.
@@ -13,11 +12,11 @@ _.path = ["{{config_root}}/node_modules/.bin"]
 
 [tasks.dev]
 description = "Run the Music Server and Web Client in development mode"
-run = "./scripts/run-with-music-server.sh development bun run --cwd web dev"
+run = "./scripts/run-with-music-server.sh development pnpm --dir web run dev"
 
 [tasks."desktop:dev"]
 description = "Run the Music Server and Desktop Client in development mode"
-run = "./scripts/run-with-music-server.sh development bun run --cwd desktop dev"
+run = "./scripts/run-with-music-server.sh development pnpm --dir desktop run dev"
 
 [tasks.start]
 description = "Run the built Music Server and release Desktop Client"
@@ -25,54 +24,73 @@ run = """
 #!/usr/bin/env bash
 set -euo pipefail
 [[ -x bin/server ]] || { echo "Missing bin/server; run 'mise run build' first." >&2; exit 1; }
-./scripts/run-with-music-server.sh built bun run --cwd desktop start
+./scripts/run-with-music-server.sh built pnpm --dir desktop run start
 """
 
 # --- Code generation ---------------------------------------------------------
 
 [tasks.generate]
-description = "Regenerate committed OpenAPI clients and sqlc query packages"
-run = ["bash scripts/generate-openapi.sh", "cd server && sqlc generate"]
+description = "Regenerate the committed OpenAPI client and the Music Server's offline query data"
+run = ["bash scripts/generate-openapi.sh", "bash scripts/sqlx-prepare.sh"]
 
 [tasks."generate:check"]
-description = "Verify committed OpenAPI clients and sqlc query packages are current"
-run = ["bash scripts/check-openapi-generation.sh", "cd server && sqlc diff"]
+description = "Verify the committed OpenAPI client and offline query data are current"
+run = [
+	"bash scripts/check-openapi-generation.sh",
+	"bash scripts/sqlx-prepare.sh --check",
+]
 
 # --- Build -------------------------------------------------------------------
 
 [tasks.build]
-description = "Build the Music Server (with embedded Web Client and docs) and the Desktop Client"
+description = "Build the Music Server (with embedded Web Client and docs) and the Electron Desktop Client"
 depends = ["server:build", "desktop:build"]
 
 [tasks."web:build"]
 description = "Build the Web Client"
-run = "bun run --cwd web build"
+run = "pnpm --dir web run build"
+
+[tasks."web:lighthouse"]
+description = "Check performance budgets (LCP, TBT/INP, CLS, TTFB) with Lighthouse on the production build"
+depends = ["server:build"]
+# Its own port, so a running development server is not measured instead.
+env = { SERVER_ADDR = "127.0.0.1:8099", LIGHTHOUSE_BASE_URL = "http://127.0.0.1:8099" }
+run = "./scripts/run-with-music-server.sh built pnpm --dir web run lighthouse"
+
+[tasks."perf:snapshot"]
+description = "Print CPU and memory of the built Music Server, idle and streaming (plus a running Desktop Client)"
+run = "node scripts/perf-snapshot.ts"
+
+[tasks."perf:server-load"]
+description = "Startup, idle footprint, endpoint latency under load and stream throughput of the built Music Server"
+run = "node scripts/server-load.ts"
 
 [tasks."docs:build"]
 description = "Build the product documentation embedded by the Music Server"
-run = "bun run --cwd packages/docs build"
+run = "pnpm --dir packages/docs run build"
 
 [tasks."server:build"]
-description = "Build the Music Server binary with embedded Web Client and docs"
+description = "Build the Music Server binary (bin/server) with embedded Web Client and docs"
 depends = ["web:build", "docs:build"]
 run = [
 	"bash scripts/sync-static.sh",
-	"cd server && go build -o ../bin/server ./cmd/server",
+	"cargo build --release -p earthly-music-server",
+	"mkdir -p bin && cp target/release/earthly-music-server bin/server",
 ]
 
 [tasks."desktop:build"]
-description = "Build the release Desktop Client with pinned mpv"
+description = "Build the release Desktop Client: Rust core with pinned mpv, Electron shell bundle, Web Client"
 depends = ["web:build"]
-run = "bun run --cwd desktop build:sidecar:prepared"
+run = "pnpm --dir desktop run build"
 
 # --- Static checks -----------------------------------------------------------
 
 [tasks.format]
-description = "Format TypeScript, Go, and Rust sources"
+description = "Format TypeScript and Rust sources"
 run = [
-	"bun --bun vp fmt",
-	"cd server && go fmt ./...",
-	"bun run --cwd desktop format",
+	"vp fmt",
+	"cargo fmt -p earthly-music-server",
+	"pnpm --dir desktop run format",
 ]
 
 [tasks.check]
@@ -81,74 +99,74 @@ depends = ["web:check", "server:check", "desktop:check"]
 
 [tasks."web:check"]
 description = "Oxfmt, Oxlint, and type checks for the TypeScript workspace"
-run = "bun --bun vp check"
+run = "vp check"
 
 [tasks."server:check"]
-description = "gofmt and golangci-lint for the Music Server"
-run = """
-#!/usr/bin/env bash
-set -euo pipefail
-cd server
-unformatted="$(gofmt -l .)"
-if [[ -n "$unformatted" ]]; then printf '%s\n' "$unformatted" >&2; exit 1; fi
-golangci-lint run
-"""
+description = "rustfmt, Clippy and current offline query data for the Music Server"
+run = [
+	"cargo fmt -p earthly-music-server -- --check",
+	"cargo clippy -p earthly-music-server --all-targets -- -D warnings",
+	"bash scripts/sqlx-prepare.sh --check",
+]
 
 [tasks."desktop:check"]
-description = "rustfmt and Clippy for the Desktop Client"
-run = ["bun run --cwd desktop format:check", "bun run --cwd desktop lint"]
+description = "rustfmt and Clippy for the Desktop core (the Electron shell's TypeScript is in web:check)"
+run = ["pnpm --dir desktop run format:check", "pnpm --dir desktop run lint"]
 
 # --- Tests -------------------------------------------------------------------
 
 [tasks.test]
-description = "Run TypeScript, Go, and Rust unit tests"
+description = "Run TypeScript and Rust unit tests"
 depends = ["web:test", "server:test", "desktop:test"]
 
 [tasks."web:test"]
 description = "Run Web Client, shared UI, and API client unit tests"
-run = "bun --bun vp run --filter web --filter @repo/ui --filter @repo/api-client test"
+run = "vp run --filter web --filter @repo/ui --filter @repo/api-client test"
 
 [tasks."server:test"]
 description = "Run Music Server tests"
-dir = "server"
-run = "go test ./..."
+run = "cargo test -p earthly-music-server"
+
+[tasks."server:prepare"]
+description = "Regenerate server/.sqlx after adding or changing a sqlx query (needs sqlx-cli)"
+run = "bash scripts/sqlx-prepare.sh"
 
 [tasks."desktop:test"]
-description = "Run Desktop Client unit tests"
-run = "bun run --cwd desktop test"
+description = "Run Desktop core (Rust) and Electron shell unit tests"
+run = ["pnpm --dir desktop run test:core", "pnpm --dir desktop run test"]
 
 [tasks."web:test:e2e"]
 description = "Run Web Client Playwright tests"
-run = "bun run --cwd web test:e2e"
+# The Music Server embeds the product docs from server/static, which git ignores.
+depends = ["docs:build"]
+run = ["bash scripts/sync-static.sh docs", "pnpm --dir web run test:e2e"]
 
 [tasks."server:test:hls"]
-description = "Run Music Server HLS browser integration tests"
-dir = "server"
+description = "Run the Music Server HLS browser integration test (needs Playwright's Chromium)"
 env = { RUN_HLS_BROWSER_INTEGRATION = "1" }
-run = "go test ./internal/modules/radio -run TestBrowserHLSProxyIntegration -count=1 -v"
+run = "cargo test -p earthly-music-server --lib hls_browser -- --nocapture"
 
 [tasks."desktop:test:mpv"]
-description = "Run Desktop Client tests against pinned mpv"
-run = ["bun run --cwd desktop prepare:mpv", "bun run --cwd desktop test:mpv"]
+description = "Run Desktop core tests against pinned mpv"
+run = ["pnpm --dir desktop run prepare:mpv", "pnpm --dir desktop run test:mpv"]
 
 [tasks."desktop:test:import-parity"]
-description = "Run Desktop Client Managed Import parity against a real Music Server"
-run = "bun run --cwd desktop test:import-parity"
+description = "Run Desktop core Managed Import parity against a real Music Server"
+run = "pnpm --dir desktop run test:import-parity"
 
 # --- Security audit ----------------------------------------------------------
 
 [tasks.audit]
-description = "Check JS and Go dependencies for known vulnerabilities"
+description = "Check JS and Rust dependencies for known vulnerabilities"
 depends = ["web:audit", "server:audit"]
 
 [tasks."web:audit"]
-description = "bun audit for moderate and higher advisories"
-run = "bun audit --audit-level=moderate"
+description = "pnpm audit for moderate and higher advisories"
+run = "pnpm audit --audit-level moderate"
 
 [tasks."server:audit"]
-description = "govulncheck for vulnerabilities reachable from Music Server code"
-dir = "server"
-run = "go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./..."
+description = "cargo audit of the Rust workspace lockfile against the RustSec advisory database"
+run = "cargo audit"
 
 [tasks.ci]
 description = "What CI runs on every pull request: static checks, unit tests, and dependency audit"

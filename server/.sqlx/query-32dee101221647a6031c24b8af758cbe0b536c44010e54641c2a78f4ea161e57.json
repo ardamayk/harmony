@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE managed_import_commit_journal\n            SET phase = 'completed', recovery_reason = COALESCE(recovery_reason, 'commit completed'), updated_at = CURRENT_TIMESTAMP\n            WHERE id = ? AND phase = 'cleaned'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "32dee101221647a6031c24b8af758cbe0b536c44010e54641c2a78f4ea161e57"
+}

@@ -25,6 +25,11 @@ export { SeekBar } from "./SeekBar";
 export { ShortcutHelpOverlay } from "./ShortcutHelpOverlay";
 export { Panel, Slot } from "./Slot";
 export { Toaster } from "./Toaster";
-export { TopNav } from "./TopNav";
+export {
+	TOP_NAV_ICON_BUTTON_CLASS,
+	TopNav,
+	type WindowControls,
+} from "./TopNav";
+export { TopNavActions } from "./TopNavActions";
 export { UpNextPeek } from "./UpNextPeek";
 export { WidgetDndProvider, WidgetDock } from "./WidgetDock";

@@ -23,8 +23,9 @@ export default defineConfig({
 	projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
 	webServer: [
 		{
-			command: "go run ./cmd/server",
-			timeout: 120_000,
+			// The first run compiles the Music Server.
+			command: "cargo run --quiet -p earthly-music-server",
+			timeout: 600_000,
 			url: `${PRODUCTION_API_ORIGIN}/api/v1/health`,
 			cwd: "../server",
 			env: {
@@ -34,7 +35,8 @@ export default defineConfig({
 			reuseExistingServer: false,
 		},
 		{
-			command: "bun run build && bun run preview --host 127.0.0.1 --port 4173",
+			command:
+				"pnpm run build && pnpm run preview --host 127.0.0.1 --port 4173",
 			timeout: 120_000,
 			url: "http://127.0.0.1:4173",
 			env: { VITE_PROXY_TARGET: PRODUCTION_API_ORIGIN },

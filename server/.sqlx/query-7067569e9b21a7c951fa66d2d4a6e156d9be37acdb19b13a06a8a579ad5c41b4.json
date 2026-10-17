@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO permanent_track_deletions (track_id, file_path, content_sha256, artwork_file_path, artwork_content_sha256)\n            VALUES (?1, ?2, ?3, NULLIF(CAST(?4 AS TEXT), ''), NULLIF(CAST(?5 AS TEXT), ''))",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "7067569e9b21a7c951fa66d2d4a6e156d9be37acdb19b13a06a8a579ad5c41b4"
+}

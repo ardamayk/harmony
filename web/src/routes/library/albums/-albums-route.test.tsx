@@ -72,19 +72,15 @@ describe("albums route", () => {
 		cleanup();
 	});
 
-	it("uses the shared compact sticky header and hidden page scrollbar", async () => {
+	it("keeps the page title for screen readers only and hides the page scrollbar", async () => {
 		renderWithQuery(<AlbumsPage />);
 
 		await screen.findByText("1989");
-		const header = screen
-			.getByRole("heading", { name: "Albums" })
-			.closest("header");
+		const heading = screen.getByRole("heading", { name: "Albums" });
 
-		expect(header?.className).toContain("sticky");
-		expect(header?.className).toContain("top-0");
-		expect(header?.className).toContain("py-3");
-		expect(header?.className).not.toContain("pt-7");
-		expect(header?.querySelector(".page-content-column")).toBeTruthy();
+		// The lit Top Nav section already names the page.
+		expect(heading.className).toContain("sr-only");
+		expect(heading.closest("header")?.className).toContain("sr-only");
 		expect(screen.getByTestId("albums-page-shell").className).toContain(
 			"overflow-hidden",
 		);
@@ -92,7 +88,7 @@ describe("albums route", () => {
 			"[scrollbar-width:none]",
 		);
 		expect(screen.getByTestId("albums-page-content").className).toContain(
-			"py-5",
+			"py-6",
 		);
 		expect(screen.getByTestId("albums-page-content").className).not.toContain(
 			"pt-8",
@@ -105,17 +101,13 @@ describe("albums route", () => {
 		expect(screen.queryByRole("button", { name: "Scan library" })).toBeNull();
 	});
 
-	it("opens album filters in a drawer from the header", async () => {
+	it("opens album filters in a drawer from the Top Nav filter button", async () => {
 		renderWithQuery(<AlbumsPage />);
 
 		await screen.findByText("1989");
-		const header = screen
-			.getByRole("heading", { name: "Albums" })
-			.closest("header");
-		expect(
-			screen.getByRole("button", { name: "Filters" }).closest("header"),
-		).toBe(header);
-		fireEvent.click(screen.getByRole("button", { name: "Filters" }));
+		const filters = screen.getByRole("button", { name: "Filters" });
+		expect(filters.getAttribute("aria-pressed")).toBe("false");
+		fireEvent.click(filters);
 		const drawer = await screen.findByRole("dialog", {
 			name: "Album filters",
 		});

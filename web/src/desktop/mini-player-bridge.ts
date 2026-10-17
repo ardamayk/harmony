@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./desktop-api";
 
 /** Closes the mini player window; a no-op when it is not open. */
 export function closeMiniPlayer(): Promise<void> {

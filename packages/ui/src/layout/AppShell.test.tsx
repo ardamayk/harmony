@@ -13,6 +13,7 @@ import {
 	LayoutProvider,
 	PlaybackProvider,
 	TopNav,
+	TopNavActions,
 } from "../index";
 import { InMemoryPlaybackEngine } from "../playback/testing/InMemoryPlaybackEngine";
 
@@ -105,6 +106,49 @@ describe("AppShell", () => {
 		cleanup();
 		vi.restoreAllMocks();
 		vi.unstubAllGlobals();
+		window.localStorage.clear();
+	});
+
+	it("pins the queue by default and floats it over the page once unpinned", () => {
+		const { container } = renderShell(
+			<AppShell>
+				<div>Main content</div>
+			</AppShell>,
+		);
+		const main = container.querySelector("main") as HTMLElement;
+		const pin = screen.getByRole("button", { name: "Pin queue" });
+		expect(pin.getAttribute("aria-pressed")).toBe("true");
+		expect(main.hasAttribute("data-queue-open")).toBe(true);
+
+		fireEvent.click(pin);
+
+		expect(pin.getAttribute("aria-pressed")).toBe("false");
+		// The drawer stays open but no longer pushes the page aside.
+		const drawer = container.querySelector(
+			"[data-queue-drawer]",
+		) as HTMLElement;
+		expect(drawer.dataset.state).toBe("open");
+		expect(main.hasAttribute("data-queue-open")).toBe(false);
+		expect(container.querySelector("[data-queue-scrim]")).toBeNull();
+	});
+
+	it("remembers the pin choice on this device", () => {
+		renderShell(<AppShell />);
+		fireEvent.click(screen.getByRole("button", { name: "Pin queue" }));
+		cleanup();
+
+		const { container } = renderShell(<AppShell />);
+
+		expect(
+			screen
+				.getByRole("button", { name: "Pin queue" })
+				.getAttribute("aria-pressed"),
+		).toBe("false");
+		expect(
+			(container.querySelector("main") as HTMLElement).hasAttribute(
+				"data-queue-open",
+			),
+		).toBe(false);
 	});
 
 	it("renders the top nav, main content and full-height queue", () => {
@@ -172,7 +216,7 @@ describe("AppShell", () => {
 		expect(main.hasAttribute("data-queue-open")).toBe(true);
 		expect(main.style.paddingRight).toBe("");
 		expect(main.className).toContain(
-			"lg:data-[queue-open]:pr-[var(--queue-drawer-clearance)]",
+			"data-[queue-open]:pr-[var(--queue-drawer-clearance)]",
 		);
 	});
 
@@ -218,7 +262,7 @@ describe("AppShell", () => {
 		expect(container.querySelector("[data-widget-dock]")).toBeNull();
 		expect(drawer.style.width).toBe("var(--queue-drawer-width, 18rem)");
 		expect(drawer.style.bottom).toContain("1.5rem");
-		expect(drawer.className).toContain("rounded-2xl");
+		expect(drawer.className).toContain("rounded-lg");
 	});
 
 	it("updates inherited drawer width on shell and window resize without changing the bottom gap", () => {
@@ -251,7 +295,9 @@ describe("AppShell", () => {
 			(element, pseudoElement) => {
 				const style = readStyle(element, pseudoElement);
 				if (element.tagName === "HEADER") {
-					Object.defineProperty(style, "paddingRight", { value: "24px" });
+					Object.defineProperty(style, "paddingLeft", { value: "24px" });
+					// With window controls the Top Nav drops its right inset.
+					Object.defineProperty(style, "paddingRight", { value: "0px" });
 				}
 				if (element === document.documentElement) {
 					Object.defineProperty(style, "fontSize", { value: "16px" });
@@ -282,10 +328,59 @@ describe("AppShell", () => {
 		expect(drawer?.style.bottom).toBe(bottom);
 		shellWidth = 1000;
 		fireEvent(window, new Event("resize"));
-		expect(shell?.style.getPropertyValue("--queue-drawer-width")).toBe("288px");
+		expect(shell?.style.getPropertyValue("--queue-drawer-width")).toBe("386px");
 		expect(drawer?.style.bottom).toBe(bottom);
 		unmount();
 		expect(disconnect).toHaveBeenCalled();
+	});
+
+	it("lets the Desktop Client drag the window by the top nav's empty space", () => {
+		const { container } = render(<TopNav onSearch={vi.fn()} />);
+		const header = container.querySelector("header") as HTMLElement;
+		expect(header.hasAttribute("data-window-drag-region")).toBe(true);
+		expect(
+			screen
+				.getByRole("navigation", { name: "Library" })
+				.hasAttribute("data-window-drag-region"),
+		).toBe(true);
+		// Links and buttons stay clickable instead of starting a drag.
+		expect(
+			screen
+				.getByRole("link", { name: "Albums" })
+				.hasAttribute("data-window-drag-region"),
+		).toBe(false);
+	});
+
+	it("moves a page's Top Nav actions next to Settings", () => {
+		renderShell(
+			<AppShell>
+				<TopNavActions>
+					<button type="button">Filters</button>
+				</TopNavActions>
+			</AppShell>,
+		);
+		const filters = screen.getByRole("button", { name: "Filters" });
+		expect(filters.closest("header")).toBeTruthy();
+		expect(filters.closest("main")).toBeNull();
+	});
+
+	it("shows window controls only when the host supplies them", () => {
+		const { unmount } = render(<TopNav />);
+		expect(screen.queryByRole("group", { name: "Window" })).toBeNull();
+		unmount();
+
+		const windowControls = {
+			minimize: vi.fn(),
+			toggleMaximize: vi.fn(),
+			close: vi.fn(),
+		};
+		render(<TopNav windowControls={windowControls} />);
+		fireEvent.click(screen.getByRole("button", { name: "Minimize" }));
+		fireEvent.click(screen.getByRole("button", { name: "Maximize" }));
+		fireEvent.click(screen.getByRole("button", { name: "Close" }));
+		expect(windowControls.minimize).toHaveBeenCalledTimes(1);
+		expect(windowControls.toggleMaximize).toHaveBeenCalledTimes(1);
+		expect(windowControls.close).toHaveBeenCalledTimes(1);
 	});
 
 	it("renders the library sections, Search and Settings in the top nav", () => {
@@ -304,9 +399,7 @@ describe("AppShell", () => {
 		fireEvent.click(screen.getByRole("button", { name: "Search" }));
 		expect(onSearch).toHaveBeenCalledTimes(1);
 		const radioLink = screen.getByRole("link", { name: "Radio" });
-		expect(radioLink.className).toContain(
-			"[&.active]:bg-[var(--shell-active)]",
-		);
+		expect(radioLink.className).toContain("[&.active]:text-heading");
 		expect(screen.getByRole("link", { name: "Settings" })).toBeTruthy();
 		expect(screen.queryByText("Premium Account")).toBeNull();
 	});

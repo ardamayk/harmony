@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM playlists WHERE id = ?1 AND user_id = ?2 AND is_default = 0\n            AND NOT EXISTS (SELECT 1 FROM playlist_tracks WHERE playlist_id = ?1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "9a356675b42a00763a15fc285ee885438c23db0177ea0408b85fb60f09c4b3c1"
+}

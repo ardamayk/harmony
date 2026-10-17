@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT artist_id AS \"artist_id!\" FROM track_artists WHERE track_id = ?\n        UNION SELECT artist_id FROM album_artists WHERE album_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "artist_id!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "track_artists",
+            "name": "artist_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "f2e5365d79dbb4ad98ce614de29fa586cbf94f696ae8aad3f55c5030565193e8"
+}

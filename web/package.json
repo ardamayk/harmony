@@ -6,17 +6,19 @@
     "#/*": "./src/*"
   },
   "scripts": {
-    "dev": "bun --bun vp dev --port 3000",
-    "build": "bun --bun vp build",
-    "preview": "bun --bun vp preview",
+    "dev": "vp dev --port 3000",
+    "build": "vp build",
+    "preview": "vp preview",
     "generate-routes": "tsr generate",
-    "test": "bun --bun vp test",
+    "test": "vp test",
     "test:e2e": "playwright test && playwright test --config playwright.production.config.ts",
     "test:integration": "playwright test e2e/radio-hls-proxy.spec.ts --config=playwright.hls.config.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lighthouse": "node scripts/lighthouse-budget.ts"
   },
   "dependencies": {
     "@repo/api-client": "workspace:*",
+    "@repo/desktop-bridge": "workspace:*",
     "@repo/ui": "workspace:*",
     "@t3-oss/env-core": "^0.13.10",
     "@tailwindcss/vite": "^4.1.18",
@@ -25,7 +27,6 @@
     "@tanstack/react-query-devtools": "latest",
     "@tanstack/react-router": "1.170.32",
     "@tanstack/router-plugin": "^1.132.0",
-    "@tauri-apps/api": "2.11.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "hls.js": "^1.6.16",
@@ -53,6 +54,7 @@
     "@vitejs/plugin-react": "^6.0.1",
     "babel-plugin-react-compiler": "^1.0.0",
     "jsdom": "^28.1.0",
+    "lighthouse": "^13.5.0",
     "typescript": "^6.0.2",
     "vite": "catalog:",
     "vite-plus": "catalog:"

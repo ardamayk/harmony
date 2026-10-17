@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createRouter, RouterProvider } from "@tanstack/react-router";
 import { lazy, StrictMode, Suspense } from "react";
 import { createRoot } from "react-dom/client";
+import { hasDesktopBridge } from "./desktop/desktop-api";
 import { routeTree } from "./routeTree.gen";
 import "./styles.css";
 
@@ -35,8 +36,7 @@ if (!rootElement) {
 	throw new Error("Root element not found");
 }
 
-const shouldRenderQueryDevtools =
-	import.meta.env.DEV && !("__TAURI_INTERNALS__" in window);
+const shouldRenderQueryDevtools = import.meta.env.DEV && !hasDesktopBridge();
 
 createRoot(rootElement).render(
 	<StrictMode>

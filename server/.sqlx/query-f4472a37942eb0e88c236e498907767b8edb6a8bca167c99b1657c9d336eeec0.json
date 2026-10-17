@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT kind, id, text_json FROM library_search_texts",
+  "describe": {
+    "columns": [
+      {
+        "name": "kind",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "library_search_texts",
+            "name": "kind"
+          }
+        }
+      },
+      {
+        "name": "id",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "library_search_texts",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "text_json",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "library_search_texts",
+            "name": "text_json"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "f4472a37942eb0e88c236e498907767b8edb6a8bca167c99b1657c9d336eeec0"
+}

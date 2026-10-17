@@ -1,0 +1,135 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT t.id AS \"id!\", t.album_id, t.artist_name, t.file_path, t.revision, t.size_bytes,\n            CAST(t.missing_at IS NOT NULL OR t.is_pending_commit = 1 AS INTEGER) AS \"hidden!: i64\",\n            COALESCE(s.source_kind, '') AS \"source_kind!: String\",\n            COALESCE(s.file_path, '') AS \"source_path!: String\", COALESCE(s.content_sha256, '') AS \"source_hash!: String\",\n            COALESCE(s.revision, 0) AS \"source_revision!: i64\", COALESCE(s.size_bytes, 0) AS \"source_size!: i64\",\n            CAST((SELECT json_group_array(json_object('ID', id, 'Name', name, 'Position', position)) FROM (\n                SELECT a.id, a.name, c.position FROM track_artists c JOIN artists a ON a.id = c.artist_id\n                WHERE c.track_id = t.id ORDER BY c.position\n            )) AS TEXT) AS \"credits!: String\"\n        FROM tracks t LEFT JOIN track_sources s ON s.track_id = t.id\n        ORDER BY t.id",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tracks",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "album_id",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tracks",
+            "name": "album_id"
+          }
+        }
+      },
+      {
+        "name": "artist_name",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tracks",
+            "name": "artist_name"
+          }
+        }
+      },
+      {
+        "name": "file_path",
+        "ordinal": 3,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tracks",
+            "name": "file_path"
+          }
+        }
+      },
+      {
+        "name": "revision",
+        "ordinal": 4,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "tracks",
+            "name": "revision"
+          }
+        }
+      },
+      {
+        "name": "size_bytes",
+        "ordinal": 5,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "tracks",
+            "name": "size_bytes"
+          }
+        }
+      },
+      {
+        "name": "hidden!: i64",
+        "ordinal": 6,
+        "type_info": "Integer",
+        "origin": "Expression"
+      },
+      {
+        "name": "source_kind!: String",
+        "ordinal": 7,
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "name": "source_path!: String",
+        "ordinal": 8,
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "name": "source_hash!: String",
+        "ordinal": 9,
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "name": "source_revision!: i64",
+        "ordinal": 10,
+        "type_info": "Integer",
+        "origin": "Expression"
+      },
+      {
+        "name": "source_size!: i64",
+        "ordinal": 11,
+        "type_info": "Integer",
+        "origin": "Expression"
+      },
+      {
+        "name": "credits!: String",
+        "ordinal": 12,
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "934921ff1fe7b3ca9ff9c87a46609fcaf2e31ad9bf492d3c91554ca44088bb68"
+}

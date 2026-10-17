@@ -5,7 +5,7 @@ MPV_SOURCE_SHA256="${MPV_SOURCE_SHA256:-ee21092a5ee427353392360929dc64645c54479a
 MPV_BUILD_FLAGS="${MPV_BUILD_FLAGS:---buildtype=release --auto-features=disabled -Dbuild-date=false -Dgl=disabled -Dlibmpv=false}"
 MPV_OUTPUT_DIRECTORY="${MPV_OUTPUT_DIRECTORY:-${RUNNER_TEMP:?RUNNER_TEMP is required}/earthly-audio-mpv}"
 MPV_BUILD_LOG="${MPV_BUILD_LOG:-${RUNNER_TEMP}/mpv-build.log}"
-MPV_VERSION="$(tr -d '\r\n' < desktop/src-tauri/mpv-version.txt)"
+MPV_VERSION="$(tr -d '\r\n' < desktop/core/mpv-version.txt)"
 MPV_ARCHIVE="${RUNNER_TEMP}/mpv-${MPV_VERSION}.tar.gz"
 MPV_SOURCE_DIRECTORY="${RUNNER_TEMP}/mpv-${MPV_VERSION}"
 read -r -a mpvBuildFlags <<< "${MPV_BUILD_FLAGS}"

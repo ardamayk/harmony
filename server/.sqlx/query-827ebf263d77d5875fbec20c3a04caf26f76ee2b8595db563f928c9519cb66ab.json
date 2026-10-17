@@ -1,0 +1,21 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT COUNT(DISTINCT al.id) AS \"total!: i64\" FROM albums al\n            INNER JOIN visible_tracks t ON t.album_id = al.id\n            WHERE (CAST(?1 AS TEXT) = '' OR EXISTS (\n                    SELECT 1 FROM album_artists credit WHERE credit.album_id = al.id AND credit.artist_id = CAST(?1 AS TEXT)))\n              AND (CAST(?2 AS TEXT) = '' OR al.title LIKE '%' || CAST(?2 AS TEXT) || '%' OR EXISTS (\n                    SELECT 1 FROM album_artists credit\n                    INNER JOIN artists credited ON credited.id = credit.artist_id\n                    WHERE credit.album_id = al.id AND credited.name LIKE '%' || CAST(?2 AS TEXT) || '%'))",
+  "describe": {
+    "columns": [
+      {
+        "name": "total!: i64",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "827ebf263d77d5875fbec20c3a04caf26f76ee2b8595db563f928c9519cb66ab"
+}

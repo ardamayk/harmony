@@ -160,11 +160,12 @@ describe("genre routes", () => {
 		expect(dance.getAttribute("href")).toBe("/library/genres/Dance");
 		expect(synthpop.className).toContain("duration-300");
 		expect(synthpop.className).toContain("ease-out");
-		expect(synthpop.className).toContain("hover:-translate-y-px");
-		expect(synthpop.className).toContain("hover:shadow-lg");
-		expect(synthpop.className).toContain("focus-visible:ring-2");
+		expect(synthpop.className).toContain("hover:-translate-y-1");
+		expect(synthpop.className).toContain(
+			"hover:border-shell-active-foreground/35",
+		);
+		expect(synthpop.className).toContain("focus-visible:-translate-y-1");
 		expect(synthpop.className).toContain("motion-reduce:transition-none");
-		expect(synthpop.className).not.toContain("hover:-translate-y-1");
 		expect(synthpop.className).toContain("aspect-square");
 		expect(synthpop.className).toContain("overflow-hidden");
 		expect(screen.getByTestId("genres-page-shell").className).toContain(
@@ -188,7 +189,7 @@ describe("genre routes", () => {
 		).toBeTruthy();
 		const overlay = container.querySelector("[data-genre-card-overlay]");
 		expect(overlay?.className).toContain("px-3");
-		expect(overlay?.className).toContain("pt-14");
+		expect(overlay?.className).toContain("pt-12");
 		expect(overlay?.querySelector("p")?.className).toContain("font-semibold");
 		expect(overlay?.querySelector("p")?.className).not.toContain(
 			"group-hover:underline",
@@ -261,7 +262,7 @@ describe("genre routes", () => {
 		expect(
 			screen.getByRole("row", { name: /Blue Monday/ }).querySelector("td")
 				?.className,
-		).toContain("py-1.5");
+		).toContain("py-2");
 	});
 
 	it("lists genre tracks in added order with list numbering", async () => {

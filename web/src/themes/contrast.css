@@ -1,0 +1,85 @@
+/*
+ * WCAG AA contrast fixes, measured per preset (docs/design-rules.md,
+ * Accessibility): text on a filled control at least 4.5:1, the Player Bar's
+ * primary control against the bar at least 3:1. Imported last so these win
+ * over layers.css and the semantic overrides. Each value stays derived from
+ * the preset's own palette where it can.
+ */
+
+/* Text on the red: the light themes' near-white palette end misses 4.5:1. */
+[data-theme-preset]:not(.dark) {
+	--destructive-foreground: #ffffff;
+}
+
+[data-theme-preset="tokyo-night"].dark {
+	--primary-foreground: var(--theme-6);
+	/* A light glyph cannot clear both 3:1 against the bar and 4.5:1 on the
+	   button here, so the button lightens and its glyph goes dark. */
+	--player-control-primary: color-mix(in srgb, var(--primary) 70%, white);
+	--player-control-primary-foreground: color-mix(
+		in srgb,
+		var(--theme-1) 30%,
+		black
+	);
+}
+
+[data-theme-preset="dusty-earth"].dark {
+	--primary-foreground: #ffffff;
+	--player-control-primary: color-mix(in srgb, var(--primary) 85%, white);
+	--player-control-primary-foreground: color-mix(
+		in srgb,
+		var(--theme-1) 40%,
+		black
+	);
+}
+
+[data-theme-preset="dusty-earth"]:not(.dark) {
+	--player-control-primary: color-mix(in srgb, var(--primary) 80%, black);
+}
+
+[data-theme-preset="coastal-mist"].dark {
+	--primary-foreground: color-mix(in srgb, var(--theme-1) 50%, black);
+	--player-control-primary: color-mix(in srgb, var(--primary) 90%, white);
+}
+
+[data-theme-preset="coastal-mist"]:not(.dark) {
+	--primary-foreground: color-mix(in srgb, var(--theme-1) 50%, black);
+	--player-control-primary: color-mix(in srgb, var(--primary) 85%, black);
+	--player-control-primary-foreground: #ffffff;
+}
+
+[data-theme-preset="sage-hearth"]:not(.dark) {
+	--player-control-primary: color-mix(in srgb, var(--primary) 90%, black);
+}
+
+[data-theme-preset="vintage-harbor"].dark {
+	--primary-foreground: color-mix(in srgb, var(--theme-1) 30%, black);
+}
+
+[data-theme-preset="vintage-harbor"]:not(.dark) {
+	--primary-foreground: #ffffff;
+}
+
+/* Vintage Harbor keeps the Top Nav, Player Bar and Queue Drawer dark in
+   light mode (semantic/vintage-harbor.css), so text inside these shell
+   surfaces takes the bar's light tones; popovers inside them are light again. */
+[data-theme-preset="vintage-harbor"]:not(.dark) [data-shell-surface] {
+	--heading: var(--player-title);
+	--text: var(--player-foreground);
+	--foreground: var(--player-foreground);
+	--queue-foreground: var(--player-foreground);
+	--caption: color-mix(in srgb, var(--player-foreground) 78%, #1e2b3b);
+	--muted-foreground: var(--caption);
+	--border: var(--sidebar-border);
+}
+
+[data-theme-preset="vintage-harbor"]:not(.dark)
+	[data-shell-surface]
+	:is(.bg-popover) {
+	--heading: var(--theme-1);
+	--text: var(--theme-2);
+	--foreground: var(--theme-2);
+	--caption: color-mix(in srgb, var(--theme-2) 72%, var(--theme-1) 28%);
+	--muted-foreground: var(--caption);
+	--border: color-mix(in srgb, var(--theme-4) 70%, var(--theme-3) 30%);
+}

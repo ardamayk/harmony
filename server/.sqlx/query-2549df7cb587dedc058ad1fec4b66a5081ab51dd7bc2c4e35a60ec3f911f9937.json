@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT tracks.id AS \"id!\" FROM track_sources JOIN tracks ON tracks.id = track_sources.track_id\n            WHERE track_sources.content_sha256 = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tracks",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "2549df7cb587dedc058ad1fec4b66a5081ab51dd7bc2c4e35a60ec3f911f9937"
+}

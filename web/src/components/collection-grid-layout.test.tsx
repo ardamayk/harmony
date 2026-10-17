@@ -28,6 +28,9 @@ describe("collection grid layout", () => {
 			"grid-cols-[repeat(auto-fill,min(250px,100%))]",
 		);
 		expect(grid?.className).toContain("gap-3");
+		expect(grid?.className).toContain(
+			"max-lg:in-data-[queue-open]:grid-cols-2",
+		);
 		expect(grid?.getAttribute("aria-busy")).toBe("true");
 	});
 

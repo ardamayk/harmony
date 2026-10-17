@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO managed_track_replacements (\n                id, job_id, track_id, phase, staged_file_path, pending_audio_path, audio_file_path,\n                previous_audio_path, retired_audio_path, audio_sha256, previous_audio_sha256, artwork_mode,\n                pending_artwork_path, artwork_file_path, previous_artwork_path, retired_artwork_path,\n                artwork_sha256, previous_artwork_sha256, artwork_created, previous_album_id\n            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 20
+    },
+    "nullable": []
+  },
+  "hash": "6111a0bbfc49c45b86073f04a96167be1659ebb5cfde58dad128ea0679d5dda1"
+}

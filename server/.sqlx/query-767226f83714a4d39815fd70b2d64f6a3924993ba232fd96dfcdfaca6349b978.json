@@ -1,0 +1,88 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT al.id AS \"id!\", al.title AS \"title!\",\n                COALESCE(primary_artist.id, legacy_artist.id) AS \"artist_id!: String\",\n                COALESCE(primary_artist.name, legacy_artist.name) AS \"artist_name!: String\",\n                al.year AS \"year?: i64\", al.release_date AS \"release_date?: String\", al.genres AS \"genres!\"\n            FROM albums al\n            INNER JOIN artists legacy_artist ON legacy_artist.id = al.artist_id\n            LEFT JOIN album_artists primary_credit ON primary_credit.album_id = al.id AND primary_credit.position = 0\n            LEFT JOIN artists primary_artist ON primary_artist.id = primary_credit.artist_id\n            WHERE al.id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "albums",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "title!",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "albums",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "name": "artist_id!: String",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "name": "artist_name!: String",
+        "ordinal": 3,
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "name": "year?: i64",
+        "ordinal": 4,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "albums",
+            "name": "year"
+          }
+        }
+      },
+      {
+        "name": "release_date?: String",
+        "ordinal": 5,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "albums",
+            "name": "release_date"
+          }
+        }
+      },
+      {
+        "name": "genres!",
+        "ordinal": 6,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "albums",
+            "name": "genres"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      false,
+      true,
+      false,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "767226f83714a4d39815fd70b2d64f6a3924993ba232fd96dfcdfaca6349b978"
+}

@@ -29,7 +29,7 @@ export function PanelCollapseButton({
 			aria-label={label}
 			title={label}
 			className={cn(
-				"inline-flex size-7 shrink-0 items-center justify-center rounded-md text-caption transition hover:bg-sidebar-accent hover:text-sidebar-foreground",
+				"inline-flex size-8 shrink-0 items-center justify-center rounded-sm text-caption transition hover:bg-sidebar-accent hover:text-sidebar-foreground",
 				className,
 			)}
 		>

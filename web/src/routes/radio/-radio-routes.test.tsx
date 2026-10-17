@@ -189,7 +189,7 @@ describe("radio routes", () => {
 		expect(header?.className).toContain("sticky");
 		expect(header?.className).toContain("top-0");
 		expect(searchInput.className).toContain("h-11");
-		expect(searchInput.className).toContain("pl-10");
+		expect(searchInput.className).toContain("pl-8");
 		expect(addButton.className).toContain("size-10");
 		expect(await screen.findByText("Jazz FM")).toBeTruthy();
 		expect(screen.getByText("Rock Hits")).toBeTruthy();

@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT credits.track_id AS \"track_id!\", artists.id AS \"id!\", artists.name AS \"name!\"\n            FROM track_artists credits\n            INNER JOIN artists ON artists.id = credits.artist_id\n            WHERE credits.track_id IN (SELECT value FROM json_each(?))\n            ORDER BY credits.track_id, credits.position",
+  "describe": {
+    "columns": [
+      {
+        "name": "track_id!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "track_artists",
+            "name": "track_id"
+          }
+        }
+      },
+      {
+        "name": "id!",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artists",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "name!",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artists",
+            "name": "name"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "e229686bae432826d85f4f7f3bd1b1f81dcc8c7fb078d0e72430538d41780267"
+}

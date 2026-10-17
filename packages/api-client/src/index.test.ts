@@ -849,6 +849,10 @@ describe("createApiClient", () => {
 		expect(client.getAlbumCoverUrl("album-1")).toBe(
 			"earthly-media://localhost/api/v1/library/albums/album-1/cover",
 		);
+		// A size asks the server for a scaled-down cover.
+		expect(client.getAlbumCoverUrl("album-1", 512)).toBe(
+			"earthly-media://localhost/api/v1/library/albums/album-1/cover?size=512",
+		);
 		expect(client.getTrackStreamUrl("track-1")).toBe(
 			"http://127.0.0.1:41000/token-1/api/v1/tracks/track-1/stream",
 		);

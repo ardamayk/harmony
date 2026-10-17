@@ -44,7 +44,7 @@ export function TiltingArtwork({
 			<div
 				ref={artworkRef}
 				data-testid="tilting-artwork"
-				className="aspect-square w-full border border-white/10 shadow-2xl transition-transform duration-200 ease-out motion-reduce:!transform-none motion-reduce:transition-none"
+				className="aspect-square w-full border border-border shadow-xl transition-transform duration-200 ease-out motion-reduce:!transform-none motion-reduce:transition-none"
 			>
 				<AlbumArt
 					key={coverUrl}

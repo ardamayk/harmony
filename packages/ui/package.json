@@ -10,7 +10,7 @@
     "./widgets": "./src/widgets/index.ts"
   },
   "scripts": {
-    "test": "bun --bun vp test",
+    "test": "vp test",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT lyrics AS \"lyrics!\" FROM tracks WHERE id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "lyrics!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tracks",
+            "name": "lyrics"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "5dd5ddf4cd617efd2548eb18806c35cd4b465fe601f06f0f8111297c5bd8994c"
+}

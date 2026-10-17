@@ -60,13 +60,15 @@ describe("calculateQueueDrawerWidth", () => {
 	);
 
 	it.each([
-		{ shellWidth: 1023, expected: 288 },
-		{ shellWidth: 336, expected: 288 },
+		{ shellWidth: 1023, expected: 386 },
+		{ shellWidth: 768, expected: 386 },
+		{ shellWidth: 767, expected: 275 },
+		{ shellWidth: 640, expected: 275 },
 		{ shellWidth: 320, expected: 272 },
 		{ shellWidth: 48, expected: 0 },
 		{ shellWidth: 40, expected: 0 },
 	])(
-		"caps the narrow fallback to available space at $shellWidth",
+		"uses the fixed below-lg and below-md widths, within the space, at $shellWidth",
 		({ shellWidth, expected }) => {
 			expect(calculateQueueDrawerWidth(shellWidth, 24, 16)).toBe(expected);
 		},
@@ -78,6 +80,6 @@ describe("calculateQueueDrawerWidth", () => {
 		const collectionWidth = 6 * 250 + 5 * 15;
 		expect(collectionWidth).toBe(1575);
 		expect(2102 - collectionWidth - panelWidth).toBe(30);
-		expect(calculateQueueDrawerWidth(1000, 24, 20)).toBe(360);
+		expect(calculateQueueDrawerWidth(1000, 24, 20)).toBe(386);
 	});
 });

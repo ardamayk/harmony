@@ -1,0 +1,95 @@
+{
+  "db_name": "SQLite",
+  "query": "WITH params AS (SELECT CAST(?1 AS TEXT) AS artist_id, CAST(?2 AS TEXT) AS q)\n            SELECT al.id AS \"id!\", al.title AS \"title!\",\n                COALESCE(primary_artist.id, legacy_artist.id) AS \"artist_id!: String\",\n                COALESCE(primary_artist.name, legacy_artist.name) AS \"artist_name!: String\",\n                al.year AS \"year?: i64\", al.release_date AS \"release_date?: String\",\n                al.genres AS \"genres!\", COUNT(t.id) AS \"track_count!: i64\"\n            FROM params p, albums al\n            INNER JOIN artists legacy_artist ON legacy_artist.id = al.artist_id\n            LEFT JOIN album_artists primary_credit ON primary_credit.album_id = al.id AND primary_credit.position = 0\n            LEFT JOIN artists primary_artist ON primary_artist.id = primary_credit.artist_id\n            INNER JOIN visible_tracks t ON t.album_id = al.id\n            WHERE (p.artist_id = '' OR EXISTS (\n                    SELECT 1 FROM album_artists credit WHERE credit.album_id = al.id AND credit.artist_id = p.artist_id))\n              AND (p.q = '' OR al.title LIKE '%' || p.q || '%' OR EXISTS (\n                    SELECT 1 FROM album_artists credit\n                    INNER JOIN artists credited ON credited.id = credit.artist_id\n                    WHERE credit.album_id = al.id AND credited.name LIKE '%' || p.q || '%'))\n            GROUP BY al.id, al.title, primary_artist.id, primary_artist.name,\n                legacy_artist.id, legacy_artist.name, al.year, al.release_date, al.genres\n            ORDER BY\n                CASE WHEN p.artist_id != '' THEN al.year IS NULL END,\n                CASE WHEN p.artist_id != '' THEN al.year END DESC,\n                al.title_sort\n            LIMIT ?3 OFFSET ?4",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "albums",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "title!",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "albums",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "name": "artist_id!: String",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "name": "artist_name!: String",
+        "ordinal": 3,
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "name": "year?: i64",
+        "ordinal": 4,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "albums",
+            "name": "year"
+          }
+        }
+      },
+      {
+        "name": "release_date?: String",
+        "ordinal": 5,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "albums",
+            "name": "release_date"
+          }
+        }
+      },
+      {
+        "name": "genres!",
+        "ordinal": 6,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "albums",
+            "name": "genres"
+          }
+        }
+      },
+      {
+        "name": "track_count!: i64",
+        "ordinal": 7,
+        "type_info": "Integer",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": [
+      true,
+      false,
+      true,
+      false,
+      true,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "0245d728a45be85312de25d8b979910ee014fa0d86baa976b27e8d08503b76e8"
+}

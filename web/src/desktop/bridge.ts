@@ -1,10 +1,7 @@
 import type { QueueEvent } from "@repo/api-client";
-import { Channel, invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { DESKTOP_EVENTS, type ImportProgressEvent } from "@repo/desktop-bridge";
+import { hasDesktopBridge, invoke, listen, type Unlisten } from "./desktop-api";
 
-const CONNECTION_CHANGED_EVENT = "server-connection-changed";
-const QUEUE_EVENTS_ERROR_EVENT = "desktop-queue-events-error";
-const QUEUE_INVALIDATED_EVENT = "desktop-queue-invalidated";
 let mediaProxyBaseUrl: string | null = null;
 
 export type ServerConnection = {
@@ -28,13 +25,8 @@ export type DesktopImportSelection = {
 	size: number;
 };
 
-type DesktopImportProgress = {
-	sentBytes: number;
-	totalBytes: number;
-};
-
 export function isDesktopClient(): boolean {
-	return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+	return hasDesktopBridge();
 }
 
 export type DesktopMpvStatus = {
@@ -97,12 +89,16 @@ export async function desktopUploadImportFile(
 		throw new DOMException("Managed Import upload canceled", "AbortError");
 	}
 	const uploadId = crypto.randomUUID();
-	const progressChannel = new Channel<DesktopImportProgress>();
-	progressChannel.onmessage = ({ sentBytes, totalBytes }) => {
-		if (totalBytes > 0) {
-			onProgress?.(Math.round((sentBytes / totalBytes) * 100), sentBytes);
-		}
-	};
+	const stopProgress = listen<ImportProgressEvent>(
+		DESKTOP_EVENTS.importProgress,
+		(progress) => {
+			if (progress.uploadId !== uploadId || progress.totalBytes <= 0) return;
+			onProgress?.(
+				Math.round((progress.sentBytes / progress.totalBytes) * 100),
+				progress.sentBytes,
+			);
+		},
+	);
 	const handleAbort = () => {
 		cancelDesktopImportUpload(uploadId).catch((error) => {
 			console.error("Desktop Managed Import cancellation failed", error);
@@ -117,7 +113,6 @@ export async function desktopUploadImportFile(
 				selectionId,
 				uploadId,
 				jobId,
-				onProgress: progressChannel,
 			},
 		);
 		if (signal?.aborted) {
@@ -126,6 +121,7 @@ export async function desktopUploadImportFile(
 		onProgress?.(100);
 		return bridgeResponse(response);
 	} finally {
+		stopProgress();
 		signal?.removeEventListener("abort", handleAbort);
 	}
 }
@@ -154,27 +150,28 @@ export function getMediaProxyBaseUrl(): string {
 	return mediaProxyBaseUrl;
 }
 
-export function listenForServerConnectionChanges(
+export async function listenForServerConnectionChanges(
 	callback: (connection: ConnectionCheck) => void,
-): Promise<UnlistenFn> {
-	return listen<ConnectionCheck>(CONNECTION_CHANGED_EVENT, (event) => {
-		callback(event.payload);
-	});
+): Promise<Unlisten> {
+	return listen<ConnectionCheck>(DESKTOP_EVENTS.connectionChanged, callback);
 }
 
 export async function listenForQueueEvents(
 	onEvent: (event: QueueEvent) => void,
 	onError: (error: Error) => void,
-): Promise<UnlistenFn> {
-	const unlistenQueue = await listen<QueueEvent>(
-		QUEUE_INVALIDATED_EVENT,
-		(event) => onEvent(event.payload),
+): Promise<Unlisten> {
+	const unlistenQueue = listen<QueueEvent>(
+		DESKTOP_EVENTS.queueInvalidated,
+		onEvent,
 	);
-	let unlistenError: UnlistenFn | undefined;
+	let unlistenError: Unlisten | undefined;
 	try {
-		unlistenError = await listen<string>(QUEUE_EVENTS_ERROR_EVENT, (event) => {
-			onError(new Error(`Desktop Queue event stream: ${event.payload}`));
-		});
+		unlistenError = listen<string>(
+			DESKTOP_EVENTS.queueEventsError,
+			(message) => {
+				onError(new Error(`Desktop Queue event stream: ${message}`));
+			},
+		);
 		await invoke("desktop_reconnect_queue_events");
 		return () => {
 			unlistenQueue();
@@ -201,7 +198,13 @@ export async function desktopFetch(
 			value,
 		]),
 	);
-	const body = await encodeBody(init?.body);
+	const body = await encodeBody(
+		init?.body !== undefined
+			? init.body
+			: input instanceof Request && input.body
+				? new Uint8Array(await input.arrayBuffer())
+				: null,
+	);
 	const response = await invoke<BridgeHttpResponse>("desktop_http_request", {
 		request: {
 			method: init?.method ?? (input instanceof Request ? input.method : "GET"),

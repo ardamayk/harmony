@@ -25,5 +25,5 @@ Sentry.startSpan({ name: 'Requesting all the pokemon' }, async () => {
 Use the latest version of Shadcn to install new components, like this command to add a button component:
 
 ```bash
-bun x shadcn@latest add button
+pnpm dlx shadcn@latest add button
 ```

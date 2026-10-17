@@ -177,7 +177,7 @@ export function SeekBar({
 				className="pointer-events-none absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 overflow-hidden rounded-full"
 			>
 				<div
-					className="h-full rounded-full bg-[var(--player-foreground)]/25"
+					className="h-full rounded-full bg-player-foreground/25"
 					style={{ width: `${(bufferedFraction * 100).toFixed(2)}%` }}
 				/>
 			</div>
@@ -213,7 +213,7 @@ export function SeekBar({
 					id={tooltipId}
 					role="tooltip"
 					data-testid="seek-tooltip"
-					className="pointer-events-none absolute bottom-full mb-1 -translate-x-1/2 rounded bg-popover px-1.5 py-0.5 text-[11px] text-popover-foreground tabular-nums shadow"
+					className="pointer-events-none absolute bottom-full mb-1 -translate-x-1/2 rounded-sm bg-popover px-2 py-0.5 text-xs text-popover-foreground tabular-nums shadow"
 					style={{ left: `${(tooltipFraction * 100).toFixed(2)}%` }}
 				>
 					{formatSeekTime(tooltipFraction * duration)}
@@ -261,9 +261,9 @@ function WaveformBars({
 			preserveAspectRatio="none"
 		>
 			<title>Waveform</title>
-			<g className="fill-[var(--player-foreground)] opacity-25">{bars}</g>
+			<g className="fill-player-foreground opacity-25">{bars}</g>
 			<g
-				className="fill-[var(--player-foreground)] opacity-20"
+				className="fill-player-foreground opacity-20"
 				style={{
 					clipPath: `inset(0 ${(100 - bufferedFraction * 100).toFixed(2)}% 0 0)`,
 				}}
@@ -272,7 +272,7 @@ function WaveformBars({
 			</g>
 			<g
 				data-testid="seek-waveform-played"
-				className="fill-[var(--player-live-progress)]"
+				className="fill-player-live-progress"
 				style={{
 					clipPath: `inset(0 ${(100 - playedFraction * 100).toFixed(2)}% 0 0)`,
 				}}

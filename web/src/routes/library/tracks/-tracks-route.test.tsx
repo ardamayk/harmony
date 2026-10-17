@@ -599,7 +599,7 @@ describe("tracks route", () => {
 
 	afterEach(() => {
 		vi.useRealTimers();
-		Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
+		Reflect.deleteProperty(window, "earthlyDesktop");
 		vi.useRealTimers();
 		cleanup();
 	});
@@ -796,7 +796,7 @@ describe("tracks route", () => {
 			"[scrollbar-width:none]",
 		);
 		expect(screen.getByTestId("tracks-page-content").className).toContain(
-			"py-5",
+			"py-6",
 		);
 	});
 

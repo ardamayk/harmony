@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO managed_import_commit_journal (\n                id, job_id, track_id, phase, staged_file_path, audio_file_path, artwork_file_path,\n                audio_sha256, artwork_sha256, artwork_created\n            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 10
+    },
+    "nullable": []
+  },
+  "hash": "62fbe6dd08e7018d38f88db9a449bac4a514755163d1141b780e65d7581fd057"
+}

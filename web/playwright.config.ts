@@ -21,8 +21,9 @@ export default defineConfig({
 	// running development server would receive the test imports instead.
 	webServer: [
 		{
-			command: "go run ./cmd/server",
-			timeout: 120_000,
+			// The first run compiles the Music Server.
+			command: "cargo run --quiet -p earthly-music-server",
+			timeout: 600_000,
 			url: "http://localhost:8090/api/v1/health",
 			reuseExistingServer: false,
 			cwd: "../server",
@@ -34,7 +35,7 @@ export default defineConfig({
 			},
 		},
 		{
-			command: "bun run dev",
+			command: "pnpm run dev",
 			timeout: 120_000,
 			url: "http://localhost:3000",
 			reuseExistingServer: false,

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO managed_import_batches (id, status, revision) VALUES (?, 'uploading', 1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "4b0b4f5db61c14984bd4982e8b58ae2e77cc1e10274fc92b0bc4d12b0eb1336c"
+}

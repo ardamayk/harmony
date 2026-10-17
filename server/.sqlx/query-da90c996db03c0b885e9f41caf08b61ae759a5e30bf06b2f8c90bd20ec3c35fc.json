@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE managed_import_jobs SET staged_file_path = NULL, upload_size_bytes = 0,\n                status = CASE WHEN error_code = 'exact_duplicate' THEN 'failed' ELSE status END,\n                outcome = CASE WHEN error_code = 'exact_duplicate' AND batch_id IS NOT NULL THEN 'rejected' ELSE outcome END,\n                selected = CASE WHEN error_code = 'exact_duplicate' THEN 0 ELSE selected END,\n                updated_at = CURRENT_TIMESTAMP\n            WHERE id = ? AND staged_file_path IS NOT NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "da90c996db03c0b885e9f41caf08b61ae759a5e30bf06b2f8c90bd20ec3c35fc"
+}

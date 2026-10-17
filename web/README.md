@@ -5,7 +5,7 @@ Welcome to your new TanStack Start app!
 To run this application:
 
 ```bash
-bun install
+pnpm install
 mise run web:dev
 ```
 
@@ -36,7 +36,7 @@ If you prefer not to use Tailwind CSS:
 1. Remove the demo pages in `src/routes/demo/`
 2. Replace the Tailwind import in `src/styles.css` with your own styles
 3. Remove `tailwindcss()` from the plugins array in `vite.config.ts`
-4. Uninstall the packages: `bun run add @tailwindcss/vite tailwindcss --dev`
+4. Uninstall the packages: `pnpm remove @tailwindcss/vite tailwindcss`
 
 ## Linting & Formatting
 
@@ -55,7 +55,7 @@ mise run web:typecheck
 Add components using the latest version of [Shadcn](https://ui.shadcn.com/).
 
 ```bash
-bun x shadcn@latest add button
+pnpm dlx shadcn@latest add button
 ```
 
 

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM tracks WHERE id = ? AND is_pending_commit = 1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "c699647c83720c8dfaed33af6c19dd5a2f0315e6b5d0206c667bbb4ba8ee070a"
+}

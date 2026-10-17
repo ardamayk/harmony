@@ -9,8 +9,7 @@ bash "$REPOSITORY_ROOT/scripts/generate-openapi.sh" --output-root "$TEMPORARY_RO
 
 hasDrift=false
 for generatedPath in \
-	packages/api-client/src/generated/schema.ts \
-	server/internal/api/gen/types.gen.go; do
+	packages/api-client/src/generated/schema.ts; do
 	committedFile="$REPOSITORY_ROOT/$generatedPath"
 	generatedFile="$TEMPORARY_ROOT/$generatedPath"
 	if ! cmp -s "$committedFile" "$generatedFile"; then

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO managed_import_artwork (batch_id, id, job_id, album_key, media_type, width, height, content_sha256, data)\n            SELECT batches.id, ?1, NULLIF(CAST(?2 AS TEXT), ''), ?3, ?4, ?5, ?6, ?7, ?8\n            FROM managed_import_batches batches WHERE batches.id = ?9 AND batches.status = 'uploading'\n            ON CONFLICT(batch_id, id) DO UPDATE SET media_type = excluded.media_type, width = excluded.width,\n                height = excluded.height, content_sha256 = excluded.content_sha256, data = excluded.data",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 9
+    },
+    "nullable": []
+  },
+  "hash": "8e926f3751364c1312e566f9221c54b0bf80544f4fc660e72b9c7b2c2af2c330"
+}

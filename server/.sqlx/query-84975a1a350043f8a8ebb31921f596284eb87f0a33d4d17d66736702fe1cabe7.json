@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id AS \"id!\" FROM managed_import_jobs\n                WHERE batch_id IS NULL AND status != 'committed' AND updated_at <= ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_import_jobs",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "84975a1a350043f8a8ebb31921f596284eb87f0a33d4d17d66736702fe1cabe7"
+}

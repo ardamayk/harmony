@@ -85,7 +85,7 @@ function AlbumReview({
 	return (
 		<fieldset
 			disabled={isDisabled}
-			className="grid gap-4 rounded-xl border border-border bg-card/40 p-4 disabled:opacity-60"
+			className="grid gap-4 rounded-lg border border-border bg-card/40 p-4 disabled:opacity-60"
 		>
 			<legend className="px-1 font-medium text-heading">
 				{album.title} — {album.albumArtists.join(", ")}
@@ -112,7 +112,7 @@ function AlbumReview({
 						Upload another cover · JPG or PNG, maximum 20 MiB
 						<input
 							aria-label={`Upload cover for ${album.title}`}
-							className="mt-2 block w-full min-w-0 rounded-lg border border-input bg-secondary/30 p-2 text-foreground text-sm file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1.5 file:font-medium file:text-secondary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+							className="mt-2 block w-full min-w-0 rounded-md border border-input bg-secondary/30 p-2 text-foreground text-sm file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-2 file:font-medium file:text-secondary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 							type="file"
 							accept=".jpg,.jpeg,.png,image/jpeg,image/png"
 							onChange={(event) => {
@@ -154,7 +154,7 @@ function AlbumDestination({
 		<div className="grid gap-2 text-sm">
 			<p className="font-medium text-heading">Album destination</p>
 			{album.existingAlbums.length === 0 ? (
-				<div className="rounded-lg border border-border bg-secondary/40 px-3 py-2.5">
+				<div className="rounded-md border border-border bg-secondary/40 px-3 py-3">
 					<p className="font-medium text-foreground">Create new album</p>
 					<p className="mt-1 text-caption">
 						No library album matches this title and album artist. A new album
@@ -233,7 +233,7 @@ export function ImportFileAlternatives({
 					<fieldset
 						key={key}
 						disabled={isBusy}
-						className="rounded border border-border p-3"
+						className="rounded-sm border border-border p-3"
 					>
 						<legend className="px-1 text-sm">
 							Choose one file for {files[0].preview?.file.album}, position{" "}

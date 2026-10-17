@@ -5,7 +5,8 @@ const generatedAndBuildOutput = [
 	"**/.output/**",
 	"**/src/generated/**",
 	"**/routeTree.gen.ts",
-	"desktop/src-tauri/**",
+	"desktop/core/**",
+	"target/**",
 	"graphify-out/**",
 	"server/**",
 	"docs/**",
@@ -36,8 +37,17 @@ export default defineConfig({
 		ignorePatterns: generatedAndBuildOutput,
 		plugins: ["typescript", "react", "jsx-a11y", "import", "vitest"],
 		categories: { correctness: "error" },
-		jsPlugins: [{ name: "vite-plus", specifier: "vite-plus/oxlint-plugin" }],
+		jsPlugins: [
+			{ name: "vite-plus", specifier: "vite-plus/oxlint-plugin" },
+			{ name: "shadcn", specifier: "@shadcn/lint" },
+		],
 		rules: {
+			"shadcn/no-arbitrary-values": "warn",
+			"shadcn/no-raw-colors": "warn",
+			"shadcn/no-unknown-classes": "warn",
+			"shadcn/no-inline-styles": "warn",
+			"shadcn/require-static-classes": "warn",
+			"shadcn/no-restyle": ["warn", { allow: ["layout"] }],
 			"vite-plus/prefer-vite-plus-imports": "error",
 			"react/react-in-jsx-scope": "off",
 			"vitest/require-mock-type-parameters": "off",
@@ -78,8 +88,7 @@ export default defineConfig({
 	},
 	staged: {
 		"*.{js,cjs,mjs,jsx,ts,tsx,json,jsonc}": "vp check --fix",
-		"*.go": "gofmt -w",
-		"desktop/src-tauri/**/*.rs": () =>
+		"{desktop/core,server}/**/*.rs": () =>
 			"bash scripts/check-staged-rust-format.sh",
 	},
 });

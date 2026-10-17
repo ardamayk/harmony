@@ -1,3 +1,4 @@
+import { TOP_NAV_ICON_BUTTON_CLASS, TopNavActions } from "@repo/ui";
 import { useQuery } from "@tanstack/react-query";
 import { Disc3, SlidersHorizontal, TriangleAlert, X } from "lucide-react";
 import { Dialog as DialogPrimitive } from "radix-ui";
@@ -99,21 +100,21 @@ export function AlbumsPage() {
 				<PageHeader
 					title="Albums"
 					innerClassName={COLLECTION_PAGE_CONTAINER_CLASS}
-					actions={
-						<Button
-							type="button"
-							variant="ghost"
-							size="icon"
-							aria-label="Filters"
-							className="size-10 text-caption hover:text-heading"
-							onClick={() => setAreFiltersOpen(true)}
-						>
-							<SlidersHorizontal className="size-5" />
-						</Button>
-					}
 				/>
 			}
 		>
+			<TopNavActions>
+				<button
+					type="button"
+					aria-label="Filters"
+					title="Filters"
+					aria-pressed={areFiltersOpen || hasActiveFilters}
+					className={TOP_NAV_ICON_BUTTON_CLASS}
+					onClick={() => setAreFiltersOpen(true)}
+				>
+					<SlidersHorizontal className="size-4" />
+				</button>
+			</TopNavActions>
 			<CollectionPageContainer aria-busy={isFetching || undefined}>
 				<AlbumFilterDrawer
 					isOpen={areFiltersOpen}
@@ -182,7 +183,7 @@ function AlbumFilterDrawer({
 				<DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-background/50 backdrop-blur-sm" />
 				<DialogPrimitive.Content
 					aria-describedby="album-filter-description"
-					className="fixed top-0 right-0 z-50 flex h-dvh w-[min(390px,100vw)] flex-col gap-5 border-border border-l bg-background p-6 shadow-xl outline-none"
+					className="fixed top-0 right-0 z-50 flex h-dvh w-[min(390px,100vw)] flex-col gap-6 border-border border-l bg-background p-6 shadow-xl outline-none"
 				>
 					<div className="flex items-start justify-between gap-4">
 						<div className="min-w-0">

@@ -55,7 +55,7 @@ describe("AlbumGrid", () => {
 		expect(album.className).toContain("duration-300");
 		expect(album.className).toContain("ease-out");
 		expect(album.className).toContain("hover:-translate-y-1");
-		expect(album.className).toContain("hover:shadow-lg");
+		expect(album.className).toContain("focus-visible:-translate-y-1");
 		expect(screen.getByText("1959")).toBeTruthy();
 		expect(screen.queryByText(/tracks/)).toBeNull();
 		expect(container.querySelector("[data-album-card-overlay]")).toBeTruthy();

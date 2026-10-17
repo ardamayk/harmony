@@ -1,0 +1,26 @@
+[
+  {
+    "filename": "strict-import.flac",
+    "format": "flac"
+  },
+  {
+    "filename": "strict-import.mp3",
+    "format": "mp3"
+  },
+  {
+    "filename": "strict-import-aac.m4a",
+    "format": "m4a"
+  },
+  {
+    "filename": "strict-import.ogg",
+    "format": "ogg"
+  },
+  {
+    "filename": "strict-import.opus",
+    "format": "opus"
+  },
+  {
+    "filename": "strict-import.wav",
+    "format": "wav"
+  }
+]

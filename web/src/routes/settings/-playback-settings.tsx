@@ -115,13 +115,13 @@ export function PlaybackSettingsSection() {
 				{choices.map((choice) => (
 					<fieldset
 						key={choice.key}
-						className="m-0 rounded-xl border border-border bg-card/40 p-3"
+						className="m-0 rounded-lg border border-border bg-card/40 p-3"
 					>
 						<legend className="px-1 font-medium text-heading text-sm">
 							{choice.label}
 						</legend>
 						<p className="mb-2 text-caption text-xs">{choice.description}</p>
-						<div className="flex flex-wrap gap-1.5">
+						<div className="flex flex-wrap gap-2">
 							{choice.options.map((option) => {
 								const isActive = playback[choice.key] === option;
 								return (
@@ -131,8 +131,8 @@ export function PlaybackSettingsSection() {
 										aria-pressed={isActive}
 										className={
 											isActive
-												? "rounded-md border border-primary bg-primary/10 px-2.5 py-1 text-heading text-xs"
-												: "rounded-md border border-border px-2.5 py-1 text-xs hover:bg-muted/50"
+												? "rounded-sm border border-primary bg-primary/10 px-3 py-1 text-heading text-xs"
+												: "rounded-sm border border-border px-3 py-1 text-xs hover:bg-muted/50"
 										}
 										onClick={() =>
 											setPlaybackPreferences({ [choice.key]: option })
@@ -150,7 +150,7 @@ export function PlaybackSettingsSection() {
 				{TOGGLES.map((toggle) => (
 					<li
 						key={toggle.key}
-						className="flex items-start justify-between gap-4 rounded-xl border border-border bg-card/40 p-3"
+						className="flex items-start justify-between gap-4 rounded-lg border border-border bg-card/40 p-3"
 					>
 						<div className="min-w-0">
 							<Label

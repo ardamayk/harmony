@@ -1,0 +1,105 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT tracks.id AS \"id!\", tracks.title, albums.title AS album_title,\n                COALESCE(tracks.disc_no, 1) AS \"disc_no!: i64\", tracks.track_no, tracks.format,\n                tracks.duration_ms, tracks.revision\n            FROM tracks JOIN albums ON albums.id = tracks.album_id\n            WHERE tracks.id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tracks",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "title",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tracks",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "name": "album_title",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "albums",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "name": "disc_no!: i64",
+        "ordinal": 3,
+        "type_info": "Integer",
+        "origin": "Expression"
+      },
+      {
+        "name": "track_no",
+        "ordinal": 4,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "tracks",
+            "name": "track_no"
+          }
+        }
+      },
+      {
+        "name": "format",
+        "ordinal": 5,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tracks",
+            "name": "format"
+          }
+        }
+      },
+      {
+        "name": "duration_ms",
+        "ordinal": 6,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "tracks",
+            "name": "duration_ms"
+          }
+        }
+      },
+      {
+        "name": "revision",
+        "ordinal": 7,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "tracks",
+            "name": "revision"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "99c8eba7976e6be10077689271bb7380f8643a18087b56e18c2b2443ea3a6693"
+}

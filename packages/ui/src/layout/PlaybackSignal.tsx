@@ -80,11 +80,11 @@ export function PlaybackSignal({
 				title={`Output mode: ${activeLabel}`}
 				aria-haspopup="menu"
 				aria-expanded={isOpen}
-				className="inline-flex h-8 items-center gap-2 rounded-xl border border-[var(--sidebar-border)] bg-[var(--player-pill)] px-3.5 text-player-foreground text-xs hover:text-[var(--player-control-primary)]"
+				className="inline-flex h-8 items-center gap-2 rounded-lg border border-sidebar-border bg-player-pill px-4 text-player-foreground text-xs hover:text-player-control-primary"
 				onClick={() => setIsOpen((value) => !value)}
 			>
 				{qualityIcon}
-				<span className="hidden font-medium tabular-nums md:inline">
+				<span className="hidden font-medium tabular-nums @min-[66rem]/player-bar:inline">
 					{qualityLabel}
 				</span>
 				<ChevronUp className="size-3.5" aria-hidden />
@@ -93,9 +93,9 @@ export function PlaybackSignal({
 				<div
 					role="menu"
 					aria-label="Output mode"
-					className="absolute right-0 bottom-full z-50 mb-1.5 w-40 overflow-hidden rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-xl"
+					className="absolute right-0 bottom-full z-50 mb-2 w-40 overflow-hidden rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg"
 				>
-					<p className="px-1.5 pt-1 pb-1.5 font-medium text-[0.625rem] text-caption uppercase tracking-wide">
+					<p className="px-2 pt-1 pb-2 font-medium text-xs text-caption uppercase tracking-wide">
 						Output mode
 					</p>
 					{OUTPUT_OPTIONS.map((option) => (
@@ -105,9 +105,9 @@ export function PlaybackSignal({
 							aria-checked={outputMode === option.mode}
 							key={option.mode}
 							className={cn(
-								"flex h-7 w-full items-center gap-1.5 rounded-sm px-1.5 text-left text-xs hover:bg-muted",
+								"flex h-8 w-full items-center gap-2 rounded-sm px-2 text-left text-xs hover:bg-muted",
 								outputMode === option.mode &&
-									"bg-muted text-[var(--player-control-primary)]",
+									"bg-muted text-player-control-primary",
 							)}
 							onClick={() => selectMode(option.mode)}
 						>

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE managed_import_jobs\n        SET status = 'committed', revision = revision + 1, track_id = ?, staged_file_path = NULL,\n            outcome = CASE WHEN batch_id IS NULL THEN NULL ELSE 'imported' END, updated_at = CURRENT_TIMESTAMP\n        WHERE id = ? AND status = 'awaiting_confirmation' AND revision = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "53ba18cfc6099dc488c754f89e0ed7dbc35abbdd0440451c1f049ebd590e6664"
+}

@@ -4,9 +4,8 @@
 
 `packages/contracts/openapi.yaml` is the single source of truth for the HTTP API.
 
-All Go and TypeScript types are generated from this file. Do not hand-edit generated output in:
+The TypeScript client types are generated from this file, and the Music Server serves it as is at `/api/openapi.yaml`. Do not hand-edit generated output in:
 
-- `server/internal/api/gen/`
 - `packages/api-client/src/generated/schema.ts`
 
 ## Versioning
@@ -87,8 +86,9 @@ mise run generate
 
 | Target | Tool | Output |
 |--------|------|--------|
-| Go types | oapi-codegen | `server/internal/api/gen/types.gen.go` |
 | TS schema | openapi-typescript | `packages/api-client/src/generated/schema.ts` |
+
+`mise run generate` also refreshes `server/.sqlx`, the Music Server's offline query data.
 
 `packages/api-client/src/index.ts` may define convenience wrappers, but exported domain types should alias generated schemas rather than re-declaring fields.
 
@@ -110,12 +110,13 @@ mise run generate
 
 ## Contract verification
 
-Generated files are committed (ADR 0013). `mise run generate:check` regenerates into a temporary directory and fails when either committed output is stale. Go tests additionally verify the contract without UI journeys:
+Generated files are committed (ADR 0013). `mise run generate:check` regenerates into a temporary directory and fails when the committed client or query data is stale. Server tests verify the contract without UI journeys:
 
-- `server/internal/api/contract_test.go` proves the spec embedded in the binary matches `packages/contracts/openapi.yaml` and that every operation has a unique `operationId`.
-- `server/cmd/server/contract_test.go` walks the assembled router: every documented operation is mounted, every mounted `/api/v1` route is documented, every advertised capability is described in `HealthResponse`, every documented request header passes CORS preflight.
-- `testutil.ServeContractRequest` validates responses against the embedded spec; the Managed Import, Track Replacement, and Permanent Track Deletion contract tests exercise binary uploads and structured errors at the HTTP seam.
+- `server/tests/contract.rs` sends every documented operation to the assembled router and fails when one is not mounted, fails when the source registers an `/api/v1` path the spec does not document, checks that every `operationId` is unique, that every advertised capability is described in `HealthResponse`, and that every documented request header passes CORS preflight. The server embeds `packages/contracts/openapi.yaml` itself, so the served spec cannot drift from the file.
+- The Managed Import, Track Replacement and Permanent Track Deletion service tests (`server/src/modules/managed_import/service_tests.rs`) drive uploads, previews, structured errors and crash recovery end to end.
 - `packages/api-client/src/contract.test.ts` pins the generated schemas, upload media types, structured errors, and capability negotiation on the client side.
+
+The Go server also validated responses against the schema in its tests; the Rust server was instead checked answer for answer against the Go server while it was ported (ADR 0025).
 
 ## Swagger UI
 

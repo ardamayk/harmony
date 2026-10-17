@@ -54,7 +54,7 @@ export function ServerDependenciesSection({ health, desktopMpv }: Props) {
 	return (
 		<section className="mb-8 flex flex-col gap-4">
 			<h2 className="font-medium text-sm">Server dependencies</h2>
-			<div className="overflow-x-auto rounded-xl border border-border">
+			<div className="overflow-x-auto rounded-lg border border-border">
 				<table className="w-full text-sm">
 					<thead className="bg-muted/40 text-left text-muted-foreground">
 						<tr>

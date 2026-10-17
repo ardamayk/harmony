@@ -48,7 +48,7 @@ function SortableWidget({ id, panel }: { id: string; panel: PanelSide }) {
 			<div
 				ref={setNodeRef}
 				style={style}
-				className="rounded border border-destructive/50 p-2 text-destructive text-xs"
+				className="rounded-sm border border-destructive/50 p-2 text-destructive text-xs"
 			>
 				Unknown widget: {id}
 			</div>
@@ -60,7 +60,7 @@ function SortableWidget({ id, panel }: { id: string; panel: PanelSide }) {
 			ref={setNodeRef}
 			style={style}
 			className={cn(
-				"min-w-0 overflow-hidden rounded-lg border border-border bg-card",
+				"min-w-0 overflow-hidden rounded-md border border-border bg-card",
 				isDragging && "opacity-60 shadow-md",
 			)}
 		>
