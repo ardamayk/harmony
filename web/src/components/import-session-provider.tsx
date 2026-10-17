@@ -15,7 +15,7 @@ export function ImportSessionProvider({ children }: { children: ReactNode }) {
 				isOpen={session.isOpen}
 				onOpenChange={session.handleOpenChange}
 				onCommitted={session.refresh}
-				onCloseAutoFocus={session.restoreFocus}
+				finalFocus={session.restoreFocus}
 			/>
 		</ImportSessionContext.Provider>
 	);
@@ -42,6 +42,6 @@ function useImportSession() {
 		},
 		handleOpenChange,
 		refresh,
-		restoreFocus: returnFocus.restore,
+		restoreFocus: () => returnFocus.restore(),
 	};
 }

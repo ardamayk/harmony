@@ -89,7 +89,13 @@ function openDropdown() {
 		name: "Queue actions for Track one",
 	});
 	trigger.focus();
-	fireEvent.keyDown(trigger, { key: "Enter" });
+	pressButton(trigger, "Enter");
+}
+
+// A native button turns Enter and Space into a click; jsdom does not.
+function pressButton(button: HTMLElement, key: string) {
+	fireEvent.keyDown(button, { key });
+	fireEvent.click(button);
 }
 
 async function openPlaylists() {
@@ -156,7 +162,7 @@ describe("QueueTrackMenu", () => {
 				fireEvent.click(trigger);
 			} else {
 				trigger.focus();
-				fireEvent.keyDown(trigger, { key: method });
+				pressButton(trigger, method);
 			}
 			expect(
 				await screen.findByRole("menuitem", { name: "Play next" }),

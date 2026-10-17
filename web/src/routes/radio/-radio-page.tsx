@@ -10,7 +10,7 @@ import {
 	CARD_INTERACTION_CLASS,
 } from "#/components/collection-grid-layout";
 import { PageHeader, PageShell } from "#/components/page-layout";
-import { Button } from "#/components/ui/button";
+import { Button, buttonVariants } from "#/components/ui/button";
 import {
 	ContextMenu,
 	ContextMenuContent,
@@ -88,16 +88,16 @@ export function RadioPage() {
 									type="search"
 								/>
 							</div>
-							<Button
+							<Link
+								to="/radio/discover"
 								aria-label="Add radio station"
-								asChild
-								className="size-10 rounded-lg bg-player-control-primary text-player-control-primary-foreground hover:opacity-90"
-								size="icon"
+								className={cn(
+									buttonVariants({ size: "icon" }),
+									"size-10 rounded-lg bg-player-control-primary text-player-control-primary-foreground hover:opacity-90",
+								)}
 							>
-								<Link to="/radio/discover">
-									<Plus className="size-5" />
-								</Link>
-							</Button>
+								<Plus className="size-5" />
+							</Link>
 						</>
 					}
 				/>
@@ -184,131 +184,132 @@ function StationCard({
 
 	return (
 		<ContextMenu open={isContextMenuOpen} onOpenChange={setIsContextMenuOpen}>
-			<ContextMenuTrigger asChild>
-				<CardElement
-					aria-label={isEditing ? undefined : `Play ${station.name}`}
-					data-testid={`radio-station-card-${station.id}`}
-					className={cn(
-						"flex min-w-0 items-start gap-3 rounded-md border border-border bg-card/45 p-3 text-left hover:bg-card/65",
-						!isEditing && ["cursor-pointer", CARD_INTERACTION_CLASS],
-						isActive &&
-							"border-border bg-player text-player-foreground shadow-lg",
-					)}
-					onClick={isEditing ? undefined : onPlay}
-					type={isEditing ? undefined : "button"}
-				>
-					<div className="shrink-0 rounded-md">
-						<StationArtwork
-							faviconUrl={station.faviconUrl}
-							name={station.name}
-						/>
-					</div>
-
-					<div className="min-w-0 flex-1">
-						{isEditing ? (
-							<div className="grid gap-2 sm:grid-cols-2">
-								<label
-									className="flex min-w-0 flex-col gap-1"
-									htmlFor={`${station.id}-edit-radio-name`}
-								>
-									<span className="font-medium text-caption text-xs">Name</span>
-									<Input
-										id={`${station.id}-edit-radio-name`}
-										value={editName}
-										onChange={(event) => setEditName(event.target.value)}
-									/>
-								</label>
-								<label
-									className="flex min-w-0 flex-col gap-1"
-									htmlFor={`${station.id}-edit-radio-stream-url`}
-								>
-									<span className="font-medium text-caption text-xs">
-										Stream URL
-									</span>
-									<Input
-										id={`${station.id}-edit-radio-stream-url`}
-										value={editStreamUrl}
-										onChange={(event) => setEditStreamUrl(event.target.value)}
-										type="url"
-									/>
-								</label>
-							</div>
-						) : (
-							<>
-								<div className="flex min-w-0 items-center gap-2">
-									<p
-										className={cn(
-											"truncate font-semibold text-heading text-sm",
-											isActive && "text-player-control-primary",
-										)}
-										title={station.name}
-									>
-										{station.name}
-									</p>
-									{isActive ? <EqualizerBars /> : null}
-								</div>
-								{tags.length > 0 ? (
-									<div className="mt-2 flex min-w-0 flex-wrap gap-2">
-										{tags.map((tag) => (
-											<span
-												key={tag}
-												className="rounded-full border border-border px-2 py-0.5 text-caption text-xs"
-											>
-												{tag}
-											</span>
-										))}
-									</div>
-								) : null}
-								{nowPlayingLabel ? (
-									<p className="mt-2 truncate text-foreground text-xs">
-										{nowPlayingLabel}
-									</p>
-								) : null}
-							</>
+			<ContextMenuTrigger
+				render={
+					<CardElement
+						aria-label={isEditing ? undefined : `Play ${station.name}`}
+						data-testid={`radio-station-card-${station.id}`}
+						className={cn(
+							"flex min-w-0 items-start gap-3 rounded-md border border-border bg-card/45 p-3 text-left hover:bg-card/65",
+							!isEditing && ["cursor-pointer", CARD_INTERACTION_CLASS],
+							isActive &&
+								"border-border bg-player text-player-foreground shadow-lg",
 						)}
-					</div>
+						onClick={isEditing ? undefined : onPlay}
+						type={isEditing ? undefined : "button"}
+					/>
+				}
+			>
+				<div className="shrink-0 rounded-md">
+					<StationArtwork faviconUrl={station.faviconUrl} name={station.name} />
+				</div>
 
+				<div className="min-w-0 flex-1">
 					{isEditing ? (
-						<div className="flex shrink-0 items-center gap-2">
-							<Button
-								size="sm"
-								disabled={!canSaveEdit || isMutating}
-								onClick={() => {
-									onUpdate({
-										name: editName.trim(),
-										streamUrl: editStreamUrl.trim(),
-									});
-									setIsEditing(false);
-								}}
+						<div className="grid gap-2 sm:grid-cols-2">
+							<label
+								className="flex min-w-0 flex-col gap-1"
+								htmlFor={`${station.id}-edit-radio-name`}
 							>
-								Save
-							</Button>
-							<Button
-								size="sm"
-								variant="outline"
-								disabled={isMutating}
-								onClick={() => {
-									setEditName(station.name);
-									setEditStreamUrl(station.streamUrl);
-									setIsEditing(false);
-								}}
+								<span className="font-medium text-caption text-xs">Name</span>
+								<Input
+									id={`${station.id}-edit-radio-name`}
+									value={editName}
+									onChange={(event) => setEditName(event.target.value)}
+								/>
+							</label>
+							<label
+								className="flex min-w-0 flex-col gap-1"
+								htmlFor={`${station.id}-edit-radio-stream-url`}
 							>
-								Cancel
-							</Button>
+								<span className="font-medium text-caption text-xs">
+									Stream URL
+								</span>
+								<Input
+									id={`${station.id}-edit-radio-stream-url`}
+									value={editStreamUrl}
+									onChange={(event) => setEditStreamUrl(event.target.value)}
+									type="url"
+								/>
+							</label>
 						</div>
-					) : null}
-				</CardElement>
+					) : (
+						<>
+							<div className="flex min-w-0 items-center gap-2">
+								<p
+									className={cn(
+										"truncate font-semibold text-heading text-sm",
+										isActive && "text-player-control-primary",
+									)}
+									title={station.name}
+								>
+									{station.name}
+								</p>
+								{isActive ? <EqualizerBars /> : null}
+							</div>
+							{tags.length > 0 ? (
+								<div className="mt-2 flex min-w-0 flex-wrap gap-2">
+									{tags.map((tag) => (
+										<span
+											key={tag}
+											className="rounded-full border border-border px-2 py-0.5 text-caption text-xs"
+										>
+											{tag}
+										</span>
+									))}
+								</div>
+							) : null}
+							{nowPlayingLabel ? (
+								<p className="mt-2 truncate text-foreground text-xs">
+									{nowPlayingLabel}
+								</p>
+							) : null}
+						</>
+					)}
+				</div>
+
+				{isEditing ? (
+					<div className="flex shrink-0 items-center gap-2">
+						<Button
+							size="sm"
+							disabled={!canSaveEdit || isMutating}
+							onClick={() => {
+								onUpdate({
+									name: editName.trim(),
+									streamUrl: editStreamUrl.trim(),
+								});
+								setIsEditing(false);
+							}}
+						>
+							Save
+						</Button>
+						<Button
+							size="sm"
+							variant="outline"
+							disabled={isMutating}
+							onClick={() => {
+								setEditName(station.name);
+								setEditStreamUrl(station.streamUrl);
+								setIsEditing(false);
+							}}
+						>
+							Cancel
+						</Button>
+					</div>
+				) : null}
 			</ContextMenuTrigger>
 			<ContextMenuContent>
-				<ContextMenuItem asChild>
-					<Link to="/radio/$stationId" params={{ stationId: station.id }}>
-						Details
-					</Link>
+				<ContextMenuItem
+					render={
+						<Link to="/radio/$stationId" params={{ stationId: station.id }} />
+					}
+				>
+					Details
 				</ContextMenuItem>
 				{canEditStation ? (
 					<ContextMenuItem
 						disabled={isMutating}
-						onSelect={() => {
+						onClick={() => {
 							setIsContextMenuOpen(false);
 							setIsEditing(true);
 						}}
@@ -320,7 +321,7 @@ function StationCard({
 				<ContextMenuItem
 					disabled={isMutating}
 					variant="destructive"
-					onSelect={() => {
+					onClick={() => {
 						setIsContextMenuOpen(false);
 						onDelete();
 					}}

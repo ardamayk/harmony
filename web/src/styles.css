@@ -416,7 +416,7 @@ html[data-window-maximized] body::after {
 		}
 	}
 	@media (prefers-reduced-motion: no-preference) {
-		.library-search-card[data-state="open"] {
+		.library-search-card[data-open] {
 			animation: library-search-enter 220ms cubic-bezier(0.22, 0.8, 0.24, 1);
 			/* ponytail: JS height measurement exists only to drive this transition; drop
          both once `interpolate-size: allow-keywords` is supported everywhere. */

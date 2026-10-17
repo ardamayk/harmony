@@ -89,6 +89,24 @@ export function AlbumFilters({
 			),
 		[artists],
 	);
+	// Base UI's SelectValue shows an item's label only when it knows the items.
+	const artistItems = useMemo(
+		() => [
+			{ value: ALL_ARTISTS, label: "All artists" },
+			...sortedArtists.map((artist) => ({
+				value: artist.id,
+				label: artist.name,
+			})),
+		],
+		[sortedArtists],
+	);
+	const genreItems = useMemo(
+		() => [
+			{ value: ALL_GENRES, label: "All genres" },
+			...genreOptions.map((genre) => ({ value: genre, label: genre })),
+		],
+		[genreOptions],
+	);
 
 	const clearFilters = () => {
 		onFiltersChange({
@@ -119,19 +137,22 @@ export function AlbumFilters({
 					<div className="flex min-w-0 flex-col gap-1 text-caption text-xs">
 						<span>Artist</span>
 						<Select
+							items={artistItems}
 							value={artistValue}
 							onValueChange={(artistId) =>
-								onFiltersChange({ ...filters, artistId })
+								onFiltersChange({
+									...filters,
+									artistId: artistId ?? ALL_ARTISTS,
+								})
 							}
 						>
 							<SelectTrigger className="w-[180px] max-w-full">
-								<SelectValue placeholder="All artists" />
+								<SelectValue />
 							</SelectTrigger>
 							<SelectContent>
-								<SelectItem value={ALL_ARTISTS}>All artists</SelectItem>
-								{sortedArtists.map((artist) => (
-									<SelectItem key={artist.id} value={artist.id}>
-										{artist.name}
+								{artistItems.map((item) => (
+									<SelectItem key={item.value} value={item.value}>
+										{item.label}
 									</SelectItem>
 								))}
 							</SelectContent>
@@ -141,17 +162,19 @@ export function AlbumFilters({
 					<div className="flex min-w-0 flex-col gap-1 text-caption text-xs">
 						<span>Genre</span>
 						<Select
+							items={genreItems}
 							value={genreValue}
-							onValueChange={(genre) => onFiltersChange({ ...filters, genre })}
+							onValueChange={(genre) =>
+								onFiltersChange({ ...filters, genre: genre ?? ALL_GENRES })
+							}
 						>
 							<SelectTrigger className="w-[180px] max-w-full">
-								<SelectValue placeholder="All genres" />
+								<SelectValue />
 							</SelectTrigger>
 							<SelectContent>
-								<SelectItem value={ALL_GENRES}>All genres</SelectItem>
-								{genreOptions.map((genre) => (
-									<SelectItem key={genre} value={genre}>
-										{genre}
+								{genreItems.map((item) => (
+									<SelectItem key={item.value} value={item.value}>
+										{item.label}
 									</SelectItem>
 								))}
 							</SelectContent>

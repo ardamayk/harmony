@@ -2,7 +2,10 @@ import type {
 	ManagedImportAlbumDecision,
 	ManagedImportAlbumPreview,
 } from "@repo/api-client";
-import { useState } from "react";
+import { useId, useState } from "react";
+import { Input } from "#/components/ui/input";
+import { Label } from "#/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "#/components/ui/radio-group";
 import {
 	Select,
 	SelectContent,
@@ -55,6 +58,7 @@ function AlbumReview({
 			);
 	const [error, setError] = useState("");
 	const [isUploading, setIsUploading] = useState(false);
+	const uploadId = useId();
 	const isDisabled = props.isBusy || isUploading;
 	async function upload(file: File | undefined) {
 		if (!file) return;
@@ -108,11 +112,13 @@ function AlbumReview({
 						decision={decision}
 						onChange={props.onChange}
 					/>
-					<label className="text-sm">
-						Upload another cover · JPG or PNG, maximum 20 MiB
-						<input
+					<div className="grid gap-2">
+						<Label htmlFor={uploadId} className="font-normal leading-normal">
+							Upload another cover · JPG or PNG, maximum 20 MiB
+						</Label>
+						<Input
+							id={uploadId}
 							aria-label={`Upload cover for ${album.title}`}
-							className="mt-2 block w-full min-w-0 rounded-md border border-input bg-secondary/30 p-2 text-foreground text-sm file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-2 file:font-medium file:text-secondary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 							type="file"
 							accept=".jpg,.jpeg,.png,image/jpeg,image/png"
 							onChange={(event) => {
@@ -120,7 +126,7 @@ function AlbumReview({
 								event.target.value = "";
 							}}
 						/>
-					</label>
+					</div>
 					{existing ? (
 						<p className="text-caption text-sm">
 							Your import confirmation also approves adding this cover to the
@@ -165,10 +171,18 @@ function AlbumDestination({
 				<>
 					<Select
 						disabled={isDisabled}
+						items={[
+							...album.existingAlbums.map((match) => ({
+								value: match.id,
+								label: existingAlbumLabel(match),
+							})),
+							{ value: "separate", label: "Create separate album" },
+						]}
 						value={
-							decision.createSeparate ? "separate" : (decision.albumId ?? "")
+							decision.createSeparate ? "separate" : (decision.albumId ?? null)
 						}
 						onValueChange={(value) =>
+							value &&
 							onChange({
 								...decision,
 								createSeparate: value === "separate",
@@ -184,11 +198,10 @@ function AlbumDestination({
 						>
 							<SelectValue placeholder="Choose an existing album" />
 						</SelectTrigger>
-						<SelectContent position="popper">
+						<SelectContent alignItemWithTrigger={false}>
 							{album.existingAlbums.map((match) => (
 								<SelectItem key={match.id} value={match.id}>
-									Add to existing album{match.year ? ` (${match.year})` : ""} —{" "}
-									{match.tracks.length} tracks
+									{existingAlbumLabel(match)}
 								</SelectItem>
 							))}
 							<SelectItem value="separate">Create separate album</SelectItem>
@@ -202,6 +215,12 @@ function AlbumDestination({
 			)}
 		</div>
 	);
+}
+
+function existingAlbumLabel(
+	match: ManagedImportAlbumPreview["existingAlbums"][number],
+): string {
+	return `Add to existing album${match.year ? ` (${match.year})` : ""} — ${match.tracks.length} tracks`;
 }
 
 export function ImportFileAlternatives({
@@ -239,30 +258,37 @@ export function ImportFileAlternatives({
 							Choose one file for {files[0].preview?.file.album}, position{" "}
 							{files[0].preview?.file.discNo}.{files[0].preview?.file.trackNo}
 						</legend>
-						{files.map((entry) => (
-							<label key={entry.key} className="flex gap-2 py-1 text-sm">
-								<input
-									type="radio"
-									name={key}
-									checked={
-										entry.selected &&
-										files.filter((file) => file.selected).length === 1
-									}
-									onChange={() => onSelect(entry.key, true)}
-								/>
-								{entry.file.name} — {entry.preview?.file.format.toUpperCase()},{" "}
-								{((entry.preview?.file.sizeBytes ?? 0) / 1024 / 1024).toFixed(
-									1,
-								)}{" "}
-								MiB, {entry.preview?.file.sampleRateHz} Hz,{" "}
-								{entry.preview &&
-								"bitDepth" in entry.preview.file &&
-								entry.preview.file.bitDepth
-									? `${entry.preview.file.bitDepth}-bit, `
-									: ""}
-								{entry.preview?.file.bitrateKbps} kbps
-							</label>
-						))}
+						<RadioGroup
+							className="gap-0"
+							disabled={isBusy}
+							value={
+								files.filter((file) => file.selected).length === 1
+									? (files.find((file) => file.selected)?.key ?? null)
+									: null
+							}
+							onValueChange={(entryKey) => onSelect(entryKey as string, true)}
+						>
+							{files.map((entry) => (
+								<Label
+									key={entry.key}
+									className="py-1 font-normal leading-normal"
+								>
+									<RadioGroupItem value={entry.key} />
+									{entry.file.name} — {entry.preview?.file.format.toUpperCase()}
+									,{" "}
+									{((entry.preview?.file.sizeBytes ?? 0) / 1024 / 1024).toFixed(
+										1,
+									)}{" "}
+									MiB, {entry.preview?.file.sampleRateHz} Hz,{" "}
+									{entry.preview &&
+									"bitDepth" in entry.preview.file &&
+									entry.preview.file.bitDepth
+										? `${entry.preview.file.bitDepth}-bit, `
+										: ""}
+									{entry.preview?.file.bitrateKbps} kbps
+								</Label>
+							))}
+						</RadioGroup>
 					</fieldset>
 				))}
 		</div>

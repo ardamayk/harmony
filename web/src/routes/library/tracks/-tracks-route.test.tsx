@@ -1149,11 +1149,15 @@ describe("tracks route", () => {
 			"[scrollbar-width:none]",
 		);
 		expect(
-			screen.getByRole("checkbox", { name: "Select broken.flac" }),
-		).toHaveProperty("disabled", true);
+			screen
+				.getByRole("checkbox", { name: "Select broken.flac" })
+				.getAttribute("aria-disabled"),
+		).toBe("true");
 		expect(
-			screen.getByRole("checkbox", { name: "Select track.flac" }),
-		).toHaveProperty("checked", true);
+			screen
+				.getByRole("checkbox", { name: "Select track.flac" })
+				.getAttribute("aria-checked"),
+		).toBe("true");
 
 		// A Possible Duplicate requires an explicit decision before confirming.
 		await screen.findByText("Track Replacement");
@@ -1386,14 +1390,16 @@ describe("tracks route", () => {
 		const acceptedCheckbox = screen.getByRole("checkbox", {
 			name: "Select strict-import.flac",
 		});
-		expect(acceptedCheckbox).not.toHaveProperty("disabled", true);
+		expect(acceptedCheckbox.getAttribute("aria-disabled")).not.toBe("true");
 		fireEvent.click(acceptedCheckbox);
-		expect(acceptedCheckbox).toHaveProperty("checked", false);
+		expect(acceptedCheckbox.getAttribute("aria-checked")).toBe("false");
 		fireEvent.click(acceptedCheckbox);
-		expect(acceptedCheckbox).toHaveProperty("checked", true);
+		expect(acceptedCheckbox.getAttribute("aria-checked")).toBe("true");
 		expect(
-			screen.getByRole("checkbox", { name: "Select broken.flac" }),
-		).toHaveProperty("disabled", true);
+			screen
+				.getByRole("checkbox", { name: "Select broken.flac" })
+				.getAttribute("aria-disabled"),
+		).toBe("true");
 
 		fireEvent.click(screen.getByRole("button", { name: "Confirm Import" }));
 
@@ -2212,7 +2218,9 @@ describe("tracks route", () => {
 			name: "Select strict-import.flac",
 		});
 		fireEvent.click(screen.getByRole("button", { name: "Confirm Import" }));
-		await vi.waitFor(() => expect(checkbox).toHaveProperty("disabled", true));
+		await vi.waitFor(() =>
+			expect(checkbox.getAttribute("aria-disabled")).toBe("true"),
+		);
 		finishConfirmation?.();
 	});
 
@@ -2268,7 +2276,7 @@ describe("tracks route", () => {
 		});
 		fireEvent.click(screen.getByRole("button", { name: "Confirm Import" }));
 		await screen.findByText("confirmation response lost");
-		expect(checkbox).toHaveProperty("disabled", true);
+		expect(checkbox.getAttribute("aria-disabled")).toBe("true");
 		expect(
 			screen.getByRole("button", { name: "Close Import Music" }),
 		).toHaveProperty("disabled", false);

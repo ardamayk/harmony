@@ -33,53 +33,57 @@ export function AlbumGrid({ albums }: { albums: Album[] }) {
 			<CollectionGrid>
 				{albums.map((album) => (
 					<ContextMenu key={album.id}>
-						<ContextMenuTrigger asChild>
-							<Link
-								to="/library/$albumId"
-								params={{ albumId: album.id }}
-								className={cn(
-									"group relative aspect-square overflow-hidden rounded-md border border-border bg-card",
-									CARD_INTERACTION_CLASS,
-								)}
-							>
-								<AlbumArt
-									coverUrl={apiClient.getAlbumCoverUrl(album.id, 512)}
-									title={album.title}
-									className="absolute inset-0 size-full transform-gpu text-2xl transition duration-500 ease-out group-hover:scale-[1.04] group-focus-visible:scale-[1.04]"
+						<ContextMenuTrigger
+							render={
+								<Link
+									to="/library/$albumId"
+									params={{ albumId: album.id }}
+									className={cn(
+										"group relative aspect-square overflow-hidden rounded-md border border-border bg-card",
+										CARD_INTERACTION_CLASS,
+									)}
 								/>
-								<div
-									data-album-card-overlay
-									className="absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-background/95 via-background/75 to-transparent p-2 text-foreground"
+							}
+						>
+							<AlbumArt
+								coverUrl={apiClient.getAlbumCoverUrl(album.id, 512)}
+								title={album.title}
+								className="absolute inset-0 size-full transform-gpu text-2xl transition duration-500 ease-out group-hover:scale-[1.04] group-focus-visible:scale-[1.04]"
+							/>
+							<div
+								data-album-card-overlay
+								className="absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-background/95 via-background/75 to-transparent p-2 text-foreground"
+							>
+								<p
+									className="truncate font-medium text-heading text-xs leading-tight"
+									title={album.title}
 								>
-									<p
-										className="truncate font-medium text-heading text-xs leading-tight"
-										title={album.title}
-									>
-										{album.title}
+									{album.title}
+								</p>
+								<p className="truncate text-xs text-foreground leading-tight">
+									{getAlbumArtistName(album)}
+								</p>
+								{album.releaseDate != null || album.year != null ? (
+									<p className="text-xs text-caption leading-tight">
+										{album.releaseDate ?? album.year}
 									</p>
-									<p className="truncate text-xs text-foreground leading-tight">
-										{getAlbumArtistName(album)}
-									</p>
-									{album.releaseDate != null || album.year != null ? (
-										<p className="text-xs text-caption leading-tight">
-											{album.releaseDate ?? album.year}
-										</p>
-									) : null}
-								</div>
-							</Link>
+								) : null}
+							</div>
 						</ContextMenuTrigger>
 						<ContextMenuContent>
-							<ContextMenuItem asChild>
-								<Link to="/library/$albumId" params={{ albumId: album.id }}>
-									Open album
-								</Link>
+							<ContextMenuItem
+								render={
+									<Link to="/library/$albumId" params={{ albumId: album.id }} />
+								}
+							>
+								Open album
 							</ContextMenuItem>
 							{canDeleteAlbums ? (
 								<>
 									<ContextMenuSeparator />
 									<ContextMenuItem
 										variant="destructive"
-										onSelect={() => albumDeletion.open(album)}
+										onClick={() => albumDeletion.open(album)}
 									>
 										<Trash2 className="size-4" />
 										Delete album

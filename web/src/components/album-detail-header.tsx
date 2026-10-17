@@ -68,101 +68,103 @@ export function AlbumDetailHeader({
 	);
 	return (
 		<ContextMenu>
-			<ContextMenuTrigger asChild>
-				<div className="@container relative overflow-hidden rounded-lg border border-border/60 bg-card/40">
-					<div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/20 via-background/40 to-background" />
-					<div className="relative grid gap-8 p-6 @xl:grid-cols-[auto_minmax(0,1fr)] @xl:items-start @4xl:grid-cols-[auto_minmax(0,1fr)_220px]">
-						<AlbumArt
-							coverUrl={apiClient.getAlbumCoverUrl(album.id, 1024)}
-							title={album.title}
-							className="aspect-square w-full shrink-0 rounded-md shadow-lg text-3xl @xl:size-52"
-						/>
+			<ContextMenuTrigger
+				render={
+					<div className="@container relative overflow-hidden rounded-lg border border-border/60 bg-card/40" />
+				}
+			>
+				<div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/20 via-background/40 to-background" />
+				<div className="relative grid gap-8 p-6 @xl:grid-cols-[auto_minmax(0,1fr)] @xl:items-start @4xl:grid-cols-[auto_minmax(0,1fr)_220px]">
+					<AlbumArt
+						coverUrl={apiClient.getAlbumCoverUrl(album.id, 1024)}
+						title={album.title}
+						className="aspect-square w-full shrink-0 rounded-md shadow-lg text-3xl @xl:size-52"
+					/>
 
-						<div className="min-w-0 pt-1">
+					<div className="min-w-0 pt-1">
+						<p className="mb-2 font-semibold text-caption text-xs uppercase tracking-widest">
+							Album
+						</p>
+						<h1 className="font-semibold text-3xl tracking-tight">
+							{album.title}
+						</h1>
+						<p className="mt-2 font-medium text-foreground text-xl">
+							{artistName}
+						</p>
+
+						<div className="mt-4 flex flex-wrap items-center gap-2 text-foreground text-sm">
+							<Music2 className="size-4 shrink-0" />
+							{metaTags.map((tag) => (
+								<Badge key={tag} variant="secondary" className="font-normal">
+									{tag}
+								</Badge>
+							))}
+						</div>
+
+						<div className="mt-6 flex flex-wrap gap-2">
+							<Button type="button" onClick={onPlayAlbum}>
+								<Play className="size-4" />
+								Play
+							</Button>
+							<Button type="button" variant="outline" onClick={onQueueAlbum}>
+								<SkipForward className="size-4" />
+								Queue album
+							</Button>
+							<Button
+								type="button"
+								variant="outline"
+								disabled
+								title="Album radio will build a station from similar album, artist, and genre tracks when recommendations exist."
+							>
+								<Disc3 className="size-4" />
+								Album radio
+							</Button>
+						</div>
+					</div>
+
+					<div className="flex flex-wrap gap-x-12 gap-y-6 @xl:col-span-2 @4xl:col-span-1 @4xl:flex-col @4xl:flex-nowrap @4xl:pt-2">
+						<div>
 							<p className="mb-2 font-semibold text-caption text-xs uppercase tracking-widest">
-								Album
+								Genres
 							</p>
-							<h1 className="font-semibold text-3xl tracking-tight">
-								{album.title}
-							</h1>
-							<p className="mt-2 font-medium text-foreground text-xl">
-								{artistName}
-							</p>
+							{genres.length > 0 ? (
+								<div className="flex flex-wrap gap-2">
+									{genres.map((genre) => (
+										<Badge key={genre} variant="outline" className="text-sm">
+											{genre}
+										</Badge>
+									))}
+								</div>
+							) : (
+								<p className="text-foreground text-sm">Not tagged</p>
+							)}
+						</div>
 
-							<div className="mt-4 flex flex-wrap items-center gap-2 text-foreground text-sm">
-								<Music2 className="size-4 shrink-0" />
-								{metaTags.map((tag) => (
-									<Badge key={tag} variant="secondary" className="font-normal">
-										{tag}
-									</Badge>
+						<div>
+							<p className="mb-3 font-semibold text-caption text-xs uppercase tracking-widest">
+								External links
+							</p>
+							<div className="flex flex-wrap gap-2">
+								{externalLinks.map((link) => (
+									<ExternalLinkButton
+										key={link.id}
+										href={link.href}
+										name={link.name}
+										short={link.short}
+										iconSrc={link.iconSrc}
+										iconClassName={link.iconClassName}
+									/>
 								))}
-							</div>
-
-							<div className="mt-6 flex flex-wrap gap-2">
-								<Button type="button" onClick={onPlayAlbum}>
-									<Play className="size-4" />
-									Play
-								</Button>
-								<Button type="button" variant="outline" onClick={onQueueAlbum}>
-									<SkipForward className="size-4" />
-									Queue album
-								</Button>
-								<Button
-									type="button"
-									variant="outline"
-									disabled
-									title="Album radio will build a station from similar album, artist, and genre tracks when recommendations exist."
-								>
-									<Disc3 className="size-4" />
-									Album radio
-								</Button>
 							</div>
 						</div>
 
-						<div className="flex flex-wrap gap-x-12 gap-y-6 @xl:col-span-2 @4xl:col-span-1 @4xl:flex-col @4xl:flex-nowrap @4xl:pt-2">
-							<div>
-								<p className="mb-2 font-semibold text-caption text-xs uppercase tracking-widest">
-									Genres
-								</p>
-								{genres.length > 0 ? (
-									<div className="flex flex-wrap gap-2">
-										{genres.map((genre) => (
-											<Badge key={genre} variant="outline" className="text-sm">
-												{genre}
-											</Badge>
-										))}
-									</div>
-								) : (
-									<p className="text-foreground text-sm">Not tagged</p>
-								)}
-							</div>
-
-							<div>
-								<p className="mb-3 font-semibold text-caption text-xs uppercase tracking-widest">
-									External links
-								</p>
-								<div className="flex flex-wrap gap-2">
-									{externalLinks.map((link) => (
-										<ExternalLinkButton
-											key={link.id}
-											href={link.href}
-											name={link.name}
-											short={link.short}
-											iconSrc={link.iconSrc}
-											iconClassName={link.iconClassName}
-										/>
-									))}
-								</div>
-							</div>
-
-							<div className="flex items-center gap-2 self-end text-caption text-xs @4xl:self-auto">
-								<Clock className="size-3.5" />
-								<span>
-									{totalDurationMs > 0
-										? `${formatTotalDuration(totalDurationMs)} total`
-										: "Duration unknown"}
-								</span>
-							</div>
+						<div className="flex items-center gap-2 self-end text-caption text-xs @4xl:self-auto">
+							<Clock className="size-3.5" />
+							<span>
+								{totalDurationMs > 0
+									? `${formatTotalDuration(totalDurationMs)} total`
+									: "Duration unknown"}
+							</span>
 						</div>
 					</div>
 				</div>
@@ -171,7 +173,7 @@ export function AlbumDetailHeader({
 				{canDeleteAlbums ? (
 					<ContextMenuItem
 						variant="destructive"
-						onSelect={() => albumDeletion.open(album)}
+						onClick={() => albumDeletion.open(album)}
 					>
 						<Trash2 className="size-4" />
 						Delete album

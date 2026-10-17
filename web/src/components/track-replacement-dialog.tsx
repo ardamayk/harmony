@@ -3,7 +3,17 @@ import type {
 	TrackReplacementFieldDiff,
 	TrackReplacementPreview,
 } from "@repo/api-client";
-import { Dialog as DialogPrimitive } from "radix-ui";
+import { Button } from "#/components/ui/button";
+import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogFooter,
+	DialogTitle,
+} from "#/components/ui/dialog";
+import { Input } from "#/components/ui/input";
+import { Label } from "#/components/ui/label";
+import { Progress } from "#/components/ui/progress";
 import type { TrackReplacementStep } from "#/hooks/use-track-replacement-flow";
 import { SUPPORTED_AUDIO_FILE_ACCEPT } from "#/routes/library/tracks/-managed-import-workflow";
 
@@ -20,7 +30,7 @@ export function TrackReplacementDialog({
 	onFile,
 	onSelectDesktopFile,
 	onConfirm,
-	onCloseAutoFocus,
+	finalFocus,
 }: {
 	track: Track | null;
 	step: TrackReplacementStep;
@@ -34,10 +44,10 @@ export function TrackReplacementDialog({
 	onFile: (file: File) => void;
 	onSelectDesktopFile: () => void;
 	onConfirm: () => void;
-	onCloseAutoFocus?: (event: Event) => void;
+	finalFocus?: () => HTMLElement | true;
 }) {
 	return (
-		<DialogPrimitive.Root
+		<Dialog
 			open={Boolean(track)}
 			onOpenChange={(open) => {
 				if (open) return;
@@ -45,58 +55,49 @@ export function TrackReplacementDialog({
 				else onCancel();
 			}}
 		>
-			<DialogPrimitive.Portal>
-				<DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-background/70" />
-				<DialogPrimitive.Content
-					aria-describedby="track-replacement-description"
-					onCloseAutoFocus={onCloseAutoFocus}
-					className="-translate-x-1/2 -translate-y-1/2 fixed top-1/2 left-1/2 z-50 max-h-[85vh] w-[calc(100vw-2rem)] max-w-2xl overflow-y-auto rounded-md border border-border bg-popover p-6 text-popover-foreground shadow-xl outline-none"
-				>
-					<DialogPrimitive.Title className="font-semibold text-heading text-xl">
-						Replace {track?.title}
-					</DialogPrimitive.Title>
-					<DialogPrimitive.Description
-						id="track-replacement-description"
-						className="mt-2 text-caption text-sm"
-					>
-						The Track keeps its identity, Playlist and Queue references. The
-						previous managed file is deleted only after the replacement is
-						verified.
-					</DialogPrimitive.Description>
-					{step === "select" || step === "uploading" ? (
-						<ReplacementFilePicker
-							isDesktop={isDesktop}
-							isBusy={isBusy}
-							progress={progress}
-							step={step}
-							onFile={onFile}
-							onSelectDesktopFile={onSelectDesktopFile}
-						/>
-					) : null}
-					{preview && step !== "completed" ? (
-						<ReplacementReview preview={preview} />
-					) : null}
-					{step === "completed" ? (
-						<output className="mt-4 block text-sm">
-							{track?.title} was replaced. Playback of this Track was stopped if
-							it was active.
-						</output>
-					) : null}
-					{error ? (
-						<p role="alert" className="mt-4 text-destructive text-sm">
-							{error}
-						</p>
-					) : null}
-					<ReplacementActions
-						step={step}
+			<DialogContent
+				finalFocus={finalFocus}
+				className="max-h-[85vh] max-w-2xl overflow-y-auto"
+			>
+				<DialogTitle>Replace {track?.title}</DialogTitle>
+				<DialogDescription className="mt-2">
+					The Track keeps its identity, Playlist and Queue references. The
+					previous managed file is deleted only after the replacement is
+					verified.
+				</DialogDescription>
+				{step === "select" || step === "uploading" ? (
+					<ReplacementFilePicker
+						isDesktop={isDesktop}
 						isBusy={isBusy}
-						onCancel={onCancel}
-						onClose={onClose}
-						onConfirm={onConfirm}
+						progress={progress}
+						step={step}
+						onFile={onFile}
+						onSelectDesktopFile={onSelectDesktopFile}
 					/>
-				</DialogPrimitive.Content>
-			</DialogPrimitive.Portal>
-		</DialogPrimitive.Root>
+				) : null}
+				{preview && step !== "completed" ? (
+					<ReplacementReview preview={preview} />
+				) : null}
+				{step === "completed" ? (
+					<output className="mt-4 block text-sm">
+						{track?.title} was replaced. Playback of this Track was stopped if
+						it was active.
+					</output>
+				) : null}
+				{error ? (
+					<p role="alert" className="mt-4 text-destructive text-sm">
+						{error}
+					</p>
+				) : null}
+				<ReplacementActions
+					step={step}
+					isBusy={isBusy}
+					onCancel={onCancel}
+					onClose={onClose}
+					onConfirm={onConfirm}
+				/>
+			</DialogContent>
+		</Dialog>
 	);
 }
 
@@ -118,28 +119,22 @@ function ReplacementFilePicker({
 	return (
 		<div className="mt-4 grid gap-2">
 			{isDesktop ? (
-				<button
+				<Button
 					type="button"
-					className="rounded-sm border border-border px-4 py-2 text-sm"
+					variant="outline"
 					disabled={isBusy}
 					onClick={onSelectDesktopFile}
 				>
 					Select replacement file
-				</button>
+				</Button>
 			) : (
 				<>
-					<label
-						htmlFor="track-replacement-file"
-						className="font-medium text-sm"
-					>
-						Replacement audio file
-					</label>
-					<input
+					<Label htmlFor="track-replacement-file">Replacement audio file</Label>
+					<Input
 						id="track-replacement-file"
 						type="file"
 						accept={SUPPORTED_AUDIO_FILE_ACCEPT}
 						disabled={isBusy}
-						className="rounded-md border border-input bg-background px-3 py-2 text-sm file:mr-3 file:rounded-sm file:border-0 file:bg-secondary file:px-3 file:py-2 file:text-secondary-foreground"
 						onChange={(event) => {
 							const file = event.target.files?.[0];
 							if (file) onFile(file);
@@ -148,19 +143,7 @@ function ReplacementFilePicker({
 				</>
 			)}
 			{step === "uploading" ? (
-				<div
-					className="h-2 overflow-hidden rounded-full bg-secondary"
-					role="progressbar"
-					aria-label="Replacement upload progress"
-					aria-valuenow={progress}
-					aria-valuemin={0}
-					aria-valuemax={100}
-				>
-					<div
-						className="h-full bg-primary transition-[width]"
-						style={{ width: `${progress}%` }}
-					/>
-				</div>
+				<Progress aria-label="Replacement upload progress" value={progress} />
 			) : null}
 			{step === "uploading" ? (
 				<p aria-live="polite" className="text-caption text-sm">
@@ -323,36 +306,32 @@ function ReplacementActions({
 }) {
 	if (step === "completed") {
 		return (
-			<div className="mt-6 flex justify-end gap-2">
-				<button
-					type="button"
-					className="rounded-sm border border-border px-4 py-2 text-sm"
-					onClick={onClose}
-				>
+			<DialogFooter className="mt-6">
+				<Button type="button" variant="outline" onClick={onClose}>
 					Done
-				</button>
-			</div>
+				</Button>
+			</DialogFooter>
 		);
 	}
 	return (
-		<div className="mt-6 flex justify-end gap-2">
-			<button
+		<DialogFooter className="mt-6">
+			<Button
 				type="button"
-				className="rounded-sm border border-border px-4 py-2 text-sm"
+				variant="outline"
 				disabled={step === "replacing"}
 				onClick={onCancel}
 			>
 				Cancel
-			</button>
-			<button
+			</Button>
+			<Button
 				type="button"
-				className="rounded-sm bg-destructive px-4 py-2 text-destructive-foreground text-sm"
+				variant="destructive"
 				disabled={step !== "review" || isBusy}
 				onClick={onConfirm}
 			>
 				{step === "replacing" ? "Replacing…" : "Replace track"}
-			</button>
-		</div>
+			</Button>
+		</DialogFooter>
 	);
 }
 

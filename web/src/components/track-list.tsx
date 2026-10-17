@@ -11,7 +11,6 @@ import {
 	Trash2,
 	X,
 } from "lucide-react";
-import { Dialog as DialogPrimitive } from "radix-ui";
 import { useRef, useState } from "react";
 import {
 	ContextMenu,
@@ -19,6 +18,13 @@ import {
 	ContextMenuItem,
 	ContextMenuTrigger,
 } from "#/components/ui/context-menu";
+import { Button } from "#/components/ui/button";
+import {
+	Dialog,
+	DialogClose,
+	DialogContent,
+	DialogTitle,
+} from "#/components/ui/dialog";
 import { useFavoriteTracks } from "#/hooks/use-favorite-tracks";
 import { useReturnFocus } from "#/hooks/use-return-focus";
 import { useServerCapability } from "#/hooks/use-server-capability";
@@ -89,8 +95,7 @@ export function TrackList({
 	const returnFocus = useReturnFocus();
 	const captureRowFocus = (trackId: string) =>
 		returnFocus.capture(rowRefs.current.get(trackId));
-	const restoreRowFocus = (event: Event) =>
-		returnFocus.restore(event, tableRef.current);
+	const restoreRowFocus = () => returnFocus.restore(tableRef.current);
 
 	// Selecting a Track replaces the Queue with the context from that Track
 	// onward, so the previous Queue is gone and no earlier Track in the list
@@ -162,95 +167,99 @@ export function TrackList({
 
 						return (
 							<ContextMenu key={track.id}>
-								<ContextMenuTrigger asChild>
-									<tr
-										ref={(row) => {
-											if (row) rowRefs.current.set(track.id, row);
-											else rowRefs.current.delete(track.id);
-										}}
-										className={cn(
-											"group cursor-pointer border-border/40 border-b transition hover:bg-muted/50",
-											isPlaying && "bg-primary/5",
-										)}
-										tabIndex={0}
-										onClick={() => {
-											if (playMode === "single") handlePlay(track);
-										}}
-										onDoubleClick={() => {
-											if (playMode === "double") handlePlay(track);
-										}}
-										onKeyDown={(event) => {
-											if (event.key === "Enter") handlePlay(track);
-										}}
-									>
-										<td className={cn("text-caption tabular-nums", rowPadding)}>
-											{visibleNumber}
-										</td>
-										<td className={rowPadding}>
-											<div className="flex min-w-0 items-center gap-2">
-												{shouldShowAlbumCover ? (
-													<img
-														alt=""
-														src={getAlbumCoverUrl(track.albumId, 64)}
-														className="size-8 shrink-0 rounded-sm object-cover text-xs"
-													/>
-												) : null}
-												<div className="min-w-0">
-													<span
-														className={cn(
-															"block truncate font-medium leading-snug",
-															compact ? "text-sm" : "text-base",
-															isPlaying ? "text-heading" : "text-foreground",
-														)}
-													>
-														{track.title}
-													</span>
-													{shouldShowArtistLine ? (
-														<span className="mt-0.5 block truncate text-caption text-xs leading-tight">
-															{getTrackArtistName(track)}
-														</span>
-													) : null}
-												</div>
-											</div>
-										</td>
-										<td
+								<ContextMenuTrigger
+									render={
+										<tr
+											ref={(row) => {
+												if (row) rowRefs.current.set(track.id, row);
+												else rowRefs.current.delete(track.id);
+											}}
 											className={cn(
-												"text-right text-caption tabular-nums",
-												rowPadding,
+												"group cursor-pointer border-border/40 border-b transition hover:bg-muted/50",
+												isPlaying && "bg-primary/5",
 											)}
-										>
-											{formatDuration(track.durationMs)}
-										</td>
-										{showFavorite ? (
-											<td className={cn("text-center", favoritePadding)}>
-												<button
-													type="button"
-													aria-label={
-														favorited
-															? "Remove from favorites"
-															: "Add to favorites"
-													}
+											tabIndex={0}
+											onClick={() => {
+												if (playMode === "single") handlePlay(track);
+											}}
+											onDoubleClick={() => {
+												if (playMode === "double") handlePlay(track);
+											}}
+											onKeyDown={(event) => {
+												if (event.key === "Enter") handlePlay(track);
+											}}
+										/>
+									}
+								>
+									<td className={cn("text-caption tabular-nums", rowPadding)}>
+										{visibleNumber}
+									</td>
+									<td className={rowPadding}>
+										<div className="flex min-w-0 items-center gap-2">
+											{shouldShowAlbumCover ? (
+												<img
+													alt=""
+													src={getAlbumCoverUrl(track.albumId, 64)}
+													className="size-8 shrink-0 rounded-sm object-cover text-xs"
+												/>
+											) : null}
+											<div className="min-w-0">
+												<span
 													className={cn(
-														"inline-flex size-8 items-center justify-center rounded-full text-caption transition hover:bg-muted hover:text-heading",
-														favorited && "text-heading",
+														"block truncate font-medium leading-snug",
+														compact ? "text-sm" : "text-base",
+														isPlaying ? "text-heading" : "text-foreground",
 													)}
-													onClick={(event) => {
-														event.stopPropagation();
-														toggleFavorite(track.id);
-													}}
 												>
-													<Heart
-														className="size-3.5"
-														fill={favorited ? "currentColor" : "none"}
-													/>
-												</button>
-											</td>
-										) : null}
-									</tr>
+													{track.title}
+												</span>
+												{shouldShowArtistLine ? (
+													<span className="mt-0.5 block truncate text-caption text-xs leading-tight">
+														{getTrackArtistName(track)}
+													</span>
+												) : null}
+											</div>
+										</div>
+									</td>
+									<td
+										className={cn(
+											"text-right text-caption tabular-nums",
+											rowPadding,
+										)}
+									>
+										{formatDuration(track.durationMs)}
+									</td>
+									{showFavorite ? (
+										<td className={cn("text-center", favoritePadding)}>
+											<Button
+												type="button"
+												variant="ghost"
+												size="icon-sm"
+												aria-label={
+													favorited
+														? "Remove from favorites"
+														: "Add to favorites"
+												}
+												className={cn(
+													"rounded-full text-caption hover:bg-muted hover:text-heading",
+													favorited && "text-heading",
+												)}
+												onClick={(event) => {
+													event.stopPropagation();
+													toggleFavorite(track.id);
+												}}
+											>
+												<Heart
+													className="size-3.5"
+													fill={favorited ? "currentColor" : "none"}
+												/>
+											</Button>
+										</td>
+									) : null}
 								</ContextMenuTrigger>
 								<ContextMenuContent>
 									<ContextMenuItem
-										onSelect={() =>
+										onClick={() =>
 											void handleQueueAction(
 												track.id,
 												playNext,
@@ -262,7 +271,7 @@ export function TrackList({
 										Play next
 									</ContextMenuItem>
 									<ContextMenuItem
-										onSelect={() =>
+										onClick={() =>
 											void handleQueueAction(
 												track.id,
 												addToQueue,
@@ -274,7 +283,7 @@ export function TrackList({
 										Add to queue
 									</ContextMenuItem>
 									<ContextMenuItem
-										onSelect={() => {
+										onClick={() => {
 											captureRowFocus(track.id);
 											setDetailsTrack(track);
 										}}
@@ -283,7 +292,7 @@ export function TrackList({
 										Details
 									</ContextMenuItem>
 									{onRemoveTrack ? (
-										<ContextMenuItem onSelect={() => onRemoveTrack(track)}>
+										<ContextMenuItem onClick={() => onRemoveTrack(track)}>
 											<ListMinus className="size-4" />
 											{removeLabel}
 										</ContextMenuItem>
@@ -291,7 +300,7 @@ export function TrackList({
 									{showDelete && hasReplacementCapability ? (
 										<ContextMenuItem
 											disabled={trackReplacement.isBusy}
-											onSelect={() => {
+											onClick={() => {
 												captureRowFocus(track.id);
 												trackReplacement.open(track);
 											}}
@@ -304,7 +313,7 @@ export function TrackList({
 										<ContextMenuItem
 											variant="destructive"
 											disabled={trackDeletion.isDeleting}
-											onSelect={() => {
+											onClick={() => {
 												captureRowFocus(track.id);
 												trackDeletion.open(track);
 											}}
@@ -324,11 +333,11 @@ export function TrackList({
 				onOpenChange={(isOpen) => {
 					if (!isOpen) setDetailsTrack(null);
 				}}
-				onCloseAutoFocus={restoreRowFocus}
+				finalFocus={restoreRowFocus}
 			/>
 			<TrackDeletionDialog
 				track={trackDeletion.track}
-				onCloseAutoFocus={restoreRowFocus}
+				finalFocus={restoreRowFocus}
 				preview={trackDeletion.preview}
 				error={trackDeletion.error}
 				isLoading={trackDeletion.isLoading}
@@ -338,7 +347,7 @@ export function TrackList({
 			/>
 			<TrackReplacementDialog
 				track={trackReplacement.track}
-				onCloseAutoFocus={restoreRowFocus}
+				finalFocus={restoreRowFocus}
 				step={trackReplacement.step}
 				preview={trackReplacement.preview}
 				progress={trackReplacement.progress}
@@ -358,41 +367,38 @@ export function TrackList({
 function TrackDetailsDialog({
 	track,
 	onOpenChange,
-	onCloseAutoFocus,
+	finalFocus,
 }: {
 	track: Track | null;
 	onOpenChange: (isOpen: boolean) => void;
-	onCloseAutoFocus?: (event: Event) => void;
+	finalFocus?: () => HTMLElement | true;
 }) {
 	const rows = track ? buildTrackDetailRows(track) : [];
 
 	return (
-		<DialogPrimitive.Root open={Boolean(track)} onOpenChange={onOpenChange}>
-			<DialogPrimitive.Portal>
-				<DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-background/70" />
-				<DialogPrimitive.Content
-					onCloseAutoFocus={onCloseAutoFocus}
-					className="-translate-x-1/2 -translate-y-1/2 fixed top-1/2 left-1/2 z-50 max-h-[80vh] w-[calc(100vw-2rem)] max-w-2xl overflow-hidden rounded-md border border-border bg-popover text-popover-foreground shadow-xl outline-none"
-				>
-					<div className="flex items-center justify-between gap-3 border-border border-b p-4">
-						<DialogPrimitive.Title className="truncate font-semibold text-heading text-xl">
-							{track?.title}
-						</DialogPrimitive.Title>
-						<DialogPrimitive.Close className="inline-flex size-8 items-center justify-center rounded-full hover:bg-muted">
-							<span className="sr-only">Close</span>
-							<X className="size-4" />
-						</DialogPrimitive.Close>
+		<Dialog open={Boolean(track)} onOpenChange={onOpenChange}>
+			<DialogContent
+				finalFocus={finalFocus}
+				className="max-h-[80vh] max-w-2xl overflow-hidden p-0"
+			>
+				<div className="flex items-center justify-between gap-3 border-border border-b p-4">
+					<DialogTitle className="truncate">{track?.title}</DialogTitle>
+					<DialogClose
+						render={<Button type="button" variant="ghost" size="icon-sm" />}
+					>
+						<span className="sr-only">Close</span>
+						<X className="size-4" />
+					</DialogClose>
+				</div>
+				{rows.length > 0 ? (
+					<div className="max-h-[65vh] overflow-auto p-4">
+						{rows.map(([label, value]) => (
+							<DetailRow key={label} label={label} value={value} />
+						))}
 					</div>
-					{rows.length > 0 ? (
-						<div className="max-h-[65vh] overflow-auto p-4">
-							{rows.map(([label, value]) => (
-								<DetailRow key={label} label={label} value={value} />
-							))}
-						</div>
-					) : null}
-				</DialogPrimitive.Content>
-			</DialogPrimitive.Portal>
-		</DialogPrimitive.Root>
+				) : null}
+			</DialogContent>
+		</Dialog>
 	);
 }
 

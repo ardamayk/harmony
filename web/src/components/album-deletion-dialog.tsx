@@ -1,12 +1,15 @@
 import type { Album, AlbumDeletionPreview } from "@repo/api-client";
-import { Dialog as DialogPrimitive } from "radix-ui";
 import {
-	DELETION_DIALOG_CONTENT_CLASS,
-	DELETION_DIALOG_OVERLAY_CLASS,
 	DeletionActions,
 	DeletionRows,
 	formatDeletionBytes,
 } from "#/components/track-deletion-dialog";
+import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogTitle,
+} from "#/components/ui/dialog";
 
 export function AlbumDeletionDialog({
 	album,
@@ -26,38 +29,32 @@ export function AlbumDeletionDialog({
 	onConfirm: () => void;
 }) {
 	return (
-		<DialogPrimitive.Root
-			open={Boolean(album)}
-			onOpenChange={(open) => !open && onCancel()}
-		>
-			<DialogPrimitive.Portal>
-				<DialogPrimitive.Overlay className={DELETION_DIALOG_OVERLAY_CLASS} />
-				<DialogPrimitive.Content className={DELETION_DIALOG_CONTENT_CLASS}>
-					<DialogPrimitive.Title className="font-semibold text-heading text-xl">
-						Permanently delete every track of {album?.title}?
-					</DialogPrimitive.Title>
-					<DialogPrimitive.Description className="mt-2 text-caption text-sm">
-						Each track and its managed file is deleted one by one. This cannot
-						be undone; if a track fails, the ones already deleted stay deleted.
-					</DialogPrimitive.Description>
-					{isLoading ? (
-						<p className="mt-4 text-sm">Loading deletion details…</p>
-					) : null}
-					{preview ? <AlbumDeletionPreviewDetails preview={preview} /> : null}
-					{error ? (
-						<p role="alert" className="mt-4 text-destructive text-sm">
-							{error}
-						</p>
-					) : null}
-					<DeletionActions
-						isReady={Boolean(preview)}
-						isDeleting={isDeleting}
-						onCancel={onCancel}
-						onConfirm={onConfirm}
-					/>
-				</DialogPrimitive.Content>
-			</DialogPrimitive.Portal>
-		</DialogPrimitive.Root>
+		<Dialog open={Boolean(album)} onOpenChange={(open) => !open && onCancel()}>
+			<DialogContent>
+				<DialogTitle>
+					Permanently delete every track of {album?.title}?
+				</DialogTitle>
+				<DialogDescription className="mt-2">
+					Each track and its managed file is deleted one by one. This cannot be
+					undone; if a track fails, the ones already deleted stay deleted.
+				</DialogDescription>
+				{isLoading ? (
+					<p className="mt-4 text-sm">Loading deletion details…</p>
+				) : null}
+				{preview ? <AlbumDeletionPreviewDetails preview={preview} /> : null}
+				{error ? (
+					<p role="alert" className="mt-4 text-destructive text-sm">
+						{error}
+					</p>
+				) : null}
+				<DeletionActions
+					isReady={Boolean(preview)}
+					isDeleting={isDeleting}
+					onCancel={onCancel}
+					onConfirm={onConfirm}
+				/>
+			</DialogContent>
+		</Dialog>
 	);
 }
 
