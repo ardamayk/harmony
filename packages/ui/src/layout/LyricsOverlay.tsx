@@ -4,6 +4,7 @@ import {
 	type CSSProperties,
 	type ReactNode,
 	useEffect,
+	useLayoutEffect,
 	useRef,
 	useState,
 } from "react";
@@ -18,6 +19,7 @@ import { cn } from "../lib/utils";
 import { usePlayback } from "../playback/PlaybackProvider";
 import { CurrentTrackPanel } from "./CurrentTrackPanel";
 import { QueuePreview } from "./QueuePreview";
+import { WindowControlButtons, type WindowControls } from "./TopNav";
 
 /** Matches --animate-lyrics-view-exit in web/src/styles.css. */
 const EXIT_MS = 250;
@@ -35,6 +37,7 @@ export function LyricsOverlay({
 	track,
 	coverUrl,
 	accent = {},
+	windowControls,
 	loadLyrics,
 	onClose,
 }: {
@@ -42,6 +45,8 @@ export function LyricsOverlay({
 	coverUrl: string | null;
 	/** Cover-derived custom properties; the backdrop takes its tint from them. */
 	accent?: Record<string, string>;
+	/** The Top Nav's window buttons, for a host without a title bar; the view covers them. */
+	windowControls?: WindowControls;
 	/** Resolves the stored lyrics; null when the host has no lyrics endpoint. */
 	loadLyrics?: (trackId: string) => Promise<{ lyrics: string } | null>;
 	onClose: () => void;
@@ -55,6 +60,23 @@ export function LyricsOverlay({
 	else if (loaded?.trackId === track.id) state = loaded.state;
 	const lyrics = state.status === "loaded" ? parseLyrics(state.lyrics) : null;
 	const rootRef = useRef<HTMLDivElement>(null);
+	// The Queue preview's first row lines up with the top of the centered cover.
+	const stageRef = useRef<HTMLDivElement>(null);
+	const [coverTop, setCoverTop] = useState(0);
+	useLayoutEffect(() => {
+		const stage = stageRef.current;
+		const cover = stage?.querySelector("section")?.firstElementChild;
+		if (!stage || !cover || typeof ResizeObserver === "undefined")
+			return undefined;
+		const measure = () =>
+			setCoverTop(
+				cover.getBoundingClientRect().top - stage.getBoundingClientRect().top,
+			);
+		const observer = new ResizeObserver(measure);
+		observer.observe(stage);
+		observer.observe(cover);
+		return () => observer.disconnect();
+	}, []);
 	const closeRef = useRef(onClose);
 	useFocusTrap(rootRef);
 
@@ -124,6 +146,14 @@ export function LyricsOverlay({
 				{
 					"--player-accent": accent["--player-accent"],
 					"--lyrics-accent": accent["--player-accent"] ?? "var(--heading)",
+					"--cover-top": `${coverTop}px`,
+					// Lyrics reach three lines (1.2em text plus py-2 each) past the
+					// centered cover and controls. They start beside the cover, scroll
+					// on until the last line sits at the bottom, and fade at both edges
+					// so no line shows cut in half.
+					"--lyrics-line": "calc(1.2em + 1rem)",
+					"--lyrics-inset": `max(0px, calc(${coverTop}px - 3.6em - 3rem))`,
+					"--lyrics-reach": `min(${coverTop}px, 3.6em + 3rem)`,
 				} as CSSProperties
 			}
 			// Without a cover accent the gradient is invalid and the flat background shows.
@@ -134,20 +164,31 @@ export function LyricsOverlay({
 				"fixed inset-0 z-fullscreen flex flex-col bg-background bg-linear-to-b from-(--player-accent)/40 to-background to-70% text-foreground outline-none",
 			)}
 		>
-			<header className="flex shrink-0 items-center justify-between gap-4 px-6 py-3">
+			<header
+				data-window-drag-region
+				className="flex shrink-0 items-center justify-between gap-4 py-3 pl-6"
+			>
 				<p className="text-caption text-xs uppercase tracking-widest">Lyrics</p>
-				<button
-					type="button"
-					className="inline-flex size-9 items-center justify-center rounded-full text-foreground hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
-					aria-label="Close lyrics"
-					title="Close lyrics"
-					onClick={() => closeRef.current()}
-				>
-					<ChevronDown className="size-5" />
-				</button>
+				<div className="flex items-center gap-1 pr-2">
+					<button
+						type="button"
+						className="inline-flex size-9 items-center justify-center rounded-full text-foreground hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
+						aria-label="Close lyrics"
+						title="Close lyrics"
+						onClick={() => closeRef.current()}
+					>
+						<ChevronDown className="size-5" />
+					</button>
+					{windowControls ? (
+						<WindowControlButtons controls={windowControls} />
+					) : null}
+				</div>
 			</header>
 			<div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-6 pb-6 md:flex-row md:overflow-hidden lg:gap-12 lg:px-12 lg:pb-12">
-				<div className="flex shrink-0 md:w-2/5 md:overflow-y-auto xl:w-1/3 scrollbar-hidden">
+				<div
+					ref={stageRef}
+					className="flex shrink-0 md:w-2/5 md:overflow-y-auto lg:w-1/3 2xl:w-1/4 scrollbar-hidden"
+				>
 					<CurrentTrackPanel track={track} coverUrl={coverUrl} />
 				</div>
 				{/* Lyrics and a Queue preview share the right side; without lyrics
@@ -168,7 +209,9 @@ export function LyricsOverlay({
 					<QueuePreview
 						className={cn(
 							"min-h-0 shrink-0",
-							lyrics ? "hidden w-queue-preview lg:flex" : "w-queue-preview",
+							lyrics
+								? "hidden w-queue-preview justify-start pt-(--cover-top) xl:flex [&>ol]:-mt-3"
+								: "w-queue-preview",
 						)}
 					/>
 				</div>
@@ -209,10 +252,7 @@ function SyncedLyrics({ lyrics }: { lyrics: ParsedLyrics }) {
 		<section
 			ref={scrollerRef}
 			aria-label="Lyrics text"
-			className={cn(
-				"relative min-w-0 flex-1 overflow-y-auto text-lyrics scrollbar-hidden",
-				lyrics.synced ? "py-lyrics-edge" : "py-12",
-			)}
+			className="relative my-(--lyrics-inset) min-w-0 flex-1 overflow-y-auto pt-(--lyrics-reach) pb-(--lyrics-line) text-lyrics scrollbar-hidden mask-y-from-[calc(100%-var(--lyrics-line))]"
 		>
 			{lyrics.lines.map((line, index) => {
 				const className =
@@ -238,12 +278,12 @@ function SyncedLyrics({ lyrics }: { lyrics: ParsedLyrics }) {
 						aria-current={index === active ? "true" : undefined}
 						className={cn(
 							className,
-							"-mx-2 rounded-md px-2 hover:bg-heading/5 hover:text-heading focus-visible:bg-heading/5 focus-visible:text-heading focus-visible:outline-none",
+							"hover:text-heading focus-visible:text-heading focus-visible:underline focus-visible:decoration-2 focus-visible:underline-offset-8 focus-visible:outline-none",
 							index === active
 								? "text-heading"
 								: index < active
 									? "text-heading/40"
-									: "text-heading/60",
+									: "text-heading/70",
 						)}
 						onClick={() => seek(time)}
 					>

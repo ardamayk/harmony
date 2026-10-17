@@ -34,8 +34,9 @@ import {
 import { SeekBar } from "./SeekBar";
 
 const CONTROL_BUTTON_CLASS =
-	"inline-flex size-6 items-center justify-center rounded-sm text-player-foreground hover:text-player-control-primary disabled:opacity-40 group-data-stage/controls:size-12";
-const CONTROL_ICON_CLASS = "size-4.5 group-data-stage/controls:size-7";
+	"inline-flex size-6 items-center justify-center rounded-sm text-player-foreground hover:text-player-control-primary disabled:opacity-40 group-data-stage/controls:size-10 group-data-stage/controls:2xl:size-12";
+const CONTROL_ICON_CLASS =
+	"size-4.5 group-data-stage/controls:size-6 group-data-stage/controls:2xl:size-7";
 // The right cluster sits alone at the edge, so its icons run one step larger.
 const SIDE_ICON_CLASS = "size-5";
 const SIDE_BUTTON_CLASS = "size-7";
@@ -72,7 +73,7 @@ export function PlaybackControls(props: PlaybackControlsProps) {
 		<section
 			aria-label="Playback controls"
 			data-stage={props.stage || undefined}
-			className="group/controls flex min-w-px max-w-112 translate-y-1.25 grow shrink-0 basis-0 flex-col items-center justify-center justify-self-center data-stage:max-w-xl data-stage:translate-y-0"
+			className="group/controls flex min-w-px max-w-112 translate-y-1.25 grow shrink-0 basis-0 flex-col items-center justify-center justify-self-center data-stage:w-full data-stage:max-w-xl data-stage:translate-y-0"
 		>
 			<TransportControls {...props} />
 			<PlaybackProgress {...props} />
@@ -93,7 +94,7 @@ function TransportControls({
 	onNext,
 }: PlaybackControlsProps) {
 	return (
-		<div className="flex items-center gap-6 group-data-stage/controls:gap-8">
+		<div className="flex items-center gap-6 group-data-stage/controls:w-full group-data-stage/controls:justify-between group-data-stage/controls:gap-2">
 			<ShuffleButton
 				isEnabled={shuffleEnabled}
 				disabled={!hasCurrentTrack}
@@ -188,7 +189,7 @@ function PrimaryPlaybackButton({
 		<button
 			type="button"
 			data-player-control
-			className="inline-flex size-11 items-center justify-center rounded-full bg-player-control-primary group-data-stage/controls:size-20 text-player-control-primary-foreground shadow-lg shadow-player-control-shadow transition hover:scale-105 hover:opacity-95 disabled:opacity-50 disabled:hover:scale-100"
+			className="inline-flex size-11 items-center justify-center rounded-full bg-player-control-primary group-data-stage/controls:size-14 group-data-stage/controls:2xl:size-20 text-player-control-primary-foreground shadow-lg shadow-player-control-shadow transition hover:scale-105 hover:opacity-95 disabled:opacity-50 disabled:hover:scale-100"
 			onClick={onClick}
 			disabled={disabled}
 			aria-label={isPlaying ? "Pause" : "Play"}
@@ -282,7 +283,7 @@ function PlaybackProgress({
 	onSeek: (seconds: number) => void;
 }) {
 	return (
-		<div className="mt-1 flex w-full min-w-0 items-center gap-2 text-xs tabular-nums group-data-stage/controls:mt-6 group-data-stage/controls:gap-4 group-data-stage/controls:text-base">
+		<div className="mt-1 flex w-full min-w-0 items-center gap-2 text-xs tabular-nums group-data-stage/controls:mt-4 group-data-stage/controls:gap-3 group-data-stage/controls:text-sm group-data-stage/controls:2xl:mt-6 group-data-stage/controls:2xl:text-base">
 			<span className="w-8 shrink-0 text-right text-player-foreground group-data-stage/controls:w-12">
 				{isRadioPlaying ? "LIVE" : formatTime(currentTime)}
 			</span>

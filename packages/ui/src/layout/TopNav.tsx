@@ -103,40 +103,53 @@ export function TopNav({
 				</div>
 			</div>
 			{windowControls ? (
-				<div
-					role="group"
-					aria-label="Window"
-					className="flex w-30 shrink-0 items-center justify-end gap-1 pr-2"
-				>
-					<button
-						type="button"
-						aria-label="Minimize"
-						title="Minimize"
-						className={WINDOW_CONTROL_CLASS}
-						onClick={windowControls.minimize}
-					>
-						<Minus className="size-4" />
-					</button>
-					<button
-						type="button"
-						aria-label="Maximize"
-						title="Maximize"
-						className={WINDOW_CONTROL_CLASS}
-						onClick={windowControls.toggleMaximize}
-					>
-						<Square className="size-3.5" />
-					</button>
-					<button
-						type="button"
-						aria-label="Close"
-						title="Close"
-						className={`${WINDOW_CONTROL_CLASS} hover:bg-destructive/80 hover:text-destructive-foreground focus-visible:bg-destructive/80 focus-visible:text-destructive-foreground`}
-						onClick={windowControls.close}
-					>
-						<X className="size-4" />
-					</button>
-				</div>
+				<WindowControlButtons controls={windowControls} className="w-30 pr-2" />
 			) : null}
 		</header>
+	);
+}
+
+/** Minimize, maximize and close for a window without a system title bar. */
+export function WindowControlButtons({
+	controls,
+	className = "",
+}: {
+	controls: WindowControls;
+	className?: string;
+}) {
+	return (
+		<div
+			role="group"
+			aria-label="Window"
+			className={`flex shrink-0 items-center justify-end gap-1 ${className}`}
+		>
+			<button
+				type="button"
+				aria-label="Minimize"
+				title="Minimize"
+				className={WINDOW_CONTROL_CLASS}
+				onClick={controls.minimize}
+			>
+				<Minus className="size-4" />
+			</button>
+			<button
+				type="button"
+				aria-label="Maximize"
+				title="Maximize"
+				className={WINDOW_CONTROL_CLASS}
+				onClick={controls.toggleMaximize}
+			>
+				<Square className="size-3.5" />
+			</button>
+			<button
+				type="button"
+				aria-label="Close"
+				title="Close"
+				className={`${WINDOW_CONTROL_CLASS} hover:bg-destructive/80 hover:text-destructive-foreground focus-visible:bg-destructive/80 focus-visible:text-destructive-foreground`}
+				onClick={controls.close}
+			>
+				<X className="size-4" />
+			</button>
+		</div>
 	);
 }

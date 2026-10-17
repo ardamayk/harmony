@@ -48,6 +48,7 @@ import { AlbumArt } from "./AlbumArt";
 import { useLayout } from "./LayoutProvider";
 import { LyricsOverlay } from "./LyricsOverlay";
 import { NowPlayingView } from "./NowPlayingView";
+import type { WindowControls } from "./TopNav";
 import { PlaybackErrorBanner } from "./PlaybackErrorBanner";
 import { PlaybackSignal } from "./PlaybackSignal";
 import {
@@ -127,6 +128,7 @@ export function PlayerBar({
 	isCurrentStationFavorite = false,
 	onToggleStationFavorite,
 	onToggleMiniPlayer,
+	windowControls,
 	canShowWaveform = false,
 }: {
 	onPlaylistMutated?: () => void;
@@ -138,6 +140,8 @@ export function PlayerBar({
 	onToggleStationFavorite?: (stationId: string, isFavorite: boolean) => void;
 	/** Desktop only: opens or closes the always-on-top mini player window. */
 	onToggleMiniPlayer?: () => void;
+	/** Window buttons for a host without a title bar; full-screen views cover the Top Nav's. */
+	windowControls?: WindowControls;
 	/** Whether the Music Server advertises track-waveform.v1. */
 	canShowWaveform?: boolean;
 } = {}) {
@@ -970,6 +974,7 @@ export function PlayerBar({
 					track={currentTrack}
 					coverUrl={largeArtworkUrl}
 					accent={accent}
+					windowControls={windowControls}
 					loadLyrics={getTrackLyrics}
 					onClose={() => setLyricsOpen(false)}
 				/>

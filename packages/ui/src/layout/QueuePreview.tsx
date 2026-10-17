@@ -36,9 +36,6 @@ export function QueuePreview({ className }: { className?: string }) {
 			aria-label="Queue"
 			className={cn("flex flex-col justify-center", className)}
 		>
-			<h2 className="mb-3 px-3 text-caption text-xs uppercase tracking-widest">
-				Queue
-			</h2>
 			<ol className="flex flex-col gap-1">
 				{rows.map((item, offset) => {
 					const index = start + offset;
@@ -68,7 +65,7 @@ export function QueuePreview({ className }: { className?: string }) {
 								<span className="min-w-0 flex-1">
 									<span
 										className={cn(
-											"block truncate text-base text-heading xl:text-xl",
+											"block truncate text-base text-heading xl:text-xl xl:leading-6",
 											distance === 0 && "font-semibold",
 										)}
 										title={item.track.title}

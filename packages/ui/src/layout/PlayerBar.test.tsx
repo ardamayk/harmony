@@ -315,7 +315,7 @@ describe("PlayerBar", () => {
 		expect(await within(view).findByText("Line one")).toBeTruthy();
 		expect(within(view).getByText("Line two")).toBeTruthy();
 		expect(api.getTrackLyrics).toHaveBeenCalledWith(track.id);
-		expect(within(view).getByRole("heading", { name: "Queue" })).toBeTruthy();
+		expect(within(view).getByRole("region", { name: "Queue" })).toBeTruthy();
 		expect(within(view).getAllByText("Track 1").length).toBeGreaterThan(0);
 
 		fireEvent.keyDown(document, { key: "Escape" });
@@ -502,6 +502,29 @@ describe("PlayerBar", () => {
 		const seek = vi.spyOn(engine, "seek");
 		fireEvent.click(second);
 		expect(seek).toHaveBeenLastCalledWith(20);
+	});
+
+	it("shows the host's window buttons in the Lyrics view", async () => {
+		const windowControls = {
+			minimize: vi.fn(),
+			toggleMaximize: vi.fn(),
+			close: vi.fn(),
+		};
+		render(
+			<LayoutProvider initialPreferences={defaultPreferences}>
+				<PlaybackProvider api={api} engine={new InMemoryPlaybackEngine()}>
+					<PlaybackStarter />
+					<PlayerBar windowControls={windowControls} />
+				</PlaybackProvider>
+			</LayoutProvider>,
+		);
+		await act(async () => {
+			screen.getByRole("button", { name: "Start track" }).click();
+		});
+		fireEvent.click(screen.getByRole("button", { name: "Lyrics" }));
+		const view = screen.getByRole("dialog", { name: "Lyrics" });
+		fireEvent.click(within(view).getByRole("button", { name: "Minimize" }));
+		expect(windowControls.minimize).toHaveBeenCalled();
 	});
 
 	it("keeps empty lyrics settled while the playhead advances", async () => {

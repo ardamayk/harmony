@@ -40,9 +40,7 @@ html[data-theme-preset] {
 	--spacing-dialog-body-height: 65dvh;
 	--spacing-search-card-height: min(85dvh, 56rem);
 	--spacing-artwork-stage: min(100%, 65vh);
-	--spacing-queue-preview: clamp(20rem, 26vw, 30rem);
-	/* Room above and below synced lyrics so the first and last line can sit in the middle. */
-	--spacing-lyrics-edge: 40vh;
+	--spacing-queue-preview: clamp(18rem, 22vw, 26rem);
 	--spacing-top-nav-offset: max(0px, calc(var(--shell-inset, 2rem) - 7.5rem));
 	--spacing-queue-drawer-max: calc(100% - 2 * var(--shell-inset, 2rem));
 	/* Shadows: the lit pill, the lifted card, the shell surfaces and the
