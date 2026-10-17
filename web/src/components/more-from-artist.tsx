@@ -81,7 +81,7 @@ export function MoreFromArtist({
 
 			<div
 				ref={scrollRef}
-				className="flex gap-4 overflow-x-auto pt-2 pb-6 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+				className="flex gap-4 overflow-x-auto pt-2 pb-6 scrollbar-hidden"
 			>
 				{items.map((album) => (
 					<Link

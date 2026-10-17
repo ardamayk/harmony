@@ -114,7 +114,7 @@ export function QualityDetailsCard({
 						"group-focus-within/quality:opacity-100 group-hover/quality:opacity-100",
 				)}
 			>
-				<dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1">
+				<dl className="grid grid-cols-media gap-x-3 gap-y-1">
 					{rows.map((row) => (
 						<div key={row.label} className="contents">
 							<dt className="text-caption">{row.label}</dt>

@@ -78,7 +78,7 @@ export function ImportMusicDialog({
 					<DialogPrimitive.Content
 						aria-describedby="import-music-description"
 						onCloseAutoFocus={onCloseAutoFocus}
-						className="-translate-x-1/2 -translate-y-1/2 fixed top-1/2 left-1/2 z-50 flex max-h-[90dvh] w-[calc(100vw-1rem)] max-w-5xl flex-col overflow-hidden rounded-lg border border-border bg-background shadow-xl outline-none sm:w-[calc(100vw-3rem)]"
+						className="-translate-x-1/2 -translate-y-1/2 fixed top-1/2 left-1/2 z-50 flex max-h-dialog-height w-dialog-width max-w-5xl flex-col overflow-hidden rounded-lg border border-border bg-background shadow-xl outline-none"
 					>
 						<ImportDialogHeader isBusy={false} />
 						<div
@@ -86,7 +86,7 @@ export function ImportMusicDialog({
 							className={
 								workflow.entries.length > 0
 									? "hidden"
-									: "grid gap-6 overflow-y-auto px-4 py-6 sm:px-6 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+									: "grid gap-6 overflow-y-auto px-4 py-6 sm:px-6 scrollbar-hidden"
 							}
 						>
 							<ImportFilePicker
@@ -105,7 +105,7 @@ export function ImportMusicDialog({
 						 * not become scroll containers of their own: a non-overflowing
 						 * `overflow-y-auto` + `overscroll-contain` child swallows wheel
 						 * events and the dialog stops scrolling with the mouse. */}
-						<div className="min-h-0 flex-1 overflow-y-auto overscroll-contain [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+						<div className="min-h-0 flex-1 overflow-y-auto overscroll-contain scrollbar-hidden">
 							{!workflow.isCompleted && workflow.batchId ? (
 								<ImportAlbumReview
 									batchId={workflow.batchId}
@@ -814,7 +814,7 @@ function ExactDuplicateReview({
 				<summary className="cursor-pointer text-primary underline">
 					View existing Track
 				</summary>
-				<dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-caption">
+				<dl className="mt-2 grid grid-cols-media gap-x-3 gap-y-1 text-caption">
 					<dt>Artist</dt>
 					<dd>{candidate.artists.join(", ")}</dd>
 					<dt>Album</dt>

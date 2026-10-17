@@ -92,7 +92,7 @@ export function WidgetDock({ panel }: { panel: PanelSide }) {
 	return (
 		<SortableContext items={widgetIds} strategy={verticalListSortingStrategy}>
 			<div
-				className="flex min-w-0 flex-col gap-3 p-2 [contain:inline-size]"
+				className="flex min-w-0 flex-col gap-3 p-2 contain-inline-size"
 				data-widget-dock
 			>
 				{widgetIds.map((id) => (

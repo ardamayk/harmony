@@ -24,9 +24,7 @@ describe("collection grid layout", () => {
 		expect(container.className).toContain("page-content-column");
 
 		const grid = screen.getByText("Card").parentElement;
-		expect(grid?.className).toContain(
-			"grid-cols-[repeat(auto-fill,min(250px,100%))]",
-		);
+		expect(grid?.className).toContain("grid-cols-cards");
 		expect(grid?.className).toContain("gap-3");
 		expect(grid?.className).toContain(
 			"max-lg:in-data-[queue-open]:grid-cols-2",

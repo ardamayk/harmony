@@ -16,9 +16,7 @@ describe("ArtistGrid", () => {
 		const { container } = render(<ArtistGrid artists={artists} />);
 
 		const grid = container.firstElementChild;
-		expect(grid?.className).toContain(
-			"grid-cols-[repeat(auto-fill,min(250px,100%))]",
-		);
+		expect(grid?.className).toContain("grid-cols-cards");
 		expect(grid?.className).toContain("gap-3");
 
 		const card = screen.getByText("Nina Simone").closest("div");

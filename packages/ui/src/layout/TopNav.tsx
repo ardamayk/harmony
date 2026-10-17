@@ -52,7 +52,7 @@ export function TopNav({
 			data-shell-surface
 			data-window-drag-region
 			className={`flex ${TOP_NAV_HEIGHT_CLASS} shrink-0 items-stretch bg-sidebar text-sidebar-foreground ${
-				windowControls ? "pl-[var(--shell-inset,2rem)]" : SHELL_INSET_CLASS
+				windowControls ? "pl-(--shell-inset,2rem)" : SHELL_INSET_CLASS
 			}`}
 		>
 			{/* Window controls sit at the window's own corner, not on the page
@@ -60,9 +60,7 @@ export function TopNav({
 			<div
 				data-window-drag-region
 				className={`flex h-full w-full min-w-0 items-center gap-6 border-sidebar-border border-b ${
-					windowControls
-						? "mr-[max(0px,calc(var(--shell-inset,2rem)-7.5rem))]"
-						: ""
+					windowControls ? "mr-top-nav-offset" : ""
 				}`}
 			>
 				<Link
@@ -108,7 +106,7 @@ export function TopNav({
 				<div
 					role="group"
 					aria-label="Window"
-					className="flex w-[7.5rem] shrink-0 items-center justify-end gap-1 pr-2"
+					className="flex w-30 shrink-0 items-center justify-end gap-1 pr-2"
 				>
 					<button
 						type="button"

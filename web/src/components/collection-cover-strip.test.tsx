@@ -200,7 +200,7 @@ describe("CollectionCoverStrip", () => {
 				expect(cover.className).toContain(className);
 			}
 			expect(cover.className).toContain("top-0");
-			expect(cover.className).toContain("h-[88%]");
+			expect(cover.className).toContain("h-11/12");
 		}
 	});
 
@@ -234,9 +234,7 @@ describe("CollectionCoverStrip", () => {
 		);
 		expect(covers).toHaveLength(4);
 		for (const cover of covers) {
-			expect(cover.className).toContain(
-				"transition-[left,width,box-shadow,filter]",
-			);
+			expect(cover.className).toContain("transition-all");
 			expect(cover.className).toContain("hover:left-0");
 			expect(cover.className).toContain("hover:z-50");
 			expect(cover.className).toContain("hover:w-full");

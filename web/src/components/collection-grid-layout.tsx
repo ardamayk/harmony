@@ -30,7 +30,7 @@ export const COLLECTION_PAGE_CONTAINER_CLASS = PAGE_CONTENT_WIDTH_CLASS;
 // an open Queue Drawer has a fixed width (see use-queue-drawer-width) and the
 // grid stretches two columns into what is left.
 export const COLLECTION_GRID_CLASS =
-	"grid grid-cols-[repeat(auto-fill,min(250px,100%))] gap-3 max-lg:in-data-[queue-open]:grid-cols-2";
+	"grid grid-cols-cards gap-3 max-lg:in-data-[queue-open]:grid-cols-2";
 
 // Hover and keyboard focus for every collection and station card
 // (docs/design-rules.md, Interaction states): lift, accent border, soft shadow.

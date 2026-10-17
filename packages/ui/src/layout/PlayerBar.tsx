@@ -655,7 +655,7 @@ export function PlayerBar({
 			<div className="@container/player-bar flex h-full w-full min-w-0 items-center justify-between gap-6">
 				<section
 					aria-label="Now playing"
-					className="@container/now-playing flex min-w-50 flex-[1_0_0] items-center gap-3 justify-self-start sm:gap-4"
+					className="@container/now-playing flex min-w-50 grow shrink-0 basis-0 items-center gap-3 justify-self-start sm:gap-4"
 				>
 					{currentTrack ? (
 						<button
@@ -694,7 +694,7 @@ export function PlayerBar({
 									type="button"
 									data-player-control
 									className={cn(
-										"ml-2 inline-flex size-6 relative after:absolute after:-inset-1 after:content-[''] shrink-0 items-center justify-center rounded-sm text-player-foreground hover:text-player-control-primary disabled:opacity-40",
+										"ml-2 inline-flex size-6 relative after:absolute after:-inset-1 after:content-empty shrink-0 items-center justify-center rounded-sm text-player-foreground hover:text-player-control-primary disabled:opacity-40",
 										favoriteTarget?.isFavorite && "text-player-control-primary",
 									)}
 									aria-label={
@@ -719,7 +719,7 @@ export function PlayerBar({
 								type="button"
 								data-player-control
 								className={cn(
-									"ml-1 inline-flex size-6 relative after:absolute after:-inset-1 after:content-[''] shrink-0 items-center justify-center rounded-sm text-player-foreground hover:text-player-control-primary disabled:opacity-40",
+									"ml-1 inline-flex size-6 relative after:absolute after:-inset-1 after:content-empty shrink-0 items-center justify-center rounded-sm text-player-foreground hover:text-player-control-primary disabled:opacity-40",
 									actionsOpen && "text-player-control-primary",
 								)}
 								aria-label="Track actions"
@@ -1191,7 +1191,7 @@ function TrackInfoDialog({
 					aria-modal="true"
 					aria-label={track.title}
 					tabIndex={-1}
-					className="max-h-[80vh] w-full max-w-2xl overflow-hidden rounded-md border border-border bg-popover text-popover-foreground shadow-xl"
+					className="max-h-dialog-height w-full max-w-2xl overflow-hidden rounded-md border border-border bg-popover text-popover-foreground shadow-xl"
 				>
 					<div className="flex items-center justify-between gap-3 border-border border-b p-4">
 						<h2 className="truncate font-semibold text-heading text-xl">
@@ -1206,11 +1206,11 @@ function TrackInfoDialog({
 							<X className="size-4" />
 						</button>
 					</div>
-					<div className="max-h-[65vh] overflow-auto p-4">
+					<div className="max-h-dialog-body-height overflow-auto p-4">
 						{rows.map(([label, value]) => (
 							<div
 								key={label}
-								className="grid grid-cols-[8rem_minmax(0,1fr)] gap-3 border-border border-b py-2 text-sm"
+								className="grid grid-cols-label gap-3 border-border border-b py-2 text-sm"
 							>
 								<span className="text-caption">{label}</span>
 								<span className="min-w-0 break-words font-medium text-foreground">

@@ -142,7 +142,7 @@ export function QueuePanel({
 			</div>
 			<div
 				ref={scrollContainerRef}
-				className="min-h-0 flex-1 overflow-y-auto pt-2 pr-2 pb-3 pl-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+				className="min-h-0 flex-1 overflow-y-auto pt-2 pr-2 pb-3 pl-4 scrollbar-hidden"
 			>
 				{(queueConflict || actionError) && (
 					<p

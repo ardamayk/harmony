@@ -49,7 +49,7 @@ export function QueueTrackRow({
 				}
 			}}
 			className={cn(
-				"group relative flex cursor-pointer items-center gap-3 rounded-r-sm py-2 pr-3 pl-6 outline-offset-[-2px] hover:bg-player-pill/60 focus-visible:outline-2 focus-visible:outline-player-control-primary",
+				"group relative flex cursor-pointer items-center gap-3 rounded-r-sm py-2 pr-3 pl-6 -outline-offset-2 hover:bg-player-pill/60 focus-visible:outline-2 focus-visible:outline-player-control-primary",
 				state === "played" &&
 					"opacity-50 hover:opacity-100 focus-within:opacity-100",
 				isCurrent &&

@@ -33,6 +33,15 @@ html[data-theme-preset] {
 }
 
 @theme inline {
+	/* Layout geometry as spacing tokens, so widths and offsets stay on
+     theme classes (w-dialog-width) instead of arbitrary values. */
+	--spacing-dialog-width: calc(100vw - 2rem);
+	--spacing-dialog-height: 85dvh;
+	--spacing-dialog-body-height: 65dvh;
+	--spacing-search-card-height: min(85dvh, 56rem);
+	--spacing-artwork-stage: min(100%, 65vh);
+	--spacing-lyrics-aside: clamp(14rem, 22vw, 18rem);
+	--spacing-top-nav-offset: max(0px, calc(var(--shell-inset, 2rem) - 7.5rem));
 	--font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
 	--color-background: var(--background);
 	--color-foreground: var(--foreground);
@@ -239,6 +248,82 @@ html[data-window-maximized] body::after {
 	.text-caption {
 		color: var(--caption);
 	}
+}
+
+/* Named utilities for the few layout patterns Tailwind has no class for. */
+@utility scrollbar-hidden {
+	scrollbar-width: none;
+	-ms-overflow-style: none;
+	&::-webkit-scrollbar {
+		display: none;
+	}
+}
+@utility content-empty {
+	content: "";
+}
+@utility z-fullscreen {
+	z-index: 60;
+}
+@utility z-above-fullscreen {
+	z-index: 70;
+}
+@utility grid-cols-label {
+	grid-template-columns: 8rem minmax(0, 1fr);
+}
+@utility grid-cols-media {
+	grid-template-columns: auto minmax(0, 1fr);
+}
+@utility grid-cols-media-aside {
+	grid-template-columns: auto minmax(0, 1fr) 220px;
+}
+@utility grid-cols-media-actions {
+	grid-template-columns: auto minmax(0, 1fr) auto;
+}
+@utility grid-cols-cards {
+	grid-template-columns: repeat(auto-fill, min(250px, 100%));
+}
+@utility grid-cols-panels {
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 560px), 1fr));
+}
+@utility transition-ring {
+	transition-property: color, box-shadow, border-color;
+	transition-timing-function: var(
+		--tw-ease,
+		var(--default-transition-timing-function)
+	);
+	transition-duration: var(--tw-duration, var(--default-transition-duration));
+}
+@utility transition-padding {
+	transition-property: padding;
+	transition-timing-function: var(
+		--tw-ease,
+		var(--default-transition-timing-function)
+	);
+	transition-duration: var(--tw-duration, var(--default-transition-duration));
+}
+@utility transition-slide {
+	transition-property: translate, visibility;
+	transition-timing-function: var(
+		--tw-ease,
+		var(--default-transition-timing-function)
+	);
+	transition-duration: var(--tw-duration, var(--default-transition-duration));
+}
+@utility contain-inline-size {
+	contain: inline-size;
+}
+/* Player Bar surfaces that keep the theme's neutral accent. */
+@utility player-neutral {
+	--player-control-primary: var(--primary);
+	--player-control-primary-foreground: var(--primary-foreground);
+	--player-foreground: var(--foreground);
+}
+@utility translate-x-switch-on {
+	translate: calc(100% - 2px) 0;
+}
+/* Hidden Queue Drawer: below the Player Bar dock, shadow included. */
+@utility translate-y-below-dock {
+	translate: 0 calc(100% + 8rem);
 }
 
 @layer components {

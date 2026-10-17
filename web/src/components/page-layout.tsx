@@ -29,7 +29,7 @@ export function PageShell({
 			<div
 				data-testid={contentTestId}
 				className={cn(
-					"min-h-0 flex-1 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+					"min-h-0 flex-1 overflow-y-auto scrollbar-hidden",
 					PAGE_CONTENT_PADDING_CLASS,
 					contentClassName,
 				)}
@@ -99,7 +99,7 @@ export function DetailPageShell({
 	return (
 		<div
 			className={cn(
-				"min-h-0 flex-1 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+				"min-h-0 flex-1 overflow-y-auto scrollbar-hidden",
 				PAGE_CONTENT_PADDING_CLASS,
 			)}
 		>

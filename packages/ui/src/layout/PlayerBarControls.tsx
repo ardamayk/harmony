@@ -69,7 +69,7 @@ export function PlaybackControls(props: PlaybackControlsProps) {
 	return (
 		<section
 			aria-label="Playback controls"
-			className="flex min-w-px max-w-112 translate-y-1.25 flex-[1_0_0] flex-col items-center justify-center justify-self-center"
+			className="flex min-w-px max-w-112 translate-y-1.25 grow shrink-0 basis-0 flex-col items-center justify-center justify-self-center"
 		>
 			<TransportControls {...props} />
 			<PlaybackProgress {...props} />
@@ -352,7 +352,7 @@ export function VolumeAndQueueControls({
 	return (
 		<section
 			aria-label="Volume and queue"
-			className="flex min-w-50 flex-[1_0_0] items-center justify-end gap-3 justify-self-end @min-[66rem]/player-bar:gap-4"
+			className="flex min-w-50 grow shrink-0 basis-0 items-center justify-end gap-3 justify-self-end @min-[66rem]/player-bar:gap-4"
 		>
 			{isGapless ? (
 				<span

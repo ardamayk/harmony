@@ -172,7 +172,7 @@ describe("genre routes", () => {
 			"overflow-hidden",
 		);
 		expect(screen.getByTestId("genres-page-content").className).toContain(
-			"[scrollbar-width:none]",
+			"scrollbar-hidden",
 		);
 		expect(
 			screen
@@ -182,7 +182,7 @@ describe("genre routes", () => {
 		expect(
 			screen
 				.getByTestId("genres-page-content")
-				.querySelector('[class*="auto-fill"]'),
+				.querySelector(".grid-cols-cards"),
 		).toBeTruthy();
 		expect(
 			container.querySelector('[data-testid="playlist-card-cover-stack"]'),

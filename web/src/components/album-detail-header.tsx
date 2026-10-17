@@ -71,7 +71,7 @@ export function AlbumDetailHeader({
 			<ContextMenuTrigger asChild>
 				<div className="@container relative overflow-hidden rounded-lg border border-border/60 bg-card/40">
 					<div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/20 via-background/40 to-background" />
-					<div className="relative grid gap-8 p-6 @xl:grid-cols-[auto_minmax(0,1fr)] @xl:items-start @4xl:grid-cols-[auto_minmax(0,1fr)_220px]">
+					<div className="relative grid gap-8 p-6 @xl:grid-cols-media @xl:items-start @4xl:grid-cols-media-aside">
 						<AlbumArt
 							coverUrl={apiClient.getAlbumCoverUrl(album.id, 1024)}
 							title={album.title}

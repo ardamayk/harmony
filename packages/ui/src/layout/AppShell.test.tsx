@@ -191,7 +191,7 @@ describe("AppShell", () => {
 		const column = container.querySelector("[data-player-dock-column]");
 		expect(dock?.className).toContain("inset-x-0");
 		// Mirrors PAGE_CONTENT_PADDING_CLASS in web: the same --shell-inset.
-		expect(dock?.className).toContain("px-[var(--shell-inset,2rem)]");
+		expect(dock?.className).toContain("px-(--shell-inset,2rem)");
 		expect(column?.className).toContain("w-full");
 		expect(column?.className).not.toContain("max-w-");
 	});
@@ -216,7 +216,7 @@ describe("AppShell", () => {
 		expect(main.hasAttribute("data-queue-open")).toBe(true);
 		expect(main.style.paddingRight).toBe("");
 		expect(main.className).toContain(
-			"data-[queue-open]:pr-[var(--queue-drawer-clearance)]",
+			"data-[queue-open]:pr-(--queue-drawer-clearance)",
 		);
 	});
 
@@ -233,7 +233,7 @@ describe("AppShell", () => {
 		expect(drawer.dataset.state).toBe("closed");
 		expect(drawer.getAttribute("aria-hidden")).toBe("true");
 		expect(drawer.hasAttribute("inert")).toBe(true);
-		expect(drawer.className).toContain("translate-y-[calc(100%+8rem)]");
+		expect(drawer.className).toContain("translate-y-below-dock");
 		expect(drawer.className).toContain("invisible");
 		const main = container.querySelector("main") as HTMLElement;
 		expect(main.hasAttribute("data-queue-open")).toBe(false);
