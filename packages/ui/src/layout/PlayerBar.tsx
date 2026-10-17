@@ -418,12 +418,12 @@ export function PlayerBar({
 		? getAlbumCoverUrl(currentTrack.albumId, 1024)
 		: (currentRadioStation?.faviconUrl ?? null);
 	const themeMode = useResolvedThemeMode(preferences.theme.mode);
-	const accentStyle = useCoverAccent({
+	const accent = useCoverAccent({
 		cacheKey: currentTrack ? currentTrack.albumId : null,
 		coverUrl: currentTrack ? artworkUrl : null,
 		enabled: playbackPreferences.accentFromCover,
 		mode: themeMode,
-	}) as CSSProperties;
+	});
 
 	const effectiveDuration =
 		duration > 0
@@ -639,7 +639,17 @@ export function PlayerBar({
 		<footer
 			data-testid="player-bar"
 			data-shell-surface
-			style={accentStyle}
+			style={
+				{
+					"--player-accent": accent["--player-accent"],
+					"--player-accent-foreground": accent["--player-accent-foreground"],
+					"--player-control-primary": accent["--player-control-primary"],
+					"--player-control-primary-foreground":
+						accent["--player-control-primary-foreground"],
+					"--player-live-progress": accent["--player-live-progress"],
+					"--player-control-shadow": accent["--player-control-shadow"],
+				} as CSSProperties
+			}
 			className="relative h-21.5 rounded-lg border border-player-border bg-player px-6 text-player-foreground shadow-shell"
 		>
 			{playbackError ? (
@@ -756,11 +766,13 @@ export function PlayerBar({
 							<Portal>
 								<div
 									id="player-track-actions-menu"
-									className="fixed z-50 min-w-44 -translate-y-full rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg"
-									style={{
-										top: menuPosition.top,
-										left: menuPosition.left,
-									}}
+									className="fixed top-(--menu-top) left-(--menu-left) z-50 min-w-44 -translate-y-full rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg"
+									style={
+										{
+											"--menu-top": `${menuPosition.top}px`,
+											"--menu-left": `${menuPosition.left}px`,
+										} as CSSProperties
+									}
 									role="menu"
 								>
 									<AddToPlaylistMenuItem
@@ -980,7 +992,7 @@ export function PlayerBar({
 				<NowPlayingView
 					track={currentTrack}
 					coverUrl={largeArtworkUrl}
-					accentStyle={accentStyle}
+					accent={accent}
 					onOpenLyrics={() => {
 						setNowPlayingOpen(false);
 						setLyricsOpen(true);

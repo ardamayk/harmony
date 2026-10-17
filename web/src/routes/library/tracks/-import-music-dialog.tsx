@@ -9,7 +9,7 @@ import {
 	X,
 } from "lucide-react";
 import { Dialog as DialogPrimitive } from "radix-ui";
-import { memo, useId, useState } from "react";
+import { type CSSProperties, memo, useId, useState } from "react";
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import { isDesktopClient } from "#/desktop/bridge";
@@ -397,10 +397,10 @@ function ProgressBar({
 		>
 			<div
 				className={cn(
-					"h-full rounded-full bg-primary",
+					"h-full w-(--progress) rounded-full bg-primary",
 					isIndeterminate && "opacity-60",
 				)}
-				style={{ width: `${percent}%` }}
+				style={{ "--progress": `${percent}%` } as CSSProperties}
 			/>
 		</div>
 	);

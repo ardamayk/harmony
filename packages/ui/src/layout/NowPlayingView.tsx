@@ -15,14 +15,14 @@ import { QueuePanel } from "./QueuePanel";
 export function NowPlayingView({
 	track,
 	coverUrl,
-	accentStyle,
+	accent = {},
 	onOpenLyrics,
 	onClose,
 }: {
 	track: Track;
 	coverUrl: string | null;
 	/** Cover-derived custom properties, forwarded so the view matches the bar. */
-	accentStyle?: CSSProperties;
+	accent?: Record<string, string>;
 	onOpenLyrics?: () => void;
 	onClose: () => void;
 }) {
@@ -47,7 +47,17 @@ export function NowPlayingView({
 			aria-label="Now playing"
 			tabIndex={-1}
 			data-now-playing-surface
-			style={accentStyle}
+			style={
+				{
+					"--player-accent": accent["--player-accent"],
+					"--player-accent-foreground": accent["--player-accent-foreground"],
+					"--player-control-primary": accent["--player-control-primary"],
+					"--player-control-primary-foreground":
+						accent["--player-control-primary-foreground"],
+					"--player-live-progress": accent["--player-live-progress"],
+					"--player-control-shadow": accent["--player-control-shadow"],
+				} as CSSProperties
+			}
 			className="motion-safe:animate-lyrics-view fixed inset-0 z-fullscreen flex flex-col overflow-hidden bg-background text-foreground outline-none"
 		>
 			<header className="relative flex shrink-0 items-center justify-between gap-4 px-6 py-3">

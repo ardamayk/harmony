@@ -209,9 +209,11 @@ describe("AppShell", () => {
 		expect(drawer.getAttribute("aria-hidden")).toBe("false");
 		expect(drawer.className).toContain("translate-y-0");
 		expect(drawer.className).not.toContain("invisible");
-		expect(drawer.style.right).toBe("var(--shell-inset, 2rem)");
+		expect(drawer.className).toContain("right-(--shell-inset,2rem)");
 		// Parks above the Player Bar rather than touching it.
-		expect(drawer.style.bottom).toContain("86px");
+		expect(drawer.style.getPropertyValue("--queue-drawer-bottom")).toContain(
+			"86px",
+		);
 		const main = container.querySelector("main") as HTMLElement;
 		expect(main.hasAttribute("data-queue-open")).toBe(true);
 		expect(main.style.paddingRight).toBe("");
@@ -260,8 +262,10 @@ describe("AppShell", () => {
 			"[data-queue-drawer]",
 		) as HTMLElement;
 		expect(container.querySelector("[data-widget-dock]")).toBeNull();
-		expect(drawer.style.width).toBe("var(--queue-drawer-width, 18rem)");
-		expect(drawer.style.bottom).toContain("1.5rem");
+		expect(drawer.className).toContain("w-(--queue-drawer-width,18rem)");
+		expect(drawer.style.getPropertyValue("--queue-drawer-bottom")).toContain(
+			"1.5rem",
+		);
 		expect(drawer.className).toContain("rounded-lg");
 	});
 
@@ -314,22 +318,26 @@ describe("AppShell", () => {
 		expect(shell?.style.getPropertyValue("--queue-drawer-width")).toBe("518px");
 		expect(drawer?.style.getPropertyValue("--queue-drawer-width")).toBe("");
 		expect(main?.style.getPropertyValue("--queue-drawer-width")).toBe("");
-		expect(drawer?.style.width).toBe("var(--queue-drawer-width, 18rem)");
+		expect(drawer?.className).toContain("w-(--queue-drawer-width,18rem)");
 		expect(main?.style.getPropertyValue("--queue-drawer-clearance")).toBe(
 			"calc(var(--queue-drawer-width, 18rem) + 1.5rem)",
 		);
-		const bottom = drawer?.style.bottom;
+		const bottom = drawer?.style.getPropertyValue("--queue-drawer-bottom");
 		expect(bottom).toBe("calc(16px + 86px + 1.5rem)");
 		if (!resizeShell)
 			throw new Error("The shell was not observed for resizing");
 		shellWidth = 1919;
 		act(resizeShell);
 		expect(shell?.style.getPropertyValue("--queue-drawer-width")).toBe("549px");
-		expect(drawer?.style.bottom).toBe(bottom);
+		expect(drawer?.style.getPropertyValue("--queue-drawer-bottom")).toBe(
+			bottom,
+		);
 		shellWidth = 1000;
 		fireEvent(window, new Event("resize"));
 		expect(shell?.style.getPropertyValue("--queue-drawer-width")).toBe("386px");
-		expect(drawer?.style.bottom).toBe(bottom);
+		expect(drawer?.style.getPropertyValue("--queue-drawer-bottom")).toBe(
+			bottom,
+		);
 		unmount();
 		expect(disconnect).toHaveBeenCalled();
 	});

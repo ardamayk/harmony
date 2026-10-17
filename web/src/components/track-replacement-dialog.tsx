@@ -4,6 +4,7 @@ import type {
 	TrackReplacementPreview,
 } from "@repo/api-client";
 import { Dialog as DialogPrimitive } from "radix-ui";
+import type { CSSProperties } from "react";
 import type { TrackReplacementStep } from "#/hooks/use-track-replacement-flow";
 import { SUPPORTED_AUDIO_FILE_ACCEPT } from "#/routes/library/tracks/-managed-import-workflow";
 
@@ -157,8 +158,8 @@ function ReplacementFilePicker({
 					aria-valuemax={100}
 				>
 					<div
-						className="h-full bg-primary transition-all"
-						style={{ width: `${progress}%` }}
+						className="h-full w-(--progress) bg-primary transition-all"
+						style={{ "--progress": `${progress}%` } as CSSProperties}
 					/>
 				</div>
 			) : null}

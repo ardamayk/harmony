@@ -936,8 +936,8 @@ describe("PlayerBar", () => {
 		const menu = document.getElementById("player-track-actions-menu");
 		expect(menu).toBeTruthy();
 		expect(menu?.parentElement).toBe(document.body);
-		expect(menu?.style.top).toBe("312px");
-		expect(menu?.style.left).toBe("48px");
+		expect(menu?.style.getPropertyValue("--menu-top")).toBe("312px");
+		expect(menu?.style.getPropertyValue("--menu-left")).toBe("48px");
 	});
 
 	it("navigates to album and artist from the actions menu", async () => {

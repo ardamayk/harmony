@@ -15,7 +15,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical } from "lucide-react";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { cn } from "../lib/utils";
 import { renderWidget, widgetRegistry } from "../widgets/registry";
 import { useLayout } from "./LayoutProvider";
@@ -39,16 +39,16 @@ function SortableWidget({ id, panel }: { id: string; panel: PanelSide }) {
 	const title = widgetRegistry.find((w) => w.id === id)?.title ?? id;
 
 	const style = {
-		transform: CSS.Transform.toString(transform),
-		transition,
-	};
+		"--sortable-transform": CSS.Transform.toString(transform),
+		"--sortable-transition": transition,
+	} as CSSProperties;
 
 	if (!widget) {
 		return (
 			<div
 				ref={setNodeRef}
 				style={style}
-				className="rounded-sm border border-destructive/50 p-2 text-destructive text-xs"
+				className="sortable-widget rounded-sm border border-destructive/50 p-2 text-destructive text-xs"
 			>
 				Unknown widget: {id}
 			</div>
@@ -60,7 +60,7 @@ function SortableWidget({ id, panel }: { id: string; panel: PanelSide }) {
 			ref={setNodeRef}
 			style={style}
 			className={cn(
-				"min-w-0 overflow-hidden rounded-md border border-border bg-card",
+				"sortable-widget min-w-0 overflow-hidden rounded-md border border-border bg-card",
 				isDragging && "opacity-60 shadow-md",
 			)}
 		>
