@@ -337,7 +337,7 @@ export function LibrarySearchDialog({
 						Search your library
 					</DialogPrimitive.Title>
 					<div className="flex shrink-0 items-center gap-3 border-border border-b px-4 sm:gap-4 sm:px-6">
-						<Search className="size-5 shrink-0 text-caption" />
+						<Search className="size-4 shrink-0 text-caption" />
 						<input
 							ref={inputRef}
 							type="search"
@@ -358,16 +358,16 @@ export function LibrarySearchDialog({
 								setShowAll(false);
 							}}
 							onKeyDown={onInputKeyDown}
-							className="h-16 min-w-0 flex-1 bg-transparent text-xl outline-none placeholder:text-muted-foreground sm:h-20 [&::-webkit-search-cancel-button]:appearance-none"
+							className="h-14 min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-muted-foreground [&::-webkit-search-cancel-button]:appearance-none"
 						/>
 						{resultCount !== undefined ? (
-							<output className="shrink-0 rounded-sm border border-border px-3 py-2 text-caption text-xs">
+							<output className="flex h-8 shrink-0 items-center rounded-sm border border-border px-3 text-caption text-xs">
 								{resultCount} {resultCount === 1 ? "result" : "results"}
 							</output>
 						) : null}
 						<DialogPrimitive.Close
 							aria-label="Close search"
-							className="shrink-0 rounded-sm border border-border px-3 py-2 text-caption text-xs outline-none hover:bg-muted/50 focus-visible:bg-muted/50"
+							className="flex h-8 shrink-0 items-center rounded-sm border border-border px-3 text-caption text-xs outline-none hover:bg-muted/50 focus-visible:bg-muted/50"
 						>
 							Esc
 						</DialogPrimitive.Close>
