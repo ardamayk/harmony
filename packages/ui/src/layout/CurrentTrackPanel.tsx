@@ -54,14 +54,15 @@ export function CurrentTrackPanel({
 					className="aspect-square w-artwork-stage shrink-0 rounded-md text-3xl shadow-xl"
 				/>
 			)}
-			<div className="w-full max-w-xl text-center">
+			{/* Spans the cover and sizes its type from it, so title and cover keep their proportion. */}
+			<div className="@container w-artwork-stage text-center">
 				<h1
-					className="truncate font-semibold text-3xl text-heading"
+					className="line-clamp-2 text-balance break-words font-semibold text-heading text-xl @xs:text-2xl @sm:text-3xl"
 					title={track.title}
 				>
 					{track.title}
 				</h1>
-				<p className="mt-2 truncate text-caption text-xl">
+				<p className="mt-2 line-clamp-2 text-balance text-caption text-base @sm:text-xl">
 					{track.artistName}
 					{track.albumTitle ? ` · ${track.albumTitle}` : ""}
 				</p>
