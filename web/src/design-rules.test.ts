@@ -49,12 +49,12 @@ function radiusViolations(path: string, source: string): string[] {
 // token should be the token class (`bg-x`).
 const ARBITRARY_COLOR_VARIABLE =
 	/(?<![\w-])(?:bg|text|border(?:-[trblxyse])?|ring|ring-offset|outline|fill|stroke|decoration|from|via|to|caret|accent|divide|placeholder)-\[var\(--([a-z0-9-]+)\)\]/g;
+const theme = readFileSync(join(webSource, "styles.css"), "utf8");
 const themeColorTokens = new Set(
-	[
-		...readFileSync(join(webSource, "styles.css"), "utf8").matchAll(
-			/--color-([a-z0-9-]+):/g,
-		),
-	].map((match) => match[1]),
+	[...theme.matchAll(/--color-([a-z0-9-]+):/g)].map((match) => match[1]),
+);
+const themeSpacingTokens = new Set(
+	[...theme.matchAll(/--spacing-([a-z0-9-]+):/g)].map((match) => match[1]),
 );
 
 function colorTokenViolations(path: string, source: string): string[] {
@@ -107,10 +107,12 @@ function scaleViolations(path: string, source: string): string[] {
 		const spacing = SPACING.exec(token);
 		if (!spacing) return [];
 		const step = spacing[1];
-		// Layout geometry tied to a CSS variable is allowed (`px-[var(--shell-inset)]`).
+		// Layout geometry is allowed as a CSS variable (`px-(--shell-inset)`)
+		// or a `--spacing-*` theme token (`mr-top-nav-offset`).
 		if (
 			SPACING_STEPS.has(step) ||
-			/^\[var\(--[\w-]+(?:,[^\]]+)?\)\]$/.test(step)
+			themeSpacingTokens.has(step) ||
+			/^\(--[\w-]+(?:,[^)]+)?\)$/.test(step)
 		)
 			return [];
 		return [`${where}: ${token}`];

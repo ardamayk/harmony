@@ -35,7 +35,7 @@ import { SeekBar } from "./SeekBar";
 
 const CONTROL_BUTTON_CLASS =
 	"inline-flex size-6 items-center justify-center rounded-sm text-player-foreground hover:text-player-control-primary disabled:opacity-40";
-const CONTROL_ICON_CLASS = "size-[18px]";
+const CONTROL_ICON_CLASS = "size-4.5";
 // The right cluster sits alone at the edge, so its icons run one step larger.
 const SIDE_ICON_CLASS = "size-5";
 const SIDE_BUTTON_CLASS = "size-7";
@@ -69,7 +69,7 @@ export function PlaybackControls(props: PlaybackControlsProps) {
 	return (
 		<section
 			aria-label="Playback controls"
-			className="flex min-w-px max-w-[448px] translate-y-[5px] flex-[1_0_0] flex-col items-center justify-center justify-self-center"
+			className="flex min-w-px max-w-112 translate-y-1.25 grow shrink-0 basis-0 flex-col items-center justify-center justify-self-center"
 		>
 			<TransportControls {...props} />
 			<PlaybackProgress {...props} />
@@ -185,7 +185,7 @@ function PrimaryPlaybackButton({
 		<button
 			type="button"
 			data-player-control
-			className="inline-flex size-11 items-center justify-center rounded-full bg-player-control-primary text-player-control-primary-foreground shadow-[0px_10px_15px_-3px_var(--player-control-shadow),0px_4px_6px_-4px_var(--player-control-shadow)] transition hover:scale-105 hover:opacity-95 disabled:opacity-50 disabled:hover:scale-100"
+			className="inline-flex size-11 items-center justify-center rounded-full bg-player-control-primary text-player-control-primary-foreground shadow-lg shadow-player-control-shadow transition hover:scale-105 hover:opacity-95 disabled:opacity-50 disabled:hover:scale-100"
 			onClick={onClick}
 			disabled={disabled}
 			aria-label={isPlaying ? "Pause" : "Play"}
@@ -193,12 +193,15 @@ function PrimaryPlaybackButton({
 			{isPlaying ? (
 				<Pause
 					key="pause"
-					className={cn(CONTROL_ICON_CLASS, "player-glyph-enter")}
+					className={cn(CONTROL_ICON_CLASS, "motion-safe:animate-player-glyph")}
 				/>
 			) : (
 				<Play
 					key="play"
-					className={cn(CONTROL_ICON_CLASS, "player-glyph-enter ml-0.5")}
+					className={cn(
+						CONTROL_ICON_CLASS,
+						"motion-safe:animate-player-glyph ml-0.5",
+					)}
 				/>
 			)}
 		</button>
@@ -352,7 +355,7 @@ export function VolumeAndQueueControls({
 	return (
 		<section
 			aria-label="Volume and queue"
-			className="flex min-w-[200px] flex-[1_0_0] items-center justify-end gap-3 justify-self-end @min-[66rem]/player-bar:gap-4"
+			className="flex min-w-50 grow shrink-0 basis-0 items-center justify-end gap-3 justify-self-end @min-[66rem]/player-bar:gap-4"
 		>
 			{isGapless ? (
 				<span
@@ -533,7 +536,7 @@ function VolumeControl({
 					touchOpen && "pointer-events-auto opacity-100",
 				)}
 			>
-				<div className="flex h-32 w-9 items-center justify-center rounded-lg border border-player-border bg-player px-2 py-3 shadow-[0_8px_24px_-4px_var(--player-shadow)]">
+				<div className="flex h-32 w-9 items-center justify-center rounded-lg border border-player-border bg-player px-2 py-3 shadow-lg">
 					<div className="relative h-full w-4">
 						<input
 							type="range"

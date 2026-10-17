@@ -78,7 +78,7 @@ export function LyricsOverlay({
 			aria-modal="true"
 			aria-label="Lyrics"
 			tabIndex={-1}
-			className="lyrics-view-enter fixed inset-0 z-[60] flex flex-col bg-background text-foreground outline-none"
+			className="motion-safe:animate-lyrics-view fixed inset-0 z-fullscreen flex flex-col bg-background text-foreground outline-none"
 		>
 			<header className="flex shrink-0 items-center justify-between gap-4 border-border border-b px-6 py-3">
 				<div className="flex min-w-0 items-center gap-3">
@@ -107,16 +107,16 @@ export function LyricsOverlay({
 				</button>
 			</header>
 			<div className="flex min-h-0 flex-1 flex-col overflow-y-auto md:flex-row md:overflow-hidden">
-				<div className="shrink-0 border-border border-b md:w-[34%] md:overflow-y-auto md:border-r md:border-b-0">
+				<div className="shrink-0 border-border border-b md:w-1/3 md:overflow-y-auto md:border-r md:border-b-0">
 					<CurrentTrackPanel track={track} coverUrl={coverUrl} />
 				</div>
 				<section
 					aria-label="Lyrics text"
-					className="flex min-h-64 min-w-0 flex-1 flex-col md:overflow-y-auto px-8 py-12 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+					className="flex min-h-64 min-w-0 flex-1 flex-col md:overflow-y-auto px-8 py-12 scrollbar-hidden"
 				>
 					<LyricsBody state={state} />
 				</section>
-				<aside className="hidden w-[clamp(14rem,22vw,18rem)] shrink-0 border-border border-l bg-queue text-queue-foreground md:block">
+				<aside className="hidden w-lyrics-aside shrink-0 border-border border-l bg-queue text-queue-foreground md:block">
 					<QueuePanel embedded />
 				</aside>
 			</div>
@@ -166,7 +166,7 @@ function LyricsBody({ state }: { state: LyricsState }): ReactNode {
 				<p
 					// biome-ignore lint/suspicious/noArrayIndexKey: lyric lines have no identity
 					key={index}
-					className="min-h-[1.5em] font-semibold text-2xl text-heading leading-relaxed"
+					className="min-h-6 font-semibold text-2xl text-heading leading-relaxed"
 				>
 					{line}
 				</p>

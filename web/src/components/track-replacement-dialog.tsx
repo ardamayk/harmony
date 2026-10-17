@@ -57,7 +57,7 @@ export function TrackReplacementDialog({
 		>
 			<DialogContent
 				finalFocus={finalFocus}
-				className="max-h-[85vh] max-w-2xl overflow-y-auto"
+				className="max-h-dialog-height max-w-2xl overflow-y-auto"
 			>
 				<DialogTitle>Replace {track?.title}</DialogTitle>
 				<DialogDescription className="mt-2">
@@ -178,7 +178,7 @@ function ReplacementReview({ preview }: { preview: TrackReplacementPreview }) {
 					permanently after the replacement is verified.
 				</p>
 			</div>
-			<dl className="grid grid-cols-[8rem_minmax(0,1fr)] gap-3 text-sm">
+			<dl className="grid grid-cols-label gap-3 text-sm">
 				<dt className="text-caption">Playlists kept</dt>
 				<dd>
 					{preview.playlistReferences
@@ -210,7 +210,7 @@ function DiffSection({
 			{changed.length === 0 ? (
 				<p className="text-caption text-sm">No changes</p>
 			) : (
-				<dl className="mt-1 grid grid-cols-[8rem_minmax(0,1fr)] gap-x-3 gap-y-1 text-sm">
+				<dl className="mt-1 grid grid-cols-label gap-x-3 gap-y-1 text-sm">
 					{changed.map((diff) => (
 						<DiffRow key={diff.field} diff={diff} />
 					))}

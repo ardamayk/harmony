@@ -4,7 +4,7 @@ import { Button as ButtonPrimitive } from "@base-ui/react/button";
 import { cn } from "#/lib/utils.ts";
 
 const buttonVariants = cva(
-	"inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+	"inline-flex shrink-0 items-center justify-center gap-2 rounded-md text-sm font-medium whitespace-nowrap transition-all outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
 	{
 		variants: {
 			variant: {
@@ -18,6 +18,9 @@ const buttonVariants = cva(
 				ghost:
 					"text-foreground hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
 				link: "text-foreground underline-offset-4 hover:text-heading hover:underline",
+				// Quiet control beside content: caption color until hovered.
+				muted:
+					"text-caption hover:bg-accent hover:text-heading dark:hover:bg-accent/50",
 			},
 			size: {
 				default: "h-9 px-4 py-2 has-[>svg]:px-3",

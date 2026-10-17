@@ -239,8 +239,8 @@ describe("PlayerBar", () => {
 		});
 
 		const nowPlaying = screen.getByLabelText("Now playing");
-		expect(nowPlaying.className).toContain("min-w-[200px]");
-		expect(nowPlaying.className).toContain("flex-[1_0_0]");
+		expect(nowPlaying.className).toContain("min-w-50");
+		expect(nowPlaying.className).toContain("grow shrink-0 basis-0");
 	});
 
 	it("keeps playback controls centered in the full player bar", async () => {
@@ -254,7 +254,7 @@ describe("PlayerBar", () => {
 	it("renders the Figma player bar shell dimensions", () => {
 		renderPlayerBar();
 
-		expect(screen.getByRole("contentinfo").className).toContain("h-[86px]");
+		expect(screen.getByRole("contentinfo").className).toContain("h-21.5");
 		expect(screen.getByRole("contentinfo").className).toContain("bg-player");
 	});
 
@@ -936,8 +936,8 @@ describe("PlayerBar", () => {
 		const menu = document.getElementById("player-track-actions-menu");
 		expect(menu).toBeTruthy();
 		expect(menu?.parentElement).toBe(document.body);
-		expect(menu?.style.top).toBe("312px");
-		expect(menu?.style.left).toBe("48px");
+		expect(menu?.style.getPropertyValue("--menu-top")).toBe("312px");
+		expect(menu?.style.getPropertyValue("--menu-left")).toBe("48px");
 	});
 
 	it("navigates to album and artist from the actions menu", async () => {

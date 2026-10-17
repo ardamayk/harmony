@@ -25,7 +25,7 @@ function SheetContent({ className, ...props }: SheetPrimitive.Popup.Props) {
 			<SheetPrimitive.Popup
 				data-slot="sheet-content"
 				className={cn(
-					"fixed top-0 right-0 z-50 flex h-dvh w-[min(390px,100vw)] flex-col gap-6 border-border border-l bg-background p-6 shadow-xl outline-none",
+					"fixed top-0 right-0 z-50 flex h-dvh w-sm flex-col gap-6 border-border border-l bg-background p-6 shadow-xl outline-none",
 					className,
 				)}
 				{...props}

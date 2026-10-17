@@ -1,12 +1,11 @@
 import { usePlayback } from "@repo/ui";
+import { SearchField } from "#/components/search-field";
 import { useQuery } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
-import { Search } from "lucide-react";
 import { useMemo } from "react";
 import { CollectionDetailHeader } from "#/components/collection-detail-header";
 import { DetailPageShell } from "#/components/page-layout";
 import { TrackList } from "#/components/track-list";
-import { Input } from "#/components/ui/input";
 import { apiClient } from "#/lib/api";
 import { fetchGenreTracks } from "#/lib/collect-genres";
 import { trackHasGenre } from "#/lib/genre-filter";
@@ -78,13 +77,9 @@ export function GenreDetailContent({ genre }: { genre: string }) {
 
 			<section className="mt-6">
 				{genreTracks.length > 0 ? (
-					<div
-						data-testid="genre-track-search"
-						className="relative mb-4 w-full"
-					>
-						<Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-caption" />
-						<Input
-							className="h-11 rounded-lg bg-player pl-8 text-sm"
+					<div data-testid="genre-track-search" className="mb-4 w-full">
+						<SearchField
+							variant="shell"
 							placeholder={`Search ${genre}…`}
 							value={collection.search}
 							onChange={(event) => collection.setSearch(event.target.value)}

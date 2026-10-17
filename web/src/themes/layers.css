@@ -48,6 +48,8 @@
 	--accent: color-mix(in srgb, var(--theme-2) 50%, var(--theme-3) 50%);
 	--destructive: #f87171;
 	--destructive-foreground: var(--theme-1);
+	--warning: #fbbf24;
+	--success: #34d399;
 
 	--sidebar-primary: var(--theme-4);
 	--sidebar-primary-foreground: var(--theme-1);
@@ -124,6 +126,8 @@
 	--accent: color-mix(in srgb, var(--theme-5) 50%, var(--theme-4) 50%);
 	--destructive: #dc2626;
 	--destructive-foreground: var(--theme-6);
+	--warning: #b45309;
+	--success: #047857;
 
 	--sidebar-primary: var(--theme-3);
 	--sidebar-primary-foreground: var(--theme-6);

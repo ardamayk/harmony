@@ -14,7 +14,6 @@ import {
 	List,
 	MapPin,
 	Radio,
-	Search,
 	ShieldAlert,
 	ShieldQuestion,
 	SlidersHorizontal,
@@ -26,6 +25,7 @@ import {
 	CollectionPageContainer,
 	CARD_INTERACTION_CLASS,
 } from "#/components/collection-grid-layout";
+import { SearchField } from "#/components/search-field";
 import { Button } from "#/components/ui/button";
 import {
 	Dialog,
@@ -49,7 +49,6 @@ import {
 	ComboboxList,
 	ComboboxTrigger,
 } from "#/components/ui/combobox";
-import { Input } from "#/components/ui/input";
 import { Label } from "#/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "#/components/ui/radio-group";
 import {
@@ -60,10 +59,7 @@ import {
 	SheetTitle,
 } from "#/components/ui/sheet";
 import { apiClient } from "#/lib/api";
-import {
-	HEADER_SEARCH_CONTAINER_CLASS,
-	HEADER_SEARCH_INPUT_CLASS,
-} from "#/lib/page-layout-classes";
+import { HEADER_SEARCH_CONTAINER_CLASS } from "#/lib/page-layout-classes";
 import { cn } from "#/lib/utils";
 
 const PAGE_SIZE = 40;
@@ -495,7 +491,7 @@ export function RadioDiscoverPage() {
 
 	return (
 		<div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-			<header className="sticky top-0 z-40 shrink-0 bg-background/80 px-[var(--shell-inset)] py-3 backdrop-blur">
+			<header className="sticky top-0 z-40 shrink-0 bg-background/80 px-(--shell-inset) py-3 backdrop-blur">
 				<div
 					className={`flex flex-col gap-2 ${COLLECTION_PAGE_CONTAINER_CLASS}`}
 				>
@@ -511,10 +507,9 @@ export function RadioDiscoverPage() {
 								className={HEADER_SEARCH_CONTAINER_CLASS}
 								htmlFor="radio-discover-search"
 							>
-								<Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-caption" />
-								<Input
+								<SearchField
 									id="radio-discover-search"
-									className={`${HEADER_SEARCH_INPUT_CLASS} text-player-foreground placeholder:text-player-foreground/55`}
+									variant="shell"
 									value={filters.q}
 									onChange={(event) =>
 										setFilters((current) => ({
@@ -528,10 +523,9 @@ export function RadioDiscoverPage() {
 							</label>
 							<Button
 								type="button"
-								variant="ghost"
-								size="icon"
+								variant="muted"
+								size="icon-lg"
 								aria-label="Filters"
-								className="size-10 text-caption hover:text-heading"
 								onClick={() => setAreFiltersOpen(true)}
 							>
 								<SlidersHorizontal className="size-5" />
@@ -547,10 +541,10 @@ export function RadioDiscoverPage() {
 				</div>
 			</header>
 
-			<div className="min-h-0 flex-1 overflow-y-auto px-[var(--shell-inset)] py-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+			<div className="min-h-0 flex-1 overflow-y-auto px-(--shell-inset) py-6 scrollbar-hidden">
 				<CollectionPageContainer>
 					{catalog.isLoading ? (
-						<div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,620px),1fr))] gap-4">
+						<div className="grid grid-cols-panels gap-4">
 							{SKELETON_CARD_KEYS.map((key) => (
 								<SkeletonCard key={key} />
 							))}
@@ -572,7 +566,7 @@ export function RadioDiscoverPage() {
 					{viewMode === "grid" ? (
 						<div
 							data-testid="radio-catalog-grid"
-							className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,560px),1fr))] gap-3"
+							className="grid grid-cols-panels gap-3"
 						>
 							{entries.map((entry) => (
 								<CatalogCard
@@ -671,7 +665,7 @@ function FilterDrawer({
 					</SheetClose>
 				</div>
 
-				<div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+				<div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto scrollbar-hidden">
 					<fieldset className="grid gap-2">
 						<legend className="font-medium text-caption text-xs">
 							Catalog layout
@@ -773,7 +767,7 @@ function OptionCombobox({
 	const selectedFlag = value === ALL_FILTER_VALUE ? undefined : flagFor(value);
 
 	return (
-		<div className="flex min-w-[210px] flex-col gap-1 text-caption text-xs">
+		<div className="flex min-w-52.5 flex-col gap-1 text-caption text-xs">
 			<span>{label}</span>
 			<Combobox
 				items={items}
@@ -785,7 +779,7 @@ function OptionCombobox({
 			>
 				<ComboboxTrigger
 					aria-label={label}
-					className={cn(FILTER_TRIGGER_CLASS, "w-[230px] max-w-full")}
+					className={cn(FILTER_TRIGGER_CLASS, "w-57.5 max-w-full")}
 				>
 					<span className="inline-flex min-w-0 items-center gap-2">
 						{selectedFlag ? (
@@ -796,7 +790,7 @@ function OptionCombobox({
 				</ComboboxTrigger>
 				<ComboboxContent>
 					<ComboboxInput
-						className="h-10 rounded-md bg-player"
+						variant="shell"
 						placeholder={searchPlaceholder}
 						aria-label={searchPlaceholder}
 					/>
@@ -913,7 +907,7 @@ function FilterRadioGroup({
 					<Label
 						key={option.value}
 						className={cn(
-							"h-11 gap-3 rounded-lg border border-border bg-player px-3 font-normal text-player-foreground transition-[color,box-shadow,border-color] hover:border-player-control-primary has-focus-visible:border-ring has-focus-visible:ring-[3px] has-focus-visible:ring-ring/50",
+							"h-11 gap-3 rounded-lg border border-border bg-player px-3 font-normal text-player-foreground transition-ring hover:border-player-control-primary has-focus-visible:border-ring has-focus-visible:ring-3 has-focus-visible:ring-ring/50",
 							option.value === value &&
 								"border-player-control-primary bg-player-pill",
 						)}
@@ -944,11 +938,10 @@ function ViewButton({
 	return (
 		<Button
 			type="button"
-			size="icon"
+			size="icon-sm"
 			variant={isActive ? "default" : "ghost"}
 			aria-label={label}
 			aria-pressed={isActive}
-			className="size-8 rounded-sm"
 			onClick={onClick}
 		>
 			{children}
@@ -1049,7 +1042,7 @@ function CatalogRow({
 						ref={ref}
 						data-testid={`radio-catalog-card-${entry.stationUuid}`}
 						onClick={onPreview}
-						className="group grid min-w-0 cursor-pointer grid-cols-[auto_minmax(0,1fr)] gap-3 rounded-lg border border-border bg-card/45 p-3 text-left shadow-sm outline-none transition duration-300 ease-out hover:-translate-y-1 hover:border-player-control-primary/60 hover:bg-card/65 hover:shadow-lg focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 md:grid-cols-[auto_minmax(0,1fr)_auto]"
+						className="group grid min-w-0 cursor-pointer grid-cols-media gap-3 rounded-lg border border-border bg-card/45 p-3 text-left shadow-sm outline-none transition duration-300 ease-out hover:-translate-y-1 hover:border-player-control-primary/60 hover:bg-card/65 hover:shadow-lg focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:grid-cols-media-actions"
 					/>
 				}
 			>
@@ -1193,7 +1186,7 @@ function HealthChip({ status }: { status?: string }) {
 	return (
 		<MetaChip
 			className={cn(
-				normalized === "healthy" && "text-emerald-300",
+				normalized === "healthy" && "text-success",
 				normalized === "broken" && "text-destructive",
 			)}
 		>
@@ -1215,8 +1208,8 @@ function CardHealthStatus({ status }: { status?: string }) {
 		<span className="absolute top-4 right-4 inline-flex items-center gap-2 text-caption text-xs">
 			<span
 				className={cn(
-					"size-2 rounded-full shadow-[0_0_12px_currentColor]",
-					normalized === "healthy" && "bg-emerald-400 text-emerald-400",
+					"size-2 rounded-full",
+					normalized === "healthy" && "bg-success text-success",
 					normalized === "broken" && "bg-destructive text-destructive",
 					normalized !== "healthy" &&
 						normalized !== "broken" &&
@@ -1258,7 +1251,7 @@ function StationDetailsDialog({
 		<Dialog open={entry != null} onOpenChange={onOpenChange}>
 			<DialogContent
 				overlayClassName="bg-background/80 backdrop-blur-sm"
-				className="flex max-h-[85vh] w-[min(680px,calc(100vw-2rem))] max-w-none flex-col gap-6 overflow-y-auto bg-background text-foreground"
+				className="flex max-h-dialog-height max-w-2xl flex-col gap-6 overflow-y-auto bg-background text-foreground"
 			>
 				{entry ? (
 					<>

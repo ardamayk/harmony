@@ -57,7 +57,7 @@ export function CurrentTrackPanel({
 					{track.albumTitle ? ` · ${track.albumTitle}` : ""}
 				</p>
 			</div>
-			<div className="w-full max-w-xl [--player-control-primary:var(--primary)] [--player-control-primary-foreground:var(--primary-foreground)] [--player-foreground:var(--foreground)]">
+			<div className="w-full max-w-xl player-neutral">
 				<PlaybackControls
 					isRadioPlaying={false}
 					isPlaying={isPlaying}

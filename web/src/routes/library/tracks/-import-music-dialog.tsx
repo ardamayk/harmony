@@ -8,8 +8,7 @@ import {
 	LoaderCircle,
 	X,
 } from "lucide-react";
-import { memo, useId, useState } from "react";
-import { Badge } from "#/components/ui/badge";
+import { type CSSProperties, memo, useId, useState } from "react";
 import { Button } from "#/components/ui/button";
 import { Checkbox } from "#/components/ui/checkbox";
 import {
@@ -59,7 +58,7 @@ export function ImportMusicDialog({
 				<Button
 					type="button"
 					onClick={() => onOpenChange(true)}
-					className="fixed bottom-24 right-6 z-40 shadow-lg"
+					className="fixed bottom-24 right-6 z-40"
 					aria-label="Open current import"
 				>
 					{workflow.isCompleted
@@ -81,7 +80,7 @@ export function ImportMusicDialog({
 						"bg-background/80",
 						!isDesktopClient() && "backdrop-blur-sm",
 					)}
-					className="flex max-h-[90dvh] w-[calc(100vw-1rem)] max-w-5xl flex-col overflow-hidden bg-background p-0 text-foreground sm:w-[calc(100vw-3rem)]"
+					className="flex max-h-dialog-height max-w-5xl flex-col overflow-hidden bg-background p-0 text-foreground"
 				>
 					<ImportDialogHeader isBusy={false} />
 					<div
@@ -89,7 +88,7 @@ export function ImportMusicDialog({
 						className={
 							workflow.entries.length > 0
 								? "hidden"
-								: "grid gap-6 overflow-y-auto px-4 py-6 sm:px-6 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+								: "grid gap-6 overflow-y-auto px-4 py-6 sm:px-6 scrollbar-hidden"
 						}
 					>
 						<ImportFilePicker
@@ -108,7 +107,7 @@ export function ImportMusicDialog({
 					 * not become scroll containers of their own: a non-overflowing
 					 * `overflow-y-auto` + `overscroll-contain` child swallows wheel
 					 * events and the dialog stops scrolling with the mouse. */}
-					<div className="min-h-0 flex-1 overflow-y-auto overscroll-contain [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+					<div className="min-h-0 flex-1 overflow-y-auto overscroll-contain scrollbar-hidden">
 						{!workflow.isCompleted && workflow.batchId ? (
 							<ImportAlbumReview
 								batchId={workflow.batchId}
@@ -132,7 +131,7 @@ export function ImportMusicDialog({
 									<p
 										key={problem}
 										aria-live="polite"
-										className="px-4 py-1 text-amber-600 text-sm sm:px-6"
+										className="px-4 py-1 text-warning text-sm sm:px-6"
 									>
 										{problem}
 									</p>
@@ -390,10 +389,10 @@ function ProgressBar({
 		>
 			<div
 				className={cn(
-					"h-full rounded-full bg-primary",
+					"h-full w-(--progress) rounded-full bg-primary",
 					isIndeterminate && "opacity-60",
 				)}
-				style={{ width: `${percent}%` }}
+				style={{ "--progress": `${percent}%` } as CSSProperties}
 			/>
 		</div>
 	);
@@ -551,9 +550,8 @@ const ImportFileRow = memo(function ImportFileRow({
 					<StatusBadge entry={entry} isConfirming={isConfirming} />
 					<Button
 						type="button"
-						variant="ghost"
-						size="icon"
-						className="size-8 text-caption"
+						variant="muted"
+						size="icon-sm"
 						aria-label={`Details for ${filename}`}
 						aria-expanded={isExpanded}
 						aria-controls={isExpanded ? detailsId : undefined}
@@ -683,16 +681,15 @@ function StatusBadge({
 		? outcomeBadges[entry.outcome]
 		: stateBadges[entry.state];
 	return (
-		<Badge
-			variant={badge.variant}
+		<span
 			className={cn(
-				"border-0 bg-transparent px-0 font-normal text-xs dark:bg-transparent",
+				"inline-flex items-center gap-1 text-xs [&>svg]:size-3",
 				badge.variant === "destructive" ? "text-destructive" : "text-caption",
 			)}
 		>
 			<badge.Icon aria-hidden="true" className={badge.iconClassName} />
 			{entry.state === "unresolved" ? importPhaseLabel(entry) : badge.label}
-		</Badge>
+		</span>
 	);
 }
 
@@ -741,7 +738,7 @@ function DuplicateReview({
 	const candidates = preview.matchingTracks ?? [];
 	if (!candidates.length)
 		return preview.file.artworkWarning ? (
-			<p className="text-amber-600 text-sm">{preview.file.artworkWarning}</p>
+			<p className="text-warning text-sm">{preview.file.artworkWarning}</p>
 		) : null;
 	if (
 		candidates.some(
@@ -802,7 +799,7 @@ function ExactDuplicateReview({
 				<summary className="cursor-pointer text-primary underline">
 					View existing Track
 				</summary>
-				<dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-caption">
+				<dl className="mt-2 grid grid-cols-media gap-x-3 gap-y-1 text-caption">
 					<dt>Artist</dt>
 					<dd>{candidate.artists.join(", ")}</dd>
 					<dt>Album</dt>

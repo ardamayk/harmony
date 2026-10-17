@@ -793,7 +793,7 @@ describe("tracks route", () => {
 			"overflow-hidden",
 		);
 		expect(screen.getByTestId("tracks-page-content").className).toContain(
-			"[scrollbar-width:none]",
+			"scrollbar-hidden",
 		);
 		expect(screen.getByTestId("tracks-page-content").className).toContain(
 			"py-6",
@@ -1145,9 +1145,7 @@ describe("tracks route", () => {
 		expect(preview.className).not.toContain("overscroll-contain");
 		expect(preview.parentElement?.className).toContain("overflow-y-auto");
 		expect(preview.parentElement?.className).toContain("overscroll-contain");
-		expect(preview.parentElement?.className).toContain(
-			"[scrollbar-width:none]",
-		);
+		expect(preview.parentElement?.className).toContain("scrollbar-hidden");
 		expect(
 			screen
 				.getByRole("checkbox", { name: "Select broken.flac" })

@@ -1,11 +1,12 @@
 import { Combobox as ComboboxPrimitive } from "@base-ui/react/combobox";
+import type { VariantProps } from "class-variance-authority";
 import { CheckIcon, ChevronDownIcon, SearchIcon } from "lucide-react";
 
 import {
 	menuContentClass,
 	menuItemClass,
 } from "#/components/ui/dropdown-menu.tsx";
-import { inputClass } from "#/components/ui/input.tsx";
+import { inputVariants } from "#/components/ui/input.tsx";
 import { cn } from "#/lib/utils.ts";
 
 // A select with a search field in its popup.
@@ -24,7 +25,7 @@ function ComboboxTrigger({
 		<ComboboxPrimitive.Trigger
 			data-slot="combobox-trigger"
 			className={cn(
-				"flex h-9 w-fit items-center justify-between gap-3 rounded-sm border border-input bg-transparent px-3 text-left text-sm whitespace-nowrap shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 data-disabled:cursor-not-allowed data-disabled:opacity-50 dark:bg-input/30 dark:hover:bg-input/50",
+				"flex h-9 w-fit items-center justify-between gap-3 rounded-sm border border-input bg-transparent px-3 text-left text-sm whitespace-nowrap shadow-xs transition-ring outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 data-disabled:cursor-not-allowed data-disabled:opacity-50 dark:bg-input/30 dark:hover:bg-input/50",
 				className,
 			)}
 			{...props}
@@ -68,7 +69,12 @@ function ComboboxContent({
 	);
 }
 
-function ComboboxInput({ className, ...props }: ComboboxPrimitive.Input.Props) {
+function ComboboxInput({
+	className,
+	variant,
+	...props
+}: ComboboxPrimitive.Input.Props &
+	Pick<VariantProps<typeof inputVariants>, "variant">) {
 	return (
 		<div className="relative m-1 mb-2">
 			<SearchIcon
@@ -77,7 +83,7 @@ function ComboboxInput({ className, ...props }: ComboboxPrimitive.Input.Props) {
 			/>
 			<ComboboxPrimitive.Input
 				data-slot="combobox-input"
-				className={cn(inputClass, "pl-8", className)}
+				className={cn(inputVariants({ variant, leadingIcon: true }), className)}
 				{...props}
 			/>
 		</div>

@@ -98,10 +98,10 @@ function PlaylistCard({ playlist }: { playlist: Playlist }) {
 				data-playlist-card-overlay
 				className="absolute inset-x-0 bottom-0 z-50 bg-gradient-to-t from-background/95 via-background/70 to-transparent px-3 pt-12 pb-3 text-foreground"
 			>
-				<p className="truncate font-semibold text-heading text-sm leading-tight tracking-[-0.012em]">
+				<p className="truncate font-semibold text-heading text-sm leading-tight tracking-tight">
 					{playlist.name}
 				</p>
-				<p className="mt-0.5 truncate text-xs text-caption leading-tight tracking-[0.01em]">
+				<p className="mt-0.5 truncate text-xs text-caption leading-tight">
 					{playlist.trackCount} track{playlist.trackCount === 1 ? "" : "s"}
 				</p>
 			</div>

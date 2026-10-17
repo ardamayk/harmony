@@ -74,7 +74,7 @@ export function AlbumDetailHeader({
 				}
 			>
 				<div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/20 via-background/40 to-background" />
-				<div className="relative grid gap-8 p-6 @xl:grid-cols-[auto_minmax(0,1fr)] @xl:items-start @4xl:grid-cols-[auto_minmax(0,1fr)_220px]">
+				<div className="relative grid gap-8 p-6 @xl:grid-cols-media @xl:items-start @4xl:grid-cols-media-aside">
 					<AlbumArt
 						coverUrl={apiClient.getAlbumCoverUrl(album.id, 1024)}
 						title={album.title}
@@ -95,7 +95,7 @@ export function AlbumDetailHeader({
 						<div className="mt-4 flex flex-wrap items-center gap-2 text-foreground text-sm">
 							<Music2 className="size-4 shrink-0" />
 							{metaTags.map((tag) => (
-								<Badge key={tag} variant="secondary" className="font-normal">
+								<Badge key={tag} variant="secondary">
 									{tag}
 								</Badge>
 							))}
@@ -130,7 +130,7 @@ export function AlbumDetailHeader({
 							{genres.length > 0 ? (
 								<div className="flex flex-wrap gap-2">
 									{genres.map((genre) => (
-										<Badge key={genre} variant="outline" className="text-sm">
+										<Badge key={genre} variant="outline">
 											{genre}
 										</Badge>
 									))}

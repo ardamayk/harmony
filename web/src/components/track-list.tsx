@@ -379,7 +379,7 @@ function TrackDetailsDialog({
 		<Dialog open={Boolean(track)} onOpenChange={onOpenChange}>
 			<DialogContent
 				finalFocus={finalFocus}
-				className="max-h-[80vh] max-w-2xl overflow-hidden p-0"
+				className="max-h-dialog-height max-w-2xl overflow-hidden p-0"
 			>
 				<div className="flex items-center justify-between gap-3 border-border border-b p-4">
 					<DialogTitle className="truncate">{track?.title}</DialogTitle>
@@ -391,7 +391,7 @@ function TrackDetailsDialog({
 					</DialogClose>
 				</div>
 				{rows.length > 0 ? (
-					<div className="max-h-[65vh] overflow-auto p-4">
+					<div className="max-h-dialog-body-height overflow-auto p-4">
 						{rows.map(([label, value]) => (
 							<DetailRow key={label} label={label} value={value} />
 						))}
@@ -405,7 +405,7 @@ function TrackDetailsDialog({
 function DetailRow({ label, value }: { label: string; value?: string | null }) {
 	if (!value) return null;
 	return (
-		<div className="grid grid-cols-[8rem_minmax(0,1fr)] gap-3 border-border border-b py-2 text-sm">
+		<div className="grid grid-cols-label gap-3 border-border border-b py-2 text-sm">
 			<span className="text-caption">{label}</span>
 			<span className="min-w-0 break-words font-medium text-foreground">
 				{value}

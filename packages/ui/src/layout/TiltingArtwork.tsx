@@ -36,7 +36,7 @@ export function TiltingArtwork({
 	}
 	return (
 		<div
-			className="w-[min(100%,65vh)] shrink-0 p-4 [perspective:1200px]"
+			className="w-artwork-stage shrink-0 p-4 perspective-distant"
 			onPointerMove={handlePointerMove}
 			onPointerLeave={resetTilt}
 			onPointerCancel={resetTilt}

@@ -48,7 +48,7 @@ export function AlbumGrid({ albums }: { albums: Album[] }) {
 							<AlbumArt
 								coverUrl={apiClient.getAlbumCoverUrl(album.id, 512)}
 								title={album.title}
-								className="absolute inset-0 size-full transform-gpu text-2xl transition duration-500 ease-out group-hover:scale-[1.04] group-focus-visible:scale-[1.04]"
+								className="absolute inset-0 size-full transform-gpu text-2xl transition duration-500 ease-out group-hover:scale-104 group-focus-visible:scale-104"
 							/>
 							<div
 								data-album-card-overlay

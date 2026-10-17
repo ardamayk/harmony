@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { cn } from "../lib/utils";
 import { getQueuePanel } from "../widgets/layout-utils";
 import { useLayout } from "./LayoutProvider";
@@ -6,7 +7,6 @@ import {
 	QUEUE_DRAWER_BOTTOM,
 	QUEUE_DRAWER_BOTTOM_ABOVE_PLAYER,
 	QUEUE_DRAWER_TOP,
-	QUEUE_DRAWER_WIDTH,
 } from "./shell-metrics";
 
 /**
@@ -29,23 +29,20 @@ export function QueueDrawer({ abovePlayerBar }: { abovePlayerBar: boolean }) {
 			aria-hidden={!open}
 			inert={!open}
 			className={cn(
-				"absolute z-40 overflow-hidden rounded-lg border border-player-border shadow-[0_-16px_48px_-12px_var(--player-shadow),0_14px_40px_-8px_var(--player-shadow)] transition-[translate,visibility] duration-300 ease-out",
+				"absolute top-(--queue-drawer-top) right-(--shell-inset,2rem) bottom-(--queue-drawer-bottom) z-40 w-(--queue-drawer-width,18rem) max-w-queue-drawer-max overflow-hidden rounded-lg border border-player-border shadow-shell transition-slide duration-300 ease-out",
 				// Closed: slides below the viewport, then goes fully invisible so
 				// it can never peek out under the Player Bar, whatever the host
 				// window's geometry does to the shell.
-				open
-					? "visible translate-y-0"
-					: "invisible translate-y-[calc(100%+8rem)]",
+				open ? "visible translate-y-0" : "invisible translate-y-below-dock",
 			)}
-			style={{
-				width: QUEUE_DRAWER_WIDTH,
-				maxWidth: "calc(100% - 2 * var(--shell-inset, 2rem))",
-				right: "var(--shell-inset, 2rem)",
-				top: QUEUE_DRAWER_TOP,
-				bottom: abovePlayerBar
-					? QUEUE_DRAWER_BOTTOM_ABOVE_PLAYER
-					: QUEUE_DRAWER_BOTTOM,
-			}}
+			style={
+				{
+					"--queue-drawer-top": QUEUE_DRAWER_TOP,
+					"--queue-drawer-bottom": abovePlayerBar
+						? QUEUE_DRAWER_BOTTOM_ABOVE_PLAYER
+						: QUEUE_DRAWER_BOTTOM,
+				} as CSSProperties
+			}
 		>
 			<div className="relative flex h-full w-full flex-col overflow-hidden bg-player text-player-foreground">
 				<QueuePanel embedded onClose={() => togglePanel(queuePanel)} />
