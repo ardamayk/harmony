@@ -165,6 +165,7 @@ function ShuffleButton({
 			data-player-control
 			className={cn(
 				CONTROL_BUTTON_CLASS,
+				"relative",
 				isEnabled && ACTIVE_CONTROL_BUTTON_CLASS,
 			)}
 			aria-label={isEnabled ? "Shuffle on" : "Shuffle off"}
@@ -172,6 +173,13 @@ function ShuffleButton({
 			disabled={disabled}
 		>
 			<Shuffle className={CONTROL_ICON_CLASS} />
+			{/* On differs from off by more than colour: a dot under the glyph. */}
+			{isEnabled ? (
+				<span
+					aria-hidden
+					className="-bottom-1 absolute left-1/2 size-1 -translate-x-1/2 rounded-full bg-current"
+				/>
+			) : null}
 		</button>
 	);
 }
