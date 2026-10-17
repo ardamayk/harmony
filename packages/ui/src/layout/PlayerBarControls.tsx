@@ -282,11 +282,27 @@ function PlaybackProgress({
 	keyboardLargeStepSeconds?: number;
 	onSeek: (seconds: number) => void;
 }) {
+	const [showRemaining, setShowRemaining] = useState(false);
 	return (
 		<div className="mt-1 flex w-full min-w-0 items-center gap-2 text-xs tabular-nums group-data-stage/controls:mt-4 group-data-stage/controls:gap-3 group-data-stage/controls:text-sm group-data-stage/controls:2xl:mt-6 group-data-stage/controls:2xl:text-base">
-			<span className="w-8 shrink-0 text-right text-player-foreground group-data-stage/controls:w-12">
-				{isRadioPlaying ? "LIVE" : formatTime(currentTime)}
-			</span>
+			{isRadioPlaying ? (
+				<span className="w-10 shrink-0 text-right text-player-foreground group-data-stage/controls:w-14">
+					LIVE
+				</span>
+			) : (
+				<button
+					type="button"
+					data-player-control
+					disabled={!hasCurrentTrack}
+					title={showRemaining ? "Show elapsed time" : "Show remaining time"}
+					onClick={() => setShowRemaining((value) => !value)}
+					className="-my-2 w-10 shrink-0 cursor-pointer rounded-sm py-2 text-right whitespace-nowrap text-player-foreground hover:text-player-control-primary disabled:cursor-default group-data-stage/controls:w-14"
+				>
+					{showRemaining
+						? `-${formatTime(effectiveDuration - currentTime)}`
+						: formatTime(currentTime)}
+				</button>
+			)}
 			{isRadioPlaying ? (
 				<div className="h-1 min-w-0 flex-1 rounded-full bg-player-live-progress/45" />
 			) : (
@@ -303,7 +319,7 @@ function PlaybackProgress({
 				/>
 			)}
 			{isRadioPlaying ? null : (
-				<span className="w-8 shrink-0 text-player-foreground group-data-stage/controls:w-12">
+				<span className="w-10 shrink-0 text-player-foreground group-data-stage/controls:w-14">
 					{formatTime(effectiveDuration)}
 				</span>
 			)}
