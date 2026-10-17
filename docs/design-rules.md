@@ -35,6 +35,26 @@ Applies to `web/src`, `packages/ui/src`. Pattern no rule covers: raise with main
 - Contrast never below WCAG AA, every theme and mode: 4.5:1 text (also on filled controls), 3:1 large text, icons, control against surface.
   - Project: Preset fixes: `web/src/themes/contrast.css`, derived from preset's own palette. Surface darker than theme mode (Vintage Harbor: Top Nav, Player Bar, Queue Drawer dark in light mode) carries `data-shell-surface`, re-scopes text tokens there.
 
+## Palette order
+
+Build palette in this order; each step uses previous.
+
+1. Accent hue (H), neutral base: pure gray or tinted.
+   - Project: Accent per preset (`--primary`, `--player-control-primary`); cover accent overrides in Player Bar. Neutrals tinted to preset base hue (Vintage Harbor h 252).
+2. Family ladders: L steps of neutral and accent families.
+3. Surface ladder (60/30): page, alt surface, card, dark band, footer. Light-dark rhythm set here; grayscale test shows it.
+   - Project: Vintage Harbor dark, OKLCH L: page / Top Nav 23.5, card / Player Bar / Queue Drawer 27.5, raised control 31.5, active 39.5.
+4. Text hierarchy: each surface gets primary, secondary, faint text. 4.5:1, 7:1 decide here. Dark surfaces own text set.
+   - Project: Tokens `heading`, `text`, `caption`. Vintage Harbor dark L 93 / 80 / 70, hue 80, C 0.02; caption 4.5:1 up to raised controls. Other presets: caption brighter than text, open.
+5. Lines, controls: decorative line no threshold; input border, icon 3:1.
+6. Accent placement (10): button fill, text on it 4.5:1, dark-surface variant, accent surface.
+   - Project: One accent per surface: seek fill = play button colour.
+7. States: hover, focus 3:1, error, disabled.
+8. Verify: contrast every pair, grayscale test, warm/cool test, color-blind simulation, dark mode.
+   - Project: Contrast: `web/src/themes/themes.test.ts`. Grayscale, warm/cool, color-blind: by hand in browser, every page.
+
+Ratios: decision tool in steps 4–7, check in step 8.
+
 ## Spacing and alignment
 
 - Spacing from one scale, never one-off. Tailwind: steps `1, 2, 3, 4, 6, 8, 12, 16, 24` (4px base); `0.5` only optical nudge. Arbitrary spacing only for layout variable.
@@ -67,7 +87,7 @@ Applies to `web/src`, `packages/ui/src`. Pattern no rule covers: raise with main
   - Project: Example: pin icon changes shape, not only color.
 - Hit area 32px min, 44px preferred. Control may look small; click area never shrinks.
 - Element matches job: `<button>` acts, `<a>` or router link navigates, headings in order, lists for lists. Clickable `<div>` is bug.
-- Icon-only control: `aria-label` names action ("Pin queue", not "Pin icon"), tooltip same words.
+- No visible text, clickable or hover-acts (icon button, icon, swatch, avatar): tooltip required, short function, verb ("Pin queue", not "Pin icon"). `aria-label` same words.
 
 ## Keyboard and focus
 
