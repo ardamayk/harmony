@@ -969,6 +969,7 @@ export function PlayerBar({
 				<LyricsOverlay
 					track={currentTrack}
 					coverUrl={largeArtworkUrl}
+					accent={accent}
 					loadLyrics={getTrackLyrics}
 					onClose={() => setLyricsOpen(false)}
 				/>

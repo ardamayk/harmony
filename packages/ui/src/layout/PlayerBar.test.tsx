@@ -482,6 +482,28 @@ describe("PlayerBar", () => {
 		);
 	});
 
+	it("follows synced lyrics and seeks to a line when it is clicked", async () => {
+		const { engine } = renderPlayerBar();
+		vi.mocked(api.getTrackLyrics)?.mockResolvedValueOnce({
+			lyrics: "[00:10.00] First line\n[00:20.00] Second line",
+		});
+		await act(async () => {
+			screen.getByRole("button", { name: "Start track" }).click();
+		});
+		fireEvent.click(screen.getByRole("button", { name: "Lyrics" }));
+		const second = await screen.findByRole("button", { name: "Second line" });
+		await act(async () => engine.seek(12));
+		expect(
+			screen
+				.getByRole("button", { name: "First line" })
+				.getAttribute("aria-current"),
+		).toBe("true");
+
+		const seek = vi.spyOn(engine, "seek");
+		fireEvent.click(second);
+		expect(seek).toHaveBeenLastCalledWith(20);
+	});
+
 	it("keeps empty lyrics settled while the playhead advances", async () => {
 		const { engine } = renderPlayerBar();
 		vi.mocked(api.getTrackLyrics)?.mockResolvedValueOnce({ lyrics: "" });

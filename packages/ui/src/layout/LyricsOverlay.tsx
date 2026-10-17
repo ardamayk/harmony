@@ -1,9 +1,21 @@
 import type { Track } from "@repo/api-client";
 import { ChevronDown } from "lucide-react";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import {
+	type CSSProperties,
+	type ReactNode,
+	useEffect,
+	useRef,
+	useState,
+} from "react";
 import { createPortal } from "react-dom";
+import {
+	activeLyricIndex,
+	type ParsedLyrics,
+	parseLyrics,
+} from "../lib/lyrics";
 import { useFocusTrap } from "../lib/use-focus-trap";
-import { AlbumArt } from "./AlbumArt";
+import { cn } from "../lib/utils";
+import { usePlayback } from "../playback/PlaybackProvider";
 import { CurrentTrackPanel } from "./CurrentTrackPanel";
 import { QueuePanel } from "./QueuePanel";
 
@@ -18,11 +30,14 @@ type LyricsState =
 export function LyricsOverlay({
 	track,
 	coverUrl,
+	accent = {},
 	loadLyrics,
 	onClose,
 }: {
 	track: Track;
 	coverUrl: string | null;
+	/** Cover-derived custom properties; the backdrop takes its tint from them. */
+	accent?: Record<string, string>;
 	/** Resolves the stored lyrics; null when the host has no lyrics endpoint. */
 	loadLyrics?: (trackId: string) => Promise<{ lyrics: string } | null>;
 	onClose: () => void;
@@ -34,6 +49,7 @@ export function LyricsOverlay({
 	let state: LyricsState = { status: "loading" };
 	if (!loadLyrics) state = { status: "loaded", lyrics: "" };
 	else if (loaded?.trackId === track.id) state = loaded.state;
+	const lyrics = state.status === "loaded" ? parseLyrics(state.lyrics) : null;
 	const rootRef = useRef<HTMLDivElement>(null);
 	useFocusTrap(rootRef);
 
@@ -78,64 +94,142 @@ export function LyricsOverlay({
 			aria-modal="true"
 			aria-label="Lyrics"
 			tabIndex={-1}
-			className="motion-safe:animate-lyrics-view fixed inset-0 z-fullscreen flex flex-col bg-background text-foreground outline-none"
+			style={{ "--player-accent": accent["--player-accent"] } as CSSProperties}
+			// Without a cover accent the gradient is invalid and the flat background shows.
+			className="motion-safe:animate-lyrics-view fixed inset-0 z-fullscreen flex flex-col bg-background bg-linear-to-b from-(--player-accent)/40 to-background to-70% text-foreground outline-none"
 		>
-			<header className="flex shrink-0 items-center justify-between gap-4 border-border border-b px-6 py-3">
-				<div className="flex min-w-0 items-center gap-3">
-					<AlbumArt
-						coverUrl={coverUrl}
-						title={track.title}
-						className="size-12 shrink-0 rounded-sm text-sm"
-					/>
-					<div className="min-w-0">
-						<p className="truncate font-semibold text-heading text-sm">
-							{track.title}
-						</p>
-						<p className="truncate text-caption text-xs">
-							{track.artistName}
-							{track.albumTitle ? ` · ${track.albumTitle}` : ""}
-						</p>
-					</div>
-				</div>
+			<header className="flex shrink-0 items-center justify-between gap-4 px-6 py-3">
+				<p className="text-caption text-xs uppercase tracking-widest">Lyrics</p>
 				<button
 					type="button"
-					className="inline-flex size-9 items-center justify-center rounded-full text-foreground hover:bg-muted"
+					className="inline-flex size-9 items-center justify-center rounded-full text-foreground hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
 					aria-label="Close lyrics"
+					title="Close lyrics"
 					onClick={onClose}
 				>
 					<ChevronDown className="size-5" />
 				</button>
 			</header>
-			<div className="flex min-h-0 flex-1 flex-col overflow-y-auto md:flex-row md:overflow-hidden">
-				<div className="shrink-0 border-border border-b md:w-1/3 md:overflow-y-auto md:border-r md:border-b-0">
+			<div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-6 pb-6 md:flex-row md:overflow-hidden lg:gap-12 lg:px-12 lg:pb-12">
+				<div className="flex shrink-0 md:w-2/5 md:overflow-y-auto xl:w-1/3 scrollbar-hidden">
 					<CurrentTrackPanel track={track} coverUrl={coverUrl} />
 				</div>
-				<section
-					aria-label="Lyrics text"
-					className="flex min-h-64 min-w-0 flex-1 flex-col md:overflow-y-auto px-8 py-12 scrollbar-hidden"
+				{/* Lyrics and the Queue share the right side; without lyrics the
+				    Queue takes it whole under a short note, so no column stands empty. */}
+				<div
+					className={cn(
+						"flex min-h-96 min-w-0 flex-1 gap-6 md:min-h-0",
+						lyrics ? "flex-row" : "flex-col",
+					)}
 				>
-					<LyricsBody state={state} />
-				</section>
-				<aside className="hidden w-lyrics-aside shrink-0 border-border border-l bg-queue text-queue-foreground md:block">
-					<QueuePanel embedded />
-				</aside>
+					{lyrics ? (
+						<SyncedLyrics lyrics={lyrics} />
+					) : (
+						<section aria-label="Lyrics text" className="min-w-0">
+							<LyricsStatus state={state} />
+						</section>
+					)}
+					<aside
+						className={cn(
+							"min-h-0 overflow-hidden rounded-lg border border-border bg-queue text-queue-foreground",
+							lyrics ? "hidden w-lyrics-aside shrink-0 lg:block" : "flex-1",
+						)}
+					>
+						<QueuePanel embedded />
+					</aside>
+				</div>
 			</div>
 		</div>,
 		document.body,
 	);
 }
 
-function LyricsBody({ state }: { state: LyricsState }): ReactNode {
+/**
+ * Lyrics in large type. Synced (LRC) lyrics follow the playhead: the sung
+ * line is lit and kept in the middle, sung lines dim, coming ones step down.
+ */
+function SyncedLyrics({ lyrics }: { lyrics: ParsedLyrics }) {
+	const { currentTime, seek } = usePlayback();
+	const active = lyrics.synced
+		? activeLyricIndex(lyrics.lines, currentTime)
+		: -1;
+	const scrollerRef = useRef<HTMLElement>(null);
+	const activeRef = useRef<HTMLButtonElement>(null);
+
+	useEffect(() => {
+		const scroller = scrollerRef.current;
+		const line = activeRef.current;
+		if (active < 0 || !scroller || !line) return;
+		const reduceMotion = window.matchMedia?.(
+			"(prefers-reduced-motion: reduce)",
+		).matches;
+		scroller.scrollTo?.({
+			top: line.offsetTop - (scroller.clientHeight - line.clientHeight) / 2,
+			behavior: reduceMotion ? "auto" : "smooth",
+		});
+	}, [active]);
+
+	return (
+		<section
+			ref={scrollerRef}
+			aria-label="Lyrics text"
+			className={cn(
+				"relative min-w-0 flex-1 overflow-y-auto scrollbar-hidden",
+				lyrics.synced ? "py-lyrics-edge" : "py-12",
+			)}
+		>
+			{lyrics.lines.map((line, index) => {
+				const className =
+					"block min-h-6 max-w-3xl py-2 text-left font-semibold text-2xl leading-snug tracking-tight transition-colors duration-300 ease-out xl:text-3xl";
+				const time = line.time;
+				if (time === undefined)
+					return (
+						<p
+							// biome-ignore lint/suspicious/noArrayIndexKey: lyric lines have no identity
+							key={index}
+							className={cn(className, "text-heading")}
+						>
+							{line.text}
+						</p>
+					);
+				// A synced line jumps the playhead to where it is sung.
+				return (
+					<button
+						// biome-ignore lint/suspicious/noArrayIndexKey: lyric lines have no identity
+						key={index}
+						type="button"
+						ref={index === active ? activeRef : undefined}
+						aria-current={index === active ? "true" : undefined}
+						className={cn(
+							className,
+							"-mx-2 rounded-md px-2 hover:bg-heading/5 hover:text-heading focus-visible:bg-heading/5 focus-visible:text-heading focus-visible:outline-none",
+							index === active
+								? "text-heading"
+								: index < active
+									? "text-heading/40"
+									: "text-heading/60",
+						)}
+						onClick={() => seek(time)}
+					>
+						{line.text}
+					</button>
+				);
+			})}
+		</section>
+	);
+}
+
+function LyricsStatus({ state }: { state: LyricsState }): ReactNode {
 	if (state.status === "loading") {
 		return (
-			<p className="m-auto text-caption text-sm" aria-live="polite">
+			<p className="px-2 py-6 text-caption text-sm" aria-live="polite">
 				Loading lyrics…
 			</p>
 		);
 	}
 	if (state.status === "failed") {
 		return (
-			<div className="m-auto max-w-md text-center" role="alert">
+			<div className="max-w-md px-2 py-6" role="alert">
 				<p className="font-semibold text-heading text-xl">
 					Lyrics could not be loaded
 				</p>
@@ -145,32 +239,13 @@ function LyricsBody({ state }: { state: LyricsState }): ReactNode {
 			</div>
 		);
 	}
-	const lines = state.lyrics
-		.split(/\r?\n/)
-		.map((line) => line.trimEnd())
-		.filter((line, index, all) => line !== "" || all[index - 1] !== "");
-	if (lines.every((line) => line === "")) {
-		return (
-			<div className="m-auto max-w-md text-center">
-				<p className="font-semibold text-heading text-xl">No lyrics yet</p>
-				<p className="mt-2 text-caption text-sm">
-					This Track has no lyrics stored on your Music Server. Tag the file
-					with lyrics (Picard writes them) and import it again.
-				</p>
-			</div>
-		);
-	}
 	return (
-		<div className="mx-auto w-full max-w-2xl">
-			{lines.map((line, index) => (
-				<p
-					// biome-ignore lint/suspicious/noArrayIndexKey: lyric lines have no identity
-					key={index}
-					className="min-h-6 font-semibold text-2xl text-heading leading-relaxed"
-				>
-					{line}
-				</p>
-			))}
+		<div className="max-w-md px-2 py-6">
+			<p className="font-semibold text-heading text-xl">No lyrics yet</p>
+			<p className="mt-2 text-caption text-sm">
+				This Track has no lyrics stored on your Music Server. Tag the file with
+				lyrics (Picard writes them) and import it again.
+			</p>
 		</div>
 	);
 }

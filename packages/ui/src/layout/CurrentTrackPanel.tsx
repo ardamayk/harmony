@@ -45,7 +45,7 @@ export function CurrentTrackPanel({
 				<AlbumArt
 					coverUrl={coverUrl}
 					title={track.title}
-					className="aspect-square w-full max-w-sm shrink-0 rounded-lg text-3xl shadow-xl"
+					className="aspect-square w-artwork-stage shrink-0 rounded-md text-3xl shadow-xl"
 				/>
 			)}
 			<div className="w-full max-w-xl text-center">
