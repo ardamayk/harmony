@@ -173,8 +173,8 @@ test("library search follows the full album grid and animates result height", as
 				})
 				.toBeGreaterThan(24);
 		}
-		// 77dvh from its 23dvh top, less the Player Bar's 110px clearance.
-		await expect(card).toHaveCSS("max-height", "429px");
+		// 700px less its 213px top, the Player Bar's 110px clearance and a 24px gap.
+		await expect(card).toHaveCSS("max-height", "353px");
 		const input = page.getByRole("combobox");
 		await card.evaluate((element) =>
 			Promise.all(
@@ -208,9 +208,9 @@ test("library search follows the full album grid and animates result height", as
 		});
 		await expect
 			.poll(async () => (await card.boundingBox())?.height ?? 0)
-			.toBe(429);
+			.toBe(353);
 		expect(halfway).toBeGreaterThan(initialHeight);
-		expect(halfway).toBeLessThan(429);
+		expect(halfway).toBeLessThan(353);
 		await input.press("ArrowUp");
 		await expect
 			.poll(() =>

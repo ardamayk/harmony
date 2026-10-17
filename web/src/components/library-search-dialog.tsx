@@ -331,7 +331,7 @@ export function LibrarySearchDialog({
 					}}
 					onCloseAutoFocus={returnFocus.restore}
 					aria-describedby={undefined}
-					className="library-search-card fixed top-[23dvh] z-50 flex max-h-[min(56rem,calc(77dvh-var(--player-dock-clearance,1rem)))] -translate-x-1/2 flex-col overflow-hidden rounded-lg border border-border bg-popover text-popover-foreground shadow-xl outline-none"
+					className="library-search-card fixed z-50 flex -translate-x-1/2 flex-col overflow-hidden rounded-lg border border-border bg-popover text-popover-foreground shadow-xl outline-none"
 				>
 					<DialogPrimitive.Title className="sr-only">
 						Search your library
