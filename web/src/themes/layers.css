@@ -19,8 +19,10 @@
 	/* The floating player sits over list rows on --background, so it takes a
 	 * surface one step lighter than cards and its own border/shadow tokens. */
 	--player: color-mix(in srgb, var(--theme-2) 85%, var(--theme-3) 15%);
-	--player-border: color-mix(in srgb, var(--border) 70%, transparent);
-	--player-shadow: rgba(0, 0, 0, 0.45);
+	/* Dark shell surfaces separate by tone alone; a border and a dark halo
+	 * made them read as popups over the page. */
+	--player-border: transparent;
+	--player-shadow: transparent;
 
 	/* Text — light end */
 	--heading: var(--theme-6);
