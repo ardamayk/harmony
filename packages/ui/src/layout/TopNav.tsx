@@ -26,11 +26,11 @@ export type WindowControls = {
 
 // The open section (and a pressed Top Nav control) gets a lit pill: a lighter
 // surface, full-strength text and a soft top highlight with a drop shadow.
-const NAV_LINK_CLASS = `${LINK_BASE_CLASS} [&.active]:bg-[color-mix(in_srgb,var(--heading)_12%,transparent)] [&.active]:font-semibold [&.active]:text-heading [&.active]:shadow-[inset_0_1px_0_color-mix(in_srgb,var(--heading)_10%,transparent),0_8px_20px_-12px_rgb(0_0_0/0.8)]`;
+const NAV_LINK_CLASS = `${LINK_BASE_CLASS} [&.active]:bg-heading/12 [&.active]:font-semibold [&.active]:text-heading [&.active]:shadow-lit`;
 
 /** Icon control in the Top Nav; `aria-pressed` lights it like the open section. */
 export const TOP_NAV_ICON_BUTTON_CLASS =
-	"inline-flex size-9 shrink-0 items-center justify-center rounded-md text-sidebar-foreground transition hover:bg-shell-active hover:text-shell-active-foreground focus-visible:bg-shell-active focus-visible:outline-none aria-pressed:bg-[color-mix(in_srgb,var(--heading)_12%,transparent)] aria-pressed:text-heading aria-pressed:shadow-[inset_0_1px_0_color-mix(in_srgb,var(--heading)_10%,transparent),0_8px_20px_-12px_rgb(0_0_0/0.8)] [&.active]:bg-[color-mix(in_srgb,var(--heading)_12%,transparent)] [&.active]:text-heading [&.active]:shadow-[inset_0_1px_0_color-mix(in_srgb,var(--heading)_10%,transparent),0_8px_20px_-12px_rgb(0_0_0/0.8)]";
+	"inline-flex size-9 shrink-0 items-center justify-center rounded-md text-sidebar-foreground transition hover:bg-shell-active hover:text-shell-active-foreground focus-visible:bg-shell-active focus-visible:outline-none aria-pressed:bg-heading/12 aria-pressed:text-heading aria-pressed:shadow-lit [&.active]:bg-heading/12 [&.active]:text-heading [&.active]:shadow-lit";
 
 /**
  * Top navigation bar: brand, library sections, the Search entry (opens the
@@ -52,7 +52,7 @@ export function TopNav({
 			data-shell-surface
 			data-window-drag-region
 			className={`flex ${TOP_NAV_HEIGHT_CLASS} shrink-0 items-stretch bg-sidebar text-sidebar-foreground ${
-				windowControls ? "pl-[var(--shell-inset,2rem)]" : SHELL_INSET_CLASS
+				windowControls ? "pl-(--shell-inset,2rem)" : SHELL_INSET_CLASS
 			}`}
 		>
 			{/* Window controls sit at the window's own corner, not on the page
@@ -60,14 +60,12 @@ export function TopNav({
 			<div
 				data-window-drag-region
 				className={`flex h-full w-full min-w-0 items-center gap-6 border-sidebar-border border-b ${
-					windowControls
-						? "mr-[max(0px,calc(var(--shell-inset,2rem)-7.5rem))]"
-						: ""
+					windowControls ? "mr-top-nav-offset" : ""
 				}`}
 			>
 				<Link
 					to="/library/albums"
-					className="display-title shrink-0 font-semibold text-shell-brand text-xl tracking-[-0.5px]"
+					className="font-display shrink-0 font-semibold text-shell-brand text-xl tracking-tight"
 				>
 					Earthly Audio
 				</Link>
@@ -108,7 +106,7 @@ export function TopNav({
 				<div
 					role="group"
 					aria-label="Window"
-					className="flex w-[7.5rem] shrink-0 items-center justify-end gap-1 pr-2"
+					className="flex w-30 shrink-0 items-center justify-end gap-1 pr-2"
 				>
 					<button
 						type="button"

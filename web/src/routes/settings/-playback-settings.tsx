@@ -153,12 +153,7 @@ export function PlaybackSettingsSection() {
 						className="flex items-start justify-between gap-4 rounded-lg border border-border bg-card/40 p-3"
 					>
 						<div className="min-w-0">
-							<Label
-								htmlFor={`playback-${toggle.key}`}
-								className="font-medium text-heading text-sm"
-							>
-								{toggle.label}
-							</Label>
+							<Label htmlFor={`playback-${toggle.key}`}>{toggle.label}</Label>
 							<p className="text-caption text-xs">{toggle.description}</p>
 						</div>
 						<Switch

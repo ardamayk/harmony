@@ -183,7 +183,7 @@ function AlbumFilterDrawer({
 				<DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-background/50 backdrop-blur-sm" />
 				<DialogPrimitive.Content
 					aria-describedby="album-filter-description"
-					className="fixed top-0 right-0 z-50 flex h-dvh w-[min(390px,100vw)] flex-col gap-6 border-border border-l bg-background p-6 shadow-xl outline-none"
+					className="fixed top-0 right-0 z-50 flex h-dvh w-sm flex-col gap-6 border-border border-l bg-background p-6 shadow-xl outline-none"
 				>
 					<div className="flex items-start justify-between gap-4">
 						<div className="min-w-0">
@@ -205,7 +205,7 @@ function AlbumFilterDrawer({
 						</DialogPrimitive.Close>
 					</div>
 
-					<div className="min-h-0 flex-1 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+					<div className="min-h-0 flex-1 overflow-y-auto scrollbar-hidden">
 						<AlbumFilters
 							artists={artists}
 							genreOptions={genreOptions}

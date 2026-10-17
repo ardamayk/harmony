@@ -1,8 +1,8 @@
 import type { Album, Artist } from "@repo/api-client";
-import { Search, X } from "lucide-react";
+import { SearchField } from "#/components/search-field";
+import { X } from "lucide-react";
 import { useDeferredValue, useMemo } from "react";
 import { Button } from "#/components/ui/button";
-import { Input } from "#/components/ui/input";
 import {
 	Select,
 	SelectContent,
@@ -102,17 +102,14 @@ export function AlbumFilters({
 		<div className="mb-6 space-y-3">
 			<div className="flex flex-col gap-3 lg:flex-row lg:items-center">
 				{showSearch ? (
-					<div className="relative min-w-0 flex-1">
-						<Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-caption" />
-						<Input
-							className="pl-8"
-							placeholder="Search albums…"
-							value={filters.albumQuery}
-							onChange={(e) =>
-								onFiltersChange({ ...filters, albumQuery: e.target.value })
-							}
-						/>
-					</div>
+					<SearchField
+						className="min-w-0 flex-1"
+						placeholder="Search albums…"
+						value={filters.albumQuery}
+						onChange={(e) =>
+							onFiltersChange({ ...filters, albumQuery: e.target.value })
+						}
+					/>
 				) : null}
 
 				<div className="flex flex-wrap items-center gap-2">
@@ -124,7 +121,7 @@ export function AlbumFilters({
 								onFiltersChange({ ...filters, artistId })
 							}
 						>
-							<SelectTrigger className="w-[180px] max-w-full">
+							<SelectTrigger className="w-45 max-w-full">
 								<SelectValue placeholder="All artists" />
 							</SelectTrigger>
 							<SelectContent>
@@ -144,7 +141,7 @@ export function AlbumFilters({
 							value={genreValue}
 							onValueChange={(genre) => onFiltersChange({ ...filters, genre })}
 						>
-							<SelectTrigger className="w-[180px] max-w-full">
+							<SelectTrigger className="w-45 max-w-full">
 								<SelectValue placeholder="All genres" />
 							</SelectTrigger>
 							<SelectContent>
@@ -161,9 +158,8 @@ export function AlbumFilters({
 					{hasActiveFilters ? (
 						<Button
 							type="button"
-							variant="ghost"
+							variant="muted"
 							size="sm"
-							className="text-caption"
 							onClick={clearFilters}
 						>
 							<X className="size-4" />

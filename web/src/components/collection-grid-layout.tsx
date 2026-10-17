@@ -30,14 +30,14 @@ export const COLLECTION_PAGE_CONTAINER_CLASS = PAGE_CONTENT_WIDTH_CLASS;
 // an open Queue Drawer has a fixed width (see use-queue-drawer-width) and the
 // grid stretches two columns into what is left.
 export const COLLECTION_GRID_CLASS =
-	"grid grid-cols-[repeat(auto-fill,min(250px,100%))] gap-3 max-lg:in-data-[queue-open]:grid-cols-2";
+	"grid grid-cols-cards gap-3 max-lg:in-data-[queue-open]:grid-cols-2";
 
 // Hover and keyboard focus for every collection and station card
 // (docs/design-rules.md, Interaction states): lift, accent border, soft shadow.
 // `transform-gpu backface-hidden` keeps the desktop webview from flickering
 // card edges while they move.
 export const CARD_INTERACTION_CLASS =
-	"transform-gpu backface-hidden outline-none transition duration-300 ease-out hover:-translate-y-1 hover:border-shell-active-foreground/35 hover:shadow-[0_18px_40px_-18px_rgb(0_0_0/0.75)] focus-visible:-translate-y-1 focus-visible:border-shell-active-foreground/60 focus-visible:shadow-[0_18px_40px_-18px_rgb(0_0_0/0.75)] motion-reduce:transform-none motion-reduce:transition-none";
+	"transform-gpu backface-hidden outline-none transition duration-300 ease-out hover:-translate-y-1 hover:border-shell-active-foreground/35 hover:shadow-card-lift focus-visible:-translate-y-1 focus-visible:border-shell-active-foreground/60 focus-visible:shadow-card-lift motion-reduce:transform-none motion-reduce:transition-none";
 
 export function CollectionPageContainer({
 	className,
@@ -118,18 +118,11 @@ export function CollectionGridState({
 	return (
 		<Empty
 			role={isError ? "alert" : undefined}
-			className={cn(
-				"min-h-72 border",
-				isError ? "border-destructive/30" : "border-border/70 bg-card/30",
-			)}
+			variant={isError ? "error" : "card"}
+			className="min-h-72"
 		>
 			<EmptyHeader>
-				<EmptyMedia
-					variant="icon"
-					className={isError ? "text-destructive" : undefined}
-				>
-					{icon}
-				</EmptyMedia>
+				<EmptyMedia variant="icon">{icon}</EmptyMedia>
 				<EmptyTitle>{title}</EmptyTitle>
 				<EmptyDescription>{description}</EmptyDescription>
 			</EmptyHeader>

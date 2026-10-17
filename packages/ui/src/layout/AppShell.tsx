@@ -19,7 +19,7 @@ export { PLAYER_BAR_HEIGHT_PX, PLAYER_BAR_INSET_PX } from "./shell-metrics";
 
 // Floating player bar: the bar, its bottom inset and 8px breathing room, so
 // scrolled content never ends hidden under the bar.
-const PLAYER_DOCK_CONTENT_PADDING = "pb-[var(--player-dock-clearance)]";
+const PLAYER_DOCK_CONTENT_PADDING = "pb-(--player-dock-clearance)";
 const PLAYER_DOCK_CLEARANCE = `${PLAYER_BAR_HEIGHT_PX + PLAYER_BAR_INSET_PX + 8}px`;
 
 /**
@@ -82,7 +82,7 @@ function AppShellFrame({
 				<div className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
 					<main
 						data-queue-open={queueTakesSpace ? "" : undefined}
-						className={`flex h-full min-w-0 flex-1 flex-col overflow-auto bg-background pr-0 data-[queue-open]:pr-[var(--queue-drawer-clearance)] transition-[padding] duration-300 ease-out ${
+						className={`flex h-full min-w-0 flex-1 flex-col overflow-auto bg-background pr-0 data-[queue-open]:pr-(--queue-drawer-clearance) transition-padding duration-300 ease-out ${
 							bottom ? PLAYER_DOCK_CONTENT_PADDING : ""
 						}`}
 						style={

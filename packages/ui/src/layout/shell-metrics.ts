@@ -9,7 +9,7 @@
  * `--shell-inset` on `:root`; the fallback keeps the shell usable in
  * isolation (tests, storybook-like hosts).
  */
-export const SHELL_INSET_CLASS = "px-[var(--shell-inset,2rem)]";
+export const SHELL_INSET_CLASS = "px-(--shell-inset,2rem)";
 
 /** Height of the Top Nav bar. */
 export const TOP_NAV_HEIGHT_CLASS = "h-16";

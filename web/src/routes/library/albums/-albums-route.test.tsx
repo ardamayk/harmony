@@ -85,7 +85,7 @@ describe("albums route", () => {
 			"overflow-hidden",
 		);
 		expect(screen.getByTestId("albums-page-content").className).toContain(
-			"[scrollbar-width:none]",
+			"scrollbar-hidden",
 		);
 		expect(screen.getByTestId("albums-page-content").className).toContain(
 			"py-6",

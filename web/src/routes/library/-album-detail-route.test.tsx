@@ -136,8 +136,6 @@ describe("album detail route", () => {
 		await screen.findByRole("heading", { name: "1989" });
 		const content = screen.getByTestId("album-detail-content");
 		expect(content.className).toContain("page-content-column");
-		expect(content.parentElement?.className).toContain(
-			"px-[var(--shell-inset)]",
-		);
+		expect(content.parentElement?.className).toContain("px-(--shell-inset)");
 	});
 });

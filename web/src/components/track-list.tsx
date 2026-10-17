@@ -372,7 +372,7 @@ function TrackDetailsDialog({
 				<DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-background/70" />
 				<DialogPrimitive.Content
 					onCloseAutoFocus={onCloseAutoFocus}
-					className="-translate-x-1/2 -translate-y-1/2 fixed top-1/2 left-1/2 z-50 max-h-[80vh] w-[calc(100vw-2rem)] max-w-2xl overflow-hidden rounded-md border border-border bg-popover text-popover-foreground shadow-xl outline-none"
+					className="-translate-x-1/2 -translate-y-1/2 fixed top-1/2 left-1/2 z-50 max-h-dialog-height w-dialog-width max-w-2xl overflow-hidden rounded-md border border-border bg-popover text-popover-foreground shadow-xl outline-none"
 				>
 					<div className="flex items-center justify-between gap-3 border-border border-b p-4">
 						<DialogPrimitive.Title className="truncate font-semibold text-heading text-xl">
@@ -384,7 +384,7 @@ function TrackDetailsDialog({
 						</DialogPrimitive.Close>
 					</div>
 					{rows.length > 0 ? (
-						<div className="max-h-[65vh] overflow-auto p-4">
+						<div className="max-h-dialog-body-height overflow-auto p-4">
 							{rows.map(([label, value]) => (
 								<DetailRow key={label} label={label} value={value} />
 							))}
@@ -399,7 +399,7 @@ function TrackDetailsDialog({
 function DetailRow({ label, value }: { label: string; value?: string | null }) {
 	if (!value) return null;
 	return (
-		<div className="grid grid-cols-[8rem_minmax(0,1fr)] gap-3 border-border border-b py-2 text-sm">
+		<div className="grid grid-cols-label gap-3 border-border border-b py-2 text-sm">
 			<span className="text-caption">{label}</span>
 			<span className="min-w-0 break-words font-medium text-foreground">
 				{value}

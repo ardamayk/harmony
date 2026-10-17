@@ -200,7 +200,7 @@ describe("CollectionCoverStrip", () => {
 				expect(cover.className).toContain(className);
 			}
 			expect(cover.className).toContain("top-0");
-			expect(cover.className).toContain("h-[88%]");
+			expect(cover.className).toContain("h-11/12");
 		}
 	});
 
@@ -234,9 +234,7 @@ describe("CollectionCoverStrip", () => {
 		);
 		expect(covers).toHaveLength(4);
 		for (const cover of covers) {
-			expect(cover.className).toContain(
-				"transition-[left,width,box-shadow,filter]",
-			);
+			expect(cover.className).toContain("transition-all");
 			expect(cover.className).toContain("hover:left-0");
 			expect(cover.className).toContain("hover:z-50");
 			expect(cover.className).toContain("hover:w-full");
@@ -256,11 +254,9 @@ describe("CollectionCoverStrip", () => {
 		for (const cover of covers) {
 			expect(cover.className).toContain("border-r");
 			expect(cover.className).toContain("border-background/30");
-			expect(cover.className).toContain(
-				"shadow-[10px_0_20px_rgb(0_0_0_/_35%)]",
-			);
-			expect(cover.className).toContain("duration-[260ms]");
-			expect(cover.className).toContain("hover:delay-[60ms]");
+			expect(cover.className).toContain("shadow-cover-strip");
+			expect(cover.className).toContain("duration-300");
+			expect(cover.className).toContain("hover:delay-75");
 			expect(cover.className).toContain("motion-reduce:transition-none");
 		}
 	});

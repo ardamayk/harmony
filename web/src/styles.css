@@ -33,6 +33,38 @@ html[data-theme-preset] {
 }
 
 @theme inline {
+	/* Layout geometry as spacing tokens, so widths and offsets stay on
+     theme classes (w-dialog-width) instead of arbitrary values. */
+	--spacing-dialog-width: calc(100vw - 2rem);
+	--spacing-dialog-height: 85dvh;
+	--spacing-dialog-body-height: 65dvh;
+	--spacing-search-card-height: min(85dvh, 56rem);
+	--spacing-artwork-stage: min(100%, 65vh);
+	--spacing-lyrics-aside: clamp(14rem, 22vw, 18rem);
+	--spacing-top-nav-offset: max(0px, calc(var(--shell-inset, 2rem) - 7.5rem));
+	--spacing-queue-drawer-max: calc(100% - 2 * var(--shell-inset, 2rem));
+	/* Shadows: the lit pill, the lifted card, the shell surfaces and the
+     cover strip; everything else takes Tailwind's shadow scale. */
+	--shadow-lit:
+		inset 0 1px 0 color-mix(in srgb, var(--heading) 10%, transparent),
+		0 8px 20px -12px rgb(0 0 0 / 0.8);
+	--shadow-card-lift: 0 18px 40px -18px rgb(0 0 0 / 0.75);
+	--shadow-shell:
+		0 -10px 32px -6px var(--player-shadow),
+		0 14px 40px -8px var(--player-shadow);
+	--shadow-cover-strip: 10px 0 20px rgb(0 0 0 / 0.35);
+	--color-player-control-shadow: var(--player-control-shadow);
+	--color-warning: var(--warning);
+	--color-success: var(--success);
+	--font-display: "Fraunces", Georgia, serif;
+	/* Enter animations; used behind motion-safe: so reduced motion gets an
+     instant swap. Keyframes live with the components layer below. */
+	--animate-lyrics-view: lyrics-view-enter 300ms
+		cubic-bezier(0.22, 0.8, 0.24, 1) both;
+	--animate-player-cover: player-cover-crossfade 250ms ease-out both;
+	--animate-player-title: player-title-slide 200ms
+		cubic-bezier(0.22, 0.8, 0.24, 1) both;
+	--animate-player-glyph: player-glyph-pop 150ms ease-out both;
 	--font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
 	--color-background: var(--background);
 	--color-foreground: var(--foreground);
@@ -241,6 +273,90 @@ html[data-window-maximized] body::after {
 	}
 }
 
+/* Named utilities for the few layout patterns Tailwind has no class for. */
+@utility scrollbar-hidden {
+	scrollbar-width: none;
+	-ms-overflow-style: none;
+	&::-webkit-scrollbar {
+		display: none;
+	}
+}
+@utility content-empty {
+	content: "";
+}
+@utility z-fullscreen {
+	z-index: 60;
+}
+@utility z-above-fullscreen {
+	z-index: 70;
+}
+@utility grid-cols-label {
+	grid-template-columns: 8rem minmax(0, 1fr);
+}
+@utility grid-cols-media {
+	grid-template-columns: auto minmax(0, 1fr);
+}
+@utility grid-cols-media-aside {
+	grid-template-columns: auto minmax(0, 1fr) 220px;
+}
+@utility grid-cols-media-actions {
+	grid-template-columns: auto minmax(0, 1fr) auto;
+}
+@utility grid-cols-cards {
+	grid-template-columns: repeat(auto-fill, min(250px, 100%));
+}
+@utility grid-cols-panels {
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 560px), 1fr));
+}
+@utility transition-ring {
+	transition-property: color, box-shadow, border-color;
+	transition-timing-function: var(
+		--tw-ease,
+		var(--default-transition-timing-function)
+	);
+	transition-duration: var(--tw-duration, var(--default-transition-duration));
+}
+@utility transition-padding {
+	transition-property: padding;
+	transition-timing-function: var(
+		--tw-ease,
+		var(--default-transition-timing-function)
+	);
+	transition-duration: var(--tw-duration, var(--default-transition-duration));
+}
+@utility transition-slide {
+	transition-property: translate, visibility;
+	transition-timing-function: var(
+		--tw-ease,
+		var(--default-transition-timing-function)
+	);
+	transition-duration: var(--tw-duration, var(--default-transition-duration));
+}
+/* Runtime geometry read from custom properties set in style. */
+@utility clip-right {
+	clip-path: inset(0 var(--clip-right) 0 0);
+}
+@utility sortable-widget {
+	transform: var(--sortable-transform);
+	transition: var(--sortable-transition);
+}
+@utility contain-inline-size {
+	contain: inline-size;
+}
+/* Player Bar surfaces that keep the theme's neutral accent. */
+@utility player-neutral {
+	--player-control-primary: var(--primary);
+	--player-control-primary-foreground: var(--primary-foreground);
+	--player-foreground: var(--foreground);
+}
+@utility translate-x-switch-on {
+	translate: calc(100% - 2px) 0;
+}
+/* Hidden Queue Drawer: below the Player Bar dock, shadow included. */
+@utility translate-y-below-dock {
+	translate: 0 calc(100% + 8rem);
+}
+
 @layer components {
 	/* Vertical volume slider: a horizontal range rotated -90deg (works in every
      engine, unlike writing-mode on range inputs), thin track, line-shaped thumb. */
@@ -433,18 +549,10 @@ html[data-window-maximized] body::after {
 			opacity: 1;
 		}
 	}
-	.lyrics-view-enter {
-		animation: lyrics-view-enter 320ms cubic-bezier(0.22, 0.8, 0.24, 1) both;
-	}
-	@media (prefers-reduced-motion: reduce) {
-		.lyrics-view-enter {
-			animation: none;
-		}
-	}
 
 	/* Player Bar track transitions: the new cover fades in over the old one,
-     the title slides up, and the play/pause glyph pops. Every animation is
-     guarded so reduced-motion users get an instant swap. */
+     the title slides up, and the play/pause glyph pops (--animate-* tokens
+     in @theme). */
 	@keyframes player-cover-crossfade {
 		from {
 			opacity: 0;
@@ -471,17 +579,6 @@ html[data-window-maximized] body::after {
 		to {
 			transform: scale(1);
 			opacity: 1;
-		}
-	}
-	@media (prefers-reduced-motion: no-preference) {
-		.player-cover-enter {
-			animation: player-cover-crossfade 260ms ease-out both;
-		}
-		.player-title-enter {
-			animation: player-title-slide 220ms cubic-bezier(0.22, 0.8, 0.24, 1) both;
-		}
-		.player-glyph-enter {
-			animation: player-glyph-pop 160ms ease-out both;
 		}
 	}
 }
@@ -562,10 +659,6 @@ pre code {
 .page-wrap {
 	width: min(1080px, calc(100% - 2rem));
 	margin-inline: auto;
-}
-
-.display-title {
-	font-family: "Fraunces", Georgia, serif;
 }
 
 .island-shell {

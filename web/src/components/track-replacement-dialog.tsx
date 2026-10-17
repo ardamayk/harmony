@@ -4,6 +4,7 @@ import type {
 	TrackReplacementPreview,
 } from "@repo/api-client";
 import { Dialog as DialogPrimitive } from "radix-ui";
+import type { CSSProperties } from "react";
 import type { TrackReplacementStep } from "#/hooks/use-track-replacement-flow";
 import { SUPPORTED_AUDIO_FILE_ACCEPT } from "#/routes/library/tracks/-managed-import-workflow";
 
@@ -50,7 +51,7 @@ export function TrackReplacementDialog({
 				<DialogPrimitive.Content
 					aria-describedby="track-replacement-description"
 					onCloseAutoFocus={onCloseAutoFocus}
-					className="-translate-x-1/2 -translate-y-1/2 fixed top-1/2 left-1/2 z-50 max-h-[85vh] w-[calc(100vw-2rem)] max-w-2xl overflow-y-auto rounded-md border border-border bg-popover p-6 text-popover-foreground shadow-xl outline-none"
+					className="-translate-x-1/2 -translate-y-1/2 fixed top-1/2 left-1/2 z-50 max-h-dialog-height w-dialog-width max-w-2xl overflow-y-auto rounded-md border border-border bg-popover p-6 text-popover-foreground shadow-xl outline-none"
 				>
 					<DialogPrimitive.Title className="font-semibold text-heading text-xl">
 						Replace {track?.title}
@@ -157,8 +158,8 @@ function ReplacementFilePicker({
 					aria-valuemax={100}
 				>
 					<div
-						className="h-full bg-primary transition-[width]"
-						style={{ width: `${progress}%` }}
+						className="h-full w-(--progress) bg-primary transition-all"
+						style={{ "--progress": `${progress}%` } as CSSProperties}
 					/>
 				</div>
 			) : null}
@@ -195,7 +196,7 @@ function ReplacementReview({ preview }: { preview: TrackReplacementPreview }) {
 					permanently after the replacement is verified.
 				</p>
 			</div>
-			<dl className="grid grid-cols-[8rem_minmax(0,1fr)] gap-3 text-sm">
+			<dl className="grid grid-cols-label gap-3 text-sm">
 				<dt className="text-caption">Playlists kept</dt>
 				<dd>
 					{preview.playlistReferences
@@ -227,7 +228,7 @@ function DiffSection({
 			{changed.length === 0 ? (
 				<p className="text-caption text-sm">No changes</p>
 			) : (
-				<dl className="mt-1 grid grid-cols-[8rem_minmax(0,1fr)] gap-x-3 gap-y-1 text-sm">
+				<dl className="mt-1 grid grid-cols-label gap-x-3 gap-y-1 text-sm">
 					{changed.map((diff) => (
 						<DiffRow key={diff.field} diff={diff} />
 					))}

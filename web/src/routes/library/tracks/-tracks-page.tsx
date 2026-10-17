@@ -94,8 +94,7 @@ function TracksHeader({
 				<Button
 					type="button"
 					aria-label="Import Music"
-					size="icon"
-					className="size-10 rounded-lg"
+					size="icon-lg"
 					onClick={onImport}
 					disabled={importUnsupported}
 					title={importUnsupported ? IMPORT_UNSUPPORTED_TITLE : undefined}

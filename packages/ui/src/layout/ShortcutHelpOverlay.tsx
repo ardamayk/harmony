@@ -30,7 +30,7 @@ export function ShortcutHelpOverlay({
 	const shortcuts = describePlaybackShortcuts(options);
 
 	return createPortal(
-		<div className="fixed inset-0 z-[70] flex items-center justify-center bg-background/70 p-4">
+		<div className="fixed inset-0 z-above-fullscreen flex items-center justify-center bg-background/70 p-4">
 			<div
 				ref={dialogRef}
 				role="dialog"
@@ -52,7 +52,7 @@ export function ShortcutHelpOverlay({
 						<X className="size-4" />
 					</button>
 				</div>
-				<dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-6 gap-y-2 p-4 text-sm">
+				<dl className="grid grid-cols-media gap-x-6 gap-y-2 p-4 text-sm">
 					{shortcuts.map((shortcut) => (
 						<div key={shortcut.description} className="contents">
 							<dt className="flex items-center gap-1">

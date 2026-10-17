@@ -4,7 +4,7 @@ import { Dialog as DialogPrimitive } from "radix-ui";
 export const DELETION_DIALOG_OVERLAY_CLASS =
 	"fixed inset-0 z-50 bg-background/70";
 export const DELETION_DIALOG_CONTENT_CLASS =
-	"-translate-x-1/2 -translate-y-1/2 fixed top-1/2 left-1/2 z-50 w-[calc(100vw-2rem)] max-w-lg rounded-md border border-border bg-popover p-6 text-popover-foreground shadow-xl outline-none";
+	"-translate-x-1/2 -translate-y-1/2 fixed top-1/2 left-1/2 z-50 w-dialog-width max-w-lg rounded-md border border-border bg-popover p-6 text-popover-foreground shadow-xl outline-none";
 
 export function TrackDeletionDialog({
 	track,
@@ -75,7 +75,7 @@ export function DeletionRows({ rows }: { rows: string[][] }) {
 	return (
 		<dl className="mt-4 space-y-3 text-sm">
 			{rows.map(([label, value]) => (
-				<div key={label} className="grid grid-cols-[7rem_minmax(0,1fr)] gap-3">
+				<div key={label} className="grid grid-cols-label gap-3">
 					<dt className="text-caption">{label}</dt>
 					<dd className="break-all text-foreground">{value}</dd>
 				</div>

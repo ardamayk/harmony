@@ -177,8 +177,12 @@ export function SeekBar({
 				className="pointer-events-none absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 overflow-hidden rounded-full"
 			>
 				<div
-					className="h-full rounded-full bg-player-foreground/25"
-					style={{ width: `${(bufferedFraction * 100).toFixed(2)}%` }}
+					className="h-full w-(--buffered) rounded-full bg-player-foreground/25"
+					style={
+						{
+							"--buffered": `${(bufferedFraction * 100).toFixed(2)}%`,
+						} as CSSProperties
+					}
 				/>
 			</div>
 			<input
@@ -213,8 +217,12 @@ export function SeekBar({
 					id={tooltipId}
 					role="tooltip"
 					data-testid="seek-tooltip"
-					className="pointer-events-none absolute bottom-full mb-1 -translate-x-1/2 rounded-sm bg-popover px-2 py-0.5 text-xs text-popover-foreground tabular-nums shadow"
-					style={{ left: `${(tooltipFraction * 100).toFixed(2)}%` }}
+					className="pointer-events-none absolute bottom-full left-(--seek-tooltip) mb-1 -translate-x-1/2 rounded-sm bg-popover px-2 py-0.5 text-xs text-popover-foreground tabular-nums shadow"
+					style={
+						{
+							"--seek-tooltip": `${(tooltipFraction * 100).toFixed(2)}%`,
+						} as CSSProperties
+					}
 				>
 					{formatSeekTime(tooltipFraction * duration)}
 				</span>
@@ -263,19 +271,23 @@ function WaveformBars({
 			<title>Waveform</title>
 			<g className="fill-player-foreground opacity-25">{bars}</g>
 			<g
-				className="fill-player-foreground opacity-20"
-				style={{
-					clipPath: `inset(0 ${(100 - bufferedFraction * 100).toFixed(2)}% 0 0)`,
-				}}
+				className="clip-right fill-player-foreground opacity-20"
+				style={
+					{
+						"--clip-right": `${(100 - bufferedFraction * 100).toFixed(2)}%`,
+					} as CSSProperties
+				}
 			>
 				{bars}
 			</g>
 			<g
 				data-testid="seek-waveform-played"
-				className="fill-player-live-progress"
-				style={{
-					clipPath: `inset(0 ${(100 - playedFraction * 100).toFixed(2)}% 0 0)`,
-				}}
+				className="clip-right fill-player-live-progress"
+				style={
+					{
+						"--clip-right": `${(100 - playedFraction * 100).toFixed(2)}%`,
+					} as CSSProperties
+				}
 			>
 				{bars}
 			</g>

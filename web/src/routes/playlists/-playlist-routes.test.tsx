@@ -214,7 +214,7 @@ describe("playlist routes", () => {
 			"overflow-hidden",
 		);
 		expect(screen.getByTestId("playlists-page-content").className).toContain(
-			"[scrollbar-width:none]",
+			"scrollbar-hidden",
 		);
 		expect(
 			header.closest("header")?.querySelector(".page-content-column"),
@@ -227,7 +227,7 @@ describe("playlist routes", () => {
 		expect(
 			screen
 				.getByTestId("playlists-page-content")
-				.querySelector('[class*="auto-fill"]'),
+				.querySelector(".grid-cols-cards"),
 		).toBeTruthy();
 
 		const link = await screen.findByRole("link", {

@@ -184,7 +184,7 @@ describe("radio routes", () => {
 		expect(screen.queryByLabelText("List view")).toBeNull();
 		expect(shell.className).toContain("overflow-hidden");
 		expect(screen.getByTestId("radio-page-content").className).toContain(
-			"[scrollbar-width:none]",
+			"scrollbar-hidden",
 		);
 		expect(header?.className).toContain("sticky");
 		expect(header?.className).toContain("top-0");

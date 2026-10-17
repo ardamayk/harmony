@@ -1,4 +1,5 @@
 import type { RadioCatalogOption, RadioSearchResult } from "@repo/api-client";
+import { SearchField } from "#/components/search-field";
 import { usePlayback } from "@repo/ui";
 import {
 	useInfiniteQuery,
@@ -16,7 +17,6 @@ import {
 	List,
 	MapPin,
 	Radio,
-	Search,
 	ShieldAlert,
 	ShieldQuestion,
 	SlidersHorizontal,
@@ -37,12 +37,8 @@ import {
 	ContextMenuSeparator,
 	ContextMenuTrigger,
 } from "#/components/ui/context-menu";
-import { Input } from "#/components/ui/input";
 import { apiClient } from "#/lib/api";
-import {
-	HEADER_SEARCH_CONTAINER_CLASS,
-	HEADER_SEARCH_INPUT_CLASS,
-} from "#/lib/page-layout-classes";
+import { HEADER_SEARCH_CONTAINER_CLASS } from "#/lib/page-layout-classes";
 import { cn } from "#/lib/utils";
 
 const PAGE_SIZE = 40;
@@ -474,7 +470,7 @@ export function RadioDiscoverPage() {
 
 	return (
 		<div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-			<header className="sticky top-0 z-40 shrink-0 bg-background/80 px-[var(--shell-inset)] py-3 backdrop-blur">
+			<header className="sticky top-0 z-40 shrink-0 bg-background/80 px-(--shell-inset) py-3 backdrop-blur">
 				<div
 					className={`flex flex-col gap-2 ${COLLECTION_PAGE_CONTAINER_CLASS}`}
 				>
@@ -490,10 +486,9 @@ export function RadioDiscoverPage() {
 								className={HEADER_SEARCH_CONTAINER_CLASS}
 								htmlFor="radio-discover-search"
 							>
-								<Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-caption" />
-								<Input
+								<SearchField
 									id="radio-discover-search"
-									className={`${HEADER_SEARCH_INPUT_CLASS} text-player-foreground placeholder:text-player-foreground/55`}
+									variant="shell"
 									value={filters.q}
 									onChange={(event) =>
 										setFilters((current) => ({
@@ -507,10 +502,9 @@ export function RadioDiscoverPage() {
 							</label>
 							<Button
 								type="button"
-								variant="ghost"
-								size="icon"
+								variant="muted"
+								size="icon-lg"
 								aria-label="Filters"
-								className="size-10 text-caption hover:text-heading"
 								onClick={() => setAreFiltersOpen(true)}
 							>
 								<SlidersHorizontal className="size-5" />
@@ -526,10 +520,10 @@ export function RadioDiscoverPage() {
 				</div>
 			</header>
 
-			<div className="min-h-0 flex-1 overflow-y-auto px-[var(--shell-inset)] py-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+			<div className="min-h-0 flex-1 overflow-y-auto px-(--shell-inset) py-6 scrollbar-hidden">
 				<CollectionPageContainer>
 					{catalog.isLoading ? (
-						<div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,620px),1fr))] gap-4">
+						<div className="grid grid-cols-panels gap-4">
 							{SKELETON_CARD_KEYS.map((key) => (
 								<SkeletonCard key={key} />
 							))}
@@ -551,7 +545,7 @@ export function RadioDiscoverPage() {
 					{viewMode === "grid" ? (
 						<div
 							data-testid="radio-catalog-grid"
-							className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,560px),1fr))] gap-3"
+							className="grid grid-cols-panels gap-3"
 						>
 							{entries.map((entry) => (
 								<CatalogCard
@@ -638,7 +632,7 @@ function FilterDrawer({
 				<DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-background/50 backdrop-blur-sm" />
 				<DialogPrimitive.Content
 					aria-describedby="radio-filter-description"
-					className="fixed top-0 right-0 z-50 flex h-dvh w-[min(390px,100vw)] flex-col gap-6 border-border border-l bg-background p-6 shadow-xl outline-none"
+					className="fixed top-0 right-0 z-50 flex h-dvh w-sm flex-col gap-6 border-border border-l bg-background p-6 shadow-xl outline-none"
 				>
 					<div className="flex items-start justify-between gap-4">
 						<div className="min-w-0">
@@ -660,7 +654,7 @@ function FilterDrawer({
 						</DialogPrimitive.Close>
 					</div>
 
-					<div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+					<div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto scrollbar-hidden">
 						<fieldset className="grid gap-2">
 							<legend className="font-medium text-caption text-xs">
 								Catalog layout
@@ -786,7 +780,7 @@ function NativeOptionSelect({
 	return (
 		<div
 			ref={ref}
-			className="relative flex min-w-[210px] flex-col gap-1 text-caption text-xs"
+			className="relative flex min-w-52.5 flex-col gap-1 text-caption text-xs"
 		>
 			<span>{label}</span>
 			<button
@@ -795,7 +789,7 @@ function NativeOptionSelect({
 				aria-expanded={isOpen}
 				className={cn(
 					FILTER_TRIGGER_CLASS,
-					"flex w-[230px] max-w-full items-center justify-between gap-3 px-3 text-left text-sm outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50",
+					"flex w-57.5 max-w-full items-center justify-between gap-3 px-3 text-left text-sm outline-none transition-ring focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
 				)}
 				onClick={() => setIsOpen((current) => !current)}
 			>
@@ -810,19 +804,17 @@ function NativeOptionSelect({
 				<ChevronDown className="size-4 shrink-0 text-caption" />
 			</button>
 			{isOpen ? (
-				<div className="absolute top-full left-0 z-[80] mt-2 flex max-h-80 w-[320px] flex-col overflow-hidden rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-lg">
-					<label className="relative m-1 mb-2 block" htmlFor={searchInputId}>
-						<Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-caption" />
-						<Input
-							id={searchInputId}
-							className="h-10 rounded-md bg-player pl-8 text-sm"
-							placeholder={searchPlaceholder}
-							type="search"
-							value={query}
-							onChange={(event) => setQuery(event.target.value)}
-						/>
-					</label>
-					<div className="overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+				<div className="absolute top-full left-0 z-50 mt-2 flex max-h-80 w-80 flex-col overflow-hidden rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-lg">
+					<SearchField
+						className="m-1 mb-2"
+						id={searchInputId}
+						variant="shell"
+						placeholder={searchPlaceholder}
+						type="search"
+						value={query}
+						onChange={(event) => setQuery(event.target.value)}
+					/>
+					<div className="overflow-y-auto scrollbar-hidden">
 						<FilterOptionButton
 							label={allLabel}
 							isSelected={value === ALL_FILTER_VALUE}
@@ -978,7 +970,7 @@ function FilterRadioGroup({
 					<label
 						key={option.value}
 						className={cn(
-							"flex h-11 items-center gap-3 rounded-lg border border-border bg-player px-3 text-left text-player-foreground text-sm outline-none transition-[color,box-shadow,border-color] hover:border-player-control-primary focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50",
+							"flex h-11 items-center gap-3 rounded-lg border border-border bg-player px-3 text-left text-player-foreground text-sm outline-none transition-ring hover:border-player-control-primary focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
 							option.value === value &&
 								"border-player-control-primary bg-player-pill",
 						)}
@@ -1026,11 +1018,10 @@ function ViewButton({
 	return (
 		<Button
 			type="button"
-			size="icon"
+			size="icon-sm"
 			variant={isActive ? "default" : "ghost"}
 			aria-label={label}
 			aria-pressed={isActive}
-			className="size-8 rounded-sm"
 			onClick={onClick}
 		>
 			{children}
@@ -1126,7 +1117,7 @@ function CatalogRow({
 					ref={ref}
 					data-testid={`radio-catalog-card-${entry.stationUuid}`}
 					onClick={onPreview}
-					className="group grid min-w-0 cursor-pointer grid-cols-[auto_minmax(0,1fr)] gap-3 rounded-lg border border-border bg-card/45 p-3 text-left shadow-sm outline-none transition duration-300 ease-out hover:-translate-y-1 hover:border-player-control-primary/60 hover:bg-card/65 hover:shadow-lg focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 md:grid-cols-[auto_minmax(0,1fr)_auto]"
+					className="group grid min-w-0 cursor-pointer grid-cols-media gap-3 rounded-lg border border-border bg-card/45 p-3 text-left shadow-sm outline-none transition duration-300 ease-out hover:-translate-y-1 hover:border-player-control-primary/60 hover:bg-card/65 hover:shadow-lg focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:grid-cols-media-actions"
 				>
 					<CatalogArtwork
 						faviconUrl={entry.faviconUrl}
@@ -1273,7 +1264,7 @@ function HealthChip({ status }: { status?: string }) {
 	return (
 		<MetaChip
 			className={cn(
-				normalized === "healthy" && "text-emerald-300",
+				normalized === "healthy" && "text-success",
 				normalized === "broken" && "text-destructive",
 			)}
 		>
@@ -1295,8 +1286,8 @@ function CardHealthStatus({ status }: { status?: string }) {
 		<span className="absolute top-4 right-4 inline-flex items-center gap-2 text-caption text-xs">
 			<span
 				className={cn(
-					"size-2 rounded-full shadow-[0_0_12px_currentColor]",
-					normalized === "healthy" && "bg-emerald-400 text-emerald-400",
+					"size-2 rounded-full",
+					normalized === "healthy" && "bg-success text-success",
 					normalized === "broken" && "bg-destructive text-destructive",
 					normalized !== "healthy" &&
 						normalized !== "broken" &&
@@ -1340,7 +1331,7 @@ function StationDetailsDialog({
 				<DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm" />
 				<DialogPrimitive.Content
 					aria-describedby="radio-details-description"
-					className="-translate-x-1/2 -translate-y-1/2 fixed top-1/2 left-1/2 z-50 flex max-h-[85vh] w-[min(680px,calc(100vw-2rem))] flex-col gap-6 overflow-y-auto rounded-lg border border-border bg-background p-6 shadow-xl outline-none"
+					className="-translate-x-1/2 -translate-y-1/2 fixed top-1/2 left-1/2 z-50 flex max-h-dialog-height w-dialog-width max-w-2xl flex-col gap-6 overflow-y-auto rounded-lg border border-border bg-background p-6 shadow-xl outline-none"
 				>
 					{entry ? (
 						<>
