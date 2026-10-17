@@ -15,7 +15,7 @@ desktop/core                      ← Rust core sidecar: mpv playback, media pro
 packages/desktop-bridge           ← renderer ↔ shell contract (window.earthlyDesktop, command allowlist)
 ```
 
-Run everything through `mise run <task>` (`mise tasks` lists them). TypeScript tooling is bun + Vite+; run Vite+ on the Bun runtime as `bun --bun vp …` (`bun --bun vp check`, `bun --bun vp test`), never bare `vp`, which runs on Node; see ADR 0023.
+Run everything through `mise run <task>` (`mise tasks` lists them). TypeScript tooling is Node + pnpm + Vite+ (`vp`: Oxlint, Oxfmt, Vitest); run it as `vp check`, `vp test` inside mise, which puts `node_modules/.bin` on `PATH`. Bun is not used; see ADR 0026.
 
 ## Music Server modules
 

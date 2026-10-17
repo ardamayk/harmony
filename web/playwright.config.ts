@@ -35,7 +35,7 @@ export default defineConfig({
 			},
 		},
 		{
-			command: "bun run dev",
+			command: "pnpm run dev",
 			timeout: 120_000,
 			url: "http://localhost:3000",
 			reuseExistingServer: false,

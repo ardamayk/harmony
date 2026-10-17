@@ -35,7 +35,8 @@ export default defineConfig({
 			reuseExistingServer: false,
 		},
 		{
-			command: "bun run build && bun run preview --host 127.0.0.1 --port 4173",
+			command:
+				"pnpm run build && pnpm run preview --host 127.0.0.1 --port 4173",
 			timeout: 120_000,
 			url: "http://127.0.0.1:4173",
 			env: { VITE_PROXY_TARGET: PRODUCTION_API_ORIGIN },

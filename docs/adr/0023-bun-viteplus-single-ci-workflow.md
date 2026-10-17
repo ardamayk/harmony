@@ -2,6 +2,8 @@
 status: accepted
 ---
 
+> The bun part is superseded by [ADR 0026](0026-node-pnpm-replace-bun.md): Node runs Vite+ and pnpm manages dependencies. The single CI workflow stands.
+
 # bun and Vite+ replace pnpm, Turbo, Biome, and Husky; one CI workflow
 
 The TypeScript workspace uses bun workspaces for dependencies and Vite+ (`vp`) for formatting (Oxfmt), linting (Oxlint, type-aware), type checks, tests (Vitest), builds, staged-file checks, Git hooks, and workspace task running. Every `vp` invocation (package scripts, mise tasks, the pre-commit hook) runs as `bun --bun vp` so Vite+ executes on the Bun runtime; bare `vp` starts through its `#!/usr/bin/env node` shebang on Node. Mise still pins tools and composes the cross-language public tasks (`check`, `test`, `build`, `ci`), but it no longer sources a storage layer: tools write to their normal locations (`node_modules`, `dist`, `target`, the Go cache).

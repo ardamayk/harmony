@@ -1,15 +1,15 @@
-FROM oven/bun:1.4.2-alpine AS frontend-builder
+FROM node:24-alpine AS frontend-builder
 WORKDIR /src
-RUN apk add --no-cache bash nodejs
-COPY package.json bun.lock vite.config.ts ./
+RUN apk add --no-cache bash && npm install --global pnpm@12.13.0
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml vite.config.ts ./
 COPY server ./server
 COPY packages ./packages
 COPY web ./web
 COPY desktop/package.json ./desktop/package.json
 COPY scripts ./scripts
-RUN bun install --frozen-lockfile --ignore-scripts
-RUN bun run --cwd web build \
-    && bun run --cwd packages/docs build \
+RUN pnpm install --frozen-lockfile --ignore-scripts
+RUN pnpm --dir web run build \
+    && pnpm --dir packages/docs run build \
     && bash scripts/sync-static.sh
 
 FROM rust:1.96-alpine AS builder

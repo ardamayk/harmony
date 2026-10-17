@@ -37,8 +37,17 @@ export default defineConfig({
 		ignorePatterns: generatedAndBuildOutput,
 		plugins: ["typescript", "react", "jsx-a11y", "import", "vitest"],
 		categories: { correctness: "error" },
-		jsPlugins: [{ name: "vite-plus", specifier: "vite-plus/oxlint-plugin" }],
+		jsPlugins: [
+			{ name: "vite-plus", specifier: "vite-plus/oxlint-plugin" },
+			{ name: "shadcn", specifier: "@shadcn/lint" },
+		],
 		rules: {
+			"shadcn/no-arbitrary-values": "warn",
+			"shadcn/no-raw-colors": "warn",
+			"shadcn/no-unknown-classes": "warn",
+			"shadcn/no-inline-styles": "warn",
+			"shadcn/require-static-classes": "warn",
+			"shadcn/no-restyle": ["warn", { allow: ["layout"] }],
 			"vite-plus/prefer-vite-plus-imports": "error",
 			"react/react-in-jsx-scope": "off",
 			"vitest/require-mock-type-parameters": "off",

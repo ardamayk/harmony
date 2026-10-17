@@ -1,6 +1,6 @@
 [tools]
 node = "24"
-bun = "1.4.2"
+pnpm = "12.13.0"
 "cargo:sqlx-cli" = { version = "0.9.0", default-features = false, features = "sqlite,completions,rustls" }
 "cargo:cargo-audit" = "0.22.1"
 
@@ -12,11 +12,11 @@ _.path = ["{{config_root}}/node_modules/.bin"]
 
 [tasks.dev]
 description = "Run the Music Server and Web Client in development mode"
-run = "./scripts/run-with-music-server.sh development bun run --cwd web dev"
+run = "./scripts/run-with-music-server.sh development pnpm --dir web run dev"
 
 [tasks."desktop:dev"]
 description = "Run the Music Server and Desktop Client in development mode"
-run = "./scripts/run-with-music-server.sh development bun run --cwd desktop dev"
+run = "./scripts/run-with-music-server.sh development pnpm --dir desktop run dev"
 
 [tasks.start]
 description = "Run the built Music Server and release Desktop Client"
@@ -24,7 +24,7 @@ run = """
 #!/usr/bin/env bash
 set -euo pipefail
 [[ -x bin/server ]] || { echo "Missing bin/server; run 'mise run build' first." >&2; exit 1; }
-./scripts/run-with-music-server.sh built bun run --cwd desktop start
+./scripts/run-with-music-server.sh built pnpm --dir desktop run start
 """
 
 # --- Code generation ---------------------------------------------------------
@@ -48,26 +48,26 @@ depends = ["server:build", "desktop:build"]
 
 [tasks."web:build"]
 description = "Build the Web Client"
-run = "bun run --cwd web build"
+run = "pnpm --dir web run build"
 
 [tasks."web:lighthouse"]
 description = "Check performance budgets (LCP, TBT/INP, CLS, TTFB) with Lighthouse on the production build"
 depends = ["server:build"]
 # Its own port, so a running development server is not measured instead.
 env = { SERVER_ADDR = "127.0.0.1:8099", LIGHTHOUSE_BASE_URL = "http://127.0.0.1:8099" }
-run = "./scripts/run-with-music-server.sh built bun run --cwd web lighthouse"
+run = "./scripts/run-with-music-server.sh built pnpm --dir web run lighthouse"
 
 [tasks."perf:snapshot"]
 description = "Print CPU and memory of the built Music Server, idle and streaming (plus a running Desktop Client)"
-run = "bun scripts/perf-snapshot.ts"
+run = "node scripts/perf-snapshot.ts"
 
 [tasks."perf:server-load"]
 description = "Startup, idle footprint, endpoint latency under load and stream throughput of the built Music Server"
-run = "bun scripts/server-load.ts"
+run = "node scripts/server-load.ts"
 
 [tasks."docs:build"]
 description = "Build the product documentation embedded by the Music Server"
-run = "bun run --cwd packages/docs build"
+run = "pnpm --dir packages/docs run build"
 
 [tasks."server:build"]
 description = "Build the Music Server binary (bin/server) with embedded Web Client and docs"
@@ -81,16 +81,16 @@ run = [
 [tasks."desktop:build"]
 description = "Build the release Desktop Client: Rust core with pinned mpv, Electron shell bundle, Web Client"
 depends = ["web:build"]
-run = "bun run --cwd desktop build"
+run = "pnpm --dir desktop run build"
 
 # --- Static checks -----------------------------------------------------------
 
 [tasks.format]
 description = "Format TypeScript and Rust sources"
 run = [
-	"bun --bun vp fmt",
+	"vp fmt",
 	"cargo fmt -p earthly-music-server",
-	"bun run --cwd desktop format",
+	"pnpm --dir desktop run format",
 ]
 
 [tasks.check]
@@ -99,7 +99,7 @@ depends = ["web:check", "server:check", "desktop:check"]
 
 [tasks."web:check"]
 description = "Oxfmt, Oxlint, and type checks for the TypeScript workspace"
-run = "bun --bun vp check"
+run = "vp check"
 
 [tasks."server:check"]
 description = "rustfmt, Clippy and current offline query data for the Music Server"
@@ -111,7 +111,7 @@ run = [
 
 [tasks."desktop:check"]
 description = "rustfmt and Clippy for the Desktop core (the Electron shell's TypeScript is in web:check)"
-run = ["bun run --cwd desktop format:check", "bun run --cwd desktop lint"]
+run = ["pnpm --dir desktop run format:check", "pnpm --dir desktop run lint"]
 
 # --- Tests -------------------------------------------------------------------
 
@@ -121,7 +121,7 @@ depends = ["web:test", "server:test", "desktop:test"]
 
 [tasks."web:test"]
 description = "Run Web Client, shared UI, and API client unit tests"
-run = "bun --bun vp run --filter web --filter @repo/ui --filter @repo/api-client test"
+run = "vp run --filter web --filter @repo/ui --filter @repo/api-client test"
 
 [tasks."server:test"]
 description = "Run Music Server tests"
@@ -133,13 +133,13 @@ run = "bash scripts/sqlx-prepare.sh"
 
 [tasks."desktop:test"]
 description = "Run Desktop core (Rust) and Electron shell unit tests"
-run = ["bun run --cwd desktop test:core", "bun run --cwd desktop test"]
+run = ["pnpm --dir desktop run test:core", "pnpm --dir desktop run test"]
 
 [tasks."web:test:e2e"]
 description = "Run Web Client Playwright tests"
 # The Music Server embeds the product docs from server/static, which git ignores.
 depends = ["docs:build"]
-run = ["bash scripts/sync-static.sh docs", "bun run --cwd web test:e2e"]
+run = ["bash scripts/sync-static.sh docs", "pnpm --dir web run test:e2e"]
 
 [tasks."server:test:hls"]
 description = "Run the Music Server HLS browser integration test (needs Playwright's Chromium)"
@@ -148,11 +148,11 @@ run = "cargo test -p earthly-music-server --lib hls_browser -- --nocapture"
 
 [tasks."desktop:test:mpv"]
 description = "Run Desktop core tests against pinned mpv"
-run = ["bun run --cwd desktop prepare:mpv", "bun run --cwd desktop test:mpv"]
+run = ["pnpm --dir desktop run prepare:mpv", "pnpm --dir desktop run test:mpv"]
 
 [tasks."desktop:test:import-parity"]
 description = "Run Desktop core Managed Import parity against a real Music Server"
-run = "bun run --cwd desktop test:import-parity"
+run = "pnpm --dir desktop run test:import-parity"
 
 # --- Security audit ----------------------------------------------------------
 
@@ -161,8 +161,8 @@ description = "Check JS and Rust dependencies for known vulnerabilities"
 depends = ["web:audit", "server:audit"]
 
 [tasks."web:audit"]
-description = "bun audit for moderate and higher advisories"
-run = "bun audit --audit-level=moderate"
+description = "pnpm audit for moderate and higher advisories"
+run = "pnpm audit --audit-level moderate"
 
 [tasks."server:audit"]
 description = "cargo audit of the Rust workspace lockfile against the RustSec advisory database"

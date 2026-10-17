@@ -24,9 +24,9 @@ case "$command" in
 	dev)
 		./scripts/prepare-mpv-sidecar.sh
 		cargo build --manifest-path "$coreManifest"
-		bun run build:shell
-		# Its own process group, so stopping it also stops Vite under bun.
-		setsid bun run --cwd ../web dev &
+		pnpm run build:shell
+		# Its own process group, so stopping it also stops Vite under pnpm.
+		setsid pnpm --dir ../web run dev &
 		webPid=$!
 		trap 'kill -TERM -- "-$webPid" 2>/dev/null || true' EXIT INT TERM
 		for ((attempt = 1; attempt <= devServerStartupAttempts; attempt += 1)); do
@@ -42,7 +42,7 @@ case "$command" in
 		./scripts/prepare-mpv-sidecar.sh
 		cargo build --release --manifest-path "$coreManifest"
 		install -m 0755 "$(readlink -f core/binaries/mpv)" "$targetDirectory/release/mpv"
-		bun run build:shell
+		pnpm run build:shell
 		;;
 	start)
 		for required in "$targetDirectory/release/earthly-audio-core" dist/main.cjs ../web/dist/index.html; do

@@ -41,7 +41,7 @@ function chromePath(): string | undefined {
 const chrome = chromePath();
 if (!chrome) {
 	console.error(
-		"No Chrome found: set CHROME_PATH or run `bunx playwright install chromium`.",
+		"No Chrome found: set CHROME_PATH or run `pnpm exec playwright install chromium`.",
 	);
 	process.exit(1);
 }

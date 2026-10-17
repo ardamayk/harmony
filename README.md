@@ -24,7 +24,7 @@ For **Figma**, **Google Stitch**, or visual design work, start here:
 |-------|------|
 | Server | Rust, axum, SQLite (sqlx), goose-format migrations |
 | Web | React 19, TanStack Router, Vite, Tailwind 4, shadcn |
-| Monorepo | bun workspaces, Vite+ (`vp`: Oxlint, Oxfmt, Vitest, task runner), mise |
+| Monorepo | Node, pnpm workspaces, Vite+ (`vp`: Oxlint, Oxfmt, Vitest, task runner), mise |
 | API | OpenAPI spec-first (`packages/contracts`) |
 | Docs | MDX (`packages/docs`) + Swagger UI (`/api/docs`) |
 
@@ -32,7 +32,7 @@ For **Figma**, **Google Stitch**, or visual design work, start here:
 
 ```bash
 mise install
-bun install
+pnpm install
 mise run generate   # OpenAPI client and sqlx query data
 mise run dev    # Music Server :8090 + Vite :3000
 ```
@@ -81,17 +81,17 @@ See [desktop/README.md](desktop/README.md) for how the Electron shell and the Ru
 ```bash
 mise run ci                # static checks, unit tests, generated-client drift (what PR CI runs)
 mise run ci:integration    # Playwright, HLS, and pinned-mpv tests
-mise run check             # bun --bun vp check (Oxfmt + Oxlint + types), rustfmt + Clippy
+mise run check             # vp check (Oxfmt + Oxlint + types), rustfmt + Clippy
 mise run test              # TypeScript and Rust unit tests
 ```
 
-Targeted commands include `mise run web:test`, `mise run server:test`, and `mise run desktop:test`. Inside the TypeScript workspace, `bun --bun vp check --fix`, `bun --bun vp test`, and `bun --bun vp run <task>` work directly; `--bun` keeps Vite+ on the Bun runtime instead of Node.
+Targeted commands include `mise run web:test`, `mise run server:test`, and `mise run desktop:test`. Inside the TypeScript workspace, `vp check --fix`, `vp test`, and `vp run <task>` work directly (through mise, or `pnpm exec vp …`).
 
 CI is a single workflow (`.github/workflows/ci.yml`): web, server, desktop, and E2E jobs on every pull request; integration and release builds on `main`, weekly, or on demand.
 
 ## Git hooks
 
-`bun install` installs the Vite+ hook dispatcher (`.vite-hooks/`). Pre-commit runs `bun --bun vp staged` (Oxfmt/Oxlint on staged TypeScript and JSON, rustfmt check on Rust) and OpenAPI drift verification only when generation inputs are staged. Use `--no-verify` to bypass; CI remains authoritative.
+`pnpm install` installs the Vite+ hook dispatcher (`.vite-hooks/`). Pre-commit runs `vp staged` (Oxfmt/Oxlint on staged TypeScript and JSON, rustfmt check on Rust) and OpenAPI drift verification only when generation inputs are staged. Use `--no-verify` to bypass; CI remains authoritative.
 
 If `graphify-out/` exists and `graphify` is available on `PATH`, post-commit and branch-switch post-checkout hooks update the graph in the background.
 

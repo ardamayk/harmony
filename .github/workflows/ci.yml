@@ -32,7 +32,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2
-      - run: bun install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile
       - run: mise run web:check
       - run: mise run web:test
       - run: mise run generate:check
@@ -72,17 +72,17 @@ jobs:
             target
           key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
           restore-keys: cargo-${{ runner.os }}-
-      - run: bun install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile
       - run: mise run desktop:check
       - run: mise run desktop:test
 
   audit:
-    name: Dependency audit (bun audit, cargo audit)
+    name: Dependency audit (pnpm audit, cargo audit)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2
-      - run: bun install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile
       - run: mise run audit
 
   e2e:
@@ -92,8 +92,8 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
-      - run: bun install --frozen-lockfile
-      - run: cd web && bun x playwright install chromium --with-deps
+      - run: pnpm install --frozen-lockfile
+      - run: cd web && pnpm exec playwright install chromium --with-deps
       - run: mise run web:test:e2e
       - if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -122,8 +122,8 @@ jobs:
       - if: steps.mpv-cache.outputs.cache-hit != 'true'
         run: bash scripts/build-pinned-mpv.sh
       - run: (cd "$RUNNER_TEMP/earthly-audio-mpv" && sha256sum --check mpv.sha256)
-      - run: bun install --frozen-lockfile
-      - run: cd web && bun x playwright install chromium --with-deps
+      - run: pnpm install --frozen-lockfile
+      - run: cd web && pnpm exec playwright install chromium --with-deps
       - run: mise run server:test:hls
       - run: mise run desktop:test:mpv
       - run: mise run desktop:test:import-parity

@@ -1,7 +1,7 @@
 //! A real browser plays an HLS station through the stream proxy
 //! (stream_browser_integration_test.go). Runs with
 //! `RUN_HLS_BROWSER_INTEGRATION=1 cargo test -p earthly-music-server hls_browser -- --nocapture`;
-//! it needs Playwright's Chromium (`bun x playwright install chromium`).
+//! it needs Playwright's Chromium (`pnpm exec playwright install chromium`).
 
 use super::stream::{NowPlayingSink, StreamProxy, StreamRequest, Upstream, UpstreamResponse};
 use super::types::{NowPlaying, Station};
@@ -120,9 +120,9 @@ async fn hls_browser_plays_through_the_proxy() {
     tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
 
     let web = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../web");
-    let run = tokio::process::Command::new("bun")
+    let run = tokio::process::Command::new("pnpm")
         .args([
-            "x",
+            "exec",
             "playwright",
             "test",
             "e2e/radio-hls-proxy.spec.ts",
