@@ -158,11 +158,12 @@ test("library search follows the full album grid and animates result height", as
 			await page.getByRole("button", { name: "Toggle queue panel" }).click();
 		await page.getByRole("button", { name: "Search", exact: true }).click();
 		await expect(card).toHaveCSS("animation-name", "library-search-enter");
-		// Eight 250px cards, 12px gaps, 272px shell inset: third/sixth centers.
-		await expect(card).toHaveCSS("width", "786px");
+		// Eight 250px cards, 12px gaps, 272px shell inset: centered on the grid,
+		// 52rem wide (wider than between the third cards' centers).
+		await expect(card).toHaveCSS("width", "832px");
 		await expect
 			.poll(async () => Math.round((await card.boundingBox())?.x ?? 0))
-			.toBe(921);
+			.toBe(898);
 		if (open) {
 			await expect
 				.poll(async () => {
@@ -172,7 +173,8 @@ test("library search follows the full album grid and animates result height", as
 				})
 				.toBeGreaterThan(24);
 		}
-		await expect(card).toHaveCSS("max-height", "595px");
+		// 77dvh from its 23dvh top, less the Player Bar's 110px clearance.
+		await expect(card).toHaveCSS("max-height", "429px");
 		const input = page.getByRole("combobox");
 		await card.evaluate((element) =>
 			Promise.all(
@@ -206,9 +208,9 @@ test("library search follows the full album grid and animates result height", as
 		});
 		await expect
 			.poll(async () => (await card.boundingBox())?.height ?? 0)
-			.toBe(595);
+			.toBe(429);
 		expect(halfway).toBeGreaterThan(initialHeight);
-		expect(halfway).toBeLessThan(595);
+		expect(halfway).toBeLessThan(429);
 		await input.press("ArrowUp");
 		await expect
 			.poll(() =>

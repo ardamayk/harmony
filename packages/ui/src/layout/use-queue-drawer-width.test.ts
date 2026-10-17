@@ -4,12 +4,16 @@ import {
 	calculateQueueDrawerWidth,
 } from "./use-queue-drawer-width";
 
-it("places Search between third card centers of the full eight-column grid", () => {
+it("centers Search on the grid and keeps it at least 52rem wide", () => {
 	// Eight cards occupy 2084px; the 118px residual stays on the right.
 	expect(calculateLibrarySearchBounds(2250, 24, 16)).toEqual({
-		width: 786,
+		width: 832,
 		center: 1066,
 	});
+	// Six columns: between the third cards' centers would be one card wide.
+	expect(calculateLibrarySearchBounds(1700, 24, 16).width).toBe(832);
+	// Ten columns: between the third cards' centers is wider than 52rem.
+	expect(calculateLibrarySearchBounds(2800, 24, 16).width).toBe(5 * 262);
 	expect(calculateLibrarySearchBounds(375, 24, 16)).toEqual({
 		width: 343,
 		center: 187.5,

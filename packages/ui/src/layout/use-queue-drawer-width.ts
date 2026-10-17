@@ -53,15 +53,15 @@ export function calculateLibrarySearchBounds(
 	const columns = Math.floor(
 		(Math.max(0, shellWidth - 2 * inset) + gap) / pitch,
 	);
-	if (columns < 6) {
-		// ponytail: fewer than six columns cannot span both third cards; use viewport gutters.
-		return {
-			width: Math.max(0, Math.min(52 * rootFontSize, shellWidth - 32)),
-			center: shellWidth / 2,
-		};
-	}
+	// Never narrower than 52rem (or the window less gutters): between the third
+	// cards' centers is one card wide at six columns.
+	const minimumWidth = Math.max(
+		0,
+		Math.min(52 * rootFontSize, shellWidth - 32),
+	);
+	if (columns < 6) return { width: minimumWidth, center: shellWidth / 2 };
 	return {
-		width: (columns - 5) * pitch,
+		width: Math.max(minimumWidth, (columns - 5) * pitch),
 		center: inset + (columns * pitch - gap) / 2,
 	};
 }
