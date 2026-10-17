@@ -94,7 +94,7 @@ export function MoreFromArtist({
 							<AlbumArt
 								coverUrl={apiClient.getAlbumCoverUrl(album.id, 512)}
 								title={album.title}
-								className="size-full transform-gpu text-2xl transition duration-500 ease-out group-hover:scale-[1.04] group-focus-visible:scale-[1.04]"
+								className="size-full transform-gpu text-2xl transition duration-500 ease-out group-hover:scale-104 group-focus-visible:scale-104"
 							/>
 						</div>
 						<p

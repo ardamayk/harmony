@@ -650,7 +650,7 @@ function SelectionCheckbox({
 				checked={checked}
 				disabled={disabled}
 				onChange={(event) => onChange(event.target.checked)}
-				className="peer size-4 cursor-pointer appearance-none rounded-sm border border-input bg-background transition-colors checked:border-primary checked:bg-primary focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-40"
+				className="peer size-4 cursor-pointer appearance-none rounded-sm border border-input bg-background transition-colors checked:border-primary checked:bg-primary focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-40"
 			/>
 			<Check
 				aria-hidden="true"

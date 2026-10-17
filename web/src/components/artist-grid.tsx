@@ -16,7 +16,7 @@ export function ArtistGrid({ artists }: { artists: Artist[] }) {
 						CARD_INTERACTION_CLASS,
 					)}
 				>
-					<div className="mb-3 flex min-h-0 flex-1 transform-gpu items-center justify-center rounded-sm bg-muted font-semibold text-2xl uppercase transition duration-500 ease-out group-hover:scale-[1.04]">
+					<div className="mb-3 flex min-h-0 flex-1 transform-gpu items-center justify-center rounded-sm bg-muted font-semibold text-2xl uppercase transition duration-500 ease-out group-hover:scale-104">
 						{artist.name.slice(0, 1)}
 					</div>
 					<p

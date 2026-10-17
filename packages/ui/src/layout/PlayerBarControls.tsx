@@ -35,7 +35,7 @@ import { SeekBar } from "./SeekBar";
 
 const CONTROL_BUTTON_CLASS =
 	"inline-flex size-6 items-center justify-center rounded-sm text-player-foreground hover:text-player-control-primary disabled:opacity-40";
-const CONTROL_ICON_CLASS = "size-[18px]";
+const CONTROL_ICON_CLASS = "size-4.5";
 // The right cluster sits alone at the edge, so its icons run one step larger.
 const SIDE_ICON_CLASS = "size-5";
 const SIDE_BUTTON_CLASS = "size-7";
@@ -69,7 +69,7 @@ export function PlaybackControls(props: PlaybackControlsProps) {
 	return (
 		<section
 			aria-label="Playback controls"
-			className="flex min-w-px max-w-[448px] translate-y-[5px] flex-[1_0_0] flex-col items-center justify-center justify-self-center"
+			className="flex min-w-px max-w-112 translate-y-1.25 flex-[1_0_0] flex-col items-center justify-center justify-self-center"
 		>
 			<TransportControls {...props} />
 			<PlaybackProgress {...props} />
@@ -352,7 +352,7 @@ export function VolumeAndQueueControls({
 	return (
 		<section
 			aria-label="Volume and queue"
-			className="flex min-w-[200px] flex-[1_0_0] items-center justify-end gap-3 justify-self-end @min-[66rem]/player-bar:gap-4"
+			className="flex min-w-50 flex-[1_0_0] items-center justify-end gap-3 justify-self-end @min-[66rem]/player-bar:gap-4"
 		>
 			{isGapless ? (
 				<span

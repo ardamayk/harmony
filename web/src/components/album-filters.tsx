@@ -124,7 +124,7 @@ export function AlbumFilters({
 								onFiltersChange({ ...filters, artistId })
 							}
 						>
-							<SelectTrigger className="w-[180px] max-w-full">
+							<SelectTrigger className="w-45 max-w-full">
 								<SelectValue placeholder="All artists" />
 							</SelectTrigger>
 							<SelectContent>
@@ -144,7 +144,7 @@ export function AlbumFilters({
 							value={genreValue}
 							onValueChange={(genre) => onFiltersChange({ ...filters, genre })}
 						>
-							<SelectTrigger className="w-[180px] max-w-full">
+							<SelectTrigger className="w-45 max-w-full">
 								<SelectValue placeholder="All genres" />
 							</SelectTrigger>
 							<SelectContent>

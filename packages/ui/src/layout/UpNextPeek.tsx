@@ -34,7 +34,7 @@ export function UpNextPeek() {
 			type="button"
 			data-player-control
 			data-testid="up-next"
-			className="@[26rem]/now-playing:flex ml-auto hidden w-[150px] shrink-0 items-center gap-2 rounded-md border border-shell-subtle-border bg-player-pill py-1 pr-2 pl-1 text-left text-player-foreground hover:bg-[rgb(from_var(--player-pill)_r_g_b_/_0.85)]"
+			className="@[26rem]/now-playing:flex ml-auto hidden w-37.5 shrink-0 items-center gap-2 rounded-md border border-shell-subtle-border bg-player-pill py-1 pr-2 pl-1 text-left text-player-foreground hover:bg-player-pill/85"
 			title={`Up next: ${next.track.title}`}
 			aria-label={`Up next: ${next.track.title} by ${next.track.artistName}. Play now`}
 			onClick={() =>

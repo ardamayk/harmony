@@ -640,7 +640,7 @@ export function PlayerBar({
 			data-testid="player-bar"
 			data-shell-surface
 			style={accentStyle}
-			className="relative h-[86px] rounded-lg border border-player-border bg-player px-6 text-player-foreground shadow-[0_-10px_32px_-6px_var(--player-shadow),0_14px_40px_-8px_var(--player-shadow)]"
+			className="relative h-21.5 rounded-lg border border-player-border bg-player px-6 text-player-foreground shadow-[0_-10px_32px_-6px_var(--player-shadow),0_14px_40px_-8px_var(--player-shadow)]"
 		>
 			{playbackError ? (
 				<PlaybackErrorBanner error={playbackError} recovery={errorRecovery} />
@@ -655,7 +655,7 @@ export function PlayerBar({
 			<div className="@container/player-bar flex h-full w-full min-w-0 items-center justify-between gap-6">
 				<section
 					aria-label="Now playing"
-					className="@container/now-playing flex min-w-[200px] flex-[1_0_0] items-center gap-3 justify-self-start sm:gap-4"
+					className="@container/now-playing flex min-w-50 flex-[1_0_0] items-center gap-3 justify-self-start sm:gap-4"
 				>
 					{currentTrack ? (
 						<button

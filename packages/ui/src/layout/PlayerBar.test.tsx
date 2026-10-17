@@ -239,7 +239,7 @@ describe("PlayerBar", () => {
 		});
 
 		const nowPlaying = screen.getByLabelText("Now playing");
-		expect(nowPlaying.className).toContain("min-w-[200px]");
+		expect(nowPlaying.className).toContain("min-w-50");
 		expect(nowPlaying.className).toContain("flex-[1_0_0]");
 	});
 
@@ -254,7 +254,7 @@ describe("PlayerBar", () => {
 	it("renders the Figma player bar shell dimensions", () => {
 		renderPlayerBar();
 
-		expect(screen.getByRole("contentinfo").className).toContain("h-[86px]");
+		expect(screen.getByRole("contentinfo").className).toContain("h-21.5");
 		expect(screen.getByRole("contentinfo").className).toContain("bg-player");
 	});
 

@@ -786,7 +786,7 @@ function NativeOptionSelect({
 	return (
 		<div
 			ref={ref}
-			className="relative flex min-w-[210px] flex-col gap-1 text-caption text-xs"
+			className="relative flex min-w-52.5 flex-col gap-1 text-caption text-xs"
 		>
 			<span>{label}</span>
 			<button
@@ -795,7 +795,7 @@ function NativeOptionSelect({
 				aria-expanded={isOpen}
 				className={cn(
 					FILTER_TRIGGER_CLASS,
-					"flex w-[230px] max-w-full items-center justify-between gap-3 px-3 text-left text-sm outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50",
+					"flex w-57.5 max-w-full items-center justify-between gap-3 px-3 text-left text-sm outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
 				)}
 				onClick={() => setIsOpen((current) => !current)}
 			>
@@ -810,7 +810,7 @@ function NativeOptionSelect({
 				<ChevronDown className="size-4 shrink-0 text-caption" />
 			</button>
 			{isOpen ? (
-				<div className="absolute top-full left-0 z-[80] mt-2 flex max-h-80 w-[320px] flex-col overflow-hidden rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-lg">
+				<div className="absolute top-full left-0 z-[80] mt-2 flex max-h-80 w-80 flex-col overflow-hidden rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-lg">
 					<label className="relative m-1 mb-2 block" htmlFor={searchInputId}>
 						<Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-caption" />
 						<Input
@@ -978,7 +978,7 @@ function FilterRadioGroup({
 					<label
 						key={option.value}
 						className={cn(
-							"flex h-11 items-center gap-3 rounded-lg border border-border bg-player px-3 text-left text-player-foreground text-sm outline-none transition-[color,box-shadow,border-color] hover:border-player-control-primary focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50",
+							"flex h-11 items-center gap-3 rounded-lg border border-border bg-player px-3 text-left text-player-foreground text-sm outline-none transition-[color,box-shadow,border-color] hover:border-player-control-primary focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
 							option.value === value &&
 								"border-player-control-primary bg-player-pill",
 						)}
@@ -1126,7 +1126,7 @@ function CatalogRow({
 					ref={ref}
 					data-testid={`radio-catalog-card-${entry.stationUuid}`}
 					onClick={onPreview}
-					className="group grid min-w-0 cursor-pointer grid-cols-[auto_minmax(0,1fr)] gap-3 rounded-lg border border-border bg-card/45 p-3 text-left shadow-sm outline-none transition duration-300 ease-out hover:-translate-y-1 hover:border-player-control-primary/60 hover:bg-card/65 hover:shadow-lg focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 md:grid-cols-[auto_minmax(0,1fr)_auto]"
+					className="group grid min-w-0 cursor-pointer grid-cols-[auto_minmax(0,1fr)] gap-3 rounded-lg border border-border bg-card/45 p-3 text-left shadow-sm outline-none transition duration-300 ease-out hover:-translate-y-1 hover:border-player-control-primary/60 hover:bg-card/65 hover:shadow-lg focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:grid-cols-[auto_minmax(0,1fr)_auto]"
 				>
 					<CatalogArtwork
 						faviconUrl={entry.faviconUrl}
