@@ -3,6 +3,7 @@ import { getQueuePanel } from "../widgets/layout-utils";
 import { useLayout } from "./LayoutProvider";
 import { QueueDrawer } from "./QueueDrawer";
 import { QueuePinProvider, useQueuePin } from "./QueuePinProvider";
+import { Sidebar } from "./Sidebar";
 import {
 	PLAYER_BAR_HEIGHT_PX,
 	QUEUE_DRAWER_CONTENT_CLEARANCE,
@@ -20,11 +21,11 @@ const PLAYER_DOCK_CONTENT_PADDING = "pb-(--player-dock-clearance)";
 const PLAYER_DOCK_CLEARANCE = `${PLAYER_BAR_HEIGHT_PX}px`;
 
 /**
- * App Shell: Top Nav across the top, the page below it, the Player Bar
- * floating over the page's bottom edge, and the Queue Drawer sliding up on
- * the right. Nav, page and bar share one horizontal inset; while the drawer
- * is open and pinned the page gives way to it, unpinned it floats over the
- * page, and the nav and bar stay put either way.
+ * App Shell: the top bar (Home and search) across the top, the Sidebar with
+ * the library sections on the left, the page beside it, the Player Bar
+ * docked along the bottom and the Queue Drawer on the right. While the
+ * drawer is open and pinned the page gives way to it; unpinned it floats
+ * over the page.
  */
 export function AppShell(props: AppShellProps) {
 	return (
@@ -39,7 +40,7 @@ export function AppShell(props: AppShellProps) {
 type AppShellProps = {
 	children?: ReactNode;
 	bottom?: ReactNode;
-	/** Opens the host's library search; shown as "Search" in the Top Nav. */
+	/** Opens the host's library search from the top bar's search field. */
 	onSearch?: () => void;
 	/** Minimize/maximize/close in the Top Nav, for a host without a title bar. */
 	windowControls?: WindowControls;
@@ -70,13 +71,29 @@ function AppShellFrame({
 						"--queue-drawer-width": metrics && `${metrics.queueWidth}px`,
 						"--library-search-width": metrics && `${metrics.searchWidth}px`,
 						"--library-search-center": metrics && `${metrics.searchCenter}px`,
+						"--library-search-top": metrics && `${metrics.searchTop}px`,
 					} as CSSProperties
 				}
 				data-app-shell
 				className="relative flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden bg-background text-foreground"
 			>
 				<TopNav onSearch={onSearch} windowControls={windowControls} />
-				<div className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+				<div
+					data-shell-inset-probe
+					aria-hidden
+					className="pointer-events-none invisible absolute w-(--shell-inset,2rem)"
+				/>
+				<div
+					className="relative flex h-full min-h-0 min-w-0 flex-1 overflow-hidden"
+					style={
+						{
+							"--player-dock-clearance": bottom
+								? PLAYER_DOCK_CLEARANCE
+								: undefined,
+						} as CSSProperties
+					}
+				>
+					<Sidebar />
 					<main
 						data-queue-open={queueTakesSpace ? "" : undefined}
 						className={`flex h-full min-w-0 flex-1 flex-col overflow-auto bg-background pr-0 data-[queue-open]:pr-(--queue-drawer-clearance) transition-padding duration-300 ease-out ${
@@ -85,7 +102,6 @@ function AppShellFrame({
 						style={
 							{
 								"--queue-drawer-clearance": QUEUE_DRAWER_CONTENT_CLEARANCE,
-								"--player-dock-clearance": PLAYER_DOCK_CLEARANCE,
 							} as CSSProperties
 						}
 					>

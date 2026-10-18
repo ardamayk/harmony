@@ -1,16 +1,7 @@
 import { Link } from "@tanstack/react-router";
-import { Minus, Search, Settings, Square, X } from "lucide-react";
-import { SHELL_INSET_CLASS, TOP_NAV_HEIGHT_CLASS } from "./shell-metrics";
+import { House, Minus, Search, Square, X } from "lucide-react";
+import { TOP_NAV_HEIGHT_CLASS } from "./shell-metrics";
 import { TopNavActionsSlot } from "./TopNavActions";
-
-const libraryNav = [
-	{ to: "/library/albums", label: "Albums" },
-	{ to: "/library/artists", label: "Artists" },
-	{ to: "/library/genres", label: "Genres" },
-	{ to: "/radio", label: "Radio" },
-	{ to: "/library/tracks", label: "Tracks" },
-	{ to: "/playlists", label: "Playlists" },
-] as const;
 
 const LINK_BASE_CLASS =
 	"flex items-center gap-2 whitespace-nowrap rounded-md px-3 py-2 text-sidebar-foreground text-sm transition hover:bg-muted hover:text-heading focus-visible:bg-muted focus-visible:text-heading focus-visible:outline-none";
@@ -27,19 +18,22 @@ export type WindowControls = {
 // The open section (and a pressed Top Nav control) gets a lit pill: the active
 // step, accent text and a soft top highlight with a drop shadow. Hover stays
 // off the accent, so only the open section reads as marked.
-const NAV_LINK_CLASS = `${LINK_BASE_CLASS} [&.active]:bg-neutral-active [&.active]:font-semibold [&.active]:text-shell-active-foreground [&.active]:shadow-lit`;
+export const NAV_LINK_CLASS = `${LINK_BASE_CLASS} [&.active]:bg-neutral-active [&.active]:font-semibold [&.active]:text-shell-active-foreground [&.active]:shadow-lit`;
 
 /** Icon control in the Top Nav; `aria-pressed` lights it like the open section. */
 export const TOP_NAV_ICON_BUTTON_CLASS =
 	"inline-flex size-9 shrink-0 items-center justify-center rounded-md text-sidebar-foreground transition hover:bg-muted hover:text-heading focus-visible:bg-muted focus-visible:outline-none aria-pressed:bg-neutral-active aria-pressed:text-shell-active-foreground aria-pressed:shadow-lit [&.active]:bg-neutral-active [&.active]:text-shell-active-foreground [&.active]:shadow-lit";
 
+const ROUND_CONTROL_CLASS =
+	"border border-border bg-card text-sidebar-foreground transition hover:bg-muted hover:text-heading focus-visible:bg-muted focus-visible:text-heading focus-visible:outline-none";
+
 /**
- * Top navigation bar: brand, library sections, the Search entry (opens the
- * host's library search) and the Settings gear. Its content shares the page
- * inset, and the divider spans only that content column so it lines up with
- * the page title and the Player Bar below. The Desktop Client draws no system
- * title bar, so the bar's empty space carries `data-window-drag-region` to move
- * (and double-click to maximize) the window; browsers ignore the attribute.
+ * Top bar: the brand over the Sidebar, Home and the library search field in
+ * the middle, page actions on the right. The field opens the host's search,
+ * whose card drops down over it (`data-library-search-field` is what the
+ * card lines up with). The Desktop Client draws no system title bar, so the
+ * bar's empty space carries `data-window-drag-region` to move (and
+ * double-click to maximize) the window; browsers ignore the attribute.
  */
 export function TopNav({
 	onSearch,
@@ -52,60 +46,52 @@ export function TopNav({
 		<header
 			data-shell-surface
 			data-window-drag-region
-			className={`flex ${TOP_NAV_HEIGHT_CLASS} shrink-0 items-stretch bg-sidebar text-sidebar-foreground ${
-				windowControls ? "pl-(--shell-inset,2rem)" : SHELL_INSET_CLASS
+			className={`flex ${TOP_NAV_HEIGHT_CLASS} shrink-0 items-center gap-3 border-sidebar-border border-b bg-sidebar pl-6 text-sidebar-foreground max-lg:pl-3 ${
+				windowControls ? "" : "pr-6"
 			}`}
 		>
-			{/* Window controls sit at the window's own corner, not on the page
-			    inset line; the content keeps the inset when there is room. */}
-			<div
-				data-window-drag-region
-				className={`flex h-full w-full min-w-0 items-center gap-6 border-sidebar-border border-b ${
-					windowControls ? "mr-top-nav-offset" : ""
-				}`}
-			>
+			<div data-window-drag-region className="flex min-w-0 flex-1 basis-0">
 				<Link
 					to="/library/albums"
-					className="font-display shrink-0 font-semibold text-shell-brand text-xl tracking-tight"
+					className="font-display shrink-0 font-semibold text-shell-brand text-xl tracking-tight max-lg:sr-only"
 				>
 					Earthly Audio
 				</Link>
-				<nav
-					data-window-drag-region
-					aria-label="Library"
-					className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-button]:hidden [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-foreground/25 hover:[&::-webkit-scrollbar-thumb]:bg-foreground/40 [&::-webkit-scrollbar-track]:bg-transparent"
-				>
-					{libraryNav.map((item) => (
-						<Link key={item.to} to={item.to} className={NAV_LINK_CLASS}>
-							{item.label}
-						</Link>
-					))}
-					{onSearch ? (
-						<button
-							type="button"
-							onClick={onSearch}
-							className={LINK_BASE_CLASS}
-						>
-							<Search className="size-4" />
-							Search
-						</button>
-					) : null}
-				</nav>
-				<div className="flex shrink-0 items-center gap-1">
-					<TopNavActionsSlot />
-					<Link
-						to="/settings"
-						title="Settings"
-						aria-label="Settings"
-						className={TOP_NAV_ICON_BUTTON_CLASS}
-					>
-						<Settings className="size-4" />
-					</Link>
-				</div>
 			</div>
-			{windowControls ? (
-				<WindowControlButtons controls={windowControls} className="w-30 pr-2" />
-			) : null}
+			<div className="flex w-full max-w-xl min-w-0 items-center gap-2">
+				<Link
+					to="/"
+					title="Home"
+					aria-label="Home"
+					// The icon alone, like the external links: no card around it;
+					// hover and focus show the neutral step behind it.
+					className="inline-flex size-10 shrink-0 items-center justify-center rounded-md text-sidebar-foreground transition hover:bg-muted hover:text-heading focus-visible:bg-muted focus-visible:text-heading focus-visible:outline-none"
+				>
+					<House className="size-7" />
+				</Link>
+				{onSearch ? (
+					<button
+						type="button"
+						data-library-search-field
+						onClick={onSearch}
+						className={`${ROUND_CONTROL_CLASS} flex h-12 min-w-0 flex-1 items-center gap-3 rounded-full px-4 text-left`}
+					>
+						<Search className="size-5 shrink-0" />
+						<span className="truncate text-caption text-sm">
+							Search your library
+						</span>
+					</button>
+				) : null}
+			</div>
+			<div
+				data-window-drag-region
+				className="flex min-w-0 flex-1 basis-0 items-center justify-end gap-1"
+			>
+				<TopNavActionsSlot />
+				{windowControls ? (
+					<WindowControlButtons controls={windowControls} className="pr-2" />
+				) : null}
+			</div>
 		</header>
 	);
 }

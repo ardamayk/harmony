@@ -11,13 +11,16 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-	/* Horizontal inset shared by the Top Nav, page content and Player Bar.
-     Content grows to --shell-max-content and only wider screens get side
-     gutters; narrower ones keep ordinary page padding so the layout hugs the
-     window edges. Mirrored by SHELL_INSET_CLASS in
-     packages/ui/src/layout/shell-metrics.ts. */
+	/* Horizontal inset of page content beside the 15rem Sidebar. Content
+     grows to --shell-max-content and only wider screens get side gutters;
+     narrower ones keep ordinary page padding. Mirrored by SHELL_INSET_CLASS
+     in packages/ui/src/layout/shell-metrics.ts. */
 	--shell-max-content: 1600px;
-	--shell-inset: clamp(1.5rem, (100vw - var(--shell-max-content)) / 2, 17rem);
+	--shell-inset: clamp(
+		1.5rem,
+		(100vw - 15rem - var(--shell-max-content)) / 2,
+		17rem
+	);
 }
 
 html[data-theme-preset] {
@@ -43,8 +46,9 @@ html[data-theme-preset] {
      (about 24rem with the view header), so short windows shrink the cover. */
 	--spacing-artwork-stage: min(100%, 65vh, max(10rem, 100dvh - 24rem));
 	--spacing-queue-preview: clamp(18rem, 22vw, 26rem);
-	--spacing-top-nav-offset: max(0px, calc(var(--shell-inset, 2rem) - 7.5rem));
 	--spacing-queue-drawer-max: calc(100% - 2 * var(--shell-inset, 2rem));
+	/* Artist page photo banner: tall enough for a face, never the whole screen. */
+	--spacing-artist-banner: clamp(18rem, 42vh, 28rem);
 	/* Shadows: the lit pill, the lifted card, the shell surfaces and the
      cover strip; everything else takes Tailwind's shadow scale. */
 	--shadow-lit:
@@ -378,6 +382,16 @@ html[data-window-maximized] body::after {
 	--player-control-primary-foreground: var(--primary-foreground);
 	--player-foreground: var(--foreground);
 }
+/* Artist photo laid on its cover-colour band: sharp across most of its
+   width, a light eased fade (a linear one shows an edge where it starts)
+   over its right third into the band, never fully gone, and a thin strip
+   into the page. */
+@utility mask-artist-photo {
+	mask-image: linear-gradient(to left, rgb(0 0 0 / 0.3) 0%,
+			rgb(0 0 0 / 0.5) 10%, rgb(0 0 0 / 0.75) 21%, black 35%),
+		linear-gradient(to top, transparent 0%, rgb(0 0 0 / 0.5) 6%, black 14%);
+	mask-composite: intersect;
+}
 @utility translate-x-switch-on {
 	translate: calc(100% - 2px) 0;
 }
@@ -527,27 +541,26 @@ html[data-window-maximized] body::after {
 	}
 
 	.library-search-card {
-		/* Top edge at the middle of the first album cover: the 4rem Top Nav, the
-		   page's 1.5rem top padding and half of a 250px collection card. */
-		--library-search-top: calc(5.5rem + 125px);
-		top: var(--library-search-top);
-		/* At most three album rows tall (250px cards, 0.75rem gaps), so the bottom
-		   edge meets the middle of the fourth row; always clear of the Player Bar. */
+		/* Drops down over the top bar's search field, as wide as it (the App
+		   Shell measures the field); its input row covers the field. */
+		top: var(--library-search-top, 0.5rem);
+		/* At most three album rows tall (250px cards, 0.75rem gaps); always
+		   clear of the Player Bar. */
 		max-height: min(
 			3 * (250px + 0.75rem),
 			calc(
-				100dvh - var(--library-search-top) -
+				100dvh - var(--library-search-top, 0.5rem) -
 					var(--player-dock-clearance, 1rem) - 1.5rem
 			)
 		);
 		left: var(--library-search-center, 50%);
-		width: var(--library-search-width, min(52rem, calc(100vw - 2rem)));
+		width: var(--library-search-width, min(36rem, calc(100vw - 2rem)));
 		transform-origin: top center;
 	}
 	@keyframes library-search-enter {
 		from {
 			opacity: 0;
-			transform: translateX(var(--library-search-offset, 0)) translateY(0.75rem)
+			transform: translateX(var(--library-search-offset, 0)) translateY(-0.5rem)
 				scale(0.98);
 		}
 		to {

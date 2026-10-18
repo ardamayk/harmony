@@ -4,6 +4,8 @@ status: accepted
 
 # One library search dialog instead of per-page search fields
 
+> Opened from the top bar's search field since [ADR 0028](0028-sidebar-and-search-top-bar.md), over which the card now drops down.
+
 The Albums, Artists and Tracks pages each had a search field in their header, every one scoped to its own page. They are gone; the Top Nav's "Search" entry (also Ctrl/⌘+K, or "/" outside a text field) opens a single dialog that searches Tracks, Albums, Artists, Genres and Playlists at once. Radio keeps its own station search: it filters a saved-station list and the Radio Discover catalog, which are not part of the library.
 
 ## Best Match, then grouped results

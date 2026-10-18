@@ -4,6 +4,8 @@ status: accepted
 
 # Top navigation shell with a Queue Drawer
 
+> Superseded in part by [ADR 0028](0028-sidebar-and-search-top-bar.md): the library sections moved to a Sidebar and the top bar holds the search field; the Queue Drawer stays.
+
 The App Shell moved from a left sidebar plus a fixed right Queue column to a Top Nav, a page that fills the width between two insets, the floating Player Bar, and the Queue as a drawer that slides up on the right. The decision came out of a `?variant=` UI prototype flipped through on the Albums page; the "ledger-centered" variant won and the prototype files were removed once it was folded into `packages/ui` and the Web Client.
 
 ## One horizontal inset for nav, page and Player Bar

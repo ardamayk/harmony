@@ -670,7 +670,7 @@ export function PlayerBar({
 					"--player-control-shadow": accent["--player-control-shadow"],
 				} as CSSProperties
 			}
-			className="relative h-21.5 border-player-border border-t bg-player px-(--shell-inset,2rem) text-player-foreground"
+			className="relative h-21.5 border-player-border border-t bg-player px-6 text-player-foreground max-lg:px-3"
 		>
 			{playbackError ? (
 				<PlaybackErrorBanner error={playbackError} recovery={errorRecovery} />

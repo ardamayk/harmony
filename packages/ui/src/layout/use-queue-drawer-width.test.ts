@@ -1,24 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import {
-	calculateLibrarySearchBounds,
-	calculateQueueDrawerWidth,
-} from "./use-queue-drawer-width";
-
-it("centers Search on the grid and keeps it at least 52rem wide", () => {
-	// Eight cards occupy 2084px; the 118px residual stays on the right.
-	expect(calculateLibrarySearchBounds(2250, 24, 16)).toEqual({
-		width: 832,
-		center: 1066,
-	});
-	// Six columns: between the third cards' centers would be one card wide.
-	expect(calculateLibrarySearchBounds(1700, 24, 16).width).toBe(832);
-	// Ten columns: between the third cards' centers is wider than 52rem.
-	expect(calculateLibrarySearchBounds(2800, 24, 16).width).toBe(5 * 262);
-	expect(calculateLibrarySearchBounds(375, 24, 16)).toEqual({
-		width: 343,
-		center: 187.5,
-	});
-});
+import { calculateQueueDrawerWidth } from "./use-queue-drawer-width";
 
 describe("calculateQueueDrawerWidth", () => {
 	it("leaves six fixed cards and one page inset before the docked drawer", () => {
@@ -32,6 +13,13 @@ describe("calculateQueueDrawerWidth", () => {
 		// Docked: the drawer's right edge is the window edge.
 		const panelLeft = 2150 - panelWidth;
 		expect(panelLeft - lastCardRight).toBe(24);
+	});
+
+	it("leaves the Sidebar's width out of what cards and drawer share", () => {
+		// 2150px window, 240px Sidebar: six cards still fit, the drawer shrinks.
+		const panelWidth = calculateQueueDrawerWidth(2150, 24, 16, 240);
+		expect(panelWidth).toBe(542 - 240);
+		expect(2150 - 240 - 48 - panelWidth).toBe(6 * 250 + 5 * 12);
 	});
 
 	it("gives additional wide-screen space to the drawer instead of a seventh column", () => {

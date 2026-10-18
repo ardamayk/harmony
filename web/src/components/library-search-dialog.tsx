@@ -334,11 +334,12 @@ export function LibrarySearchDialog({
 					return inputRef.current;
 				}}
 				finalFocus={() => returnFocus.restore()}
-				className="library-search-card top-[var(--library-search-top)] left-[var(--library-search-center,50%)] flex w-[var(--library-search-width,min(52rem,calc(100vw-2rem)))] max-w-none translate-y-0 flex-col overflow-hidden p-0"
+				className="library-search-card top-[var(--library-search-top)] left-[var(--library-search-center,50%)] flex max-w-(--library-search-width,36rem) translate-y-0 flex-col overflow-hidden p-0"
 			>
 				<DialogTitle className="sr-only">Search your library</DialogTitle>
-				<div className="flex shrink-0 items-center gap-3 border-border border-b px-4 sm:gap-4 sm:px-6">
-					<Search className="size-4 shrink-0 text-caption" />
+				{/* Lines up with the top bar's search field it opens over. */}
+				<div className="flex shrink-0 items-center gap-3 border-border border-b px-4">
+					<Search className="size-5 shrink-0 text-caption" />
 					<input
 						ref={inputRef}
 						type="search"
@@ -351,7 +352,7 @@ export function LibrarySearchDialog({
 						aria-autocomplete="list"
 						aria-label="Search your library"
 						maxLength={200}
-						placeholder="Search tracks, albums, artists, genres, playlists"
+						placeholder="Search your library"
 						value={query}
 						onChange={(event) => {
 							setQuery(event.target.value);
@@ -359,7 +360,7 @@ export function LibrarySearchDialog({
 							setShowAll(false);
 						}}
 						onKeyDown={onInputKeyDown}
-						className="h-14 min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-muted-foreground [&::-webkit-search-cancel-button]:appearance-none"
+						className="h-12 min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-muted-foreground [&::-webkit-search-cancel-button]:appearance-none"
 					/>
 					{resultCount !== undefined ? (
 						<output className="flex h-8 shrink-0 items-center rounded-sm border border-border px-3 text-caption text-xs">

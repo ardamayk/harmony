@@ -16,6 +16,7 @@ import {
 	TopNavActions,
 } from "../index";
 import { InMemoryPlaybackEngine } from "../playback/testing/InMemoryPlaybackEngine";
+import { Sidebar } from "./Sidebar";
 
 vi.mock("@tanstack/react-router", () => ({
 	Link: ({
@@ -164,13 +165,14 @@ describe("AppShell", () => {
 		expect(screen.queryByText("Discover (coming soon)")).toBeNull();
 	});
 
-	it("has no side columns: the nav is a top bar and the queue a drawer", () => {
+	it("has a top bar, a Sidebar and a queue drawer, and no resizable columns", () => {
 		const { container } = renderShell(
 			<AppShell>
 				<div>Main content</div>
 			</AppShell>,
 		);
 		expect(container.querySelector("header")).toBeTruthy();
+		expect(container.querySelector("[data-sidebar]")).toBeTruthy();
 		expect(container.querySelector("[data-queue-column]")).toBeNull();
 		expect(container.querySelector("[data-queue-drawer]")).toBeTruthy();
 		expect(
@@ -288,15 +290,18 @@ describe("AppShell", () => {
 					: bounds;
 			},
 		);
+		// A 24px page inset and the 240px Sidebar.
+		vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockImplementation(
+			function (this: HTMLElement) {
+				if (this.hasAttribute("data-shell-inset-probe")) return 24;
+				if (this.hasAttribute("data-sidebar")) return 240;
+				return 0;
+			},
+		);
 		const readStyle = window.getComputedStyle;
 		vi.spyOn(window, "getComputedStyle").mockImplementation(
 			(element, pseudoElement) => {
 				const style = readStyle(element, pseudoElement);
-				if (element.tagName === "HEADER") {
-					Object.defineProperty(style, "paddingLeft", { value: "24px" });
-					// With window controls the Top Nav drops its right inset.
-					Object.defineProperty(style, "paddingRight", { value: "0px" });
-				}
 				if (element === document.documentElement) {
 					Object.defineProperty(style, "fontSize", { value: "16px" });
 				}
@@ -309,7 +314,7 @@ describe("AppShell", () => {
 		const shell = container.querySelector<HTMLElement>("[data-app-shell]");
 		const drawer = container.querySelector<HTMLElement>("[data-queue-drawer]");
 		const main = container.querySelector("main");
-		expect(shell?.style.getPropertyValue("--queue-drawer-width")).toBe("542px");
+		expect(shell?.style.getPropertyValue("--queue-drawer-width")).toBe("302px");
 		expect(drawer?.style.getPropertyValue("--queue-drawer-width")).toBe("");
 		expect(main?.style.getPropertyValue("--queue-drawer-width")).toBe("");
 		expect(drawer?.className).toContain("w-(--queue-drawer-width,18rem)");
@@ -322,7 +327,7 @@ describe("AppShell", () => {
 			throw new Error("The shell was not observed for resizing");
 		shellWidth = 1919;
 		act(resizeShell);
-		expect(shell?.style.getPropertyValue("--queue-drawer-width")).toBe("311px");
+		expect(shell?.style.getPropertyValue("--queue-drawer-width")).toBe("333px");
 		expect(drawer?.style.getPropertyValue("--queue-drawer-bottom")).toBe(
 			bottom,
 		);
@@ -340,17 +345,13 @@ describe("AppShell", () => {
 		const { container } = render(<TopNav onSearch={vi.fn()} />);
 		const header = container.querySelector("header") as HTMLElement;
 		expect(header.hasAttribute("data-window-drag-region")).toBe(true);
-		expect(
-			screen
-				.getByRole("navigation", { name: "Library" })
-				.hasAttribute("data-window-drag-region"),
-		).toBe(true);
 		// Links and buttons stay clickable instead of starting a drag.
-		expect(
-			screen
-				.getByRole("link", { name: "Albums" })
-				.hasAttribute("data-window-drag-region"),
-		).toBe(false);
+		for (const control of [
+			screen.getByRole("link", { name: "Home" }),
+			screen.getByRole("button", { name: "Search your library" }),
+		]) {
+			expect(control.hasAttribute("data-window-drag-region")).toBe(false);
+		}
 	});
 
 	it("moves a page's Top Nav actions next to Settings", () => {
@@ -385,9 +386,21 @@ describe("AppShell", () => {
 		expect(windowControls.close).toHaveBeenCalledTimes(1);
 	});
 
-	it("renders the library sections, Search and Settings in the top nav", () => {
+	it("puts Home and the search field in the top bar", () => {
 		const onSearch = vi.fn();
-		render(<TopNav onSearch={onSearch} />);
+		const { container } = render(<TopNav onSearch={onSearch} />);
+		expect(
+			screen.getByRole("link", { name: "Home" }).getAttribute("href"),
+		).toBe("/");
+		const field = screen.getByRole("button", { name: "Search your library" });
+		expect(field.hasAttribute("data-library-search-field")).toBe(true);
+		fireEvent.click(field);
+		expect(onSearch).toHaveBeenCalledTimes(1);
+		expect(container.querySelector("nav")).toBeNull();
+	});
+
+	it("lists the library sections and Settings in the Sidebar", () => {
+		render(<Sidebar />);
 		for (const label of [
 			"Albums",
 			"Artists",
@@ -398,8 +411,6 @@ describe("AppShell", () => {
 		]) {
 			expect(screen.getByRole("link", { name: label })).toBeTruthy();
 		}
-		fireEvent.click(screen.getByRole("button", { name: "Search" }));
-		expect(onSearch).toHaveBeenCalledTimes(1);
 		const radioLink = screen.getByRole("link", { name: "Radio" });
 		expect(radioLink.className).toContain(
 			"[&.active]:text-shell-active-foreground",
