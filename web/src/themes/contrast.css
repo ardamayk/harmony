@@ -11,6 +11,41 @@
 	--destructive-foreground: #ffffff;
 }
 
+/* Caption fade (layers.css default 85%): as faint as each preset allows while
+   keeping 4.5:1 on page, card, Player Bar and its pill. */
+[data-theme-preset="night-ember"].dark {
+	--caption: color-mix(in oklab, var(--text) 75%, var(--background));
+}
+
+[data-theme-preset="earthly"]:not(.dark),
+[data-theme-preset="night-ember"]:not(.dark),
+[data-theme-preset="coastal-mist"].dark {
+	--caption: color-mix(in oklab, var(--text) 80%, var(--background));
+}
+
+[data-theme-preset="tokyo-night"].dark,
+[data-theme-preset="coastal-mist"]:not(.dark),
+[data-theme-preset="sage-hearth"]:not(.dark) {
+	--caption: color-mix(in oklab, var(--text) 90%, var(--background));
+}
+
+[data-theme-preset="sage-hearth"].dark {
+	--caption: color-mix(in oklab, var(--text) 95%, var(--background));
+}
+
+/* Body text here already sits near 4.5:1 on the pill, leaving no room below
+   it, so text moves halfway to the heading and the caption takes the slot. */
+[data-theme-preset="dusty-earth"].dark {
+	--text: color-mix(in oklab, var(--theme-5) 50%, var(--theme-6));
+	--caption: color-mix(in oklab, var(--theme-5) 90%, var(--theme-6));
+}
+
+[data-theme-preset="tokyo-night"]:not(.dark),
+[data-theme-preset="dusty-earth"]:not(.dark) {
+	--text: color-mix(in oklab, var(--theme-2) 50%, var(--theme-1));
+	--caption: color-mix(in oklab, var(--theme-2) 90%, var(--theme-1));
+}
+
 [data-theme-preset="tokyo-night"].dark {
 	--primary-foreground: var(--theme-6);
 	/* A light glyph cannot clear both 3:1 against the bar and 4.5:1 on the
@@ -79,7 +114,7 @@
 	--heading: var(--theme-1);
 	--text: var(--theme-2);
 	--foreground: var(--theme-2);
-	--caption: color-mix(in srgb, var(--theme-2) 72%, var(--theme-1) 28%);
+	--caption: color-mix(in oklab, var(--theme-2) 85%, var(--theme-6));
 	--muted-foreground: var(--caption);
 	--border: color-mix(in srgb, var(--theme-4) 70%, var(--theme-3) 30%);
 }

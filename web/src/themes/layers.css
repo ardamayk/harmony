@@ -35,8 +35,9 @@
 	--queue-foreground: var(--text);
 	--player-foreground: var(--text);
 
-	/* Secondary copy — still from light end, slightly softer */
-	--caption: color-mix(in srgb, var(--theme-5) 72%, var(--theme-6) 28%);
+	/* Secondary copy — body text faded toward the page, so heading > text >
+	 * caption; contrast.css tunes the fade per preset to keep 4.5:1. */
+	--caption: color-mix(in oklab, var(--text) 85%, var(--background));
 	--muted-foreground: var(--caption);
 	--secondary-foreground: var(--text);
 	--accent-foreground: var(--heading);
@@ -113,8 +114,8 @@
 	--queue-foreground: var(--text);
 	--player-foreground: var(--text);
 
-	/* Secondary copy — still from dark end, slightly softer */
-	--caption: color-mix(in srgb, var(--theme-2) 72%, var(--theme-1) 28%);
+	/* Secondary copy — body text faded toward the page (see dark mode). */
+	--caption: color-mix(in oklab, var(--text) 85%, var(--background));
 	--muted-foreground: var(--caption);
 	--secondary-foreground: var(--text);
 	--accent-foreground: var(--heading);

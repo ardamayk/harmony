@@ -7,8 +7,6 @@
 	--sidebar-foreground: var(--theme-6);
 	--queue-foreground: var(--theme-6);
 	--player-foreground: var(--theme-6);
-	--caption: color-mix(in srgb, var(--theme-6) 80%, var(--theme-5) 20%);
-	--muted-foreground: var(--caption);
 	--secondary-foreground: var(--theme-6);
 	--kicker: var(--theme-6);
 	--sea-ink-soft: var(--theme-6);
