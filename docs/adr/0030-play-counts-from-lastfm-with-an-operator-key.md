@@ -14,7 +14,7 @@ One `artist.getTopTracks` request per Artist (`autocorrect=1`, `limit=1000`, Las
 
 ## Storage and traffic
 
-Lazy, like the other Artist lookups: when a client asks for a Track list's counts. Only the title→count map is stored per Artist and refreshed weekly; a failed refresh keeps the previous map, a failure with none is retried after an hour, nothing found after 30 days. One Last.fm request runs at a time. The key is never logged: lookup errors name the method, not the URL that carries it.
+Lazy, like the other Artist lookups: when a client asks for a Track list's counts. Only the title→count map is stored per Artist and refreshed weekly; a failed refresh keeps the previous map, a failure with none is retried after five minutes, nothing found after 30 days. One Last.fm request runs at a time. The key is never logged: lookup errors name the method, not the URL that carries it.
 
 ## Considered Options
 

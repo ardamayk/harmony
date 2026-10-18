@@ -9,10 +9,11 @@ use std::time::Duration;
 use tokio::sync::Semaphore;
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
-/// A lookup that found nothing is repeated after 30 days, one that failed
-/// after an hour.
+/// A lookup that found nothing is repeated after 30 days. One that failed,
+/// mostly a burst (the Artists page asking for every photo at once) over a
+/// rate limit, after five minutes.
 const MISSING_RETRY_SECONDS: i64 = 30 * 24 * 60 * 60;
-const FAILED_RETRY_SECONDS: i64 = 60 * 60;
+const FAILED_RETRY_SECONDS: i64 = 5 * 60;
 /// Popularity moves, so a found top-Track list is refreshed weekly.
 const TOP_TITLES_REFRESH_SECONDS: i64 = 7 * 24 * 60 * 60;
 /// Play counts move as slowly as popularity: refreshed weekly too.
