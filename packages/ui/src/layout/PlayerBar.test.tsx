@@ -798,7 +798,7 @@ describe("PlayerBar", () => {
 			fireEvent.click(toggle);
 			expect(toggle.textContent).toBe("");
 			expect(toggle.getAttribute("aria-expanded")).toBe("true");
-			expect(toggle.className).toContain("text-player-control-primary");
+			expect(toggle.className).toContain("shadow-lit");
 		},
 	);
 
