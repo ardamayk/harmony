@@ -175,8 +175,11 @@ export function TrackList({
 												else rowRefs.current.delete(track.id);
 											}}
 											className={cn(
-												"group cursor-pointer border-border/40 border-b transition hover:bg-muted/50",
-												isPlaying && "bg-primary/5",
+												"group cursor-pointer border-border/40 border-b transition",
+												// The playing row takes the shared lit look, so it stays lighter than hover.
+												isPlaying
+													? "bg-heading/12 shadow-lit"
+													: "hover:bg-muted/50",
 											)}
 											tabIndex={0}
 											onClick={() => {
