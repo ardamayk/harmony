@@ -3378,7 +3378,7 @@ fn handle_ended_event(
         });
     }
     if repeat_mode == RepeatMode::Once {
-        return repeat_current_source(process, state, adaptive_system_rate);
+        return repeat_current_source(process, state, queue, adaptive_system_rate);
     }
     let next_source = queue
         .lock()
@@ -3395,30 +3395,23 @@ fn handle_ended_event(
 fn repeat_current_source(
     process: &Arc<Mutex<Box<dyn MpvProcessAdapter>>>,
     state: &Arc<Mutex<PlaybackSessionState>>,
+    queue: &Arc<Mutex<PlaybackQueueContext>>,
     adaptive_system_rate: Option<&Mutex<AdaptiveSystemRateController>>,
 ) -> Result<PlaybackSessionState, PlaybackCommandError> {
-    let result = process
+    let source = state
         .lock()
-        .map_err(|_| "Native mpv process is unavailable.".to_owned())
-        .and_then(|process| {
-            process.seek(0.0)?;
-            process.set_paused(false)
-        });
-    if let Err(message) = result {
-        if reset_adaptive_after_event_failure(state, adaptive_system_rate, "Repeat Once restart")
-            .is_err()
-        {
-            report_native_playback_error(&message);
-            return publish_adaptive_cleanup_failure(state);
-        }
-        return publish_native_command_failure(state, message);
+        .map_err(|_| PlaybackCommandError::new("Native playback state is unavailable."))?
+        .source
+        .clone();
+    let Some(source) = source else {
+        return update_shared_state(state, |state| state.status = PlaybackStatus::Ended);
+    };
+    // mpv goes idle at end of file, so seeking back finds nothing: reload instead.
+    let repeated = load_advanced_source(process, state, queue, adaptive_system_rate, source)?;
+    if repeated.status != PlaybackStatus::Playing {
+        return Ok(repeated);
     }
-    update_shared_state(state, |state| {
-        state.current_time = 0.0;
-        state.buffered_end = None;
-        state.status = PlaybackStatus::Playing;
-        state.repeat_mode = RepeatMode::Off;
-    })
+    update_shared_state(state, |state| state.repeat_mode = RepeatMode::Off)
 }
 
 fn publish_adaptive_cleanup_failure(
@@ -3905,32 +3898,6 @@ mod tests {
 
     struct FailingAdvanceMpv {
         load_calls: AtomicUsize,
-    }
-
-    struct FailingRepeatMpv;
-
-    impl MpvProcessAdapter for FailingRepeatMpv {
-        fn load(&self, _url: &str) -> Result<(), String> {
-            Ok(())
-        }
-
-        fn set_paused(&self, _is_paused: bool) -> Result<(), String> {
-            Ok(())
-        }
-
-        fn seek(&self, _seconds: f64) -> Result<(), String> {
-            Err("controlled Repeat Once seek failure".to_owned())
-        }
-
-        fn set_volume(&self, _value: f64) -> Result<(), String> {
-            Ok(())
-        }
-
-        fn stop(&self) -> Result<(), String> {
-            Ok(())
-        }
-
-        fn shutdown(&self) {}
     }
 
     impl MpvProcessAdapter for FailingAdvanceMpv {
@@ -4810,7 +4777,9 @@ mod tests {
         let (event_sender, events) = std::sync::mpsc::channel();
         let pipewire_rate = Arc::new(RecordedPipeWireRate::default());
         let controller = PlaybackController::start_with_adaptive_system_rate(
-            Box::new(FailingRepeatMpv),
+            Box::new(FailingAdvanceMpv {
+                load_calls: AtomicUsize::new(0),
+            }),
             events,
             AdaptiveSystemRateController::new(pipewire_rate.clone()),
             |_| {},
@@ -4837,7 +4806,9 @@ mod tests {
     fn repeat_once_cleanup_failure_surfaces_stable_context() {
         let (event_sender, events) = std::sync::mpsc::channel();
         let controller = PlaybackController::start_with_adaptive_system_rate(
-            Box::new(FailingRepeatMpv),
+            Box::new(FailingAdvanceMpv {
+                load_calls: AtomicUsize::new(0),
+            }),
             events,
             AdaptiveSystemRateController::new(Arc::new(FailingResetPipeWireRate::default())),
             |_| {},
@@ -5877,6 +5848,44 @@ mod tests {
     }
 
     #[test]
+    fn repeat_once_reloads_the_finished_track_instead_of_seeking_idle_mpv() {
+        let (event_sender, event_receiver) = std::sync::mpsc::channel();
+        let loaded_url = Arc::new(Mutex::new(None));
+        let process = FakeMpvProcess {
+            loaded_url: loaded_url.clone(),
+            is_shutdown: Arc::new(AtomicBool::new(false)),
+            load_error: None,
+        };
+        let controller = PlaybackController::start(Box::new(process), event_receiver, |_| {});
+        let playback_url = "http://127.0.0.1:43129/token/api/v1/tracks/track-1/stream";
+        let source = json!({
+            "type": "track",
+            "track": { "id": "track-1", "title": "Track 1", "durationMs": 120000 },
+            "playbackUrl": playback_url
+        });
+
+        controller.play(Some(source)).expect("play Track");
+        controller.cycle_repeat_mode().expect("Repeat Once");
+        event_sender
+            .send(MpvEvent::Time(119.9))
+            .expect("time event");
+        // mpv is idle once the Track ends, so only a reload plays it again.
+        *loaded_url.lock().expect("loaded URL") = None;
+        event_sender.send(MpvEvent::Ended).expect("ended event");
+        let repeated = wait_for_state(&controller, |state| {
+            state.repeat_mode == super::RepeatMode::Off || state.status == PlaybackStatus::Error
+        });
+
+        assert_eq!(
+            loaded_url.lock().expect("loaded URL").as_deref(),
+            Some(playback_url)
+        );
+        assert_eq!(repeated.status, PlaybackStatus::Playing);
+        assert_eq!(repeated.current_time, 0.0);
+        assert_eq!(repeated.repeat_mode, super::RepeatMode::Off);
+    }
+
+    #[test]
     fn started_live_radio_enters_reconnecting_when_the_stream_ends() {
         let (event_sender, event_receiver) = std::sync::mpsc::channel();
         let process = FakeMpvProcess {
@@ -6731,6 +6740,45 @@ mod tests {
         assert_eq!(restored.current_time, 0.5);
         drop(controller);
         assert!(!ipc_directory.exists());
+        fs::remove_file(fixture_path).expect("remove WAV fixture");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[ignore = "requires the pinned Linux mpv executable"]
+    fn real_pinned_mpv_repeats_a_finished_track_once() {
+        let fixture_path = temporary_path("repeat-once.wav");
+        fs::write(&fixture_path, silent_wav()).expect("write WAV fixture");
+        let (process, events, _ipc_directory) =
+            RealMpvProcess::start(super::resolve_mpv_binary(), vec!["--ao=null".to_owned()])
+                .expect("start pinned mpv");
+        let controller = PlaybackController::start(process, events, |_| {});
+        let source = json!({
+            "type": "track",
+            "track": { "id": "fixture", "title": "Fixture", "durationMs": 1000 },
+            "playbackUrl": fixture_path.to_string_lossy()
+        });
+
+        controller.play(Some(source)).expect("play fixture");
+        controller.cycle_repeat_mode().expect("Repeat Once");
+        // The fixture runs one second, past wait_for_state's deadline.
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let repeated = loop {
+            let state = controller.state().expect("playback state");
+            if state.repeat_mode == super::RepeatMode::Off || state.status == PlaybackStatus::Error
+            {
+                break state;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "timed out waiting for Repeat Once"
+            );
+            thread::sleep(Duration::from_millis(20));
+        };
+
+        assert!(repeated.error.is_none(), "{:?}", repeated.error);
+        assert_eq!(repeated.status, PlaybackStatus::Playing);
+        drop(controller);
         fs::remove_file(fixture_path).expect("remove WAV fixture");
     }
 
