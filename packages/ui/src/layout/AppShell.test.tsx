@@ -178,20 +178,17 @@ describe("AppShell", () => {
 		).toHaveLength(0);
 	});
 
-	it("aligns the floating player dock with the shared page inset", () => {
+	it("docks the player on the bottom edge, full width", () => {
 		const { container } = renderShell(
 			<AppShell bottom={<div>Player</div>}>
 				<div>Main content</div>
 			</AppShell>,
 		);
-		const scrim = container.querySelector("[data-player-scrim]");
-		expect(scrim?.className).toContain("bg-gradient-to-t");
-		expect(scrim?.className).toContain("pointer-events-none");
+		expect(container.querySelector("[data-player-scrim]")).toBeNull();
 		const dock = container.querySelector("[data-player-dock]");
 		const column = container.querySelector("[data-player-dock-column]");
 		expect(dock?.className).toContain("inset-x-0");
-		// Mirrors PAGE_CONTENT_PADDING_CLASS in web: the same --shell-inset.
-		expect(dock?.className).toContain("px-(--shell-inset,2rem)");
+		expect(dock?.className).toContain("bottom-0");
 		expect(column?.className).toContain("w-full");
 		expect(column?.className).not.toContain("max-w-");
 	});
@@ -207,13 +204,11 @@ describe("AppShell", () => {
 		) as HTMLElement;
 		expect(drawer.dataset.state).toBe("open");
 		expect(drawer.getAttribute("aria-hidden")).toBe("false");
-		expect(drawer.className).toContain("translate-y-0");
+		expect(drawer.className).toContain("translate-x-0");
 		expect(drawer.className).not.toContain("invisible");
-		expect(drawer.className).toContain("right-(--shell-inset,2rem)");
-		// Parks above the Player Bar rather than touching it.
-		expect(drawer.style.getPropertyValue("--queue-drawer-bottom")).toContain(
-			"86px",
-		);
+		expect(drawer.className).toContain("right-0");
+		// Docked: its bottom edge on the Player Bar's top edge.
+		expect(drawer.style.getPropertyValue("--queue-drawer-bottom")).toBe("86px");
 		const main = container.querySelector("main") as HTMLElement;
 		expect(main.hasAttribute("data-queue-open")).toBe(true);
 		expect(main.style.paddingRight).toBe("");
@@ -235,7 +230,7 @@ describe("AppShell", () => {
 		expect(drawer.dataset.state).toBe("closed");
 		expect(drawer.getAttribute("aria-hidden")).toBe("true");
 		expect(drawer.hasAttribute("inert")).toBe(true);
-		expect(drawer.className).toContain("translate-y-below-dock");
+		expect(drawer.className).toContain("translate-x-full");
 		expect(drawer.className).toContain("invisible");
 		const main = container.querySelector("main") as HTMLElement;
 		expect(main.hasAttribute("data-queue-open")).toBe(false);
@@ -263,10 +258,9 @@ describe("AppShell", () => {
 		) as HTMLElement;
 		expect(container.querySelector("[data-widget-dock]")).toBeNull();
 		expect(drawer.className).toContain("w-(--queue-drawer-width,18rem)");
-		expect(drawer.style.getPropertyValue("--queue-drawer-bottom")).toContain(
-			"1.5rem",
-		);
-		expect(drawer.className).toContain("rounded-lg");
+		expect(drawer.style.getPropertyValue("--queue-drawer-bottom")).toBe("86px");
+		expect(drawer.className).toContain("border-l");
+		expect(drawer.className).not.toContain("rounded-lg");
 	});
 
 	it("updates inherited drawer width on shell and window resize without changing the bottom gap", () => {
@@ -315,20 +309,20 @@ describe("AppShell", () => {
 		const shell = container.querySelector<HTMLElement>("[data-app-shell]");
 		const drawer = container.querySelector<HTMLElement>("[data-queue-drawer]");
 		const main = container.querySelector("main");
-		expect(shell?.style.getPropertyValue("--queue-drawer-width")).toBe("518px");
+		expect(shell?.style.getPropertyValue("--queue-drawer-width")).toBe("542px");
 		expect(drawer?.style.getPropertyValue("--queue-drawer-width")).toBe("");
 		expect(main?.style.getPropertyValue("--queue-drawer-width")).toBe("");
 		expect(drawer?.className).toContain("w-(--queue-drawer-width,18rem)");
 		expect(main?.style.getPropertyValue("--queue-drawer-clearance")).toBe(
-			"calc(var(--queue-drawer-width, 18rem) + 1.5rem)",
+			"var(--queue-drawer-width, 18rem)",
 		);
 		const bottom = drawer?.style.getPropertyValue("--queue-drawer-bottom");
-		expect(bottom).toBe("calc(16px + 86px + 1.5rem)");
+		expect(bottom).toBe("86px");
 		if (!resizeShell)
 			throw new Error("The shell was not observed for resizing");
 		shellWidth = 1919;
 		act(resizeShell);
-		expect(shell?.style.getPropertyValue("--queue-drawer-width")).toBe("549px");
+		expect(shell?.style.getPropertyValue("--queue-drawer-width")).toBe("311px");
 		expect(drawer?.style.getPropertyValue("--queue-drawer-bottom")).toBe(
 			bottom,
 		);
@@ -407,7 +401,9 @@ describe("AppShell", () => {
 		fireEvent.click(screen.getByRole("button", { name: "Search" }));
 		expect(onSearch).toHaveBeenCalledTimes(1);
 		const radioLink = screen.getByRole("link", { name: "Radio" });
-		expect(radioLink.className).toContain("[&.active]:text-heading");
+		expect(radioLink.className).toContain(
+			"[&.active]:text-shell-active-foreground",
+		);
 		expect(screen.getByRole("link", { name: "Settings" })).toBeTruthy();
 		expect(screen.queryByText("Premium Account")).toBeNull();
 	});

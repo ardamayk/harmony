@@ -100,6 +100,7 @@ export {
 	useTrackWaveform,
 } from "./playback/use-track-waveform";
 export { ThemeProvider } from "./theme/ThemeProvider";
+export { useResolvedThemeMode } from "./theme/use-resolved-theme-mode";
 export * from "./widgets";
 export {
 	defaultLayout,

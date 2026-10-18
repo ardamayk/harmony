@@ -44,9 +44,8 @@ export function CollectionDetailHeader({
 	const showSearch = searchValue !== undefined && onSearchChange;
 
 	return (
-		<div className="relative overflow-hidden rounded-lg border border-border/60 bg-card/40">
-			<div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/20 via-background/40 to-background" />
-			<div className="relative grid gap-6 p-6 sm:grid-cols-media sm:items-stretch">
+		<div>
+			<div className="grid gap-6 sm:grid-cols-media sm:items-stretch">
 				{coverTracks && coverTracks.length > 0 ? (
 					<CollectionCoverStack tracks={coverTracks} />
 				) : (

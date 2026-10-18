@@ -52,7 +52,6 @@ html[data-theme-preset] {
 		0 8px 20px -12px rgb(0 0 0 / 0.8);
 	--shadow-card-lift: 0 18px 40px -18px rgb(0 0 0 / 0.75);
 	/* Kept tight: a wide dark halo reads as a lifted card around the shell. */
-	--shadow-shell: 0 6px 16px -10px var(--player-shadow);
 	--shadow-cover-strip: 10px 0 20px rgb(0 0 0 / 0.35);
 	--color-player-control-shadow: var(--player-control-shadow);
 	--color-warning: var(--warning);
@@ -119,6 +118,8 @@ html[data-theme-preset] {
 	--color-player-foreground: var(--player-foreground);
 	--color-shell-brand: var(--shell-brand);
 	--color-shell-active: var(--shell-active);
+	--color-neutral-active: var(--neutral-active);
+	--color-neutral-active-foreground: var(--neutral-active-foreground);
 	--color-shell-active-foreground: var(--shell-active-foreground);
 	--color-shell-subtle-border: var(--shell-subtle-border);
 	--color-player-title: var(--player-title);
@@ -312,9 +313,6 @@ html[data-window-maximized] body::after {
 @utility grid-cols-media {
 	grid-template-columns: auto minmax(0, 1fr);
 }
-@utility grid-cols-media-aside {
-	grid-template-columns: auto minmax(0, 1fr) 220px;
-}
 @utility grid-cols-media-actions {
 	grid-template-columns: auto minmax(0, 1fr) auto;
 }
@@ -331,6 +329,17 @@ html[data-window-maximized] body::after {
 		var(--default-transition-timing-function)
 	);
 	transition-duration: var(--tw-duration, var(--default-transition-duration));
+}
+/* Detail page scroller: right padding = shell inset, plus the Queue
+   Drawer's clearance while it takes space; the scroller then reaches the
+   window edge so a full-bleed backdrop runs behind the drawer. */
+@utility page-edge-right {
+	--page-edge-right: var(--shell-inset);
+	padding-right: var(--page-edge-right);
+	:where([data-queue-open]) & {
+		--page-edge-right: calc(var(--shell-inset) + var(--queue-drawer-clearance));
+		margin-right: calc(var(--queue-drawer-clearance) * -1);
+	}
 }
 @utility transition-padding {
 	transition-property: padding;
@@ -367,10 +376,6 @@ html[data-window-maximized] body::after {
 }
 @utility translate-x-switch-on {
 	translate: calc(100% - 2px) 0;
-}
-/* Hidden Queue Drawer: below the Player Bar dock, shadow included. */
-@utility translate-y-below-dock {
-	translate: 0 calc(100% + 8rem);
 }
 
 @layer components {

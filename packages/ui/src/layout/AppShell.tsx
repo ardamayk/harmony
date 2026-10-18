@@ -5,9 +5,7 @@ import { QueueDrawer } from "./QueueDrawer";
 import { QueuePinProvider, useQueuePin } from "./QueuePinProvider";
 import {
 	PLAYER_BAR_HEIGHT_PX,
-	PLAYER_BAR_INSET_PX,
 	QUEUE_DRAWER_CONTENT_CLEARANCE,
-	SHELL_INSET_CLASS,
 } from "./shell-metrics";
 import { Toaster } from "./Toaster";
 import { TopNav, type WindowControls } from "./TopNav";
@@ -15,12 +13,11 @@ import { TopNavActionsProvider } from "./TopNavActions";
 import { useQueueDrawerWidth } from "./use-queue-drawer-width";
 import { WidgetDndProvider } from "./WidgetDock";
 
-export { PLAYER_BAR_HEIGHT_PX, PLAYER_BAR_INSET_PX } from "./shell-metrics";
+export { PLAYER_BAR_HEIGHT_PX } from "./shell-metrics";
 
-// Floating player bar: the bar, its bottom inset and 8px breathing room, so
-// scrolled content never ends hidden under the bar.
+// Docked Player Bar: scrolled content never ends hidden under the bar.
 const PLAYER_DOCK_CONTENT_PADDING = "pb-(--player-dock-clearance)";
-const PLAYER_DOCK_CLEARANCE = `${PLAYER_BAR_HEIGHT_PX + PLAYER_BAR_INSET_PX + 8}px`;
+const PLAYER_DOCK_CLEARANCE = `${PLAYER_BAR_HEIGHT_PX}px`;
 
 /**
  * App Shell: Top Nav across the top, the page below it, the Player Bar
@@ -96,15 +93,8 @@ function AppShellFrame({
 					</main>
 					{bottom ? (
 						<div
-							data-player-scrim
-							aria-hidden
-							className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-36 bg-gradient-to-t from-background via-background/75 to-transparent"
-						/>
-					) : null}
-					{bottom ? (
-						<div
 							data-player-dock
-							className={`pointer-events-none absolute inset-x-0 bottom-4 z-50 ${SHELL_INSET_CLASS}`}
+							className="pointer-events-none absolute inset-x-0 bottom-0 z-50"
 						>
 							<div data-player-dock-column className="w-full">
 								<div className="pointer-events-auto">{bottom}</div>

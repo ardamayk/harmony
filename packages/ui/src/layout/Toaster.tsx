@@ -1,6 +1,6 @@
 import { Toaster as SonnerToaster } from "sonner";
 import { useResolvedThemeMode } from "../theme/use-resolved-theme-mode";
-import { PLAYER_BAR_HEIGHT_PX, PLAYER_BAR_INSET_PX } from "./AppShell";
+import { PLAYER_BAR_HEIGHT_PX } from "./AppShell";
 import { useLayout } from "./LayoutProvider";
 
 /**
@@ -16,7 +16,7 @@ export function Toaster() {
 		<SonnerToaster
 			theme={theme}
 			position="bottom-right"
-			offset={`calc(${PLAYER_BAR_HEIGHT_PX + PLAYER_BAR_INSET_PX}px + 0.75rem)`}
+			offset={`calc(${PLAYER_BAR_HEIGHT_PX}px + 0.75rem)`}
 			closeButton
 			toastOptions={{
 				classNames: {

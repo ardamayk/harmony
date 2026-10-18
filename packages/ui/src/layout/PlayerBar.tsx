@@ -38,7 +38,7 @@ import {
 	getTrackArtistCredits,
 	goToArtistCreditsSearch,
 } from "../playback/track-details";
-import { useCoverAccent } from "../playback/use-cover-accent";
+import { useCoverAccent, useRootAccentHue } from "../playback/use-cover-accent";
 import { useMute } from "../playback/use-mute";
 import { usePlaybackKeyboardShortcuts } from "../playback/use-playback-keyboard-shortcuts";
 import { useTrackWaveform } from "../playback/use-track-waveform";
@@ -422,12 +422,28 @@ export function PlayerBar({
 		? getAlbumCoverUrl(currentTrack.albumId, 1024)
 		: (currentRadioStation?.faviconUrl ?? null);
 	const themeMode = useResolvedThemeMode(preferences.theme.mode);
-	const accent = useCoverAccent({
+	const coverAccent = useCoverAccent({
 		cacheKey: currentTrack ? currentTrack.albumId : null,
 		coverUrl: currentTrack ? artworkUrl : null,
 		enabled: playbackPreferences.accentFromCover,
 		mode: themeMode,
 	});
+	// Vintage Harbor takes only the cover's hue, on the root, so every accent
+	// in the app follows it at the theme's own L and C; the bar then keeps the
+	// theme's control colours instead of overriding them here.
+	const hueAccent = preferences.theme.preset === "vintage-harbor";
+	useRootAccentHue(coverAccent, hueAccent);
+	const accent: Record<string, string> =
+		hueAccent && coverAccent["--player-accent"]
+			? {
+					"--player-accent": "var(--player-control-primary)",
+					"--player-accent-foreground":
+						"var(--player-control-primary-foreground)",
+					"--cover-tint": coverAccent["--cover-tint"],
+				}
+			: hueAccent
+				? {}
+				: coverAccent;
 
 	const effectiveDuration =
 		duration > 0
@@ -654,7 +670,7 @@ export function PlayerBar({
 					"--player-control-shadow": accent["--player-control-shadow"],
 				} as CSSProperties
 			}
-			className="relative h-21.5 rounded-lg border border-player-border bg-player px-6 text-player-foreground shadow-shell"
+			className="relative h-21.5 border-player-border border-t bg-player px-(--shell-inset,2rem) text-player-foreground"
 		>
 			{playbackError ? (
 				<PlaybackErrorBanner error={playbackError} recovery={errorRecovery} />
@@ -708,8 +724,10 @@ export function PlayerBar({
 									type="button"
 									data-player-control
 									className={cn(
-										"ml-2 inline-flex size-6 relative after:absolute after:-inset-1 after:content-empty shrink-0 items-center justify-center rounded-sm text-player-foreground hover:text-player-control-primary disabled:opacity-40",
-										favoriteTarget?.isFavorite && "text-player-control-primary",
+										"ml-2 inline-flex size-6 relative after:absolute after:-inset-1 after:content-empty shrink-0 items-center justify-center rounded-sm text-player-foreground disabled:opacity-40",
+										favoriteTarget?.isFavorite
+											? "text-player-control-primary"
+											: "hover:text-heading",
 									)}
 									aria-label={
 										favoriteTarget?.isFavorite
@@ -733,7 +751,7 @@ export function PlayerBar({
 								type="button"
 								data-player-control
 								className={cn(
-									"ml-1 inline-flex size-6 relative after:absolute after:-inset-1 after:content-empty shrink-0 items-center justify-center rounded-sm text-player-foreground hover:text-player-control-primary disabled:opacity-40",
+									"ml-1 inline-flex size-6 relative after:absolute after:-inset-1 after:content-empty shrink-0 items-center justify-center rounded-sm text-player-foreground hover:text-heading disabled:opacity-40",
 									actionsOpen && "text-player-control-primary",
 								)}
 								aria-label="Track actions"

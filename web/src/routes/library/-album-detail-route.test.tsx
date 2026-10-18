@@ -46,6 +46,9 @@ vi.mock("@repo/ui", () => ({
 		coverUrl?: string | null;
 		className?: string;
 	}) => (coverUrl ? <img alt="" src={coverUrl} className={className} /> : null),
+	useCoverAccent: () => ({}),
+	useLayout: () => ({ preferences: { theme: { mode: "dark" } } }),
+	useResolvedThemeMode: () => "dark",
 	usePlayback: () => ({
 		playTrack: mocks.playTrack,
 		queueTracks: mocks.queueTracks,
@@ -136,6 +139,7 @@ describe("album detail route", () => {
 		await screen.findByRole("heading", { name: "1989" });
 		const content = screen.getByTestId("album-detail-content");
 		expect(content.className).toContain("page-content-column");
-		expect(content.parentElement?.className).toContain("px-(--shell-inset)");
+		expect(content.parentElement?.className).toContain("pl-(--shell-inset)");
+		expect(content.parentElement?.className).toContain("page-edge-right");
 	});
 });

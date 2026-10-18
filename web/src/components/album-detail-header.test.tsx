@@ -12,6 +12,11 @@ vi.mock("#/hooks/use-delete-library", () => ({
 	usePreviewAlbumDeletion: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
+vi.mock("@repo/ui", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@repo/ui")>()),
+	useLayout: () => ({ preferences: { theme: { mode: "dark" } } }),
+}));
+
 vi.mock("#/lib/api", () => ({
 	apiClient: {
 		getAlbumCoverUrl: (albumId: string) => `/cover/${albumId}`,

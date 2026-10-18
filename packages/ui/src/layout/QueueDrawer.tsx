@@ -10,9 +10,9 @@ import {
 } from "./shell-metrics";
 
 /**
- * The Queue as a card that slides up from the bottom edge and parks between
- * the Top Nav and the Player Bar, its right edge on the page inset line. Open
- * state is the Queue panel's `collapsed` preference, so the Player Bar's queue
+ * The Queue as a column docked on the right window edge, between the Top Nav
+ * and the Player Bar, set off from the page by one line; it slides in from
+ * the right. Open state is the Queue panel's `collapsed` preference, so the Player Bar's queue
  * button and this card's close button drive the same flag.
  */
 export function QueueDrawer({ abovePlayerBar }: { abovePlayerBar: boolean }) {
@@ -29,11 +29,9 @@ export function QueueDrawer({ abovePlayerBar }: { abovePlayerBar: boolean }) {
 			aria-hidden={!open}
 			inert={!open}
 			className={cn(
-				"absolute top-(--queue-drawer-top) right-(--shell-inset,2rem) bottom-(--queue-drawer-bottom) z-40 w-(--queue-drawer-width,18rem) max-w-queue-drawer-max overflow-hidden rounded-lg border border-player-border shadow-shell transition-slide duration-300 ease-out",
-				// Closed: slides below the viewport, then goes fully invisible so
-				// it can never peek out under the Player Bar, whatever the host
-				// window's geometry does to the shell.
-				open ? "visible translate-y-0" : "invisible translate-y-below-dock",
+				"absolute top-(--queue-drawer-top) right-0 bottom-(--queue-drawer-bottom) z-40 w-(--queue-drawer-width,18rem) max-w-queue-drawer-max overflow-hidden border-player-border border-l transition-slide duration-300 ease-out",
+				// Closed: slides past the right edge, then goes fully invisible.
+				open ? "visible translate-x-0" : "invisible translate-x-full",
 			)}
 			style={
 				{

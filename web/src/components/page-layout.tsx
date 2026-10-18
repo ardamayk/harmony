@@ -97,12 +97,9 @@ export function DetailPageShell({
 	children: ReactNode;
 }) {
 	return (
-		<div
-			className={cn(
-				"min-h-0 flex-1 overflow-y-auto scrollbar-hidden",
-				PAGE_CONTENT_PADDING_CLASS,
-			)}
-		>
+		// `page-edge-right` (styles.css) lets the scroller reach the window edge
+		// behind the Queue Drawer, so a header backdrop can run full width.
+		<div className="page-edge-right min-h-0 flex-1 overflow-y-auto scrollbar-hidden pl-(--shell-inset) py-6">
 			<div
 				data-testid={testId}
 				className={cn(PAGE_CONTENT_WIDTH_CLASS, className)}
