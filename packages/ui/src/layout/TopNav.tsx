@@ -13,9 +13,9 @@ const libraryNav = [
 ] as const;
 
 const LINK_BASE_CLASS =
-	"flex items-center gap-2 whitespace-nowrap rounded-md px-3 py-2 text-sidebar-foreground text-sm transition hover:bg-shell-active hover:text-shell-active-foreground focus-visible:bg-shell-active focus-visible:text-shell-active-foreground focus-visible:outline-none";
+	"flex items-center gap-2 whitespace-nowrap rounded-md px-3 py-2 text-sidebar-foreground text-sm transition hover:bg-heading/6 hover:text-shell-active-foreground focus-visible:bg-heading/6 focus-visible:text-shell-active-foreground focus-visible:outline-none";
 const WINDOW_CONTROL_CLASS =
-	"inline-flex size-8 items-center justify-center rounded-md text-sidebar-foreground transition hover:bg-shell-active hover:text-shell-active-foreground focus-visible:bg-shell-active focus-visible:outline-none";
+	"inline-flex size-8 items-center justify-center rounded-md text-sidebar-foreground transition hover:bg-heading/6 hover:text-shell-active-foreground focus-visible:bg-heading/6 focus-visible:outline-none";
 
 /** Window actions for a host that draws no system title bar (Desktop Client). */
 export type WindowControls = {
@@ -30,7 +30,7 @@ const NAV_LINK_CLASS = `${LINK_BASE_CLASS} [&.active]:bg-heading/12 [&.active]:f
 
 /** Icon control in the Top Nav; `aria-pressed` lights it like the open section. */
 export const TOP_NAV_ICON_BUTTON_CLASS =
-	"inline-flex size-9 shrink-0 items-center justify-center rounded-md text-sidebar-foreground transition hover:bg-shell-active hover:text-shell-active-foreground focus-visible:bg-shell-active focus-visible:outline-none aria-pressed:bg-heading/12 aria-pressed:text-heading aria-pressed:shadow-lit [&.active]:bg-heading/12 [&.active]:text-heading [&.active]:shadow-lit";
+	"inline-flex size-9 shrink-0 items-center justify-center rounded-md text-sidebar-foreground transition hover:bg-heading/6 hover:text-shell-active-foreground focus-visible:bg-heading/6 focus-visible:outline-none aria-pressed:bg-heading/12 aria-pressed:text-heading aria-pressed:shadow-lit [&.active]:bg-heading/12 [&.active]:text-heading [&.active]:shadow-lit";
 
 /**
  * Top navigation bar: brand, library sections, the Search entry (opens the
