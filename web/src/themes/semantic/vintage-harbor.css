@@ -60,4 +60,10 @@
 	--player-foreground: var(--text);
 	--player-title: var(--heading);
 	--player-artwork: var(--muted);
+	/* Lines and the slate accent inside the shell join the family too: the
+	   white-alpha borders read as grey, and the slate sat at C 0.035 h 248. */
+	--sidebar-border: var(--sidebar-accent);
+	--shell-subtle-border: var(--border);
+	--primary: oklch(58.2% 0.05 252);
+	--ring: var(--primary);
 }
