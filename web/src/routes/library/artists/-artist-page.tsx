@@ -1,16 +1,22 @@
 import type { Album } from "@repo/api-client";
-import { AlbumArt } from "@repo/ui";
 import { useQuery } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
 import { useState } from "react";
-import { AlbumGrid } from "#/components/album-grid";
+import { AlbumShelf } from "#/components/album-shelf";
+import {
+	ExternalLinkButton,
+	openExternalLink,
+} from "#/components/external-link-button";
 import { CoverWash } from "#/components/cover-wash";
-import { openExternalLink } from "#/components/external-link-button";
 import { DetailPageShell } from "#/components/page-layout";
 import { TrackList } from "#/components/track-list";
+import { useTrackPlayCounts } from "#/hooks/use-track-play-counts";
 import { Button } from "#/components/ui/button";
+import { Dialog, DialogContent, DialogTitle } from "#/components/ui/dialog";
+import { getArtistExternalLinks } from "#/lib/album-external-links";
 import { apiClient } from "#/lib/api";
 import { sortAlbumsByYear } from "#/lib/sort-albums";
+import { cn } from "#/lib/utils";
 import { isGone } from "#/lib/query-persistence";
 
 // Albums carry no release type, so the track count decides: a single or an
@@ -19,7 +25,7 @@ const MAX_SINGLE_OR_EP_TRACKS = 6;
 // Popular Tracks shown at first, and after See more.
 const POPULAR_SHOWN = 5;
 const POPULAR_MORE = 10;
-// A summary this long is clipped to three lines until Read more.
+// A summary this long is clipped to two lines, all of it behind Read more.
 const LONG_BIOGRAPHY_CHARS = 240;
 
 type DiscographyFilter = "all" | "albums" | "singles";
@@ -62,7 +68,10 @@ export function ArtistDetailContent({ artistId }: { artistId: string }) {
 		staleTime: 60_000,
 	});
 	const [popularExpanded, setPopularExpanded] = useState(false);
-	const [bioExpanded, setBioExpanded] = useState(false);
+	const playCounts = useTrackPlayCounts(popular.data ?? []);
+	const [bioOpen, setBioOpen] = useState(false);
+	// The photo URL that failed to load; a 404 means Deezer had none.
+	const [failedPhotoUrl, setFailedPhotoUrl] = useState<string | null>(null);
 	const [filter, setFilter] = useState<DiscographyFilter>("all");
 
 	if (artist.isLoading) {
@@ -74,6 +83,7 @@ export function ArtistDetailContent({ artistId }: { artistId: string }) {
 
 	const { name, albumCount = 0 } = artist.data;
 	const photoUrl = apiClient.getArtistPhotoUrl(artistId);
+	const photoShown = failedPhotoUrl !== photoUrl;
 	const albumItems = sortAlbumsByYear(albums.data?.items ?? []);
 	const singles = albumItems.filter(isSingleOrEp);
 	const fullAlbums = albumItems.filter((album) => !isSingleOrEp(album));
@@ -96,64 +106,94 @@ export function ArtistDetailContent({ artistId }: { artistId: string }) {
 	const shownPopular = popularExpanded
 		? popularTracks
 		: popularTracks.slice(0, POPULAR_SHOWN);
+	const discographyHeading = (
+		<div className="flex items-baseline gap-3">
+			<h2 className="font-semibold text-heading text-xl">Discography</h2>
+			<p className="text-caption text-sm">
+				{albumCount === 1 ? "1 album" : `${albumCount} albums`}
+			</p>
+		</div>
+	);
 	const bio = biography.data;
 	const bioIsLong = (bio?.text.length ?? 0) > LONG_BIOGRAPHY_CHARS;
 
 	return (
 		<DetailPageShell testId="artist-detail-content">
-			<CoverWash cacheKey={`artist:${artistId}`} imageUrl={photoUrl}>
-				<div className="@container">
-					<div className="grid gap-8 @xl:grid-cols-media @xl:items-end">
-						<AlbumArt
-							coverUrl={photoUrl}
-							title={name}
-							className="aspect-square w-full shrink-0 rounded-full shadow-lg text-3xl @xl:size-52"
-						/>
-						<div className="flex min-w-0 flex-col">
-							<h1 className="font-semibold text-page-title tracking-tight">
-								{name}
-							</h1>
-							<p className="mt-2 text-caption text-sm">
-								{albumCount === 1 ? "1 album" : `${albumCount} albums`}
-							</p>
-							{/* About sits in the header, clipped to three lines until
-							    Read more. */}
-							{bio ? (
-								<div className="mt-4 max-w-prose">
-									<p
-										className={`text-foreground text-sm leading-relaxed ${
-											bioIsLong && !bioExpanded ? "line-clamp-3" : ""
-										}`}
-									>
-										{bio.text}
-									</p>
-									<div className="mt-2 flex items-center gap-4 text-xs">
-										{bioIsLong ? (
-											<button
-												type="button"
-												aria-expanded={bioExpanded}
-												onClick={() => setBioExpanded((value) => !value)}
-												className="font-medium text-heading hover:underline"
-											>
-												{bioExpanded ? "Show less" : "Read more"}
-											</button>
-										) : null}
-										{/* Wikipedia's CC BY-SA licence asks for the source with
-										    the text. */}
-										<a
-											href={bio.sourceUrl}
-											target="_blank"
-											rel="noopener noreferrer"
-											onClick={openExternalLink(bio.sourceUrl)}
-											className="text-caption hover:text-heading"
-										>
-											From Wikipedia, CC BY-SA
-										</a>
-									</div>
-								</div>
-							) : null}
+			{/* Deezer's photos are square, so the banner is the cover-colour band
+			    with the whole photo at its full height on the right, fading into
+			    the band (Tidal); name and About sit on its left. With no photo the
+			    band stays, holding the name. */}
+			<CoverWash
+				cacheKey={`artist:${artistId}`}
+				imageUrl={photoUrl}
+				className={cn(
+					"relative flex flex-col justify-end overflow-hidden",
+					photoShown && "min-h-artist-banner",
+				)}
+			>
+				{photoShown ? (
+					<img
+						src={photoUrl}
+						alt=""
+						onError={() => setFailedPhotoUrl(photoUrl)}
+						className="absolute inset-y-0 right-(--page-edge-right) aspect-square h-full object-cover"
+					/>
+				) : null}
+				<div className="relative flex min-w-0 flex-col">
+					<h1 className="font-semibold text-page-title tracking-tight">
+						{name}
+					</h1>
+					{/* About, clipped to two lines; Read more opens all of it in a
+					    dialog, so the header never moves. */}
+					{bio ? (
+						<p
+							className={cn(
+								"mt-4 max-w-2xl text-foreground text-sm leading-relaxed",
+								bioIsLong && "line-clamp-2",
+							)}
+						>
+							{bio.text}
+						</p>
+					) : null}
+					<div className="mt-3 flex max-w-2xl flex-wrap items-center gap-x-4 gap-y-2 text-xs">
+						{bio && bioIsLong ? (
+							<button
+								type="button"
+								onClick={() => setBioOpen(true)}
+								className="font-medium text-heading hover:underline"
+							>
+								Read more
+							</button>
+						) : null}
+						{bio ? <WikipediaSource href={bio.sourceUrl} /> : null}
+						<div className="ml-auto flex gap-1">
+							{getArtistExternalLinks(name).map((link) => (
+								<ExternalLinkButton
+									key={link.id}
+									href={link.href}
+									name={link.name}
+									short={link.short}
+									iconSrc={link.iconSrc}
+									iconClassName={link.iconClassName}
+								/>
+							))}
 						</div>
 					</div>
+					{bio ? (
+						<Dialog open={bioOpen} onOpenChange={setBioOpen}>
+							<DialogContent className="flex max-h-dialog-height flex-col">
+								<DialogTitle>About {name}</DialogTitle>
+								<div className="mt-4 min-h-0 overflow-y-auto">
+									<p className="whitespace-pre-line text-foreground text-sm leading-relaxed">
+										{bio.text}
+									</p>
+								</div>
+								<p className="mt-4 text-xs">
+									<WikipediaSource href={bio.sourceUrl} />
+								</p>
+							</DialogContent>
+						</Dialog>
+					) : null}
 				</div>
 			</CoverWash>
 
@@ -167,6 +207,7 @@ export function ArtistDetailContent({ artistId }: { artistId: string }) {
 						numbering="list"
 						showFavorite
 						compact
+						playCounts={playCounts}
 					/>
 					{popularTracks.length > POPULAR_SHOWN ? (
 						<button
@@ -182,33 +223,60 @@ export function ArtistDetailContent({ artistId }: { artistId: string }) {
 			) : null}
 
 			<section className="mt-12">
-				<h2 className="mb-4 font-semibold text-heading text-xl">Discography</h2>
-				{filters.length > 0 ? (
-					<div className="mb-4 flex flex-wrap gap-2">
-						{filters.map((option) => (
-							<Button
-								key={option.id}
-								type="button"
-								size="sm"
-								variant={filter === option.id ? "default" : "secondary"}
-								aria-pressed={filter === option.id}
-								onClick={() => setFilter(option.id)}
-							>
-								{option.label}
-							</Button>
-						))}
-					</div>
-				) : null}
-				{albums.isLoading ? (
-					<p className="text-foreground text-sm">Loading albums…</p>
-				) : shownAlbums.length > 0 ? (
-					<AlbumGrid albums={shownAlbums} />
+				{albums.isLoading || shownAlbums.length === 0 ? (
+					<>
+						{discographyHeading}
+						<p
+							className={cn(
+								"text-sm",
+								albums.isLoading ? "text-foreground" : "text-caption",
+							)}
+						>
+							{albums.isLoading
+								? "Loading albums…"
+								: "No albums under this artist's name."}
+						</p>
+					</>
 				) : (
-					<p className="text-caption text-sm">
-						No albums under this artist's name.
-					</p>
+					<AlbumShelf
+						heading={discographyHeading}
+						filters={
+							filters.length > 0 ? (
+								<div className="mb-2 flex flex-wrap gap-2">
+									{filters.map((option) => (
+										<Button
+											key={option.id}
+											type="button"
+											size="sm"
+											variant={filter === option.id ? "default" : "secondary"}
+											aria-pressed={filter === option.id}
+											onClick={() => setFilter(option.id)}
+										>
+											{option.label}
+										</Button>
+									))}
+								</div>
+							) : null
+						}
+						albums={shownAlbums}
+					/>
 				)}
 			</section>
 		</DetailPageShell>
+	);
+}
+
+/** Wikipedia's CC BY-SA licence asks for the source with the text. */
+function WikipediaSource({ href }: { href: string }) {
+	return (
+		<a
+			href={href}
+			target="_blank"
+			rel="noopener noreferrer"
+			onClick={openExternalLink(href)}
+			className="text-caption hover:text-heading"
+		>
+			From Wikipedia, CC BY-SA
+		</a>
 	);
 }

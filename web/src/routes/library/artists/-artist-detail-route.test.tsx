@@ -1,5 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+	cleanup,
+	fireEvent,
+	render,
+	screen,
+	within,
+} from "@testing-library/react";
 import {
 	afterEach,
 	beforeEach,
@@ -17,14 +23,27 @@ const mocks = vi.hoisted(() => ({
 	listArtistPopularTracks: vi.fn(),
 }));
 
-// The Album grid has its own tests; here it only lists what it was given.
-vi.mock("#/components/album-grid", () => ({
-	AlbumGrid: ({ albums }: { albums: Array<{ id: string; title: string }> }) => (
-		<ul>
-			{albums.map((album) => (
-				<li key={album.id}>{album.title}</li>
-			))}
-		</ul>
+// The Album row has its own tests; here it shows its heading, filters and
+// the Albums it was given.
+vi.mock("#/components/album-shelf", () => ({
+	AlbumShelf: ({
+		heading,
+		filters,
+		albums,
+	}: {
+		heading: React.ReactNode;
+		filters?: React.ReactNode;
+		albums: Array<{ id: string; title: string }>;
+	}) => (
+		<>
+			{heading}
+			{filters}
+			<ul>
+				{albums.map((album) => (
+					<li key={album.id}>{album.title}</li>
+				))}
+			</ul>
+		</>
 	),
 }));
 
@@ -47,6 +66,7 @@ vi.mock("@repo/ui", async (importOriginal) => ({
 
 vi.mock("#/lib/api", () => ({
 	apiClient: {
+		listTrackPlayCounts: async () => new Map(),
 		getArtist: mocks.getArtist,
 		listAlbums: mocks.listAlbums,
 		getArtistBiography: mocks.getArtistBiography,
@@ -118,8 +138,13 @@ describe("artist detail route", () => {
 		expect(source.getAttribute("href")).toBe(
 			"https://en.wikipedia.org/wiki/Skillet_(band)",
 		);
+		expect(screen.getByTitle("Last.fm").getAttribute("href")).toBe(
+			"https://www.last.fm/music/Skillet",
+		);
+		// The whole square photo, at the banner's full height.
 		const photo = document.querySelector('img[src="/photo/artist-1"]');
-		expect(photo?.className).toContain("rounded-full");
+		expect(photo?.className).toContain("aspect-square");
+		expect(photo?.parentElement?.className).toContain("min-h-artist-banner");
 	});
 
 	it("leaves the About section out when there is no biography", async () => {
@@ -137,7 +162,7 @@ describe("artist detail route", () => {
 		expect(screen.queryByText("From Wikipedia, CC BY-SA")).toBeNull();
 	});
 
-	it("filters the discography and clips a long biography until Read more", async () => {
+	it("filters the discography and opens a long biography from Read more", async () => {
 		mocks.getArtist.mockResolvedValue({
 			id: "artist-1",
 			name: "Skillet",
@@ -157,14 +182,14 @@ describe("artist detail route", () => {
 
 		renderPage();
 
-		const readMore = await screen.findByRole("button", { name: "Read more" });
-		expect(readMore.getAttribute("aria-expanded")).toBe("false");
-		fireEvent.click(readMore);
+		// Read more opens the whole summary in a dialog; the header stays put.
+		fireEvent.click(await screen.findByRole("button", { name: "Read more" }));
+		const about = await screen.findByRole("dialog");
+		expect(within(about).getByText("About Skillet")).toBeTruthy();
 		expect(
-			screen
-				.getByRole("button", { name: "Show less" })
-				.getAttribute("aria-expanded"),
-		).toBe("true");
+			within(about).getByText(/Skillet is an American rock band/),
+		).toBeTruthy();
+		fireEvent.keyDown(about, { key: "Escape" });
 
 		expect(await screen.findByText("Hero")).toBeTruthy();
 		fireEvent.click(screen.getByRole("button", { name: "Albums" }));

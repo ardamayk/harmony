@@ -1,5 +1,6 @@
 import { useCoverAccent, useLayout, useResolvedThemeMode } from "@repo/ui";
 import type { CSSProperties, ReactNode } from "react";
+import { cn } from "#/lib/utils";
 
 /**
  * A detail page header on a band in its image's colour. It bleeds to the
@@ -9,11 +10,14 @@ import type { CSSProperties, ReactNode } from "react";
 export function CoverWash({
 	cacheKey,
 	imageUrl,
+	className,
 	children,
 }: {
 	/** Shared with the Player Bar for Album covers, so a cover is read once. */
 	cacheKey: string;
 	imageUrl: string;
+	/** Layout for what the band holds, such as an Artist photo laid on it. */
+	className?: string;
 	children: ReactNode;
 }) {
 	const { preferences } = useLayout();
@@ -25,7 +29,10 @@ export function CoverWash({
 	});
 	return (
 		<div
-			className="-mt-6 -ml-(--shell-inset) -mr-(--page-edge-right) bg-linear-to-b from-(--cover-tint)/20 to-(--cover-tint)/5 pt-6 pr-(--page-edge-right) pb-6 pl-(--shell-inset)"
+			className={cn(
+				"-mt-6 -ml-(--shell-inset) -mr-(--page-edge-right) bg-linear-to-b from-(--cover-tint)/20 to-(--cover-tint)/5 pt-6 pr-(--page-edge-right) pb-6 pl-(--shell-inset)",
+				className,
+			)}
 			style={{ "--cover-tint": accent["--cover-tint"] } as CSSProperties}
 		>
 			{children}

@@ -43,9 +43,11 @@ export function ExternalLinkButton({
 			target="_blank"
 			rel="noopener noreferrer"
 			title={name}
+			// The logo alone, no ring around it; hover and focus show the
+			// neutral step behind it.
 			className={cn(
-				"flex size-10 items-center justify-center rounded-full border border-border bg-background/80",
-				"text-caption transition hover:bg-muted hover:text-foreground",
+				"flex size-10 items-center justify-center rounded-md",
+				"text-caption transition hover:bg-muted hover:text-foreground focus-visible:bg-muted",
 			)}
 			onClick={openExternalLink(href)}
 		>
@@ -53,7 +55,7 @@ export function ExternalLinkButton({
 				<img
 					src={iconSrc}
 					alt=""
-					className={cn("size-5 object-contain", iconClassName)}
+					className={cn("size-8 object-contain", iconClassName)}
 					onError={() => setIconFailed(true)}
 				/>
 			) : (
