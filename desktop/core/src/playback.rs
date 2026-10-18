@@ -31,6 +31,8 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 const DEFAULT_VOLUME: f64 = 0.8;
+/// How long before a Track ends the next Queue Track is appended to mpv.
+const GAPLESS_APPEND_LEAD_SECONDS: f64 = 10.0;
 const EVENT_POLL_INTERVAL: Duration = Duration::from_millis(50);
 const MPV_COMMAND_TIMEOUT: Duration = Duration::from_secs(5);
 const MPV_PINNED_VERSION: &str = include_str!("../mpv-version.txt");
@@ -227,6 +229,17 @@ pub(crate) trait MpvProcessAdapter: Send + Sync {
         self.load(url)?;
         self.seek(seconds)
     }
+    /// Queues `url` after the current file so mpv continues into it without
+    /// closing the audio output; any later load or stop discards it.
+    fn append(&self, _url: &str) -> Result<(), String> {
+        Ok(())
+    }
+    fn appended(&self) -> Option<String> {
+        None
+    }
+    fn take_appended(&self) -> Option<String> {
+        None
+    }
     fn set_paused(&self, is_paused: bool) -> Result<(), String>;
     fn seek(&self, seconds: f64) -> Result<(), String>;
     fn set_volume(&self, value: f64) -> Result<(), String>;
@@ -283,6 +296,7 @@ pub(crate) struct RealMpvProcess {
     worker: Mutex<Option<JoinHandle<()>>>,
     ipc_directory: PathBuf,
     exclusive_output: Arc<dyn ExclusiveOutputCoordinator>,
+    appended: Mutex<Option<String>>,
 }
 
 impl RealMpvProcess {
@@ -303,6 +317,7 @@ impl RealMpvProcess {
                     worker: Mutex::new(Some(worker)),
                     ipc_directory: ipc_directory.clone(),
                     exclusive_output: Arc::new(PipeWireExclusiveOutputCoordinator::new()),
+                    appended: Mutex::new(None),
                 };
                 process.observe_properties()?;
                 Ok((Box::new(process), events, ipc_directory))
@@ -311,6 +326,13 @@ impl RealMpvProcess {
                 remove_ipc_directory(&ipc_directory, "after mpv startup failed");
                 Err(error)
             }
+        }
+    }
+
+    /// `loadfile replace` and `stop` drop mpv's whole playlist, appended entry included.
+    fn clear_appended(&self) {
+        if let Ok(mut appended) = self.appended.lock() {
+            *appended = None;
         }
     }
 
@@ -466,11 +488,37 @@ fn resolve_mpv_binary() -> PathBuf {
 
 impl MpvProcessAdapter for RealMpvProcess {
     fn load(&self, url: &str) -> Result<(), String> {
+        self.clear_appended();
         self.command(json!(["loadfile", url, "replace"]))
             .map(|_| ())
     }
 
+    fn append(&self, url: &str) -> Result<(), String> {
+        self.command(json!(["loadfile", url, "append"]))?;
+        *self
+            .appended
+            .lock()
+            .map_err(|_| "Appended mpv entry state is unavailable.".to_owned())? =
+            Some(url.to_owned());
+        Ok(())
+    }
+
+    fn appended(&self) -> Option<String> {
+        self.appended
+            .lock()
+            .ok()
+            .and_then(|appended| appended.clone())
+    }
+
+    fn take_appended(&self) -> Option<String> {
+        self.appended
+            .lock()
+            .ok()
+            .and_then(|mut appended| appended.take())
+    }
+
     fn load_at(&self, url: &str, seconds: f64) -> Result<(), String> {
+        self.clear_appended();
         self.command(json!([
             "loadfile",
             url,
@@ -502,6 +550,7 @@ impl MpvProcessAdapter for RealMpvProcess {
     }
 
     fn load_with_event_boundary(&self, url: &str, load_revision: u64) -> Result<(), String> {
+        self.clear_appended();
         self.command_with_event_boundary(json!(["loadfile", url, "replace"]), Some(load_revision))
             .map(|_| ())
     }
@@ -603,6 +652,7 @@ impl MpvProcessAdapter for RealMpvProcess {
     }
 
     fn stop(&self) -> Result<(), String> {
+        self.clear_appended();
         self.command(json!(["stop"])).map(|_| ())
     }
 
@@ -691,6 +741,7 @@ fn configure_mpv_command(command: &mut Command, socket_path: &Path, extra_argume
         .arg("--terminal=no")
         .arg("--input-terminal=no")
         .arg("--gapless-audio=weak")
+        .arg("--prefetch-playlist=yes")
         // Speed changes must not shift pitch; make mpv's default explicit.
         .arg("--audio-pitch-correction=yes")
         .arg(format!("--volume={}", DEFAULT_VOLUME * 100.0))
@@ -2231,6 +2282,9 @@ fn dispatch_regular_playback_event(
     if is_reconnectable_live_interruption(&event) && start_live_reconnect(context, live_reconnect) {
         return;
     }
+    if let MpvEvent::Time(seconds) = &event {
+        append_next_source_near_end(context, *seconds);
+    }
     if let MpvEvent::Decoder(decoder) = &event {
         apply_adaptive_decoder_rate(
             &context.state,
@@ -2241,6 +2295,42 @@ fn dispatch_regular_playback_event(
     }
     if process_mpv_event(context, event, *last_path_refresh) {
         *last_path_refresh = Instant::now();
+    }
+}
+
+/// Hands mpv the next Queue Track shortly before the current one ends, so the
+/// natural boundary keeps the Output Device open instead of reopening it.
+fn append_next_source_near_end(context: &PlaybackEventContext, seconds: f64) {
+    let Ok(current) = context.state.lock().map(|state| state.clone()) else {
+        return;
+    };
+    let is_near_end =
+        current.duration > 0.0 && current.duration - seconds <= GAPLESS_APPEND_LEAD_SECONDS;
+    if !is_near_end
+        || current.status != PlaybackStatus::Playing
+        || current.stop_after_current
+        || current.repeat_mode == RepeatMode::Once
+        || current.source.as_ref().is_none_or(is_live_source)
+    {
+        return;
+    }
+    let next_source = context.queue.lock().ok().and_then(|queue| {
+        queue.adjacent_source(
+            QueueDirection::Next,
+            current.repeat_mode == RepeatMode::Loop,
+        )
+    });
+    let Some(url) = next_source.and_then(|source| playback_url(&source).ok()) else {
+        return;
+    };
+    let Ok(process) = context.process.lock() else {
+        return;
+    };
+    if process.appended().is_some() {
+        return;
+    }
+    if let Err(error) = process.append(&url) {
+        report_native_playback_error(&format!("Gapless next Track setup failed: {error}"));
     }
 }
 
@@ -3371,7 +3461,14 @@ fn handle_ended_event(
             .map_err(|_| PlaybackCommandError::new("Native playback state is unavailable."))?;
         (state.repeat_mode.clone(), state.stop_after_current)
     };
+    // shortcut: an entry appended before a late Queue change plays for the few
+    // milliseconds until it is stopped or replaced below.
+    let appended = process
+        .lock()
+        .map_err(|_| PlaybackCommandError::new("Native mpv process is unavailable."))?
+        .take_appended();
     if stop_after_current {
+        stop_appended_source(process, appended.as_deref());
         return update_shared_state(state, |state| {
             state.stop_after_current = false;
             state.status = PlaybackStatus::Ended;
@@ -3385,11 +3482,31 @@ fn handle_ended_event(
         .map_err(|_| PlaybackCommandError::new("Playback Queue context is unavailable."))?
         .adjacent_source(QueueDirection::Next, repeat_mode == RepeatMode::Loop);
     if let Some(source) = next_source {
+        if appended.is_some() && appended == playback_url(&source).ok() {
+            prepare_advanced_source_rate(state, adaptive_system_rate, &source)?;
+            return align_and_publish_advanced_source(state, queue, source);
+        }
         return load_advanced_source(process, state, queue, adaptive_system_rate, source);
     }
+    stop_appended_source(process, appended.as_deref());
     update_shared_state(state, |state| {
         state.status = PlaybackStatus::Ended;
     })
+}
+
+fn stop_appended_source(process: &Arc<Mutex<Box<dyn MpvProcessAdapter>>>, appended: Option<&str>) {
+    if appended.is_none() {
+        return;
+    }
+    let result = process
+        .lock()
+        .map_err(|_| "Native mpv process is unavailable.".to_owned())
+        .and_then(|process| process.stop());
+    if let Err(error) = result {
+        report_native_playback_error(&format!(
+            "Appended next Track could not be stopped: {error}"
+        ));
+    }
 }
 
 fn repeat_current_source(
@@ -3787,6 +3904,7 @@ mod tests {
                 actions: actions.clone(),
                 is_active: AtomicBool::new(false),
             }),
+            appended: Mutex::new(None),
         };
 
         for configuration in configurations {
@@ -6575,6 +6693,140 @@ mod tests {
 
         let recorded = actions.lock().expect("actions").clone();
         assert_eq!(recorded, vec!["pause:true".to_owned()]);
+    }
+
+    struct GaplessMpvProcess {
+        actions: Arc<Mutex<Vec<String>>>,
+        appended: Mutex<Option<String>>,
+    }
+
+    impl GaplessMpvProcess {
+        fn record(&self, action: String) {
+            self.actions.lock().expect("recorded actions").push(action);
+        }
+    }
+
+    impl MpvProcessAdapter for GaplessMpvProcess {
+        fn load(&self, url: &str) -> Result<(), String> {
+            self.record(format!("load:{url}"));
+            *self.appended.lock().expect("appended") = None;
+            Ok(())
+        }
+
+        fn append(&self, url: &str) -> Result<(), String> {
+            self.record(format!("append:{url}"));
+            *self.appended.lock().expect("appended") = Some(url.to_owned());
+            Ok(())
+        }
+
+        fn appended(&self) -> Option<String> {
+            self.appended.lock().expect("appended").clone()
+        }
+
+        fn take_appended(&self) -> Option<String> {
+            self.appended.lock().expect("appended").take()
+        }
+
+        fn set_paused(&self, _is_paused: bool) -> Result<(), String> {
+            Ok(())
+        }
+
+        fn seek(&self, _seconds: f64) -> Result<(), String> {
+            Ok(())
+        }
+
+        fn set_volume(&self, _value: f64) -> Result<(), String> {
+            Ok(())
+        }
+
+        fn stop(&self) -> Result<(), String> {
+            self.record("stop".to_owned());
+            *self.appended.lock().expect("appended") = None;
+            Ok(())
+        }
+
+        fn shutdown(&self) {}
+    }
+
+    type GaplessQueue = (
+        PlaybackController,
+        std::sync::mpsc::Sender<MpvEvent>,
+        Arc<Mutex<Vec<String>>>,
+        Vec<serde_json::Value>,
+    );
+
+    fn start_gapless_queue() -> GaplessQueue {
+        let (event_sender, event_receiver) = std::sync::mpsc::channel();
+        let actions = Arc::new(Mutex::new(Vec::new()));
+        let controller = PlaybackController::start(
+            Box::new(GaplessMpvProcess {
+                actions: actions.clone(),
+                appended: Mutex::new(None),
+            }),
+            event_receiver,
+            |_| {},
+        );
+        let sources = queue_sources();
+        controller
+            .sync_queue_context(sources.clone(), Some(0))
+            .expect("sync Queue context");
+        controller
+            .play(Some(sources[0].clone()))
+            .expect("play first Track");
+        (controller, event_sender, actions, sources)
+    }
+
+    fn wait_for_action(actions: &Arc<Mutex<Vec<String>>>, action: &str) {
+        let deadline = Instant::now() + Duration::from_secs(1);
+        while !actions.lock().expect("actions").iter().any(|a| a == action) {
+            assert!(Instant::now() < deadline, "timed out waiting for {action}");
+            thread::sleep(Duration::from_millis(5));
+        }
+    }
+
+    #[test]
+    fn natural_end_continues_into_the_appended_next_track_without_reloading() {
+        let (controller, events, actions, sources) = start_gapless_queue();
+        let next_url = "http://127.0.0.1/token/api/v1/tracks/track-2/stream";
+
+        events.send(MpvEvent::Time(50.0)).expect("time event");
+        events.send(MpvEvent::Time(115.0)).expect("time event");
+        wait_for_action(&actions, &format!("append:{next_url}"));
+        events.send(MpvEvent::Ended).expect("ended event");
+        let advanced = wait_for_state(&controller, |state| {
+            state.source.as_ref() == Some(&sources[1])
+        });
+
+        assert_eq!(advanced.status, PlaybackStatus::Playing);
+        let recorded = actions.lock().expect("actions").clone();
+        assert_eq!(
+            recorded
+                .iter()
+                .filter(|action| action.starts_with("append:"))
+                .count(),
+            1,
+            "the next Track is appended once, near the end: {recorded:?}"
+        );
+        assert!(!recorded.contains(&format!("load:{next_url}")));
+    }
+
+    #[test]
+    fn stop_after_current_stops_the_appended_next_track() {
+        let (controller, events, actions, _sources) = start_gapless_queue();
+        events.send(MpvEvent::Time(115.0)).expect("time event");
+        wait_for_action(
+            &actions,
+            "append:http://127.0.0.1/token/api/v1/tracks/track-2/stream",
+        );
+        controller
+            .set_stop_after_current(true)
+            .expect("stop after current");
+
+        events.send(MpvEvent::Ended).expect("ended event");
+        let ended = wait_for_state(&controller, |state| state.status == PlaybackStatus::Ended);
+
+        assert!(!ended.stop_after_current);
+        wait_for_action(&actions, "stop");
     }
 
     #[test]
