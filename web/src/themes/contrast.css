@@ -46,6 +46,12 @@
 	--caption: color-mix(in oklab, var(--theme-2) 90%, var(--theme-1));
 }
 
+/* Body text on the active step (the playing Queue row) missed 4.5:1; the step
+   lightens toward the hover step (theme-5 72%) without reaching it. */
+[data-theme-preset="tokyo-night"]:not(.dark) {
+	--sidebar-accent: color-mix(in srgb, var(--theme-5) 55%, var(--theme-4) 45%);
+}
+
 [data-theme-preset="tokyo-night"].dark {
 	--primary-foreground: var(--theme-6);
 	/* A light glyph cannot clear both 3:1 against the bar and 4.5:1 on the

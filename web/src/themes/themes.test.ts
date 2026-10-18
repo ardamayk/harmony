@@ -304,7 +304,7 @@ function resolvedTokens(id: string, dark: boolean) {
 describe("text tiers", () => {
 	for (const preset of THEME_PRESET_REGISTRY) {
 		for (const dark of [true, false]) {
-			it(`${preset.id} ${dark ? "dark" : "light"}: heading ≥ text > caption, caption ≥ 4.5:1`, () => {
+			it(`${preset.id} ${dark ? "dark" : "light"}: heading ≥ text > caption, caption and text on active ≥ 4.5:1`, () => {
 				const token = resolvedTokens(preset.id, dark);
 				const background = token("--background");
 				const tier = (name: string) => contrastRatio(token(name), background);
@@ -321,6 +321,13 @@ describe("text tiers", () => {
 					expect(
 						contrastRatio(token("--caption"), token(surface)),
 						`caption on ${surface}`,
+					).toBeGreaterThanOrEqual(4.5);
+				}
+				// The playing Queue row sits on the active step with body text.
+				if (surfaces.includes("--player")) {
+					expect(
+						contrastRatio(token("--text"), token("--shell-active")),
+						"text on --shell-active",
 					).toBeGreaterThanOrEqual(4.5);
 				}
 			});
