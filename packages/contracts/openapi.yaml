@@ -162,6 +162,35 @@ paths:
                 $ref: "#/components/schemas/ArtistBiography"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/library/artists/{artistId}/popular-tracks:
+    get:
+      tags: [library]
+      operationId: listArtistPopularTracks
+      summary: List an artist's popular tracks
+      description: >-
+        The Artist's Tracks in the library that are among their 50 most
+        popular on Deezer, best first. The Deezer list is looked up on first
+        request and refreshed weekly (ADR 0027); titles are matched without
+        case or bracketed versions. Empty when there is no list, the lookup
+        failed, or online lookups are switched off.
+      parameters:
+        - $ref: "#/components/parameters/artistId"
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 10
+      responses:
+        "200":
+          description: Popular tracks, best first
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PopularTrackList"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /api/v1/library/albums:
     get:
       tags: [library]
@@ -2599,6 +2628,14 @@ components:
         sourceUrl:
           type: string
           format: uri
+    PopularTrackList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Track"
     ArtistList:
       type: object
       required: [items, total]

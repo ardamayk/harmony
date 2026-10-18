@@ -1,6 +1,6 @@
-//! Finds an Artist's photo on Deezer's public API (no key). The Artist is
-//! found through one of their Albums, so two Artists sharing a name resolve
-//! to the one on the user's Album (ADR 0027).
+//! Finds an Artist's photo and most popular Track titles on Deezer's public
+//! API (no key). The Artist is found through one of their Albums, so two
+//! Artists sharing a name resolve to the one on the user's Album (ADR 0027).
 
 use super::fetch;
 use serde::Deserialize;
@@ -10,6 +10,8 @@ use serde_json::Value;
 const ALBUM_ATTEMPTS: usize = 3;
 /// Deezer's empty-picture URLs have no image id between the slashes.
 const PLACEHOLDER_PATH: &str = "/images/artist//";
+/// How many top Tracks are asked for; Deezer answers at most 50.
+const TOP_TRACKS: &str = "50";
 
 #[derive(Deserialize)]
 struct Hits<T> {
@@ -26,11 +28,22 @@ struct AlbumHit {
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 struct Artist {
+    #[serde(default)]
+    id: i64,
     name: String,
     #[serde(default)]
     picture_big: String,
     #[serde(default)]
     nb_fan: i64,
+}
+
+#[derive(Deserialize)]
+struct TopTrack {
+    #[serde(default)]
+    title: String,
+    /// The title without its version ("Live", "Remastered"); may be empty.
+    #[serde(default)]
+    title_short: String,
 }
 
 /// The URL of the Artist's 500px picture, `None` when Deezer has none.
@@ -40,23 +53,69 @@ pub async fn find_picture(
     name: &str,
     album_titles: &[String],
 ) -> Result<Option<String>, String> {
+    // A namesake's empty profile can share the Album results.
+    let artist = find_artist(client, base_url, name, album_titles, |artist| {
+        picture(artist).is_some()
+    })
+    .await?;
+    Ok(artist.and_then(|artist| picture(&artist)))
+}
+
+/// The Artist's most popular Track titles on Deezer, best first; empty when
+/// Deezer does not know the Artist.
+pub async fn find_top_titles(
+    client: &reqwest::Client,
+    base_url: &str,
+    name: &str,
+    album_titles: &[String],
+) -> Result<Vec<String>, String> {
+    let Some(artist) =
+        find_artist(client, base_url, name, album_titles, |artist| artist.id > 0).await?
+    else {
+        return Ok(Vec::new());
+    };
+    let url = format!("{base_url}/artist/{}/top", artist.id);
+    let hits: Hits<TopTrack> = fetch::json(client, &url, &[("limit", TOP_TRACKS)]).await?;
+    if let Some(error) = hits.error {
+        return Err(format!("GET {url}: {error}"));
+    }
+    Ok(hits
+        .into_iter()
+        .map(|track| {
+            if track.title_short.trim().is_empty() {
+                track.title
+            } else {
+                track.title_short
+            }
+        })
+        .filter(|title| !title.trim().is_empty())
+        .collect())
+}
+
+/// The Deezer Artist on one of the user's Albums that `accept`s, else the
+/// best name match.
+async fn find_artist(
+    client: &reqwest::Client,
+    base_url: &str,
+    name: &str,
+    album_titles: &[String],
+    accept: impl Fn(&Artist) -> bool,
+) -> Result<Option<Artist>, String> {
     // Plain words, not Deezer's `artist:"…"` syntax: that one leaves out
     // well-known Artists (Taylor Swift) while plain words rank them first.
     for title in album_titles.iter().take(ALBUM_ATTEMPTS) {
         let query = format!("{name} {title}");
         let hits: Hits<AlbumHit> = search(client, base_url, "album", &query).await?;
-        // A namesake's empty profile can share the Album results.
-        if let Some(url) = hits
+        if let Some(artist) = hits
             .into_iter()
             .map(|hit| hit.artist)
-            .filter(|artist| same_name(&artist.name, name))
-            .find_map(|artist| picture(&artist))
+            .find(|artist| same_name(&artist.name, name) && accept(artist))
         {
-            return Ok(Some(url));
+            return Ok(Some(artist));
         }
     }
     let hits: Hits<Artist> = search(client, base_url, "artist", name).await?;
-    Ok(best_by_name(hits.into_iter().collect(), name).and_then(|artist| picture(&artist)))
+    Ok(best_by_name(hits.into_iter().collect(), name).filter(|artist| accept(artist)))
 }
 
 async fn search<T: serde::de::DeserializeOwned>(
@@ -105,6 +164,7 @@ mod tests {
 
     fn artist(name: &str, fans: i64) -> Artist {
         Artist {
+            id: 1,
             name: name.to_owned(),
             picture_big: format!("https://cdn.example/images/artist/{name}/500x500.jpg"),
             nb_fan: fans,

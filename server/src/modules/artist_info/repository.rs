@@ -1,5 +1,5 @@
-//! The module's only database access: stored Artist photos and biographies
-//! with the outcome of their last lookup.
+//! The module's only database access: stored Artist photos, biographies and
+//! top Track titles with the outcome of their last lookup.
 
 use sqlx::SqlitePool;
 
@@ -163,6 +163,52 @@ impl Repository {
         .execute(&self.pool)
         .await
         .context(|| format!("store Artist biography {artist_id}"))?;
+        Ok(())
+    }
+
+    pub async fn top_titles(
+        &self,
+        artist_id: &str,
+    ) -> Result<Option<Stored<Vec<String>>>, RepositoryError> {
+        let row = sqlx::query!(
+            r#"SELECT outcome, titles,
+                CAST((julianday('now') - julianday(checked_at)) * 86400 AS INTEGER) AS "age_seconds!: i64"
+            FROM artist_top_tracks WHERE artist_id = ?1"#,
+            artist_id
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .context(|| format!("get Artist top Tracks {artist_id}"))?;
+        Ok(row.map(|row| Stored {
+            outcome: Outcome::parse(&row.outcome),
+            // A list this module wrote; anything unreadable counts as none.
+            value: row
+                .titles
+                .and_then(|titles| serde_json::from_str(&titles).ok()),
+            age_seconds: row.age_seconds,
+        }))
+    }
+
+    pub async fn put_top_titles(
+        &self,
+        artist_id: &str,
+        outcome: Outcome,
+        titles: Option<&Vec<String>>,
+    ) -> Result<(), RepositoryError> {
+        let outcome = outcome.as_str();
+        let titles = titles.map(|titles| serde_json::to_string(titles).expect("titles encode"));
+        sqlx::query!(
+            "INSERT INTO artist_top_tracks (artist_id, outcome, titles, checked_at)
+            VALUES (?1, ?2, ?3, CURRENT_TIMESTAMP)
+            ON CONFLICT (artist_id) DO UPDATE SET outcome = excluded.outcome,
+                titles = excluded.titles, checked_at = excluded.checked_at",
+            artist_id,
+            outcome,
+            titles
+        )
+        .execute(&self.pool)
+        .await
+        .context(|| format!("store Artist top Tracks {artist_id}"))?;
         Ok(())
     }
 }

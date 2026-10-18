@@ -133,6 +133,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/library/artists/{artistId}/popular-tracks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List an artist's popular tracks
+         * @description The Artist's Tracks in the library that are among their 50 most popular on Deezer, best first. The Deezer list is looked up on first request and refreshed weekly (ADR 0027); titles are matched without case or bracketed versions. Empty when there is no list, the lookup failed, or online lookups are switched off.
+         */
+        get: operations["listArtistPopularTracks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/library/albums": {
         parameters: {
             query?: never;
@@ -1352,6 +1372,9 @@ export interface components {
             /** Format: uri */
             sourceUrl: string;
         };
+        PopularTrackList: {
+            items: components["schemas"]["Track"][];
+        };
         ArtistList: {
             items: components["schemas"]["Artist"][];
             total: number;
@@ -2101,6 +2124,31 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ArtistBiography"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listArtistPopularTracks: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                artistId: components["parameters"]["artistId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Popular tracks, best first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PopularTrackList"];
                 };
             };
             404: components["responses"]["NotFound"];

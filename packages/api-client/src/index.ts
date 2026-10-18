@@ -426,6 +426,10 @@ export function createApiClient(config: ApiClientConfig) {
 				if (error instanceof ApiError && error.status === 404) return null;
 				throw error;
 			}),
+		listArtistPopularTracks: (artistId: string, limit?: number) =>
+			request<Schemas["PopularTrackList"]>(
+				`/api/v1/library/artists/${artistId}/popular-tracks${limit ? `?limit=${limit}` : ""}`,
+			).then((list) => list.items.map(normalizeTrack)),
 		listAlbums: (params?: ListParams) =>
 			request<WireAlbumList>(
 				`/api/v1/library/albums${buildQuery(params)}`,
