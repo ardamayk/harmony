@@ -156,6 +156,42 @@ export function clampAccent(accent: Accent, mode: AccentThemeMode): Accent {
 	};
 }
 
+function hslToRgb({ h, s, l }: Accent): [number, number, number] {
+	const k = (n: number) => (n + h / 30) % 12;
+	const a = s * Math.min(l, 1 - l);
+	const f = (n: number) =>
+		l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1));
+	return [f(0), f(8), f(4)];
+}
+
+function relativeLuminance(accent: Accent): number {
+	const [r, g, b] = hslToRgb(accent).map((c) =>
+		c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4,
+	);
+	return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+function contrastRatio(a: Accent, b: Accent): number {
+	const [light, dark] = [relativeLuminance(a), relativeLuminance(b)].sort(
+		(x, y) => y - x,
+	);
+	return (light + 0.05) / (dark + 0.05);
+}
+
+/**
+ * Text and glyphs on the accent belong to the accent's own family: a near
+ * black or near white of its hue (neutral for a grey accent), whichever
+ * reads stronger on it.
+ */
+function inkOn(accent: Accent): Accent {
+	const s = Math.min(0.3, accent.s);
+	const dark = { h: accent.h, s, l: 0.08 };
+	const light = { h: accent.h, s, l: 0.98 };
+	return contrastRatio(dark, accent) >= contrastRatio(light, accent)
+		? dark
+		: light;
+}
+
 function accentToCss(accent: Accent): string {
 	return `hsl(${accent.h.toFixed(0)} ${(accent.s * 100).toFixed(0)}% ${(accent.l * 100).toFixed(0)}%)`;
 }
@@ -180,8 +216,7 @@ export function accentCssVariables(
 				l: Math.min(max, Math.max(min, accent.l)),
 			})
 		: color;
-	// Text on the accent: dark on light accents, light on dark ones.
-	const foreground = clamped.l > 0.55 ? "#111111" : "#ffffff";
+	const foreground = accentToCss(inkOn(clamped));
 	// The control tokens are set directly on the bar element so a theme
 	// preset that hard-codes them at :root cannot mask the accent.
 	return {

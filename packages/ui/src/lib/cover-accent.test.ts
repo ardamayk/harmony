@@ -77,11 +77,11 @@ describe("cover accent", () => {
 		expect(accent?.muted).toBe(true);
 		const dark = accentCssVariables(accent, "dark");
 		expect(dark["--player-control-primary"]).toBe("hsl(0 0% 70%)");
-		expect(dark["--player-control-primary-foreground"]).toBe("#111111");
+		expect(dark["--player-control-primary-foreground"]).toBe("hsl(0 0% 8%)");
 		expect(dark["--cover-tint"]).toMatch(/^hsl\(\d+ \d+% 55%\)$/);
 		const light = accentCssVariables(accent, "light");
 		expect(light["--player-control-primary"]).toBe("hsl(0 0% 30%)");
-		expect(light["--player-control-primary-foreground"]).toBe("#ffffff");
+		expect(light["--player-control-primary-foreground"]).toBe("hsl(0 0% 98%)");
 	});
 
 	it("clamps lightness into the theme band", () => {
@@ -92,9 +92,18 @@ describe("cover accent", () => {
 	it("emits the bar's control tokens with a readable foreground", () => {
 		const dark = accentCssVariables({ h: 200, s: 0.6, l: 0.65 }, "dark");
 		expect(dark["--player-control-primary"]).toBe("hsl(200 60% 65%)");
-		expect(dark["--player-control-primary-foreground"]).toBe("#111111");
+		// Ink on the accent takes the accent's hue.
+		expect(dark["--player-control-primary-foreground"]).toBe("hsl(200 30% 8%)");
 		const light = accentCssVariables({ h: 200, s: 0.6, l: 0.35 }, "light");
-		expect(light["--player-control-primary-foreground"]).toBe("#ffffff");
+		expect(light["--player-control-primary-foreground"]).toBe(
+			"hsl(200 30% 98%)",
+		);
 		expect(accentCssVariables(null, "dark")).toEqual({});
+	});
+
+	it("picks the ink that reads stronger, not a lightness cut-off", () => {
+		// At l 0.55 white gave the queue badge's text only 3.4:1.
+		const mid = accentCssVariables({ h: 21, s: 0.35, l: 0.55 }, "dark");
+		expect(mid["--player-control-primary-foreground"]).toBe("hsl(21 30% 8%)");
 	});
 });
