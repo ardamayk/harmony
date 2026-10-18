@@ -653,6 +653,13 @@ html[data-window-maximized] body::after {
 		@apply border-border outline-ring/50;
 	}
 
+	/* Tailwind v4 dropped the pointer from buttons; every clickable control
+	   gets it back, disabled ones keep the default. */
+	button:not(:disabled),
+	[role="button"]:not([aria-disabled="true"]) {
+		cursor: pointer;
+	}
+
 	body {
 		background-color: var(--background);
 		color: var(--foreground);
