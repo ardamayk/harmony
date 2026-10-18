@@ -11,7 +11,7 @@ import { findCurrentQueueIndex, getQueueMinutes } from "./queue-groups";
 // Body text at rest, the hover step on hover and focus, and the shared lit look
 // when pressed (Pin), as the Top Nav controls do.
 const QUEUE_ICON_BUTTON_CLASS =
-	"inline-flex size-8 items-center justify-center rounded-sm text-foreground transition hover:bg-muted hover:text-heading focus-visible:bg-muted focus-visible:text-heading focus-visible:outline-none aria-pressed:bg-heading/12 aria-pressed:text-heading aria-pressed:shadow-lit";
+	"inline-flex size-8 items-center justify-center rounded-sm text-foreground transition hover:bg-muted hover:text-heading focus-visible:bg-muted focus-visible:text-heading focus-visible:outline-none aria-pressed:bg-shell-active aria-pressed:text-heading aria-pressed:shadow-lit";
 
 export function QueuePanel({
 	embedded = false,

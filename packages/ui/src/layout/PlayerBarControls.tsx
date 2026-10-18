@@ -42,7 +42,7 @@ const SIDE_ICON_CLASS = "size-5";
 const SIDE_BUTTON_CLASS = "size-7";
 // An on toggle (Shuffle, Repeat, open Queue) takes the shared lit look; hover
 // keeps the accent glyph alone, so the two never read alike.
-const ACTIVE_CONTROL_BUTTON_CLASS = "bg-heading/12 text-heading shadow-lit";
+const ACTIVE_CONTROL_BUTTON_CLASS = "bg-shell-active text-heading shadow-lit";
 const VOLUME_WHEEL_STEP = 0.05;
 const MAX_QUEUE_BADGE_COUNT = 9;
 
