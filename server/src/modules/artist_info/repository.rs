@@ -1,5 +1,6 @@
 //! The module's only database access: stored Artist photos, biographies,
-//! top Track titles and play counts with the outcome of their last lookup.
+//! top Track titles and play counts, and Album genres, with the outcome of
+//! their last lookup.
 
 use sqlx::SqlitePool;
 use std::collections::HashMap;
@@ -256,6 +257,52 @@ impl Repository {
         .execute(&self.pool)
         .await
         .context(|| format!("store Artist play counts {artist_id}"))?;
+        Ok(())
+    }
+
+    pub async fn album_genres(
+        &self,
+        album_id: &str,
+    ) -> Result<Option<Stored<Vec<String>>>, RepositoryError> {
+        let row = sqlx::query!(
+            r#"SELECT outcome, genres,
+                CAST((julianday('now') - julianday(checked_at)) * 86400 AS INTEGER) AS "age_seconds!: i64"
+            FROM album_online_genres WHERE album_id = ?1"#,
+            album_id
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .context(|| format!("get Album online genres {album_id}"))?;
+        Ok(row.map(|row| Stored {
+            outcome: Outcome::parse(&row.outcome),
+            // A list this module wrote; anything unreadable counts as none.
+            value: row
+                .genres
+                .and_then(|genres| serde_json::from_str(&genres).ok()),
+            age_seconds: row.age_seconds,
+        }))
+    }
+
+    pub async fn put_album_genres(
+        &self,
+        album_id: &str,
+        outcome: Outcome,
+        genres: Option<&Vec<String>>,
+    ) -> Result<(), RepositoryError> {
+        let outcome = outcome.as_str();
+        let genres = genres.map(|genres| serde_json::to_string(genres).expect("genres encode"));
+        sqlx::query!(
+            "INSERT INTO album_online_genres (album_id, outcome, genres, checked_at)
+            VALUES (?1, ?2, ?3, CURRENT_TIMESTAMP)
+            ON CONFLICT (album_id) DO UPDATE SET outcome = excluded.outcome,
+                genres = excluded.genres, checked_at = excluded.checked_at",
+            album_id,
+            outcome,
+            genres
+        )
+        .execute(&self.pool)
+        .await
+        .context(|| format!("store Album online genres {album_id}"))?;
         Ok(())
     }
 }

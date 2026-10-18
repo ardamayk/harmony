@@ -436,6 +436,11 @@ export function createApiClient(config: ApiClientConfig) {
 						(list) =>
 							new Map(list.items.map((item) => [item.trackId, item.playCount])),
 					),
+		/** Deezer's genres for an Album whose tags name none (ADR 0027). */
+		listAlbumOnlineGenres: (albumId: string) =>
+			request<Schemas["GenreNameList"]>(
+				`/api/v1/library/albums/${albumId}/online-genres`,
+			).then((list) => list.items),
 		listArtistPopularTracks: (artistId: string, limit?: number) =>
 			request<Schemas["PopularTrackList"]>(
 				`/api/v1/library/artists/${artistId}/popular-tracks${limit ? `?limit=${limit}` : ""}`,

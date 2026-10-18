@@ -58,6 +58,7 @@ vi.mock("#/lib/api", () => ({
 	apiClient: {
 		listTrackPlayCounts: async () => new Map(),
 		getAlbum: mocks.getAlbum,
+		listAlbumOnlineGenres: async () => [],
 		getAlbumCoverUrl: (albumId: string) => `/cover/${albumId}`,
 		listAlbums: vi.fn().mockResolvedValue({ items: [] }),
 	},

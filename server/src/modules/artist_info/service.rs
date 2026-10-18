@@ -1,5 +1,6 @@
-//! Artist photos, biographies and popular Tracks: stored results first, an
-//! online lookup when there is none or it is due again (ADR 0027).
+//! Artist photos, biographies and popular Tracks, and genres for Albums
+//! whose tags name none: stored results first, an online lookup when there
+//! is none or it is due again (ADR 0027).
 
 use super::repository::{Biography, Outcome, Photo, Repository, RepositoryError, Stored};
 use super::{deezer, lastfm, popular, wikipedia};
@@ -26,7 +27,8 @@ const ALBUMS_FOR_MATCHING: i64 = 3;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ArtistInfoError {
-    #[error("artist not found")]
+    /// The Artist or Album asked about is not in the library.
+    #[error("not found")]
     NotFound,
     #[error(transparent)]
     Repository(#[from] RepositoryError),
@@ -295,6 +297,33 @@ impl ArtistInfo {
         Ok(titles.unwrap_or_default())
     }
 
+    /// Deezer's genres for an Album whose tags name none; empty when its
+    /// tags name some, or Deezer has none (yet).
+    pub async fn album_genres(&self, album_id: &str) -> Result<Vec<String>, ArtistInfoError> {
+        let album = self.library.get_album(album_id).await?.album;
+        if !album.genres.is_empty() || !album.genre_items.is_empty() {
+            return Ok(Vec::new());
+        }
+        let stored = self.repo.album_genres(album_id).await?;
+        if !self.should_look_up(stored.as_ref(), None) {
+            return Ok(stored.and_then(|stored| stored.value).unwrap_or_default());
+        }
+        let _slot = self.deezer_slots.acquire().await.expect("semaphore open");
+        let found = deezer::find_album_genres(
+            &self.client,
+            &self.sources.deezer,
+            &album.artist_name,
+            &album.title,
+        )
+        .await
+        .map(|genres| (!genres.is_empty()).then_some(genres));
+        let (outcome, genres) = settle(album_id, found);
+        self.repo
+            .put_album_genres(album_id, outcome, genres.as_ref())
+            .await?;
+        Ok(genres.unwrap_or_default())
+    }
+
     fn should_look_up<T>(&self, stored: Option<&Stored<T>>, found_refresh: Option<i64>) -> bool {
         self.enabled
             && stored.is_none_or(|stored| is_due(stored.outcome, stored.age_seconds, found_refresh))
@@ -314,12 +343,12 @@ impl ArtistInfo {
 }
 
 /// How the lookup ended, to store, and what it found.
-fn settle<T>(artist_id: &str, found: Result<Option<T>, String>) -> (Outcome, Option<T>) {
+fn settle<T>(id: &str, found: Result<Option<T>, String>) -> (Outcome, Option<T>) {
     match found {
         Ok(Some(value)) => (Outcome::Found, Some(value)),
         Ok(None) => (Outcome::Missing, None),
         Err(error) => {
-            tracing::warn!(artist_id, %error, "artist info lookup failed");
+            tracing::warn!(id, %error, "artist info lookup failed");
             (Outcome::Failed, None)
         }
     }
@@ -371,6 +400,10 @@ mod tests {
                         {"title": "Not In Library", "title_short": ""},
                         {"title": "Hero", "title_short": "Hero"}
                     ]}),
+                    "/search/album" if query.contains("Awake") => json!({"data": [
+                        {"id": 9, "title": "Awake (Deluxe)", "artist": {"id": 7, "name": "Skillet"}}
+                    ]}),
+                    "/album/9" => json!({"id": 9, "genres": {"data": [{"id": 152, "name": "Rock"}]}}),
                     "/search/artist" | "/search/album" => json!({"data": []}),
                     "/2.0/" if query.contains("artist=Skillet") && query.contains("api_key=test-key") => {
                         json!({"toptracks": {"track": [
@@ -543,6 +576,35 @@ mod tests {
             made,
             "stored counts make no request"
         );
+    }
+
+    #[tokio::test]
+    async fn gives_deezer_genres_only_to_albums_whose_tags_name_none() {
+        let (sources, requests) = fake_sources().await;
+        let (dir, info) = service(sources, true).await;
+        let migrations = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations");
+        let pool =
+            crate::db::open_and_migrate(dir.path().join("app.db").to_str().unwrap(), &migrations)
+                .await
+                .unwrap();
+        seed_tracks(&pool, &["Hero"]).await;
+        assert_eq!(info.album_genres("al").await.unwrap(), ["Rock"]);
+        let made = requests.load(Ordering::SeqCst);
+        assert_eq!(info.album_genres("al").await.unwrap(), ["Rock"]);
+        assert_eq!(
+            requests.load(Ordering::SeqCst),
+            made,
+            "stored genres make no request"
+        );
+        sqlx::query("UPDATE albums SET genres = '[\"Metal\"]' WHERE id = 'al'")
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert!(info.album_genres("al").await.unwrap().is_empty());
+        assert!(matches!(
+            info.album_genres("unknown").await,
+            Err(ArtistInfoError::NotFound)
+        ));
     }
 
     #[tokio::test]

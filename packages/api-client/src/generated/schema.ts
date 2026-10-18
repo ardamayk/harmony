@@ -190,6 +190,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/library/albums/{albumId}/online-genres": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Deezer's genres for an album whose tags name none
+         * @description Deezer's genres for the Album, looked up on first request and stored (ADR 0027). Shown on the Album page only; Genre pages, filters and radio still read the tags. Empty when the Album's tags name a genre, when Deezer has none, or when online lookups are off.
+         */
+        get: operations["listAlbumOnlineGenres"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/library/albums/{albumId}": {
         parameters: {
             query?: never;
@@ -1392,6 +1412,9 @@ export interface components {
             /** Format: uri */
             sourceUrl: string;
         };
+        GenreNameList: {
+            items: string[];
+        };
         PlayCountList: {
             items: {
                 trackId: string;
@@ -2229,6 +2252,29 @@ export interface operations {
                     "application/json": components["schemas"]["AlbumList"];
                 };
             };
+        };
+    };
+    listAlbumOnlineGenres: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                albumId: components["parameters"]["albumId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Genre names, Deezer's order */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenreNameList"];
+                };
+            };
+            404: components["responses"]["NotFound"];
         };
     };
     getAlbum: {

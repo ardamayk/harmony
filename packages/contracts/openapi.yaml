@@ -243,6 +243,27 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AlbumList"
+  /api/v1/library/albums/{albumId}/online-genres:
+    get:
+      tags: [library]
+      operationId: listAlbumOnlineGenres
+      summary: List Deezer's genres for an album whose tags name none
+      description: >-
+        Deezer's genres for the Album, looked up on first request and stored
+        (ADR 0027). Shown on the Album page only; Genre pages, filters and
+        radio still read the tags. Empty when the Album's tags name a genre,
+        when Deezer has none, or when online lookups are off.
+      parameters:
+        - $ref: "#/components/parameters/albumId"
+      responses:
+        "200":
+          description: Genre names, Deezer's order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenreNameList"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /api/v1/library/albums/{albumId}:
     get:
       tags: [library]
@@ -2660,6 +2681,14 @@ components:
         sourceUrl:
           type: string
           format: uri
+    GenreNameList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            type: string
     PlayCountList:
       type: object
       required: [items]

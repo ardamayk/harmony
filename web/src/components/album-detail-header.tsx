@@ -3,6 +3,7 @@ import {
 	MANAGED_ALBUM_DELETION_CAPABILITY,
 } from "@repo/api-client";
 import { AlbumArt } from "@repo/ui";
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { Disc3, Play, SkipForward, Trash2 } from "lucide-react";
 import { AlbumDeletionDialog } from "#/components/album-deletion-dialog";
@@ -19,7 +20,10 @@ import { useAlbumDeletionFlow } from "#/hooks/use-album-deletion-flow";
 import { useServerCapability } from "#/hooks/use-server-capability";
 import { getAlbumExternalLinks } from "#/lib/album-external-links";
 import { apiClient } from "#/lib/api";
-import { getAlbumArtistName } from "#/lib/library-display";
+import { getAlbumArtistName, getAlbumGenreNames } from "#/lib/library-display";
+
+/** The header names a few genres; the rest are in its tooltip. */
+const MAX_GENRES = 3;
 
 function formatTotalDuration(ms: number): string {
 	if (!ms || ms < 0) return "0m";
@@ -56,6 +60,16 @@ export function AlbumDetailHeader({
 	const released =
 		album.releaseDate ?? (album.year != null ? String(album.year) : null);
 
+	const tagGenres = getAlbumGenreNames(album);
+	// Deezer's genres stand in only when the tags name none (ADR 0027).
+	const onlineGenres = useQuery({
+		queryKey: ["library", "album-online-genres", album.id],
+		queryFn: () => apiClient.listAlbumOnlineGenres(album.id),
+		enabled: tagGenres.length === 0,
+		staleTime: 60 * 60_000,
+	});
+	const genres = tagGenres.length > 0 ? tagGenres : (onlineGenres.data ?? []);
+
 	const artistName = getAlbumArtistName(album);
 	const externalLinks = getAlbumExternalLinks(artistName, album.title);
 	const albumDeletion = useAlbumDeletionFlow();
@@ -89,10 +103,15 @@ export function AlbumDetailHeader({
 								{artistName}
 							</Link>
 
-							{/* Release date under the artist, track count and length last;
-							    both on the caption step. */}
+							{/* Release date under the artist, genres, track count and
+							    length last; all on the caption step. */}
 							<div className="mt-6 flex flex-col gap-2 text-caption text-sm">
 								{released ? <p>{released}</p> : null}
+								{genres.length > 0 ? (
+									<p title={genres.join(", ")}>
+										{genres.slice(0, MAX_GENRES).join(", ")}
+									</p>
+								) : null}
 								{size ? <p>{size}</p> : null}
 							</div>
 						</div>

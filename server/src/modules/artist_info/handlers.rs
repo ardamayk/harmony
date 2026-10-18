@@ -1,4 +1,5 @@
-//! HTTP for Artist photos, biographies and popular Tracks.
+//! HTTP for Artist photos, biographies and popular Tracks, and Album genres
+//! from Deezer.
 
 use super::service::ArtistInfoError;
 use crate::app::AppState;
@@ -30,6 +31,10 @@ pub fn routes() -> Router<AppState> {
             get(get_popular_tracks),
         )
         .route("/api/v1/library/tracks/play-counts", get(get_play_counts))
+        .route(
+            "/api/v1/library/albums/{album_id}/online-genres",
+            get(get_album_genres),
+        )
 }
 
 #[derive(Serialize)]
@@ -44,6 +49,26 @@ fn api_error(error: ArtistInfoError) -> ApiError {
         ArtistInfoError::NotFound => ApiError::not_found("artist not found"),
         other => ApiError::internal(other),
     }
+}
+
+#[derive(Serialize)]
+struct GenresBody {
+    items: Vec<String>,
+}
+
+async fn get_album_genres(
+    State(state): State<AppState>,
+    Path(album_id): Path<String>,
+) -> ApiResult<Json<GenresBody>> {
+    let items = state
+        .artist_info
+        .album_genres(&album_id)
+        .await
+        .map_err(|error| match error {
+            ArtistInfoError::NotFound => ApiError::not_found("album not found"),
+            other => ApiError::internal(other),
+        })?;
+    Ok(Json(GenresBody { items }))
 }
 
 async fn get_photo(
