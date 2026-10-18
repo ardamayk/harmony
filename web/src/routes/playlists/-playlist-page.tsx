@@ -15,6 +15,7 @@ import {
 	formatTrackCollectionDuration,
 	useTrackCollectionViewState,
 } from "#/lib/track-collection-view-state";
+import { isGone } from "#/lib/query-persistence";
 
 // Route components live outside the route file: with automatic code
 // splitting, a component defined inside the route module can be rendered
@@ -64,7 +65,7 @@ export function PlaylistDetailContent({ playlistId }: { playlistId: string }) {
 		return <div className="p-6 text-foreground text-sm">Loading playlist…</div>;
 	}
 
-	if (playlist.isError || !playlist.data) {
+	if (!playlist.data || isGone(playlist.error)) {
 		return (
 			<div className="p-6 text-destructive text-sm">Playlist not found</div>
 		);

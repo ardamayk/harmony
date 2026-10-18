@@ -26,6 +26,7 @@
     "@tanstack/react-devtools": "latest",
     "@tanstack/react-query": "latest",
     "@tanstack/react-query-devtools": "latest",
+    "@tanstack/react-query-persist-client": "5.104.3",
     "@tanstack/react-router": "1.170.32",
     "@tanstack/router-plugin": "^1.132.0",
     "class-variance-authority": "^0.7.1",

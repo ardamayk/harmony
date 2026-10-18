@@ -118,7 +118,7 @@ function QueueMenuActions({ item }: { item: QueueRowMenuProps["item"] }) {
 				>
 					{playlists.isPending ? (
 						<DropdownMenuItem disabled>Loading playlists…</DropdownMenuItem>
-					) : playlists.isError ? (
+					) : playlists.isError && !playlists.data ? (
 						<DropdownMenuItem
 							closeOnClick={false}
 							onClick={() => void playlists.refetch()}

@@ -104,7 +104,7 @@ export function RadioPage() {
 				{stations.isLoading ? (
 					<p className="text-foreground text-sm">Loading radio stations...</p>
 				) : null}
-				{stations.isError ? (
+				{stations.isError && !stations.data ? (
 					<p className="text-destructive text-sm">
 						Failed to load radio stations
 					</p>

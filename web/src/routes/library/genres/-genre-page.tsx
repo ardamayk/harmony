@@ -52,7 +52,7 @@ export function GenreDetailContent({ genre }: { genre: string }) {
 		return <div className="p-6 text-foreground text-sm">Loading genre…</div>;
 	}
 
-	if (tracks.isError) {
+	if (tracks.isError && !tracks.data) {
 		return <div className="p-6 text-destructive text-sm">Genre not found</div>;
 	}
 

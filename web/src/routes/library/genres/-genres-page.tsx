@@ -32,7 +32,7 @@ export function GenresPage() {
 		return <div className="p-6 text-foreground text-sm">Loading genres…</div>;
 	}
 
-	if (tracks.isError) {
+	if (tracks.isError && !tracks.data) {
 		return (
 			<div className="p-6 text-destructive text-sm">Failed to load genres</div>
 		);
