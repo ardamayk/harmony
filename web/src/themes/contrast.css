@@ -101,6 +101,9 @@
 
 [data-theme-preset="vintage-harbor"]:not(.dark) {
 	--primary-foreground: #ffffff;
+	/* The page's active step is the light family's; the dark shell keeps its
+	   own below. */
+	--shell-active: color-mix(in srgb, var(--theme-5) 45%, var(--theme-4) 55%);
 }
 
 /* Vintage Harbor keeps the Top Nav, Player Bar and Queue Drawer dark in
@@ -114,6 +117,10 @@
 	--caption: color-mix(in srgb, var(--player-foreground) 78%, #1e2b3b);
 	--muted-foreground: var(--caption);
 	--border: var(--sidebar-border);
+	/* Hover and active steps on the dark shell: opacity steps of its title
+	   tone, hover half the active tint. */
+	--shell-active: color-mix(in srgb, var(--player-title) 16%, transparent);
+	--muted: color-mix(in srgb, var(--player-title) 8%, transparent);
 }
 
 [data-theme-preset="vintage-harbor"]:not(.dark)
@@ -125,4 +132,6 @@
 	--caption: color-mix(in oklab, var(--theme-2) 85%, var(--theme-6));
 	--muted-foreground: var(--caption);
 	--border: color-mix(in srgb, var(--theme-4) 70%, var(--theme-3) 30%);
+	--muted: color-mix(in srgb, var(--theme-5) 72%, var(--theme-4) 28%);
+	--shell-active: color-mix(in srgb, var(--theme-5) 45%, var(--theme-4) 55%);
 }
