@@ -341,6 +341,47 @@ describe("AppShell", () => {
 		expect(disconnect).toHaveBeenCalled();
 	});
 
+	it("drops the search card over the field again when only the field moves", () => {
+		const observed = new Map<Element, () => void>();
+		vi.stubGlobal(
+			"ResizeObserver",
+			class {
+				constructor(private callback: () => void) {}
+				observe(target: Element) {
+					observed.set(target, this.callback);
+				}
+				unobserve() {}
+				disconnect() {}
+			},
+		);
+		let fieldLeft = 300;
+		const getBounds = HTMLElement.prototype.getBoundingClientRect;
+		vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+			function (this: HTMLElement) {
+				if (this.hasAttribute("data-library-search-field"))
+					return new DOMRect(fieldLeft, 8, 500, 48);
+				if (this.hasAttribute("data-app-shell"))
+					return new DOMRect(0, 0, 1600, 900);
+				return getBounds.call(this);
+			},
+		);
+		const { container } = renderShell(<AppShell onSearch={vi.fn()} />);
+		const shell = container.querySelector<HTMLElement>("[data-app-shell]");
+		const field = container.querySelector("[data-library-search-field]");
+		expect(shell?.style.getPropertyValue("--library-search-center")).toBe(
+			"550px",
+		);
+		// A smaller Home button beside it: the field moves and grows, the
+		// shell does not resize.
+		const remeasure = field ? observed.get(field) : undefined;
+		if (!remeasure) throw new Error("The search field was not observed");
+		fieldLeft = 292;
+		act(remeasure);
+		expect(shell?.style.getPropertyValue("--library-search-center")).toBe(
+			"542px",
+		);
+	});
+
 	it("lets the Desktop Client drag the window by the top nav's empty space", () => {
 		const { container } = render(<TopNav onSearch={vi.fn()} />);
 		const header = container.querySelector("header") as HTMLElement;

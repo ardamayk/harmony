@@ -94,6 +94,11 @@ export function useQueueDrawerWidth(
 		measure();
 		const observer = new ResizeObserver(measure);
 		observer.observe(shell);
+		// The field moves and resizes without the shell resizing (the Home
+		// button or brand beside it changing size, a late web font), and the
+		// search card must still drop exactly over it.
+		const field = shell.querySelector("[data-library-search-field]");
+		if (field) observer.observe(field);
 		window.addEventListener("resize", measure);
 		return () => {
 			observer.disconnect();
