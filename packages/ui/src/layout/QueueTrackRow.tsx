@@ -46,10 +46,12 @@ export function QueueTrackRow({
 				}
 			}}
 			className={cn(
-				"group relative flex cursor-pointer items-center gap-3 rounded-r-sm py-2 pr-3 pl-6 -outline-offset-2 hover:bg-muted focus-visible:outline-2 focus-visible:outline-player-control-primary",
+				"group relative flex cursor-pointer items-center gap-3 rounded-r-sm py-2 pr-3 pl-6 -outline-offset-2 focus-visible:outline-2 focus-visible:outline-player-control-primary",
+				// The current row sits on the active step, so hover never darkens it.
+				!isCurrent && "hover:bg-muted",
 				// Margin plus padding match other rows' `pl-6` / `pr-3`, so number and duration columns stay put.
 				isCurrent &&
-					"my-1 mr-1 ml-2 rounded-sm bg-player-pill pr-2 pl-4 ring-1 ring-player-control-primary shadow-md shadow-player-control-shadow",
+					"my-1 mr-1 ml-2 rounded-sm bg-shell-active pr-2 pl-4 ring-1 ring-player-control-primary shadow-md shadow-player-control-shadow",
 			)}
 		>
 			{isCurrent ? (
@@ -77,7 +79,7 @@ export function QueueTrackRow({
 					className={cn(
 						"block truncate text-sm leading-5",
 						isCurrent
-							? "font-semibold text-player-control-primary"
+							? "font-semibold text-heading"
 							: state === "played"
 								? "text-caption group-hover:text-heading group-focus-within:text-heading"
 								: "text-heading",
@@ -88,14 +90,23 @@ export function QueueTrackRow({
 				</span>
 				{(!isAlbum || isCurrent) && (
 					<span
-						className="block truncate text-xs text-caption leading-4"
+						className={cn(
+							"block truncate text-xs leading-4",
+							// Caption loses 4.5:1 on the active step.
+							isCurrent ? "text-foreground" : "text-caption",
+						)}
 						title={item.track.artistName}
 					>
 						{item.track.artistName}
 					</span>
 				)}
 			</span>
-			<span className="shrink-0 text-xs text-caption tabular-nums">
+			<span
+				className={cn(
+					"shrink-0 text-xs tabular-nums",
+					isCurrent ? "text-foreground" : "text-caption",
+				)}
+			>
 				{formatQueueDuration(item.track.durationMs)}
 			</span>
 		</li>
