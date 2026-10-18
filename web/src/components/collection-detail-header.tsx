@@ -58,7 +58,7 @@ export function CollectionDetailHeader({
 					<p className="mb-2 font-semibold text-caption text-xs uppercase tracking-widest">
 						{kind}
 					</p>
-					<h1 className="truncate font-semibold text-3xl tracking-tight">
+					<h1 className="truncate font-semibold text-page-title tracking-tight">
 						{title}
 					</h1>
 					<p className="mt-2 font-medium text-foreground text-xl">{subtitle}</p>

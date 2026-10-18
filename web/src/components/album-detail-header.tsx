@@ -74,24 +74,24 @@ export function AlbumDetailHeader({
 						<AlbumArt
 							coverUrl={apiClient.getAlbumCoverUrl(album.id, 1024)}
 							title={album.title}
-							className="aspect-square w-full shrink-0 rounded-md shadow-lg text-3xl @xl:size-52"
+							className="aspect-square w-full shrink-0 rounded-md shadow-lg text-3xl @xl:size-60"
 						/>
 
 						<div className="flex min-w-0 flex-col">
-							<h1 className="font-semibold text-3xl tracking-tight">
+							<h1 className="font-semibold text-page-title tracking-tight">
 								{album.title}
 							</h1>
 							<Link
 								to="/library/artists/$artistId"
 								params={{ artistId: album.artistId }}
-								className="mt-2 self-start font-medium text-foreground text-xl hover:text-heading"
+								className="mt-3 self-start font-medium text-base text-foreground hover:text-heading"
 							>
 								{artistName}
 							</Link>
 
 							{/* Release date under the artist, track count and length last;
 							    both on the caption step. */}
-							<div className="mt-4 flex flex-col gap-1 text-caption text-sm">
+							<div className="mt-6 flex flex-col gap-2 text-caption text-sm">
 								{released ? <p>{released}</p> : null}
 								{size ? <p>{size}</p> : null}
 							</div>
@@ -100,16 +100,22 @@ export function AlbumDetailHeader({
 
 					{/* Actions under the cover, external links at the far right. */}
 					<div className="mt-6 flex flex-wrap items-center gap-2">
-						<Button type="button" onClick={onPlayAlbum}>
+						<Button type="button" size="lg" onClick={onPlayAlbum}>
 							<Play className="size-4" />
 							Play
 						</Button>
-						<Button type="button" variant="outline" onClick={onQueueAlbum}>
+						<Button
+							type="button"
+							size="lg"
+							variant="outline"
+							onClick={onQueueAlbum}
+						>
 							<SkipForward className="size-4" />
 							Queue album
 						</Button>
 						<Button
 							type="button"
+							size="lg"
 							variant="outline"
 							disabled
 							title="Album radio will build a station from similar album, artist, and genre tracks when recommendations exist."

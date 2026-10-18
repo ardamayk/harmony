@@ -144,7 +144,7 @@ export function TrackList({
 			<table
 				ref={tableRef}
 				tabIndex={-1}
-				className={cn("w-full outline-none", compact ? "text-xs" : "text-sm")}
+				className="w-full text-sm outline-none"
 			>
 				<thead>
 					<tr className="border-border border-b text-left text-caption text-xs">
@@ -234,8 +234,7 @@ export function TrackList({
 											<div className="min-w-0">
 												<span
 													className={cn(
-														"block truncate font-medium leading-snug",
-														compact ? "text-sm" : "text-base",
+														"block truncate font-medium text-base leading-snug",
 														isPlaying
 															? "text-neutral-active-foreground"
 															: "text-foreground",

@@ -61,6 +61,10 @@ html[data-theme-preset] {
      the type scale that grows with the window. */
 	--text-lyrics: clamp(1.875rem, 1rem + 1.6vw, 3rem);
 	--text-lyrics--line-height: 1.2;
+	/* Detail page titles: text-3xl at narrow widths, growing with the window
+     so the album or artist name leads on wide screens. */
+	--text-page-title: clamp(1.875rem, 1rem + 1.6vw, 3rem);
+	--text-page-title--line-height: 1.1;
 	/* Enter animations; used behind motion-safe: so reduced motion gets an
      instant swap. Keyframes live with the components layer below. */
 	--animate-lyrics-view: lyrics-view-enter 300ms

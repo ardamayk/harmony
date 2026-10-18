@@ -110,7 +110,9 @@ export function ArtistDetailContent({ artistId }: { artistId: string }) {
 							className="aspect-square w-full shrink-0 rounded-full shadow-lg text-3xl @xl:size-52"
 						/>
 						<div className="flex min-w-0 flex-col">
-							<h1 className="font-semibold text-3xl tracking-tight">{name}</h1>
+							<h1 className="font-semibold text-page-title tracking-tight">
+								{name}
+							</h1>
 							<p className="mt-2 text-caption text-sm">
 								{albumCount === 1 ? "1 album" : `${albumCount} albums`}
 							</p>
