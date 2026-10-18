@@ -43,12 +43,13 @@ Build palette in this order; each step uses previous.
    - Project: Accent per preset (`--primary`, `--player-control-primary`); cover accent overrides in Player Bar. Neutrals tinted to preset base hue (Vintage Harbor h 252).
 2. Family ladders: L steps of neutral and accent families.
 3. Surface ladder (60/30): page, alt surface, card, dark band, footer. Light-dark rhythm set here; grayscale test shows it.
-   - Project: Vintage Harbor dark, OKLCH L: page / Top Nav 23.5, card / Player Bar / Queue Drawer 27.5, raised control 31.5, active 39.5.
+   - Project: Vintage Harbor dark: one family, OKLCH h 252 C 0.05, L step 4. Page, Top Nav 23.5; card, popover, Player Bar, Queue Drawer 27.5; raised control, line 31.5; hover (`muted`, `accent`) 35.5; active 39.5.
 4. Text hierarchy: each surface gets primary, secondary, faint text. 4.5:1, 7:1 decide here. Dark surfaces own text set.
-   - Project: Tokens `heading`, `text`, `caption`. Vintage Harbor dark L 93 / 80 / 70, hue 80, C 0.02; caption 4.5:1 up to raised controls. Other presets: caption brighter than text, open.
+   - Project: Tokens `heading`, `text`, `caption`. Vintage Harbor dark L 93 / 82 / 73, C 0.02; caption 4.5:1 up to hover step, so caption never on active step.
+   - Project: Text temperature = family of surface under it: on neutral surface neutral hue (h 252), on accent accent hue. L unchanged, so grayscale unchanged.
 5. Lines, controls: decorative line no threshold; input border, icon 3:1.
 6. Accent placement (10): button fill, text on it 4.5:1, dark-surface variant, accent surface.
-   - Project: One accent per surface: seek fill = play button colour.
+   - Project: One accent per surface: seek fill = play button colour. Ink on accent: accent-hue near black or near white, stronger contrast wins (`packages/ui/src/lib/cover-accent.ts`).
 7. States: hover, focus 3:1, error, disabled.
 8. Verify: contrast every pair, grayscale test, warm/cool test, color-blind simulation, dark mode.
    - Project: Contrast: `web/src/themes/themes.test.ts`. Grayscale, warm/cool, color-blind: by hand in browser, every page.
