@@ -387,8 +387,14 @@ html[data-window-maximized] body::after {
    over its right third into the band, never fully gone, and a thin strip
    into the page. */
 @utility mask-artist-photo {
-	mask-image: linear-gradient(to left, rgb(0 0 0 / 0.3) 0%,
-			rgb(0 0 0 / 0.5) 10%, rgb(0 0 0 / 0.75) 21%, black 35%),
+	mask-image:
+		linear-gradient(
+			to left,
+			rgb(0 0 0 / 0.3) 0%,
+			rgb(0 0 0 / 0.5) 10%,
+			rgb(0 0 0 / 0.75) 21%,
+			black 35%
+		),
 		linear-gradient(to top, transparent 0%, rgb(0 0 0 / 0.5) 6%, black 14%);
 	mask-composite: intersect;
 }
