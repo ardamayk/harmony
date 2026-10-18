@@ -165,10 +165,14 @@ function previewRow(dialog: Locator, text: string): Locator {
 }
 
 async function expectFocusInside(dialog: Locator): Promise<void> {
-	const inside = await dialog.evaluate((element) =>
-		element.contains(document.activeElement),
-	);
-	expect(inside, "focus should stay inside the dialog").toBe(true);
+	// Base UI's focus guards wrap Tab around on the next animation frame.
+	await expect
+		.poll(
+			() =>
+				dialog.evaluate((element) => element.contains(document.activeElement)),
+			{ message: "focus should stay inside the dialog" },
+		)
+		.toBe(true);
 }
 
 function stagingFiles(): string[] {

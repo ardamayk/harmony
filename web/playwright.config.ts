@@ -39,6 +39,8 @@ export default defineConfig({
 			timeout: 120_000,
 			url: "http://localhost:3000",
 			reuseExistingServer: false,
+			// The devtools' floating button covers the Player Bar's Queue toggle.
+			env: { VITE_QUERY_DEVTOOLS: "off" },
 		},
 	],
 });

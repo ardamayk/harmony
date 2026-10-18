@@ -45,7 +45,7 @@ test("cached absence becomes imported Track; Enter decodes audio; Album navigati
 	expect(absent.tracks).toEqual([]);
 	await page.keyboard.press("Escape");
 	await expect(
-		page.getByRole("button", { name: "Search", exact: true }),
+		page.getByRole("button", { name: "Search your library" }),
 	).toBeFocused();
 
 	await page.getByRole("button", { name: "Import Music" }).click();
@@ -128,15 +128,12 @@ test("cached absence becomes imported Track; Enter decodes audio; Album navigati
 		.getByRole("group", { name: "Best Match", exact: true })
 		.getByRole("option")
 		.click();
+	// A track-only Artist opens its own Artist page (artist pages, 19a24db).
 	await expect(page).toHaveURL(
-		(url) =>
-			url.pathname === "/library/tracks" &&
-			url.searchParams.get("artistId") === guestID,
+		(url) => url.pathname === `/library/artists/${guestID}`,
 	);
 	await expect(
-		page
-			.getByRole("row")
-			.filter({ has: page.getByText(title, { exact: true }) }),
+		page.getByRole("heading", { name: guest, exact: true }),
 	).toBeVisible();
 	const artistsResponse = await request.get(
 		`/api/v1/library/artists?q=${encodeURIComponent(guest)}`,

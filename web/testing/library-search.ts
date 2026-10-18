@@ -10,7 +10,7 @@ export async function search(
 ): Promise<LibrarySearchResponse> {
 	const dialog = searchDialog(page);
 	if (!(await dialog.isVisible()))
-		await page.getByRole("button", { name: "Search", exact: true }).click();
+		await page.getByRole("button", { name: "Search your library" }).click();
 	const response = page.waitForResponse((response) => {
 		const url = new URL(response.url());
 		return (

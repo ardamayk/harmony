@@ -64,7 +64,10 @@ if (!rootElement) {
 
 suppressEscapeFocusRing();
 
-const shouldRenderQueryDevtools = import.meta.env.DEV && !hasDesktopBridge();
+const shouldRenderQueryDevtools =
+	import.meta.env.DEV &&
+	import.meta.env.VITE_QUERY_DEVTOOLS !== "off" &&
+	!hasDesktopBridge();
 
 createRoot(rootElement).render(
 	<StrictMode>
