@@ -1,0 +1,654 @@
+<!doctype html>
+<!--
+  PROTOTYPE — throwaway. Question: what should the full-screen Lyrics view look like?
+  Four variants (0 = today's layout, A, B, C) × three lyric states, switchable from the bottom bar.
+  Open this file in a browser. Keys: ← → variant, L lyric state, T theme, Q queue.
+-->
+<html lang="tr">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Lyrics view prototype</title>
+		<style>
+			:root,
+			[data-theme="earthly"] {
+				--background: #0a1418;
+				--surface: #152428;
+				--muted: #1b3030;
+				--heading: #e7f0e8;
+				--foreground: #a8d4c8;
+				--caption: #b9dbd0;
+				--border: color-mix(in srgb, #2f6a4a 70%, #4fb8b2 30%);
+				--primary: #4fb8b2;
+				--primary-fg: #0a1418;
+			}
+			[data-theme="black"] {
+				--background: #000;
+				--surface: #111;
+				--muted: #262626;
+				--heading: #f5f5f5;
+				--foreground: #e5e5e5;
+				--caption: #a3a3a3;
+				--border: #262626;
+				--primary: #f5f5f5;
+				--primary-fg: #171717;
+			}
+			* {
+				box-sizing: border-box;
+			}
+			html,
+			body {
+				margin: 0;
+				height: 100%;
+			}
+			body {
+				background: var(--background);
+				color: var(--foreground);
+				font:
+					14px/1.5 system-ui,
+					sans-serif;
+				overflow: hidden;
+			}
+			button {
+				font: inherit;
+				color: inherit;
+				background: none;
+				border: 0;
+				cursor: pointer;
+			}
+			.view {
+				position: fixed;
+				inset: 0;
+				display: flex;
+				flex-direction: column;
+				background: var(--background);
+			}
+			.icon-btn {
+				width: 36px;
+				height: 36px;
+				border-radius: 9999px;
+				display: inline-flex;
+				align-items: center;
+				justify-content: center;
+			}
+			.icon-btn:hover,
+			.icon-btn:focus-visible,
+			.icon-btn[aria-pressed="true"] {
+				background: color-mix(in srgb, var(--heading) 12%, transparent);
+				color: var(--heading);
+				outline: none;
+			}
+			.cover {
+				border-radius: 10px;
+				background: var(--cover-bg);
+				background-size: cover;
+				background-position: center;
+				flex-shrink: 0;
+				box-shadow: 0 20px 40px rgb(0 0 0 / 0.45);
+			}
+			.cover.sm {
+				border-radius: 6px;
+				box-shadow: none;
+			}
+			.title {
+				color: var(--heading);
+				font-weight: 600;
+				white-space: nowrap;
+				overflow: hidden;
+				text-overflow: ellipsis;
+			}
+			.meta {
+				color: var(--caption);
+				white-space: nowrap;
+				overflow: hidden;
+				text-overflow: ellipsis;
+			}
+			.controls {
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				gap: 8px;
+			}
+			.play {
+				width: 44px;
+				height: 44px;
+				border-radius: 9999px;
+				background: var(--primary);
+				color: var(--primary-fg);
+				display: inline-flex;
+				align-items: center;
+				justify-content: center;
+			}
+			.seek {
+				display: flex;
+				align-items: center;
+				gap: 8px;
+				font-size: 12px;
+				color: var(--caption);
+				font-variant-numeric: tabular-nums;
+			}
+			.seek .track {
+				flex: 1;
+				height: 4px;
+				border-radius: 9999px;
+				background: var(--muted);
+				position: relative;
+			}
+			.seek .track i {
+				position: absolute;
+				inset: 0 auto 0 0;
+				width: var(--progress, 40%);
+				background: var(--heading);
+				border-radius: 9999px;
+				transition: width 300ms linear;
+			}
+			.lyrics {
+				overflow-y: auto;
+				scrollbar-width: none;
+				scroll-behavior: smooth;
+			}
+			.lyrics p {
+				margin: 0;
+				font-weight: 600;
+				color: var(--heading);
+				transition:
+					color 300ms ease-out,
+					opacity 300ms ease-out;
+				min-height: 1.5em;
+			}
+			.lyrics.synced p {
+				opacity: 0.35;
+			}
+			.lyrics.synced p.past {
+				opacity: 0.55;
+			}
+			.lyrics.synced p.now {
+				opacity: 1;
+			}
+			.queue {
+				width: 20rem;
+				flex-shrink: 0;
+				border-left: 1px solid var(--border);
+				background: var(--surface);
+				overflow-y: auto;
+				padding: 16px;
+			}
+			.queue h3 {
+				margin: 0 0 12px;
+				font-size: 12px;
+				color: var(--caption);
+				font-weight: 500;
+				text-transform: uppercase;
+				letter-spacing: 0.12em;
+			}
+			.row {
+				display: flex;
+				align-items: center;
+				gap: 12px;
+				padding: 8px;
+				border-radius: 6px;
+			}
+			.row:hover {
+				background: color-mix(in srgb, var(--heading) 8%, transparent);
+			}
+			.row.now {
+				background: color-mix(in srgb, var(--primary) 14%, transparent);
+			}
+			.row .t {
+				min-width: 0;
+				flex: 1;
+			}
+			.row .d {
+				font-size: 12px;
+				color: var(--caption);
+				font-variant-numeric: tabular-nums;
+			}
+			.empty-note {
+				max-width: 28rem;
+			}
+			.empty-note .h {
+				color: var(--heading);
+				font-weight: 600;
+				font-size: 20px;
+			}
+			.empty-note .b {
+				color: var(--caption);
+				margin-top: 8px;
+			}
+			.chip {
+				display: inline-flex;
+				align-items: center;
+				gap: 8px;
+				padding: 8px 16px;
+				border-radius: 9999px;
+				border: 1px solid var(--border);
+				color: var(--caption);
+				font-size: 14px;
+			}
+			.drawer {
+				position: absolute;
+				top: 0;
+				right: 0;
+				bottom: 0;
+				transform: translateX(100%);
+				transition: transform 250ms ease-out;
+				box-shadow: -20px 0 40px rgb(0 0 0 / 0.35);
+				z-index: 5;
+			}
+			.drawer.open {
+				transform: none;
+			}
+			.skeleton p {
+				height: 1.2em;
+				margin: 0.6em 0;
+				border-radius: 6px;
+				background: var(--muted);
+				opacity: 0.6;
+			}
+			/* Prototype switcher — deliberately not part of the design. */
+			.proto {
+				position: fixed;
+				top: 12px;
+				left: 50%;
+				transform: translateX(-50%);
+				z-index: 99;
+				display: flex;
+				align-items: center;
+				gap: 4px;
+				padding: 4px;
+				border-radius: 9999px;
+				background: #fff;
+				color: #111;
+				box-shadow: 0 8px 24px rgb(0 0 0 / 0.4);
+				font-size: 13px;
+				font-family: system-ui;
+			}
+			.proto button {
+				color: #111;
+				padding: 6px 12px;
+				border-radius: 9999px;
+			}
+			.proto button:hover {
+				background: #eee;
+			}
+			.proto .lbl {
+				min-width: 11rem;
+				text-align: center;
+				font-weight: 600;
+			}
+			.proto .sep {
+				width: 1px;
+				height: 20px;
+				background: #ddd;
+			}
+			.proto label {
+				padding: 6px 12px;
+				border-radius: 9999px;
+				cursor: pointer;
+			}
+			.proto label:hover {
+				background: #eee;
+			}
+		</style>
+	</head>
+	<body data-theme="black">
+		<div id="app"></div>
+		<div class="proto" role="toolbar" aria-label="Prototype controls">
+			<button id="prev" aria-label="Previous variant">←</button>
+			<span class="lbl" id="vlabel"></span>
+			<button id="next" aria-label="Next variant">→</button>
+			<span class="sep"></span>
+			<button id="state" title="L"></button>
+			<button id="theme" title="T"></button>
+			<label
+				>Kapak seç<input id="coverfile" type="file" accept="image/*" hidden
+			/></label>
+		</div>
+		<script>
+			const ICON = {
+				down: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>',
+				list: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 5H3M16 12H3M11 19H3M21 16V5M21 16a3 3 0 1 1-3 3 3 3 0 0 1 3-3z"/></svg>',
+				prev: '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M17 6v12l-8.5-6zM6 6h2v12H6z"/></svg>',
+				next: '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M7 6v12l8.5-6zM16 6h2v12h-2z"/></svg>',
+				pause:
+					'<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5h3v14H7zM14 5h3v14h-3z"/></svg>',
+				shuffle:
+					'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 14 4 4-4 4M18 2l4 4-4 4M2 18h1.97a4 4 0 0 0 3.3-1.7l5.45-8.6a4 4 0 0 1 3.3-1.7H22M2 6h1.97a4 4 0 0 1 3.3 1.7l.68 1.07M22 18h-6.04a4 4 0 0 1-3.3-1.8l-.36-.45"/></svg>',
+				repeat:
+					'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m17 2 4 4-4 4M3 11v-1a4 4 0 0 1 4-4h14M7 22l-4-4 4-4M21 13v1a4 4 0 0 1-4 4H3"/></svg>',
+				mic: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m11 7.6-7.7 9.6a1 1 0 0 0 .1 1.3l2.1 2.1a1 1 0 0 0 1.3.1L16.4 13M14 4.5a5.4 5.4 0 1 1 5.5 5.5 5.4 5.4 0 0 1-5.5-5.5"/></svg>',
+			};
+			// Invented filler lyrics (not a real song).
+			const LYRICS = `Neon on the river, cold light on the glass
+Every street I walk on folds into the past
+I kept your number written on my hand
+Faded by the morning, still I understand
+
+Run, run, the city never sleeps
+Hold on to the promises nobody keeps
+Run, run, the lights are calling out
+Whisper what you wanted, now you want to shout
+
+Taxi in the rain, a song I didn't choose
+Every word you gave me, I was bound to lose
+Mirror in the hallway, someone I don't know
+Smiling like a stranger, putting on a show
+
+Run, run, the city never sleeps
+Hold on to the promises nobody keeps`.split("\n");
+			const QUEUE = [
+				["Alone Again", "4:10"],
+				["Too Late", "3:59"],
+				["Hardest to Love", "3:31"],
+				["Scared to Live", "3:11"],
+				["Snowchild", "4:07"],
+				["Escape from LA", "5:55"],
+				["Heartless", "3:18"],
+				["Faith", "4:43"],
+				["Blinding Lights", "3:20"],
+				["In Your Eyes", "3:57"],
+				["Save Your Tears", "3:35"],
+			];
+			const NOW = 7;
+			const TRACK = {
+				title: "Faith",
+				artist: "The Weeknd",
+				album: "After Hours",
+			};
+			const VARIANTS = [
+				["0", "Bugünkü"],
+				["A", "Sahne"],
+				["B", "Odak"],
+				["C", "Bant"],
+			];
+			const STATES = [
+				["synced", "Senkron sözler"],
+				["plain", "Düz sözler"],
+				["none", "Söz yok"],
+				["loading", "Yükleniyor"],
+			];
+
+			const params = new URLSearchParams(location.search);
+			let variant = params.get("variant") ?? "A";
+			let lyricState = params.get("state") ?? "synced";
+			let theme = params.get("theme") ?? "black";
+			let queueOpen = false;
+			let activeLine = 0;
+			let progress = 40;
+			document.documentElement.style.setProperty(
+				"--cover-bg",
+				"linear-gradient(135deg,#7a1010,#2a0606 60%,#c43a1a)",
+			);
+			document.documentElement.style.setProperty("--accent-tint", "#3a0d0d");
+
+			const esc = (s) =>
+				s.replace(
+					/[&<>]/g,
+					(c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c],
+				);
+			const controls = (full = true) => `
+	<div class="controls">
+		${full ? `<button class="icon-btn" aria-label="Shuffle">${ICON.shuffle}</button>` : ""}
+		<button class="icon-btn" aria-label="Previous">${ICON.prev}</button>
+		<button class="play" aria-label="Pause">${ICON.pause}</button>
+		<button class="icon-btn" aria-label="Next">${ICON.next}</button>
+		${full ? `<button class="icon-btn" aria-label="Repeat">${ICON.repeat}</button>` : ""}
+	</div>`;
+			const seek = () =>
+				`<div class="seek"><span>1:52</span><div class="track"><i></i></div><span>4:43</span></div>`;
+			const queueRows = () =>
+				QUEUE.map(
+					([t, d], i) => `
+	<div class="row ${i === NOW ? "now" : ""}">
+		<div class="cover sm" style="width:40px;height:40px"></div>
+		<div class="t"><div class="title" style="font-size:14px">${t}</div><div class="meta" style="font-size:12px">The Weeknd</div></div>
+		<span class="d">${d}</span>
+	</div>`,
+				).join("");
+			const queuePanel = (extra = "") =>
+				`<aside class="queue ${extra}" aria-label="Queue"><h3>Queue</h3>${queueRows()}</aside>`;
+			const upNext = (n) =>
+				QUEUE.slice(NOW + 1, NOW + 1 + n)
+					.map(
+						([t, d]) => `
+	<div class="row"><div class="cover sm" style="width:40px;height:40px"></div>
+	<div class="t"><div class="title">${t}</div><div class="meta" style="font-size:12px">The Weeknd</div></div><span class="d">${d}</span></div>`,
+					)
+					.join("");
+			const lyricLines = (size, align = "left") => {
+				if (lyricState === "loading")
+					return `<div class="skeleton" style="width:100%">${[80, 65, 90, 50, 75, 60].map((w) => `<p style="width:${w}%"></p>`).join("")}</div>`;
+				return `<div class="lyrics ${lyricState === "synced" ? "synced" : ""}" data-lyrics style="text-align:${align};font-size:${size}px;line-height:1.5">
+		${LYRICS.map((l, i) => `<p data-i="${i}">${esc(l)}</p>`).join("")}</div>`;
+			};
+			const header = (left, extraBtns = "") => `
+	<header style="display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 24px;flex-shrink:0">
+		<div style="min-width:0">${left}</div>
+		<div style="display:flex;gap:4px">${extraBtns}<button class="icon-btn" aria-label="Close lyrics">${ICON.down}</button></div>
+	</header>`;
+			const queueBtn = () =>
+				`<button class="icon-btn" data-queue-toggle aria-pressed="${queueOpen}" aria-label="Queue">${ICON.list}</button>`;
+
+			const render = {
+				// Today: header strip, three columns.
+				0: () => `
+		<div class="view">
+			<header style="display:flex;align-items:center;justify-content:space-between;padding:12px 24px;border-bottom:1px solid var(--border)">
+				<div style="display:flex;gap:12px;align-items:center"><div class="cover sm" style="width:48px;height:48px"></div>
+				<div><div class="title" style="font-size:14px">${TRACK.title}</div><div class="meta" style="font-size:12px">${TRACK.artist} · ${TRACK.album}</div></div></div>
+				<button class="icon-btn">${ICON.down}</button>
+			</header>
+			<div style="flex:1;display:flex;min-height:0">
+				<div style="width:34%;border-right:1px solid var(--border);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;padding:24px">
+					<div class="cover" style="width:100%;max-width:24rem;aspect-ratio:1"></div>
+					<div style="text-align:center;max-width:100%"><div class="title" style="font-size:24px">${TRACK.title}</div><div class="meta" style="font-size:16px">${TRACK.artist} · ${TRACK.album}</div></div>
+					<div style="width:100%;max-width:36rem">${seek()}${controls()}</div>
+				</div>
+				<section style="flex:1;display:flex;padding:48px 32px;min-width:0;overflow:auto">
+					${
+						lyricState === "none"
+							? `<div class="empty-note" style="margin:auto;text-align:center"><div class="h">No lyrics yet</div><div class="b">This Track has no lyrics stored on your Music Server. Tag the file with lyrics (Picard writes them) and import it again.</div></div>`
+							: `<div style="max-width:42rem;margin:0 auto;width:100%">${lyricLines(24)}</div>`
+					}
+				</section>
+				<aside class="queue" style="width:clamp(14rem,22vw,18rem)"><h3>Queue</h3>${queueRows()}</aside>
+			</div>
+		</div>`,
+
+				// A — Stage: cover + transport on the left, lyrics own the rest; Queue is a drawer.
+				// No lyrics: the right side becomes a quiet note and an "Up next" list instead of a void.
+				A: () => `
+		<div class="view" style="overflow:hidden">
+			${header(`<span class="meta" style="font-size:12px;text-transform:uppercase;letter-spacing:0.2em">Lyrics</span>`, queueBtn())}
+			<div style="flex:1;display:flex;min-height:0;padding:0 48px 48px;gap:64px">
+				<div style="width:min(40%,30rem);display:flex;flex-direction:column;justify-content:center;gap:24px">
+					<div class="cover" style="width:100%;aspect-ratio:1"></div>
+					<div><div class="title" style="font-size:24px">${TRACK.title}</div><div class="meta" style="font-size:16px">${TRACK.artist} · ${TRACK.album}</div></div>
+					<div>${seek()}<div style="margin-top:8px">${controls()}</div></div>
+				</div>
+				<section style="flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;min-height:0;overflow:hidden">
+					${
+						lyricState === "none"
+							? `
+						<div class="empty-note">
+							<div class="h">No lyrics for this Track</div>
+							<div class="b">Tag the file with lyrics (Picard writes them) and import it again.</div>
+						</div>
+						<div style="margin-top:48px;max-width:28rem">
+							<h3 class="meta" style="font-size:12px;font-weight:500;text-transform:uppercase;letter-spacing:0.12em;margin:0 0 8px">Up next</h3>
+							${upNext(4)}
+						</div>`
+							: `<div style="flex:1;display:flex;flex-direction:column;min-height:0;max-width:42rem;-webkit-mask-image:linear-gradient(transparent,#000 12%,#000 88%,transparent);mask-image:linear-gradient(transparent,#000 12%,#000 88%,transparent);overflow:hidden">
+							<div style="height:100%;overflow:hidden;position:relative" data-scroller><div style="padding:40vh 0">${lyricLines(30)}</div></div></div>`
+					}
+				</section>
+			</div>
+			${queuePanel(`drawer ${queueOpen ? "open" : ""}`)}
+		</div>`,
+
+				// B — Focus: cover-tinted backdrop, centred lyrics, transport as a slim bottom strip.
+				// No lyrics: the cover takes the stage with a one-line chip.
+				B: () => `
+		<div class="view" style="overflow:hidden;background:color-mix(in srgb, var(--accent-tint) 70%, var(--background))">
+			${header("", queueBtn())}
+			<section style="flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 48px">
+				${
+					lyricState === "none"
+						? `
+					<div class="cover" style="width:min(42vh,26rem);aspect-ratio:1"></div>
+					<div style="margin-top:32px;text-align:center"><div class="title" style="font-size:30px">${TRACK.title}</div><div class="meta" style="font-size:16px">${TRACK.artist} · ${TRACK.album}</div></div>
+					<span class="chip" style="margin-top:24px">${ICON.mic} No lyrics for this Track · tag it with Picard and import again</span>`
+						: `<div style="width:100%;max-width:48rem;flex:1;min-height:0;overflow:hidden;-webkit-mask-image:linear-gradient(transparent,#000 15%,#000 85%,transparent);mask-image:linear-gradient(transparent,#000 15%,#000 85%,transparent)">
+						<div style="height:100%;overflow:hidden;position:relative" data-scroller><div style="padding:40vh 0">${lyricLines(30, "center")}</div></div></div>`
+				}
+			</section>
+			<footer style="display:grid;grid-template-columns:1fr minmax(0,36rem) 1fr;align-items:center;gap:24px;padding:16px 24px;border-top:1px solid color-mix(in srgb, var(--heading) 10%, transparent)">
+				<div style="display:flex;gap:12px;align-items:center;min-width:0">
+					<div class="cover sm" style="width:56px;height:56px"></div>
+					<div style="min-width:0"><div class="title">${TRACK.title}</div><div class="meta" style="font-size:12px">${TRACK.artist} · ${TRACK.album}</div></div>
+				</div>
+				<div>${controls()}<div style="margin-top:4px">${seek()}</div></div>
+				<div></div>
+			</footer>
+			${queuePanel(`drawer ${queueOpen ? "open" : ""}`)}
+		</div>`,
+
+				// C — Band: horizontal now-playing band on top, lyrics + Queue below.
+				// No lyrics: the note shrinks to a narrow column and the Queue widens.
+				C: () => `
+		<div class="view">
+			<header style="display:flex;align-items:center;gap:24px;padding:24px 32px;border-bottom:1px solid var(--border)">
+				<div class="cover" style="width:96px;height:96px;box-shadow:none"></div>
+				<div style="width:16rem;min-width:0"><div class="title" style="font-size:20px">${TRACK.title}</div><div class="meta">${TRACK.artist} · ${TRACK.album}</div></div>
+				<div style="flex:1;max-width:36rem;margin:0 auto">${controls()}<div style="margin-top:4px">${seek()}</div></div>
+				<button class="icon-btn" style="align-self:flex-start">${ICON.down}</button>
+			</header>
+			<div style="flex:1;display:flex;min-height:0">
+				${
+					lyricState === "none"
+						? `
+					<section style="width:24rem;padding:32px;flex-shrink:0">
+						<div class="empty-note"><div class="h">No lyrics for this Track</div><div class="b">Tag the file with lyrics (Picard writes them) and import it again.</div></div>
+					</section>
+					<aside class="queue" style="flex:1;width:auto;padding:24px 32px"><h3>Queue</h3>${queueRows()}</aside>`
+						: `<section style="flex:1;min-width:0;padding:32px 48px;overflow:hidden"><div style="max-width:42rem;height:100%;overflow:hidden;position:relative" data-scroller>${lyricLines(24)}</div></section>
+					   ${queuePanel()}`
+				}
+			</div>
+		</div>`,
+			};
+
+			function draw() {
+				document.body.dataset.theme = theme;
+				document.getElementById("app").innerHTML = render[variant]();
+				const [, vname] = VARIANTS.find(([k]) => k === variant);
+				document.getElementById("vlabel").textContent = `${variant} (${vname})`;
+				document.getElementById("state").textContent = STATES.find(
+					([k]) => k === lyricState,
+				)[1];
+				document.getElementById("theme").textContent =
+					theme === "black" ? "Tema: siyah" : "Tema: Earthly";
+				document
+					.querySelector("[data-queue-toggle]")
+					?.addEventListener("click", () => {
+						queueOpen = !queueOpen;
+						draw();
+					});
+				highlight(true);
+				const q = new URLSearchParams({ variant, state: lyricState, theme });
+				history.replaceState(null, "", `?${q}`);
+			}
+			function highlight(instant) {
+				document.documentElement.style.setProperty(
+					"--progress",
+					`${progress}%`,
+				);
+				if (lyricState !== "synced") return;
+				const lines = document.querySelectorAll("[data-lyrics] p");
+				lines.forEach(
+					(p, i) =>
+						(p.className =
+							i === activeLine ? "now" : i < activeLine ? "past" : ""),
+				);
+				const scroller = document.querySelector("[data-scroller]");
+				const now = lines[activeLine];
+				if (scroller && now)
+					scroller.scrollTo({
+						top:
+							now.offsetTop - scroller.clientHeight / 2 + now.clientHeight / 2,
+						behavior: instant ? "auto" : "smooth",
+					});
+			}
+			setInterval(() => {
+				do activeLine = (activeLine + 1) % LYRICS.length;
+				while (LYRICS[activeLine] === "");
+				progress = (progress + 1.2) % 100;
+				highlight(false);
+			}, 2600);
+
+			const cycle = (d) => {
+				const i = VARIANTS.findIndex(([k]) => k === variant);
+				variant = VARIANTS[(i + d + VARIANTS.length) % VARIANTS.length][0];
+				draw();
+			};
+			const nextState = () => {
+				const i = STATES.findIndex(([k]) => k === lyricState);
+				lyricState = STATES[(i + 1) % STATES.length][0];
+				draw();
+			};
+			const toggleTheme = () => {
+				theme = theme === "black" ? "earthly" : "black";
+				draw();
+			};
+			document.getElementById("prev").onclick = () => cycle(-1);
+			document.getElementById("next").onclick = () => cycle(1);
+			document.getElementById("state").onclick = nextState;
+			document.getElementById("theme").onclick = toggleTheme;
+			document.addEventListener("keydown", (e) => {
+				if (e.target.closest?.("input,textarea,[contenteditable]")) return;
+				if (e.key === "ArrowLeft") cycle(-1);
+				else if (e.key === "ArrowRight") cycle(1);
+				else if (e.key.toLowerCase() === "l") nextState();
+				else if (e.key.toLowerCase() === "t") toggleTheme();
+				else if (e.key.toLowerCase() === "q") {
+					queueOpen = !queueOpen;
+					draw();
+				}
+			});
+			// Pick a real cover to judge the layouts with actual artwork; B tints its backdrop from it.
+			document.getElementById("coverfile").onchange = (e) => {
+				const file = e.target.files[0];
+				if (!file) return;
+				const url = URL.createObjectURL(file);
+				document.documentElement.style.setProperty(
+					"--cover-bg",
+					`url("${url}")`,
+				);
+				const img = new Image();
+				img.onload = () => {
+					const c = document.createElement("canvas");
+					c.width = c.height = 8;
+					const ctx = c.getContext("2d");
+					ctx.drawImage(img, 0, 0, 8, 8);
+					const d = ctx.getImageData(0, 0, 8, 8).data;
+					let r = 0,
+						g = 0,
+						b = 0;
+					for (let i = 0; i < d.length; i += 4) {
+						r += d[i];
+						g += d[i + 1];
+						b += d[i + 2];
+					}
+					const n = d.length / 4,
+						k = 0.45; // darken so text stays readable
+					document.documentElement.style.setProperty(
+						"--accent-tint",
+						`rgb(${(r / n) * k} ${(g / n) * k} ${(b / n) * k})`,
+					);
+				};
+				img.src = url;
+			};
+			draw();
+		</script>
+	</body>
+</html>
