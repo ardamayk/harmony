@@ -9,8 +9,8 @@ use tokio::sync::Mutex;
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 /// LRCLIB starts fetching a missing Track in the background on the first
-/// request, so nothing found is asked again after three days; a failure
-/// after an hour.
+/// request, so nothing found, or plain lyrics only, is asked again after
+/// three days, when synced ones may exist; a failure after an hour.
 const MISSING_RETRY_SECONDS: i64 = 3 * 24 * 60 * 60;
 const FAILED_RETRY_SECONDS: i64 = 60 * 60;
 /// LRCLIB asks clients to send requests one at a time with a short gap.
@@ -46,8 +46,10 @@ pub struct Lyrics {
     last_request: Mutex<Option<Instant>>,
 }
 
-fn is_due(outcome: Outcome, age_seconds: i64) -> bool {
+/// `plain`: found lyrics without timestamps, worth asking again for synced.
+fn is_due(outcome: Outcome, age_seconds: i64, plain: bool) -> bool {
     match outcome {
+        Outcome::Found if plain => age_seconds >= MISSING_RETRY_SECONDS,
         Outcome::Found => false,
         Outcome::Missing => age_seconds >= MISSING_RETRY_SECONDS,
         Outcome::Failed => age_seconds >= FAILED_RETRY_SECONDS,
@@ -81,9 +83,10 @@ impl Lyrics {
             return Ok(from_file);
         }
         let stored = self.repo.get(track_id).await?;
-        let due = stored
-            .as_ref()
-            .is_none_or(|stored| is_due(stored.outcome, stored.age_seconds));
+        let due = stored.as_ref().is_none_or(|stored| {
+            let plain = !stored.lyrics.trim().is_empty() && !lrclib::is_synced(&stored.lyrics);
+            is_due(stored.outcome, stored.age_seconds, plain)
+        });
         if !self.enabled || !due {
             return Ok(stored.map(|stored| stored.lyrics).unwrap_or_default());
         }
@@ -134,15 +137,18 @@ mod tests {
 
     #[test]
     fn repeats_lookups_only_when_due() {
-        assert!(!is_due(Outcome::Found, i64::MAX));
-        assert!(!is_due(Outcome::Missing, MISSING_RETRY_SECONDS - 1));
-        assert!(is_due(Outcome::Missing, MISSING_RETRY_SECONDS));
-        assert!(!is_due(Outcome::Failed, FAILED_RETRY_SECONDS - 1));
-        assert!(is_due(Outcome::Failed, FAILED_RETRY_SECONDS));
+        assert!(!is_due(Outcome::Found, i64::MAX, false));
+        assert!(!is_due(Outcome::Found, MISSING_RETRY_SECONDS - 1, true));
+        assert!(is_due(Outcome::Found, MISSING_RETRY_SECONDS, true));
+        assert!(!is_due(Outcome::Missing, MISSING_RETRY_SECONDS - 1, false));
+        assert!(is_due(Outcome::Missing, MISSING_RETRY_SECONDS, false));
+        assert!(!is_due(Outcome::Failed, FAILED_RETRY_SECONDS - 1, false));
+        assert!(is_due(Outcome::Failed, FAILED_RETRY_SECONDS, false));
     }
 
-    /// Stands in for LRCLIB: lyrics for "Hero" by Skillet at 187 s, nothing
-    /// else; counts the requests and keeps the last query.
+    /// Stands in for LRCLIB: synced lyrics for "Hero" at 187 s; for "Lucy"
+    /// plain ones from get and a synced edition 1.4 s longer from search;
+    /// nothing else. Counts the requests and keeps the last get query.
     async fn fake_lrclib() -> (String, Arc<AtomicUsize>, Arc<std::sync::Mutex<String>>) {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let origin = format!("http://{}", listener.local_addr().unwrap());
@@ -152,20 +158,33 @@ mod tests {
         let app = Router::new().fallback(move |uri: Uri| {
             counter.fetch_add(1, Ordering::SeqCst);
             let query = uri.query().unwrap_or("").to_owned();
-            *seen.lock().unwrap() = query.clone();
+            if uri.path() == "/api/get" {
+                *seen.lock().unwrap() = query.clone();
+            }
             async move {
-                if uri.path() == "/api/get"
-                    && query.contains("track_name=Hero")
-                    && query.contains("duration=187")
-                {
-                    return Json(json!({
-                        "instrumental": false,
-                        "plainLyrics": "I'm just a step away",
-                        "syncedLyrics": "[00:12.00] I'm just a step away"
+                match uri.path() {
+                    "/api/get" if query.contains("track_name=Hero") && query.contains("duration=187") => {
+                        Json(json!({
+                            "duration": 187.0,
+                            "plainLyrics": "I'm just a step away",
+                            "syncedLyrics": "[00:12.00] I'm just a step away"
+                        }))
+                        .into_response()
+                    }
+                    "/api/get" if query.contains("track_name=Lucy") => Json(json!({
+                        "duration": 222.0,
+                        "plainLyrics": "Hey Lucy",
+                        "syncedLyrics": null
                     }))
-                    .into_response();
+                    .into_response(),
+                    "/api/search" if query.contains("track_name=Lucy") => Json(json!([
+                        {"duration": 240.0, "plainLyrics": "x", "syncedLyrics": "[00:01.00] live"},
+                        {"duration": 223.4, "plainLyrics": "x", "syncedLyrics": "[00:20.00] Hey Lucy"}
+                    ]))
+                    .into_response(),
+                    "/api/search" => Json(json!([])).into_response(),
+                    _ => StatusCode::NOT_FOUND.into_response(),
                 }
-                StatusCode::NOT_FOUND.into_response()
             }
         });
         tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
@@ -173,7 +192,8 @@ mod tests {
     }
 
     /// A library with Skillet's "Hero" (no lyrics in the file, 186.6 s),
-    /// "Monster" (lyrics in the file) and "Lucy" (unknown to LRCLIB).
+    /// "Monster" (lyrics in the file), "Lucy" (plain on LRCLIB, synced in
+    /// another edition) and "Gone" (unknown to LRCLIB).
     async fn service(base_url: &str, enabled: bool) -> (tempfile::TempDir, Lyrics) {
         let dir = tempfile::tempdir().unwrap();
         let migrations = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations");
@@ -187,7 +207,8 @@ mod tests {
             "INSERT INTO tracks (id, album_id, title, title_sort, artist_name, format, file_path, duration_ms, lyrics)
              VALUES ('hero', 'al', 'Hero', 'hero', 'Skillet', 'flac', '/1.flac', 186600, ''),
                     ('monster', 'al', 'Monster', 'monster', 'Skillet', 'flac', '/2.flac', 178000, 'From the file'),
-                    ('lucy', 'al', 'Lucy', 'lucy', 'Skillet', 'flac', '/3.flac', 222000, '')",
+                    ('lucy', 'al', 'Lucy', 'lucy', 'Skillet', 'flac', '/3.flac', 222000, ''),
+                    ('gone', 'al', 'Gone', 'gone', 'Skillet', 'flac', '/4.flac', 200000, '')",
         ] {
             sqlx::query(statement).execute(&pool).await.unwrap();
         }
@@ -222,13 +243,28 @@ mod tests {
         let (_dir, lyrics) = service(&origin, true).await;
         assert_eq!(lyrics.lyrics("monster").await.unwrap(), "From the file");
         assert_eq!(requests.load(Ordering::SeqCst), 0);
-        assert_eq!(lyrics.lyrics("lucy").await.unwrap(), "");
-        assert_eq!(lyrics.lyrics("lucy").await.unwrap(), "");
-        assert_eq!(requests.load(Ordering::SeqCst), 1);
+        // Not found by get, so the search runs too; then nothing is asked.
+        assert_eq!(lyrics.lyrics("gone").await.unwrap(), "");
+        assert_eq!(lyrics.lyrics("gone").await.unwrap(), "");
+        assert_eq!(requests.load(Ordering::SeqCst), 2);
         assert!(matches!(
             lyrics.lyrics("unknown").await,
             Err(LyricsError::NotFound)
         ));
+    }
+
+    #[tokio::test]
+    async fn takes_a_synced_edition_of_the_same_length_over_plain_lyrics() {
+        let (origin, requests, _) = fake_lrclib().await;
+        let (_dir, lyrics) = service(&origin, true).await;
+        assert_eq!(lyrics.lyrics("lucy").await.unwrap(), "[00:20.00] Hey Lucy");
+        assert_eq!(requests.load(Ordering::SeqCst), 2);
+        // A synced hit is the found Track itself: no search for "Hero".
+        assert_eq!(
+            lyrics.lyrics("hero").await.unwrap(),
+            "[00:12.00] I'm just a step away"
+        );
+        assert_eq!(requests.load(Ordering::SeqCst), 3);
     }
 
     #[tokio::test]
