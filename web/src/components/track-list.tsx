@@ -244,7 +244,7 @@ export function TrackList({
 														: "Add to favorites"
 												}
 												className={cn(
-													"rounded-full text-caption hover:bg-muted hover:text-heading",
+													"rounded-full text-caption hover:bg-muted hover:text-heading dark:hover:bg-muted",
 													favorited && "text-heading",
 												)}
 												onClick={(event) => {
