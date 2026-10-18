@@ -4,6 +4,7 @@ export type LyricLine = { text: string; time?: number };
 export type ParsedLyrics = { synced: boolean; lines: LyricLine[] };
 
 const TIMESTAMP = /\[(\d+):(\d+(?:\.\d+)?)\]/g;
+const OFFSET = /^\[offset:\s*([+-]?\d+)\s*\]$/im;
 
 /**
  * Splits stored lyrics into lines. LRC text (`[mm:ss.xx] words`) becomes
@@ -12,6 +13,8 @@ const TIMESTAMP = /\[(\d+):(\d+(?:\.\d+)?)\]/g;
  */
 export function parseLyrics(text: string): ParsedLyrics | null {
 	const rows = text.split(/\r?\n/).map((row) => row.trimEnd());
+	// LRC's `[offset:ms]`: a positive offset shows every line that much sooner.
+	const offset = Number(text.match(OFFSET)?.[1] ?? 0) / 1000;
 	const timed: LyricLine[] = [];
 	for (const row of rows) {
 		const times = [...row.matchAll(TIMESTAMP)].map(
@@ -19,7 +22,8 @@ export function parseLyrics(text: string): ParsedLyrics | null {
 		);
 		const words = row.replace(TIMESTAMP, "").trim();
 		// One line may carry several timestamps when a chorus repeats.
-		for (const time of times) timed.push({ time, text: words });
+		for (const time of times)
+			timed.push({ time: Math.max(0, time - offset), text: words });
 	}
 	if (timed.length > 0) {
 		timed.sort((a, b) => (a.time ?? 0) - (b.time ?? 0));

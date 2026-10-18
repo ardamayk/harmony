@@ -126,7 +126,7 @@ describe("artist detail route", () => {
 		expect(screen.getByText("1 album")).toBeTruthy();
 		expect(mocks.listAlbums).toHaveBeenCalledWith({
 			artistId: "artist-1",
-			limit: 100,
+			limit: 500,
 		});
 		expect(await screen.findByText("Awake")).toBeTruthy();
 		expect(
@@ -145,6 +145,27 @@ describe("artist detail route", () => {
 		const photo = document.querySelector('img[src="/photo/artist-1"]');
 		expect(photo?.className).toContain("aspect-square");
 		expect(photo?.parentElement?.className).toContain("min-h-artist-banner");
+	});
+
+	it("loads every page of a discography larger than one page", async () => {
+		mocks.getArtist.mockResolvedValue({ id: "artist-1", name: "Skillet" });
+		mocks.listAlbums
+			.mockResolvedValueOnce({ items: [album], total: 2 })
+			.mockResolvedValueOnce({
+				items: [{ ...album, id: "album-2", title: "Comatose" }],
+				total: 2,
+			});
+		mocks.getArtistBiography.mockResolvedValue(null);
+
+		renderPage();
+
+		expect(await screen.findByText("Comatose")).toBeTruthy();
+		expect(screen.getByText("Awake")).toBeTruthy();
+		expect(mocks.listAlbums).toHaveBeenLastCalledWith({
+			artistId: "artist-1",
+			limit: 500,
+			offset: 1,
+		});
 	});
 
 	it("leaves the About section out when there is no biography", async () => {

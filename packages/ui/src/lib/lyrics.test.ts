@@ -17,6 +17,18 @@ describe("parseLyrics", () => {
 		});
 	});
 
+	it("applies the LRC offset tag: positive shows lines sooner", () => {
+		expect(
+			parseLyrics("[offset:+1500]\n[00:10.00] Late\n[00:01.00] Start")?.lines,
+		).toEqual([
+			{ time: 0, text: "Start" },
+			{ time: 8.5, text: "Late" },
+		]);
+		expect(parseLyrics("[offset:-500]\n[00:10.00] Line")?.lines[0].time).toBe(
+			10.5,
+		);
+	});
+
 	it("keeps plain lines and collapses blank runs", () => {
 		expect(parseLyrics("One\n\n\n\nTwo\r\n")).toEqual({
 			synced: false,

@@ -12,7 +12,7 @@ const inputVariants = cva(
 				default: "",
 				// Search field on a shell surface (page header, Player Bar).
 				shell:
-					"h-11 rounded-lg border-border bg-player text-sm text-player-foreground placeholder:text-player-foreground/55",
+					"h-11 rounded-lg border-border bg-player text-sm text-player-foreground placeholder:text-player-foreground/75",
 			},
 			leadingIcon: {
 				true: "pl-8",

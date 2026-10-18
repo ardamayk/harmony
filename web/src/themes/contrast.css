@@ -121,9 +121,13 @@
 	--text: var(--player-foreground);
 	--foreground: var(--player-foreground);
 	--queue-foreground: var(--player-foreground);
-	--caption: color-mix(in srgb, var(--player-foreground) 78%, #1e2b3b);
+	/* 84%: 4.5:1 on the shell's hover step (Queue row hover), still under body text. */
+	--caption: color-mix(in srgb, var(--player-foreground) 84%, #1e2b3b);
 	--muted-foreground: var(--caption);
 	--border: var(--sidebar-border);
+	/* Raised controls (Top Nav search) take the shell's pill step, as the
+	   Queue's Clear button does; the light card left light text at 1.7:1. */
+	--card: var(--player-pill);
 	/* Hover and active steps on the dark shell: opacity steps of its title
 	   tone, hover half the active tint. */
 	--shell-active: color-mix(in srgb, var(--player-title) 16%, transparent);
