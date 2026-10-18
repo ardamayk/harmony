@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO track_online_lyrics (track_id, outcome, lyrics, checked_at)\n            VALUES (?1, ?2, ?3, CURRENT_TIMESTAMP)\n            ON CONFLICT (track_id) DO UPDATE SET outcome = excluded.outcome,\n                lyrics = excluded.lyrics, checked_at = excluded.checked_at",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "5992b42f74c2cdb6970f356e748df6fe371bcc9f291b9bb10cde99b47d907fa5"
+}

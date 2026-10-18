@@ -53,7 +53,7 @@ describe("SeekBar", () => {
 
 		const buffered = screen.getByTestId("seek-buffered")
 			.firstElementChild as HTMLElement;
-		expect(buffered.style.width).toBe("50%");
+		expect(buffered.style.getPropertyValue("--buffered")).toBe("50.00%");
 
 		fireEvent.pointerLeave(bar);
 		expect(screen.queryByTestId("seek-tooltip")).toBeNull();
@@ -115,7 +115,7 @@ describe("SeekBar", () => {
 		const svg = screen.getByTestId("seek-waveform");
 		expect(svg.querySelectorAll("rect")).toHaveLength(12);
 		const played = screen.getByTestId("seek-waveform-played") as HTMLElement;
-		expect(played.style.clipPath).toBe("inset(0 75.00% 0 0)");
+		expect(played.style.getPropertyValue("--clip-right")).toBe("75.00%");
 		expect(screen.getByLabelText("Seek").className).toContain(
 			"player-seek-slider--waveform",
 		);

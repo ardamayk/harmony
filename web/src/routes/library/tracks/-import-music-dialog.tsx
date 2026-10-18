@@ -8,10 +8,19 @@ import {
 	LoaderCircle,
 	X,
 } from "lucide-react";
-import { Dialog as DialogPrimitive } from "radix-ui";
-import { memo, useId, useState } from "react";
-import { Badge } from "#/components/ui/badge";
+import { type CSSProperties, memo, useId, useState } from "react";
 import { Button } from "#/components/ui/button";
+import { Checkbox } from "#/components/ui/checkbox";
+import {
+	Dialog,
+	DialogClose,
+	DialogContent,
+	DialogDescription,
+	DialogTitle,
+} from "#/components/ui/dialog";
+import { Input } from "#/components/ui/input";
+import { Label } from "#/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "#/components/ui/radio-group";
 import { isDesktopClient } from "#/desktop/bridge";
 import { cn } from "#/lib/utils.ts";
 import {
@@ -33,13 +42,13 @@ export function ImportMusicDialog({
 	isOpen,
 	onOpenChange,
 	onCommitted,
-	onCloseAutoFocus,
+	finalFocus,
 }: {
 	isOpen: boolean;
 	onOpenChange: (isOpen: boolean) => void;
 	onCommitted: () => Promise<void>;
 	/** Restores focus to the opener; the dialog has no DialogTrigger. */
-	onCloseAutoFocus?: (event: Event) => void;
+	finalFocus?: () => HTMLElement | true;
 }) {
 	const workflow = useManagedImportWorkflow({ onOpenChange, onCommitted });
 
@@ -49,7 +58,7 @@ export function ImportMusicDialog({
 				<Button
 					type="button"
 					onClick={() => onOpenChange(true)}
-					className="fixed bottom-24 right-6 z-40 shadow-lg"
+					className="fixed bottom-24 right-6 z-40"
 					aria-label="Open current import"
 				>
 					{workflow.isCompleted
@@ -59,128 +68,117 @@ export function ImportMusicDialog({
 							: "Ready for review"}
 				</Button>
 			) : null}
-			<DialogPrimitive.Root
-				open={isOpen}
-				onOpenChange={workflow.handleOpenChange}
-			>
-				<DialogPrimitive.Portal>
-					{/*
-					 * The desktop client skips backdrop-blur: the dialog repaints on
-					 * every progress tick, and a blurred full-screen backdrop makes
-					 * WebKitGTK re-rasterize the whole window for each repaint.
-					 */}
-					<DialogPrimitive.Overlay
-						className={cn(
-							"fixed inset-0 z-50 bg-background/80",
-							!isDesktopClient() && "backdrop-blur-sm",
-						)}
-					/>
-					<DialogPrimitive.Content
-						aria-describedby="import-music-description"
-						onCloseAutoFocus={onCloseAutoFocus}
-						className="-translate-x-1/2 -translate-y-1/2 fixed top-1/2 left-1/2 z-50 flex max-h-[90dvh] w-[calc(100vw-1rem)] max-w-5xl flex-col overflow-hidden rounded-lg border border-border bg-background shadow-xl outline-none sm:w-[calc(100vw-3rem)]"
+			<Dialog open={isOpen} onOpenChange={workflow.handleOpenChange}>
+				{/*
+				 * The desktop client skips backdrop-blur: the dialog repaints on
+				 * every progress tick, and a blurred full-screen backdrop makes
+				 * WebKitGTK re-rasterize the whole window for each repaint.
+				 */}
+				<DialogContent
+					finalFocus={finalFocus}
+					overlayClassName={cn(
+						"bg-background/80",
+						!isDesktopClient() && "backdrop-blur-sm",
+					)}
+					className="flex max-h-dialog-height max-w-5xl flex-col overflow-hidden bg-background p-0 text-foreground"
+				>
+					<ImportDialogHeader isBusy={false} />
+					<div
+						hidden={workflow.entries.length > 0}
+						className={
+							workflow.entries.length > 0
+								? "hidden"
+								: "grid gap-6 overflow-y-auto px-4 py-6 sm:px-6 scrollbar-hidden"
+						}
 					>
-						<ImportDialogHeader isBusy={false} />
-						<div
-							hidden={workflow.entries.length > 0}
-							className={
-								workflow.entries.length > 0
-									? "hidden"
-									: "grid gap-6 overflow-y-auto px-4 py-6 sm:px-6 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-							}
-						>
-							<ImportFilePicker
-								isBusy={workflow.isPickerLocked}
-								onFiles={workflow.handleFiles}
-								onDesktopSelection={workflow.handleDesktopSelection}
-							/>
-						</div>
-						<ImportActivity errorMessage={workflow.errorMessage} />
-						<ImportSummary
-							entries={workflow.entries}
-							isConfirming={workflow.isConfirming}
-							isCompleted={workflow.isCompleted}
+						<ImportFilePicker
+							isBusy={workflow.isPickerLocked}
+							onFiles={workflow.handleFiles}
+							onDesktopSelection={workflow.handleDesktopSelection}
 						/>
-						{/* The single scroll region of the review step. Nested sections must
-						 * not become scroll containers of their own: a non-overflowing
-						 * `overflow-y-auto` + `overscroll-contain` child swallows wheel
-						 * events and the dialog stops scrolling with the mouse. */}
-						<div className="min-h-0 flex-1 overflow-y-auto overscroll-contain [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-							{!workflow.isCompleted && workflow.batchId ? (
-								<ImportAlbumReview
-									batchId={workflow.batchId}
-									albums={workflow.albums}
-									decisions={workflow.albumDecisions}
-									isBusy={workflow.isSelectionLocked}
-									onChange={workflow.handleAlbumDecision}
-									onUploaded={workflow.handleArtworkUploaded}
-									onUploadStateChange={workflow.handleArtworkUploadState}
-								/>
-							) : null}
-							{!workflow.isCompleted ? (
-								<ImportFileAlternatives
-									entries={workflow.entries}
-									isBusy={workflow.isSelectionLocked}
-									onSelect={workflow.handleSelectionChange}
-								/>
-							) : null}
-							{!workflow.isBusy && !workflow.isCompleted
-								? workflow.reviewProblems.map((problem) => (
-										<p
-											key={problem}
-											aria-live="polite"
-											className="px-4 py-1 text-amber-600 text-sm sm:px-6"
-										>
-											{problem}
-										</p>
-									))
-								: null}
-							<ImportFileList
+					</div>
+					<ImportActivity errorMessage={workflow.errorMessage} />
+					<ImportSummary
+						entries={workflow.entries}
+						isConfirming={workflow.isConfirming}
+						isCompleted={workflow.isCompleted}
+					/>
+					{/* The single scroll region of the review step. Nested sections must
+					 * not become scroll containers of their own: a non-overflowing
+					 * `overflow-y-auto` + `overscroll-contain` child swallows wheel
+					 * events and the dialog stops scrolling with the mouse. */}
+					<div className="min-h-0 flex-1 overflow-y-auto overscroll-contain scrollbar-hidden">
+						{!workflow.isCompleted && workflow.batchId ? (
+							<ImportAlbumReview
+								batchId={workflow.batchId}
+								albums={workflow.albums}
+								decisions={workflow.albumDecisions}
+								isBusy={workflow.isSelectionLocked}
+								onChange={workflow.handleAlbumDecision}
+								onUploaded={workflow.handleArtworkUploaded}
+								onUploadStateChange={workflow.handleArtworkUploadState}
+							/>
+						) : null}
+						{!workflow.isCompleted ? (
+							<ImportFileAlternatives
 								entries={workflow.entries}
 								isBusy={workflow.isSelectionLocked}
-								isConfirming={workflow.isConfirming}
-								onSelectionChange={workflow.handleSelectionChange}
-								onDuplicateDecisionChange={
-									workflow.handleDuplicateDecisionChange
-								}
+								onSelect={workflow.handleSelectionChange}
 							/>
-						</div>
-						<div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-border border-t px-4 py-3 sm:px-6">
-							{workflow.canRetry ? (
-								<Button
-									type="button"
-									variant="outline"
-									onClick={() => void workflow.handleRetry()}
-								>
-									Retry failed uploads
-								</Button>
-							) : null}
-							{workflow.canConfirm &&
-							workflow.entries.some((entry) => entry.state !== "accepted") ? (
-								<p className="text-caption text-sm">
-									{
-										workflow.entries.filter(
-											(entry) => entry.state !== "accepted",
-										).length
-									}{" "}
-									unsuccessful files will not be imported.
-								</p>
-							) : null}
-							<ImportDialogFooter
-								canConfirm={workflow.canConfirm}
-								isBusy={workflow.isCloseLocked}
-								isCompleted={workflow.isCompleted}
-								onCancel={
-									workflow.isCompleted
-										? () => workflow.handleOpenChange(false)
-										: workflow.handleCancel
-								}
-								onConfirm={workflow.handleConfirm}
-							/>
-						</div>
-					</DialogPrimitive.Content>
-				</DialogPrimitive.Portal>
-			</DialogPrimitive.Root>
+						) : null}
+						{!workflow.isBusy && !workflow.isCompleted
+							? workflow.reviewProblems.map((problem) => (
+									<p
+										key={problem}
+										aria-live="polite"
+										className="px-4 py-1 text-warning text-sm sm:px-6"
+									>
+										{problem}
+									</p>
+								))
+							: null}
+						<ImportFileList
+							entries={workflow.entries}
+							isBusy={workflow.isSelectionLocked}
+							isConfirming={workflow.isConfirming}
+							onSelectionChange={workflow.handleSelectionChange}
+							onDuplicateDecisionChange={workflow.handleDuplicateDecisionChange}
+						/>
+					</div>
+					<div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-border border-t px-4 py-3 sm:px-6">
+						{workflow.canRetry ? (
+							<Button
+								type="button"
+								variant="outline"
+								onClick={() => void workflow.handleRetry()}
+							>
+								Retry failed uploads
+							</Button>
+						) : null}
+						{workflow.canConfirm &&
+						workflow.entries.some((entry) => entry.state !== "accepted") ? (
+							<p className="text-caption text-sm">
+								{
+									workflow.entries.filter((entry) => entry.state !== "accepted")
+										.length
+								}{" "}
+								unsuccessful files will not be imported.
+							</p>
+						) : null}
+						<ImportDialogFooter
+							canConfirm={workflow.canConfirm}
+							isBusy={workflow.isCloseLocked}
+							isCompleted={workflow.isCompleted}
+							onCancel={
+								workflow.isCompleted
+									? () => workflow.handleOpenChange(false)
+									: workflow.handleCancel
+							}
+							onConfirm={workflow.handleConfirm}
+						/>
+					</div>
+				</DialogContent>
+			</Dialog>
 		</>
 	);
 }
@@ -189,22 +187,19 @@ function ImportDialogHeader({ isBusy }: { isBusy: boolean }) {
 	return (
 		<div className="flex shrink-0 items-start justify-between gap-4 border-border border-b px-4 py-4 sm:px-6">
 			<div>
-				<DialogPrimitive.Title className="font-semibold text-heading text-xl">
-					Import Music
-				</DialogPrimitive.Title>
-				<DialogPrimitive.Description
-					id="import-music-description"
-					className="mt-1 text-caption text-sm"
-				>
+				<DialogTitle>Import Music</DialogTitle>
+				<DialogDescription className="mt-1">
 					Upload audio files, review each result, then confirm selected Tracks.
-				</DialogPrimitive.Description>
+				</DialogDescription>
 			</div>
-			<DialogPrimitive.Close asChild>
-				<Button type="button" variant="ghost" size="icon" disabled={isBusy}>
-					<X className="size-4" />
-					<span className="sr-only">Close Import Music</span>
-				</Button>
-			</DialogPrimitive.Close>
+			<DialogClose
+				render={
+					<Button type="button" variant="ghost" size="icon" disabled={isBusy} />
+				}
+			>
+				<X className="size-4" />
+				<span className="sr-only">Close Import Music</span>
+			</DialogClose>
 		</div>
 	);
 }
@@ -274,10 +269,8 @@ function ImportFileInput({
 }) {
 	return (
 		<div className="grid gap-2">
-			<label htmlFor={id} className="font-medium text-sm">
-				{label}
-			</label>
-			<input
+			<Label htmlFor={id}>{label}</Label>
+			<Input
 				ref={(input) => {
 					if (isDirectory) input?.setAttribute("webkitdirectory", "");
 				}}
@@ -286,7 +279,6 @@ function ImportFileInput({
 				multiple
 				accept={SUPPORTED_AUDIO_FILE_ACCEPT}
 				disabled={isBusy}
-				className="rounded-md border border-input bg-background px-3 py-2 text-sm file:mr-3 file:rounded-sm file:border-0 file:bg-secondary file:px-3 file:py-2 file:text-secondary-foreground"
 				onChange={(event) =>
 					event.target.files && void onFiles(event.target.files)
 				}
@@ -397,10 +389,10 @@ function ProgressBar({
 		>
 			<div
 				className={cn(
-					"h-full rounded-full bg-primary",
+					"h-full w-(--progress) rounded-full bg-primary",
 					isIndeterminate && "opacity-60",
 				)}
-				style={{ width: `${percent}%` }}
+				style={{ "--progress": `${percent}%` } as CSSProperties}
 			/>
 		</div>
 	);
@@ -558,9 +550,8 @@ const ImportFileRow = memo(function ImportFileRow({
 					<StatusBadge entry={entry} isConfirming={isConfirming} />
 					<Button
 						type="button"
-						variant="ghost"
-						size="icon"
-						className="size-8 text-caption"
+						variant="muted"
+						size="icon-sm"
 						aria-label={`Details for ${filename}`}
 						aria-expanded={isExpanded}
 						aria-controls={isExpanded ? detailsId : undefined}
@@ -643,20 +634,12 @@ function SelectionCheckbox({
 	onChange: (checked: boolean) => void;
 }) {
 	return (
-		<span className="relative flex size-4 shrink-0 items-center justify-center">
-			<input
-				type="checkbox"
-				aria-label={label}
-				checked={checked}
-				disabled={disabled}
-				onChange={(event) => onChange(event.target.checked)}
-				className="peer size-4 cursor-pointer appearance-none rounded-sm border border-input bg-background transition-colors checked:border-primary checked:bg-primary focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-40"
-			/>
-			<Check
-				aria-hidden="true"
-				className="pointer-events-none absolute size-3 text-primary-foreground opacity-0 peer-checked:opacity-100"
-			/>
-		</span>
+		<Checkbox
+			aria-label={label}
+			checked={checked}
+			disabled={disabled}
+			onCheckedChange={(next) => onChange(next)}
+		/>
 	);
 }
 
@@ -698,16 +681,15 @@ function StatusBadge({
 		? outcomeBadges[entry.outcome]
 		: stateBadges[entry.state];
 	return (
-		<Badge
-			variant={badge.variant}
+		<span
 			className={cn(
-				"border-0 bg-transparent px-0 font-normal text-xs dark:bg-transparent",
+				"inline-flex items-center gap-1 text-xs [&>svg]:size-3",
 				badge.variant === "destructive" ? "text-destructive" : "text-caption",
 			)}
 		>
 			<badge.Icon aria-hidden="true" className={badge.iconClassName} />
 			{entry.state === "unresolved" ? importPhaseLabel(entry) : badge.label}
-		</Badge>
+		</span>
 	);
 }
 
@@ -756,7 +738,7 @@ function DuplicateReview({
 	const candidates = preview.matchingTracks ?? [];
 	if (!candidates.length)
 		return preview.file.artworkWarning ? (
-			<p className="text-amber-600 text-sm">{preview.file.artworkWarning}</p>
+			<p className="text-warning text-sm">{preview.file.artworkWarning}</p>
 		) : null;
 	if (
 		candidates.some(
@@ -784,15 +766,18 @@ function DuplicateReview({
 				{preview.file.artists.join(", ")}
 			</p>
 			<ReplacementMetadataChanges preview={preview} />
-			{duplicateDecisionOptions.map((option) => (
-				<DuplicateDecisionOption
-					key={option.value}
-					entry={entry}
-					isBusy={isBusy}
-					option={option}
-					onDecisionChange={onDecisionChange}
-				/>
-			))}
+			<RadioGroup
+				aria-label="Track Replacement"
+				value={entry.duplicateDecision ?? null}
+				disabled={isBusy}
+				onValueChange={(value) =>
+					onDecisionChange(entry.key, value as DuplicateDecision)
+				}
+			>
+				{duplicateDecisionOptions.map((option) => (
+					<DuplicateDecisionOption key={option.value} option={option} />
+				))}
+			</RadioGroup>
 		</fieldset>
 	);
 }
@@ -814,7 +799,7 @@ function ExactDuplicateReview({
 				<summary className="cursor-pointer text-primary underline">
 					View existing Track
 				</summary>
-				<dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-caption">
+				<dl className="mt-2 grid grid-cols-media gap-x-3 gap-y-1 text-caption">
 					<dt>Artist</dt>
 					<dd>{candidate.artists.join(", ")}</dd>
 					<dt>Album</dt>
@@ -828,28 +813,15 @@ function ExactDuplicateReview({
 }
 
 function DuplicateDecisionOption({
-	entry,
-	isBusy,
 	option,
-	onDecisionChange,
 }: {
-	entry: ImportFileEntry;
-	isBusy: boolean;
 	option: (typeof duplicateDecisionOptions)[number];
-	onDecisionChange: (key: string, decision: DuplicateDecision) => void;
 }) {
 	return (
-		<label className="flex items-center gap-2 text-sm">
-			<input
-				type="radio"
-				name={`duplicate-decision-${entry.key}`}
-				value={option.value}
-				checked={entry.duplicateDecision === option.value}
-				disabled={isBusy}
-				onChange={() => onDecisionChange(entry.key, option.value)}
-			/>
+		<Label className="font-normal">
+			<RadioGroupItem value={option.value} />
 			{option.label}
-		</label>
+		</Label>
 	);
 }
 

@@ -1,52 +1,43 @@
 import { describe, expect, it } from "vite-plus/test";
-import {
-	calculateLibrarySearchBounds,
-	calculateQueueDrawerWidth,
-} from "./use-queue-drawer-width";
-
-it("places Search between third card centers of the full eight-column grid", () => {
-	// Eight cards occupy 2084px; the 118px residual stays on the right.
-	expect(calculateLibrarySearchBounds(2250, 24, 16)).toEqual({
-		width: 786,
-		center: 1066,
-	});
-	expect(calculateLibrarySearchBounds(375, 24, 16)).toEqual({
-		width: 343,
-		center: 187.5,
-	});
-});
+import { calculateQueueDrawerWidth } from "./use-queue-drawer-width";
 
 describe("calculateQueueDrawerWidth", () => {
-	it("leaves six fixed cards and a 24px margin in the original wide-shell layout", () => {
+	it("leaves six fixed cards and one page inset before the docked drawer", () => {
 		const panelWidth = calculateQueueDrawerWidth(2150, 24, 16);
-		expect(panelWidth).toBe(518);
-		const availableWidth = 2102;
-		const collectionWidth = availableWidth - panelWidth - 24;
-		expect(collectionWidth).toBe(1560);
+		expect(panelWidth).toBe(542);
+		const collectionWidth = 2102 - panelWidth;
 		// Six 250px cards with five 12px gaps fit; a seventh starts the next row.
 		expect(collectionWidth).toBe(6 * 250 + 5 * 12);
 		expect(collectionWidth).toBeLessThan(7 * 250 + 6 * 12);
 		const lastCardRight = 24 + collectionWidth;
-		const panelLeft = 2150 - 24 - panelWidth;
+		// Docked: the drawer's right edge is the window edge.
+		const panelLeft = 2150 - panelWidth;
 		expect(panelLeft - lastCardRight).toBe(24);
+	});
+
+	it("leaves the Sidebar's width out of what cards and drawer share", () => {
+		// 2150px window, 240px Sidebar: six cards still fit, the drawer shrinks.
+		const panelWidth = calculateQueueDrawerWidth(2150, 24, 16, 240);
+		expect(panelWidth).toBe(542 - 240);
+		expect(2150 - 240 - 48 - panelWidth).toBe(6 * 250 + 5 * 12);
 	});
 
 	it("gives additional wide-screen space to the drawer instead of a seventh column", () => {
 		const panelWidth = calculateQueueDrawerWidth(2600, 24, 16);
-		expect(panelWidth).toBe(968);
-		expect(2600 - 48 - panelWidth - 24).toBe(1560);
+		expect(panelWidth).toBe(992);
+		expect(2600 - 48 - panelWidth).toBe(1560);
 	});
 
 	it.each([
-		{ shellWidth: 1920, columns: 6, panelWidth: 288 },
-		{ shellWidth: 1919, columns: 5, panelWidth: 549 },
-		{ shellWidth: 1658, columns: 5, panelWidth: 288 },
-		{ shellWidth: 1657, columns: 4, panelWidth: 549 },
-		{ shellWidth: 1396, columns: 4, panelWidth: 288 },
-		{ shellWidth: 1395, columns: 3, panelWidth: 549 },
-		{ shellWidth: 1134, columns: 3, panelWidth: 288 },
-		{ shellWidth: 1133, columns: 2, panelWidth: 549 },
-		{ shellWidth: 1024, columns: 2, panelWidth: 440 },
+		{ shellWidth: 1896, columns: 6, panelWidth: 288 },
+		{ shellWidth: 1895, columns: 5, panelWidth: 549 },
+		{ shellWidth: 1634, columns: 5, panelWidth: 288 },
+		{ shellWidth: 1633, columns: 4, panelWidth: 549 },
+		{ shellWidth: 1372, columns: 4, panelWidth: 288 },
+		{ shellWidth: 1371, columns: 3, panelWidth: 549 },
+		{ shellWidth: 1110, columns: 3, panelWidth: 288 },
+		{ shellWidth: 1109, columns: 2, panelWidth: 549 },
+		{ shellWidth: 1024, columns: 2, panelWidth: 464 },
 	])(
 		"fits $columns columns without overlap at shell width $shellWidth",
 		({ shellWidth, columns, panelWidth }) => {
@@ -54,7 +45,7 @@ describe("calculateQueueDrawerWidth", () => {
 			expect(width).toBe(panelWidth);
 			expect(width).toBeGreaterThanOrEqual(288);
 			const cardsRight = 24 + columns * 250 + (columns - 1) * 12;
-			const drawerLeft = shellWidth - 24 - width;
+			const drawerLeft = shellWidth - width;
 			expect(drawerLeft - cardsRight).toBe(24);
 		},
 	);
@@ -74,12 +65,12 @@ describe("calculateQueueDrawerWidth", () => {
 		},
 	);
 
-	it("respects rem-based card gaps, minimum width and margins with a larger root font", () => {
+	it("respects rem-based card gaps and minimum width with a larger root font", () => {
 		const panelWidth = calculateQueueDrawerWidth(2150, 24, 20);
-		expect(panelWidth).toBe(497);
+		expect(panelWidth).toBe(527);
 		const collectionWidth = 6 * 250 + 5 * 15;
 		expect(collectionWidth).toBe(1575);
-		expect(2102 - collectionWidth - panelWidth).toBe(30);
+		expect(2102 - collectionWidth - panelWidth).toBe(0);
 		expect(calculateQueueDrawerWidth(1000, 24, 20)).toBe(386);
 	});
 });

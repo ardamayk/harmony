@@ -71,7 +71,7 @@ export function QueueSections({
 					isUpdating={isUpdating}
 					onDismiss={() => onDismiss(group.items)}
 				/>
-				<ul className="flex flex-col gap-px border-[var(--queue-group-color)] border-l-2 py-0.5">
+				<ul className="flex flex-col gap-px border-(--queue-group-color) border-l-2 py-0.5">
 					{group.items.map((item, index) => {
 						const queueIndex = group.startIndex + index;
 						return (
@@ -132,7 +132,7 @@ function QueueGroupHeader({
 					className="size-7 shrink-0 rounded-sm text-xs"
 				/>
 			) : (
-				<span className="flex size-7 shrink-0 items-center justify-center text-[var(--queue-group-color)]">
+				<span className="flex size-7 shrink-0 items-center justify-center text-(--queue-group-color)">
 					<Icon className="size-3.5" />
 				</span>
 			)}
@@ -146,7 +146,7 @@ function QueueGroupHeader({
 	);
 	return (
 		<div
-			className="flex items-center gap-2 border-[var(--queue-group-color)] border-l-2 bg-player-pill py-2 pr-3 pl-6"
+			className="flex items-center gap-2 border-(--queue-group-color) border-l-2 bg-player-pill py-2 pr-3 pl-6"
 			title={details.meta}
 		>
 			{details.href ? (
@@ -187,7 +187,7 @@ function QueueGroupHeader({
 					type="button"
 					disabled={isUpdating}
 					onClick={onDismiss}
-					className="relative h-5 shrink-0 after:absolute after:-inset-y-2 after:inset-x-0 after:content-[''] rounded-sm border border-sidebar-border px-2 text-xs text-caption hover:text-heading disabled:opacity-40"
+					className="relative h-5 shrink-0 after:absolute after:-inset-y-2 after:inset-x-0 after:content-empty rounded-sm border border-sidebar-border px-2 text-xs text-caption hover:text-heading disabled:opacity-40"
 				>
 					Not now
 				</button>

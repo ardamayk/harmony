@@ -4,6 +4,8 @@ status: accepted
 
 # One library search dialog instead of per-page search fields
 
+> Opened from the top bar's search field since [ADR 0028](0028-sidebar-and-search-top-bar.md), over which the card now drops down.
+
 The Albums, Artists and Tracks pages each had a search field in their header, every one scoped to its own page. They are gone; the Top Nav's "Search" entry (also Ctrl/⌘+K, or "/" outside a text field) opens a single dialog that searches Tracks, Albums, Artists, Genres and Playlists at once. Radio keeps its own station search: it filters a saved-station list and the Radio Discover catalog, which are not part of the library.
 
 ## Best Match, then grouped results
@@ -12,7 +14,7 @@ The Library Search experience specification of 2026-09-12 supersedes the origina
 
 Results sit under one accessible "From Your Library" heading. One eligible Best Match appears first, followed by groups in the order Track, Album, Artist, Genre, Playlist. Only strong direct results qualify for Best Match; typo-only results do not. The highlighted record also appears first in its category and counts toward that category's five-result limit. Its two presentations use distinct row keys and DOM IDs; keyboard selection marks only one presentation, while activation uses the same real record identity.
 
-Choosing a Track plays it; an Album, Genre or Playlist retains its existing navigation. Artists have no detail page: an Artist result opens `/library/tracks?artistId=<id>`, matching either Track or Album credits by identity. Search includes all visible credited Artists, including Track-only contributors; it is not restricted to the Album Artists browse list.
+Choosing a Track plays it; an Album, Genre or Playlist retains its existing navigation. An Artist result opens the Artist page (`/library/artists/<id>`, [ADR 0027](0027-artist-photos-from-deezer-biographies-from-wikipedia.md)); before Artists had one it opened `/library/tracks?artistId=<id>`. Search includes all visible credited Artists, including Track-only contributors; it is not restricted to the Album Artists browse list.
 
 ## Where the matches come from
 

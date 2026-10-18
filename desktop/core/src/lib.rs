@@ -1,6 +1,7 @@
 pub mod adaptive_system_rate;
 pub mod connection;
 pub mod desktop_import;
+mod device_volume;
 mod exclusive_output;
 pub mod media_proxy;
 mod mpris;
@@ -31,6 +32,7 @@ use desktop_import::{
     DesktopImportError, ImportSelection, ImportSelectionStore, ImportUploadProgress, ProgressSink,
     upload_selection,
 };
+use device_volume::{CommandDeviceVolume, DeviceVolume, VolumeRoute, hardware_step_db};
 use media_proxy::MediaProxy;
 use mpris::MprisBridge;
 use output_device::{
@@ -94,6 +96,16 @@ struct AppState {
     /// an explicit Quit does not quit (and snapshot) a second time.
     exiting: AtomicBool,
     exit: mpsc::Sender<()>,
+    device_volume: Arc<dyn DeviceVolume>,
+    device_attenuation: Mutex<Option<DeviceAttenuation>>,
+}
+
+/// Attenuation moved from mpv onto the output device while a bit-perfect
+/// Output Mode is active, and the software volume it replaced.
+struct DeviceAttenuation {
+    route: VolumeRoute,
+    applied_db: f64,
+    software_volume: f64,
 }
 
 #[derive(Clone, Serialize)]
@@ -259,6 +271,7 @@ fn desktop_playback_select_direct_alsa_output(
         .processing
         .lock()
         .map_err(|_| PlaybackCommandError::new("Output Mode settings are unavailable."))?;
+    return_device_volume(state, &mut processing);
     let previous_mode = processing.output_mode();
     let previous_device_id = processing.selected_output_device_id().map(str::to_owned);
     let playback_state = state.playback.select_direct_alsa_output(&device_id)?;
@@ -305,6 +318,7 @@ fn desktop_playback_enable_adaptive_system_rate(
         .processing
         .lock()
         .map_err(|_| PlaybackCommandError::new("Output Mode settings are unavailable."))?;
+    return_device_volume(state, &mut processing);
     let playback_state = state.playback.enable_adaptive_system_rate()?;
     if let Err(error) = processing.set_output_mode(OutputMode::AdaptiveSystemRate) {
         eprintln!("Adaptive System Rate preference persistence failed: {error}");
@@ -318,9 +332,10 @@ fn desktop_playback_enable_adaptive_system_rate(
             "Adaptive System Rate preference could not be saved. System Output was restored.",
         ));
     }
-    Ok(restore_remembered_volume(
+    Ok(hand_off_volume_to_device(
         state,
         &mut processing,
+        VolumeRoute::SystemSink,
         playback_state,
     ))
 }
@@ -359,6 +374,7 @@ fn select_normal_output(state: &AppState) -> Result<PlaybackSessionState, Playba
         .processing
         .lock()
         .map_err(|_| PlaybackCommandError::new("Output Mode settings are unavailable."))?;
+    return_device_volume(state, &mut processing);
     let previous_mode = processing.output_mode();
     let previous_device_id = processing.selected_output_device_id().map(str::to_owned);
     let playback_state = state.playback.fallback_to_system_output()?;
@@ -387,6 +403,7 @@ fn select_exclusive_output(
         .processing
         .lock()
         .map_err(|_| PlaybackCommandError::new("Output Mode settings are unavailable."))?;
+    return_device_volume(state, &mut processing);
     let playback_state = state.playback.select_direct_alsa_output(&device.id)?;
     if playback_state.output_mode != OutputMode::DirectAlsa {
         let message = playback_state
@@ -415,9 +432,13 @@ fn select_exclusive_output(
             "Exclusive Output preference could not be saved. Normal Output was restored.",
         ));
     }
-    Ok(restore_remembered_volume(
+    let Some(route) = VolumeRoute::for_alsa_device(&device.id) else {
+        return Ok(playback_state);
+    };
+    Ok(hand_off_volume_to_device(
         state,
         &mut processing,
+        route,
         playback_state,
     ))
 }
@@ -472,6 +493,92 @@ fn restore_exclusive_device(
         return Err("the active output could not be opened exclusively".to_owned());
     }
     processing.select_direct_alsa_output(&device.id)
+}
+
+/// Bit-perfect Output Modes keep mpv at full volume, so the listener's
+/// software attenuation moves onto the device first and loudness never jumps.
+/// When the device cannot take all of it, mpv keeps its volume and the mode is
+/// simply not bit-perfect.
+fn hand_off_volume_to_device(
+    state: &AppState,
+    processing: &mut ProcessingController,
+    route: VolumeRoute,
+    playback_state: PlaybackSessionState,
+) -> PlaybackSessionState {
+    let software_volume = processing.state().software_volume;
+    if !(software_volume > 0.0 && software_volume < 1.0) {
+        return playback_state;
+    }
+    let wanted_db = hardware_step_db(software_volume);
+    let applied_db = match state.device_volume.change_db(route, wanted_db) {
+        Ok(applied_db) => applied_db,
+        Err(error) => {
+            eprintln!("Output volume hand-off failed; mpv keeps its volume: {error}");
+            return playback_state;
+        }
+    };
+    if (applied_db - wanted_db).abs() > 0.01 {
+        if let Err(error) = state.device_volume.change_db(route, -applied_db) {
+            eprintln!("Partial output volume hand-off could not be undone: {error}");
+        }
+        return playback_state;
+    }
+    if let Ok(mut attenuation) = state.device_attenuation.lock() {
+        *attenuation = Some(DeviceAttenuation {
+            route,
+            applied_db,
+            software_volume,
+        });
+    }
+    let is_volume_only = !processing.state().equalizer.is_enabled
+        && processing.state().replay_gain_mode == ReplayGainMode::Off;
+    match update_processing_locked(state, processing, |processing| {
+        if is_volume_only {
+            processing.set_profile(ProcessingProfile::Direct)
+        } else {
+            processing.set_software_volume(1.0)
+        }
+    }) {
+        Ok(handed_off) => handed_off,
+        Err(error) => {
+            eprintln!(
+                "mpv volume could not follow the output hand-off: {}",
+                error.message
+            );
+            playback_state
+        }
+    }
+}
+
+/// Undoes `hand_off_volume_to_device`: mpv first, then the device, so the
+/// level only ever dips while the Output Mode changes. PipeWire restores an
+/// ALSA card's own volume when it takes the card back from Exclusive Output.
+fn return_device_volume(state: &AppState, processing: &mut ProcessingController) {
+    let Some(attenuation) = state
+        .device_attenuation
+        .lock()
+        .ok()
+        .and_then(|mut attenuation| attenuation.take())
+    else {
+        return;
+    };
+    if let Err(error) = update_processing_locked(state, processing, |processing| {
+        processing.set_software_volume(attenuation.software_volume)
+    }) {
+        eprintln!("mpv volume could not be restored: {}", error.message);
+        // mpv is already gone at exit; the next start must still open at the
+        // listener's level, not at full volume.
+        if let Err(error) = processing.set_software_volume(attenuation.software_volume) {
+            eprintln!("Software volume could not be saved: {error}");
+        }
+    }
+    if attenuation.route == VolumeRoute::SystemSink
+        && let Err(error) = state
+            .device_volume
+            .change_db(VolumeRoute::SystemSink, -attenuation.applied_db)
+    {
+        eprintln!("System output volume could not be restored: {error}");
+    }
 }
 
 /// After an output route switch, bring back the volume last used on that
@@ -1001,8 +1108,11 @@ impl AppState {
             output,
             exiting: AtomicBool::new(false),
             exit,
+            device_volume: Arc::new(CommandDeviceVolume),
+            device_attenuation: Mutex::new(None),
         });
         let _ = mpris_state.set(Arc::downgrade(&state));
+        hand_off_restored_exclusive_volume(&state);
         Ok(state)
     }
 }
@@ -1063,9 +1173,31 @@ pub fn run(config_directory: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// A saved Exclusive Output reopens with the software volume written at exit,
+/// so it moves onto the device again before playback starts.
+fn hand_off_restored_exclusive_volume(state: &AppState) {
+    let Ok(mut processing) = state.processing.lock() else {
+        return;
+    };
+    let route = processing
+        .selected_output_device_id()
+        .and_then(VolumeRoute::for_alsa_device);
+    let (Some(route), Ok(playback_state)) = (route, state.playback.state()) else {
+        return;
+    };
+    if processing.output_mode() == OutputMode::DirectAlsa {
+        hand_off_volume_to_device(state, &mut processing, route, playback_state);
+    }
+}
+
 /// Drops the state once in-flight commands let go of it, so its teardown
 /// (mpv, the media proxy, the Adaptive System Rate restore) runs before exit.
 fn release(mut state: Arc<AppState>) {
+    // The listener's software volume is saved for the next start, and the
+    // system output gets its level back.
+    if let Ok(mut processing) = state.processing.lock() {
+        return_device_volume(&state, &mut processing);
+    }
     for _ in 0..100 {
         match Arc::try_unwrap(state) {
             Ok(state) => {

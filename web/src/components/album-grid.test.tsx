@@ -46,9 +46,7 @@ describe("AlbumGrid", () => {
 
 		const album = screen.getByRole("link", { name: /Kind of Blue/ });
 		const grid = container.firstElementChild;
-		expect(grid?.className).toContain(
-			"grid-cols-[repeat(auto-fill,min(250px,100%))]",
-		);
+		expect(grid?.className).toContain("grid-cols-cards");
 		expect(grid?.className).toContain("gap-3");
 		expect(album.className).toContain("aspect-square");
 		expect(album.className).toContain("overflow-hidden");

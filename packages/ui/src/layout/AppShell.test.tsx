@@ -16,6 +16,7 @@ import {
 	TopNavActions,
 } from "../index";
 import { InMemoryPlaybackEngine } from "../playback/testing/InMemoryPlaybackEngine";
+import { Sidebar } from "./Sidebar";
 
 vi.mock("@tanstack/react-router", () => ({
 	Link: ({
@@ -164,13 +165,14 @@ describe("AppShell", () => {
 		expect(screen.queryByText("Discover (coming soon)")).toBeNull();
 	});
 
-	it("has no side columns: the nav is a top bar and the queue a drawer", () => {
+	it("has a top bar, a Sidebar and a queue drawer, and no resizable columns", () => {
 		const { container } = renderShell(
 			<AppShell>
 				<div>Main content</div>
 			</AppShell>,
 		);
 		expect(container.querySelector("header")).toBeTruthy();
+		expect(container.querySelector("[data-sidebar]")).toBeTruthy();
 		expect(container.querySelector("[data-queue-column]")).toBeNull();
 		expect(container.querySelector("[data-queue-drawer]")).toBeTruthy();
 		expect(
@@ -178,20 +180,17 @@ describe("AppShell", () => {
 		).toHaveLength(0);
 	});
 
-	it("aligns the floating player dock with the shared page inset", () => {
+	it("docks the player on the bottom edge, full width", () => {
 		const { container } = renderShell(
 			<AppShell bottom={<div>Player</div>}>
 				<div>Main content</div>
 			</AppShell>,
 		);
-		const scrim = container.querySelector("[data-player-scrim]");
-		expect(scrim?.className).toContain("bg-gradient-to-t");
-		expect(scrim?.className).toContain("pointer-events-none");
+		expect(container.querySelector("[data-player-scrim]")).toBeNull();
 		const dock = container.querySelector("[data-player-dock]");
 		const column = container.querySelector("[data-player-dock-column]");
 		expect(dock?.className).toContain("inset-x-0");
-		// Mirrors PAGE_CONTENT_PADDING_CLASS in web: the same --shell-inset.
-		expect(dock?.className).toContain("px-[var(--shell-inset,2rem)]");
+		expect(dock?.className).toContain("bottom-0");
 		expect(column?.className).toContain("w-full");
 		expect(column?.className).not.toContain("max-w-");
 	});
@@ -207,16 +206,16 @@ describe("AppShell", () => {
 		) as HTMLElement;
 		expect(drawer.dataset.state).toBe("open");
 		expect(drawer.getAttribute("aria-hidden")).toBe("false");
-		expect(drawer.className).toContain("translate-y-0");
+		expect(drawer.className).toContain("translate-x-0");
 		expect(drawer.className).not.toContain("invisible");
-		expect(drawer.style.right).toBe("var(--shell-inset, 2rem)");
-		// Parks above the Player Bar rather than touching it.
-		expect(drawer.style.bottom).toContain("86px");
+		expect(drawer.className).toContain("right-0");
+		// Docked: its bottom edge on the Player Bar's top edge.
+		expect(drawer.style.getPropertyValue("--queue-drawer-bottom")).toBe("86px");
 		const main = container.querySelector("main") as HTMLElement;
 		expect(main.hasAttribute("data-queue-open")).toBe(true);
 		expect(main.style.paddingRight).toBe("");
 		expect(main.className).toContain(
-			"data-[queue-open]:pr-[var(--queue-drawer-clearance)]",
+			"data-[queue-open]:pr-(--queue-drawer-clearance)",
 		);
 	});
 
@@ -233,7 +232,7 @@ describe("AppShell", () => {
 		expect(drawer.dataset.state).toBe("closed");
 		expect(drawer.getAttribute("aria-hidden")).toBe("true");
 		expect(drawer.hasAttribute("inert")).toBe(true);
-		expect(drawer.className).toContain("translate-y-[calc(100%+8rem)]");
+		expect(drawer.className).toContain("translate-x-full");
 		expect(drawer.className).toContain("invisible");
 		const main = container.querySelector("main") as HTMLElement;
 		expect(main.hasAttribute("data-queue-open")).toBe(false);
@@ -260,9 +259,10 @@ describe("AppShell", () => {
 			"[data-queue-drawer]",
 		) as HTMLElement;
 		expect(container.querySelector("[data-widget-dock]")).toBeNull();
-		expect(drawer.style.width).toBe("var(--queue-drawer-width, 18rem)");
-		expect(drawer.style.bottom).toContain("1.5rem");
-		expect(drawer.className).toContain("rounded-lg");
+		expect(drawer.className).toContain("w-(--queue-drawer-width,18rem)");
+		expect(drawer.style.getPropertyValue("--queue-drawer-bottom")).toBe("86px");
+		expect(drawer.className).toContain("border-l");
+		expect(drawer.className).not.toContain("rounded-lg");
 	});
 
 	it("updates inherited drawer width on shell and window resize without changing the bottom gap", () => {
@@ -290,15 +290,18 @@ describe("AppShell", () => {
 					: bounds;
 			},
 		);
+		// A 24px page inset and the 240px Sidebar.
+		vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockImplementation(
+			function (this: HTMLElement) {
+				if (this.hasAttribute("data-shell-inset-probe")) return 24;
+				if (this.hasAttribute("data-sidebar")) return 240;
+				return 0;
+			},
+		);
 		const readStyle = window.getComputedStyle;
 		vi.spyOn(window, "getComputedStyle").mockImplementation(
 			(element, pseudoElement) => {
 				const style = readStyle(element, pseudoElement);
-				if (element.tagName === "HEADER") {
-					Object.defineProperty(style, "paddingLeft", { value: "24px" });
-					// With window controls the Top Nav drops its right inset.
-					Object.defineProperty(style, "paddingRight", { value: "0px" });
-				}
 				if (element === document.documentElement) {
 					Object.defineProperty(style, "fontSize", { value: "16px" });
 				}
@@ -311,44 +314,85 @@ describe("AppShell", () => {
 		const shell = container.querySelector<HTMLElement>("[data-app-shell]");
 		const drawer = container.querySelector<HTMLElement>("[data-queue-drawer]");
 		const main = container.querySelector("main");
-		expect(shell?.style.getPropertyValue("--queue-drawer-width")).toBe("518px");
+		expect(shell?.style.getPropertyValue("--queue-drawer-width")).toBe("302px");
 		expect(drawer?.style.getPropertyValue("--queue-drawer-width")).toBe("");
 		expect(main?.style.getPropertyValue("--queue-drawer-width")).toBe("");
-		expect(drawer?.style.width).toBe("var(--queue-drawer-width, 18rem)");
+		expect(drawer?.className).toContain("w-(--queue-drawer-width,18rem)");
 		expect(main?.style.getPropertyValue("--queue-drawer-clearance")).toBe(
-			"calc(var(--queue-drawer-width, 18rem) + 1.5rem)",
+			"var(--queue-drawer-width, 18rem)",
 		);
-		const bottom = drawer?.style.bottom;
-		expect(bottom).toBe("calc(16px + 86px + 1.5rem)");
+		const bottom = drawer?.style.getPropertyValue("--queue-drawer-bottom");
+		expect(bottom).toBe("86px");
 		if (!resizeShell)
 			throw new Error("The shell was not observed for resizing");
 		shellWidth = 1919;
 		act(resizeShell);
-		expect(shell?.style.getPropertyValue("--queue-drawer-width")).toBe("549px");
-		expect(drawer?.style.bottom).toBe(bottom);
+		expect(shell?.style.getPropertyValue("--queue-drawer-width")).toBe("333px");
+		expect(drawer?.style.getPropertyValue("--queue-drawer-bottom")).toBe(
+			bottom,
+		);
 		shellWidth = 1000;
 		fireEvent(window, new Event("resize"));
 		expect(shell?.style.getPropertyValue("--queue-drawer-width")).toBe("386px");
-		expect(drawer?.style.bottom).toBe(bottom);
+		expect(drawer?.style.getPropertyValue("--queue-drawer-bottom")).toBe(
+			bottom,
+		);
 		unmount();
 		expect(disconnect).toHaveBeenCalled();
+	});
+
+	it("drops the search card over the field again when only the field moves", () => {
+		const observed = new Map<Element, () => void>();
+		vi.stubGlobal(
+			"ResizeObserver",
+			class {
+				constructor(private callback: () => void) {}
+				observe(target: Element) {
+					observed.set(target, this.callback);
+				}
+				unobserve() {}
+				disconnect() {}
+			},
+		);
+		let fieldLeft = 300;
+		const getBounds = HTMLElement.prototype.getBoundingClientRect;
+		vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+			function (this: HTMLElement) {
+				if (this.hasAttribute("data-library-search-field"))
+					return new DOMRect(fieldLeft, 8, 500, 48);
+				if (this.hasAttribute("data-app-shell"))
+					return new DOMRect(0, 0, 1600, 900);
+				return getBounds.call(this);
+			},
+		);
+		const { container } = renderShell(<AppShell onSearch={vi.fn()} />);
+		const shell = container.querySelector<HTMLElement>("[data-app-shell]");
+		const field = container.querySelector("[data-library-search-field]");
+		expect(shell?.style.getPropertyValue("--library-search-center")).toBe(
+			"550px",
+		);
+		// A smaller Home button beside it: the field moves and grows, the
+		// shell does not resize.
+		const remeasure = field ? observed.get(field) : undefined;
+		if (!remeasure) throw new Error("The search field was not observed");
+		fieldLeft = 292;
+		act(remeasure);
+		expect(shell?.style.getPropertyValue("--library-search-center")).toBe(
+			"542px",
+		);
 	});
 
 	it("lets the Desktop Client drag the window by the top nav's empty space", () => {
 		const { container } = render(<TopNav onSearch={vi.fn()} />);
 		const header = container.querySelector("header") as HTMLElement;
 		expect(header.hasAttribute("data-window-drag-region")).toBe(true);
-		expect(
-			screen
-				.getByRole("navigation", { name: "Library" })
-				.hasAttribute("data-window-drag-region"),
-		).toBe(true);
 		// Links and buttons stay clickable instead of starting a drag.
-		expect(
-			screen
-				.getByRole("link", { name: "Albums" })
-				.hasAttribute("data-window-drag-region"),
-		).toBe(false);
+		for (const control of [
+			screen.getByRole("link", { name: "Home" }),
+			screen.getByRole("button", { name: "Search your library" }),
+		]) {
+			expect(control.hasAttribute("data-window-drag-region")).toBe(false);
+		}
 	});
 
 	it("moves a page's Top Nav actions next to Settings", () => {
@@ -383,9 +427,21 @@ describe("AppShell", () => {
 		expect(windowControls.close).toHaveBeenCalledTimes(1);
 	});
 
-	it("renders the library sections, Search and Settings in the top nav", () => {
+	it("puts Home and the search field in the top bar", () => {
 		const onSearch = vi.fn();
-		render(<TopNav onSearch={onSearch} />);
+		const { container } = render(<TopNav onSearch={onSearch} />);
+		expect(
+			screen.getByRole("link", { name: "Home" }).getAttribute("href"),
+		).toBe("/");
+		const field = screen.getByRole("button", { name: "Search your library" });
+		expect(field.hasAttribute("data-library-search-field")).toBe(true);
+		fireEvent.click(field);
+		expect(onSearch).toHaveBeenCalledTimes(1);
+		expect(container.querySelector("nav")).toBeNull();
+	});
+
+	it("lists the library sections and Settings in the Sidebar", () => {
+		render(<Sidebar />);
 		for (const label of [
 			"Albums",
 			"Artists",
@@ -396,10 +452,10 @@ describe("AppShell", () => {
 		]) {
 			expect(screen.getByRole("link", { name: label })).toBeTruthy();
 		}
-		fireEvent.click(screen.getByRole("button", { name: "Search" }));
-		expect(onSearch).toHaveBeenCalledTimes(1);
 		const radioLink = screen.getByRole("link", { name: "Radio" });
-		expect(radioLink.className).toContain("[&.active]:text-heading");
+		expect(radioLink.className).toContain(
+			"[&.active]:text-shell-active-foreground",
+		);
 		expect(screen.getByRole("link", { name: "Settings" })).toBeTruthy();
 		expect(screen.queryByText("Premium Account")).toBeNull();
 	});

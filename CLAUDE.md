@@ -19,7 +19,7 @@ Run everything through `mise run <task>` (`mise tasks` lists them). TypeScript t
 
 ## UI design rules
 
-Before changing Tailwind classes or CSS in `web/src` or `packages/ui/src`, read `docs/design-rules.md` and stay within it. The Top Nav, page content, Queue Drawer, Player Bar and desktop window frame follow one design; no part styles itself on its own. In short: theme tokens through Tailwind classes (`bg-player-pill`, not `bg-[var(--player-pill)]`), three corner radii (`rounded-sm` 6px, `rounded-md` 10px, `rounded-lg` 16px, plus `rounded-full`/`rounded-none`), the spacing and type scales, one primary action per area, complete interaction states, and the shared hover/focus/lit states and motion durations. Pages compose shared components; settings live in place on their surface, otherwise in Settings. The Web and Desktop Clients behave alike: a UI fix is checked in both. Pages stay within the performance budgets (LCP ≤ 2.5s, INP ≤ 200ms, CLS ≤ 0.1, TTFB ≤ 800ms); `mise run web:lighthouse` checks them on a production build. `web/src/design-rules.test.ts` enforces the radius and token rules; fix the code, not the check. A new visual pattern gets a rule in that file first.
+Before changing Tailwind classes or CSS in `web/src` or `packages/ui/src`, load the `ui-design-new` skill and read `docs/design-rules.md`, the project's values for it; stay within both. `web/src/design-rules.test.ts` enforces the radius and token rules; fix the code, not the check. `docs/design-rules.md` is reference only: agents do not edit it; a pattern it does not cover goes to the maintainer first. The Web and Desktop Clients behave alike: a UI fix is checked in both.
 
 ## Music Server modules
 

@@ -1,5 +1,5 @@
 import type { QueueItem } from "@repo/api-client";
-import type { ReactNode, Ref } from "react";
+import type { Ref } from "react";
 import { cn } from "../lib/utils";
 import { AlbumArt } from "./AlbumArt";
 import { useQueueRowMenu } from "./QueueRowMenuProvider";
@@ -28,17 +28,14 @@ export function QueueTrackRow({
 }: QueueTrackRowProps) {
 	const renderMenu = useQueueRowMenu();
 	const isCurrent = state === "current";
-	const renderRow = (menuTrigger: ReactNode) => (
+	const row = (
 		<li
 			ref={ref}
 			role="button"
 			tabIndex={0}
 			aria-current={isCurrent ? "true" : undefined}
 			data-queue-state={state}
-			onClick={(event) => {
-				if (!(event.target as HTMLElement).closest("[data-queue-menu-trigger]"))
-					onPlay();
-			}}
+			onClick={onPlay}
 			onKeyDown={(event) => {
 				if (
 					event.target === event.currentTarget &&
@@ -49,11 +46,12 @@ export function QueueTrackRow({
 				}
 			}}
 			className={cn(
-				"group relative flex cursor-pointer items-center gap-3 rounded-r-sm py-2 pr-3 pl-6 outline-offset-[-2px] hover:bg-[rgb(from_var(--player-pill)_r_g_b_/_0.6)] focus-visible:outline-2 focus-visible:outline-player-control-primary",
-				state === "played" &&
-					"opacity-50 hover:opacity-100 focus-within:opacity-100",
+				"group relative flex cursor-pointer items-center gap-3 rounded-r-sm py-2 pr-3 pl-6 -outline-offset-2 focus-visible:outline-2 focus-visible:outline-player-control-primary",
+				// The current row sits on the active step, so hover never darkens it.
+				!isCurrent && "hover:bg-muted",
+				// Margin plus padding match other rows' `pl-6` / `pr-3`, so number and duration columns stay put.
 				isCurrent &&
-					"my-1 mr-2 ml-2 rounded-sm bg-[rgb(from_var(--player-pill)_r_g_b_/_0.7)] py-2 pr-3 pl-4 shadow-[0_0_0_1px_var(--player-control-primary),0_6px_18px_-6px_var(--player-control-shadow)]",
+					"my-1 mr-1 ml-2 rounded-sm bg-shell-active pr-2 pl-4 ring-1 ring-player-control-primary",
 			)}
 		>
 			{isCurrent ? (
@@ -67,14 +65,24 @@ export function QueueTrackRow({
 				<AlbumArt
 					coverUrl={coverUrl}
 					title={item.track.title}
-					className="size-8 shrink-0 rounded-sm text-xs"
+					className={cn(
+						"size-8 shrink-0 rounded-sm text-xs",
+						state === "played" &&
+							"opacity-50 group-hover:opacity-100 group-focus-within:opacity-100",
+					)}
 				/>
 			)}
 			<span className="min-w-0 flex-1">
 				<span
+					// Played rows step the title down a text tier instead of fading the
+					// row, so their text keeps 4.5:1.
 					className={cn(
-						"block truncate text-sm text-heading leading-5",
-						isCurrent && "font-semibold text-player-control-primary",
+						"block truncate text-sm leading-5",
+						isCurrent
+							? "font-semibold text-heading"
+							: state === "played"
+								? "text-caption group-hover:text-heading group-focus-within:text-heading"
+								: "text-foreground group-hover:text-heading group-focus-within:text-heading",
 					)}
 					title={item.track.title}
 				>
@@ -82,7 +90,11 @@ export function QueueTrackRow({
 				</span>
 				{(!isAlbum || isCurrent) && (
 					<span
-						className="block truncate text-xs text-caption leading-4"
+						className={cn(
+							"block truncate text-xs leading-4",
+							// Caption loses 4.5:1 on the active step.
+							isCurrent ? "text-foreground" : "text-caption",
+						)}
 						title={item.track.artistName}
 					>
 						{item.track.artistName}
@@ -91,25 +103,31 @@ export function QueueTrackRow({
 			</span>
 			<span
 				className={cn(
-					"shrink-0 text-xs text-caption tabular-nums",
-					renderMenu && "group-hover:opacity-0 group-focus-within:opacity-0",
+					"shrink-0 text-xs tabular-nums",
+					isCurrent ? "text-foreground" : "text-caption",
 				)}
 			>
 				{formatQueueDuration(item.track.durationMs)}
 			</span>
-			{menuTrigger}
 		</li>
 	);
-	return renderMenu
-		? renderMenu({ item, children: renderRow })
-		: renderRow(null);
+	return renderMenu ? renderMenu({ item, children: row }) : row;
 }
 
-function QueueEqualizer({ isPlaying }: { isPlaying: boolean }) {
+export function QueueEqualizer({
+	isPlaying,
+	className = "text-player-control-primary",
+}: {
+	isPlaying: boolean;
+	className?: string;
+}) {
 	return (
 		<span
 			aria-hidden
-			className="queue-equalizer flex size-4 shrink-0 items-end justify-center gap-0.5 pb-px text-player-control-primary"
+			className={cn(
+				"queue-equalizer flex size-4 shrink-0 items-end justify-center gap-0.5 pb-px",
+				className,
+			)}
 			data-playing={isPlaying}
 		>
 			<span className="h-1.5 w-0.5 rounded-full bg-current" />

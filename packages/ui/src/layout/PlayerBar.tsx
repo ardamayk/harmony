@@ -38,7 +38,7 @@ import {
 	getTrackArtistCredits,
 	goToArtistCreditsSearch,
 } from "../playback/track-details";
-import { useCoverAccent } from "../playback/use-cover-accent";
+import { useCoverAccent, useRootAccentHue } from "../playback/use-cover-accent";
 import { useMute } from "../playback/use-mute";
 import { usePlaybackKeyboardShortcuts } from "../playback/use-playback-keyboard-shortcuts";
 import { useTrackWaveform } from "../playback/use-track-waveform";
@@ -48,6 +48,7 @@ import { AlbumArt } from "./AlbumArt";
 import { useLayout } from "./LayoutProvider";
 import { LyricsOverlay } from "./LyricsOverlay";
 import { NowPlayingView } from "./NowPlayingView";
+import type { WindowControls } from "./TopNav";
 import { PlaybackErrorBanner } from "./PlaybackErrorBanner";
 import { PlaybackSignal } from "./PlaybackSignal";
 import {
@@ -127,6 +128,7 @@ export function PlayerBar({
 	isCurrentStationFavorite = false,
 	onToggleStationFavorite,
 	onToggleMiniPlayer,
+	windowControls,
 	canShowWaveform = false,
 }: {
 	onPlaylistMutated?: () => void;
@@ -138,6 +140,8 @@ export function PlayerBar({
 	onToggleStationFavorite?: (stationId: string, isFavorite: boolean) => void;
 	/** Desktop only: opens or closes the always-on-top mini player window. */
 	onToggleMiniPlayer?: () => void;
+	/** Window buttons for a host without a title bar; full-screen views cover the Top Nav's. */
+	windowControls?: WindowControls;
 	/** Whether the Music Server advertises track-waveform.v1. */
 	canShowWaveform?: boolean;
 } = {}) {
@@ -418,12 +422,28 @@ export function PlayerBar({
 		? getAlbumCoverUrl(currentTrack.albumId, 1024)
 		: (currentRadioStation?.faviconUrl ?? null);
 	const themeMode = useResolvedThemeMode(preferences.theme.mode);
-	const accentStyle = useCoverAccent({
+	const coverAccent = useCoverAccent({
 		cacheKey: currentTrack ? currentTrack.albumId : null,
 		coverUrl: currentTrack ? artworkUrl : null,
 		enabled: playbackPreferences.accentFromCover,
 		mode: themeMode,
-	}) as CSSProperties;
+	});
+	// Vintage Harbor takes only the cover's hue, on the root, so every accent
+	// in the app follows it at the theme's own L and C; the bar then keeps the
+	// theme's control colours instead of overriding them here.
+	const hueAccent = preferences.theme.preset === "vintage-harbor";
+	useRootAccentHue(coverAccent, hueAccent);
+	const accent: Record<string, string> =
+		hueAccent && coverAccent["--player-accent"]
+			? {
+					"--player-accent": "var(--player-control-primary)",
+					"--player-accent-foreground":
+						"var(--player-control-primary-foreground)",
+					"--cover-tint": coverAccent["--cover-tint"],
+				}
+			: hueAccent
+				? {}
+				: coverAccent;
 
 	const effectiveDuration =
 		duration > 0
@@ -639,8 +659,18 @@ export function PlayerBar({
 		<footer
 			data-testid="player-bar"
 			data-shell-surface
-			style={accentStyle}
-			className="relative h-[86px] rounded-lg border border-player-border bg-player px-6 text-player-foreground shadow-[0_-10px_32px_-6px_var(--player-shadow),0_14px_40px_-8px_var(--player-shadow)]"
+			style={
+				{
+					"--player-accent": accent["--player-accent"],
+					"--player-accent-foreground": accent["--player-accent-foreground"],
+					"--player-control-primary": accent["--player-control-primary"],
+					"--player-control-primary-foreground":
+						accent["--player-control-primary-foreground"],
+					"--player-live-progress": accent["--player-live-progress"],
+					"--player-control-shadow": accent["--player-control-shadow"],
+				} as CSSProperties
+			}
+			className="relative h-21.5 border-player-border border-t bg-player px-6 text-player-foreground max-lg:px-3"
 		>
 			{playbackError ? (
 				<PlaybackErrorBanner error={playbackError} recovery={errorRecovery} />
@@ -655,7 +685,7 @@ export function PlayerBar({
 			<div className="@container/player-bar flex h-full w-full min-w-0 items-center justify-between gap-6">
 				<section
 					aria-label="Now playing"
-					className="@container/now-playing flex min-w-[200px] flex-[1_0_0] items-center gap-3 justify-self-start sm:gap-4"
+					className="@container/now-playing flex min-w-50 grow shrink-0 basis-0 items-center gap-3 justify-self-start sm:gap-4"
 				>
 					{currentTrack ? (
 						<button
@@ -669,7 +699,7 @@ export function PlayerBar({
 								key={artworkUrl ?? "none"}
 								coverUrl={artworkUrl}
 								title={nowPlayingTitle}
-								className="player-cover-enter size-14 rounded-sm border border-shell-subtle-border bg-player-artwork text-sm sm:size-16"
+								className="motion-safe:animate-player-cover size-14 rounded-sm border border-shell-subtle-border bg-player-artwork text-sm sm:size-16"
 							/>
 						</button>
 					) : (
@@ -677,14 +707,14 @@ export function PlayerBar({
 							key={artworkUrl ?? "none"}
 							coverUrl={artworkUrl}
 							title={nowPlayingTitle}
-							className="player-cover-enter size-14 shrink-0 rounded-sm border border-shell-subtle-border bg-player-artwork text-sm sm:size-16"
+							className="motion-safe:animate-player-cover size-14 shrink-0 rounded-sm border border-shell-subtle-border bg-player-artwork text-sm sm:size-16"
 						/>
 					)}
 					<div className="min-w-0 flex-1 overflow-hidden">
 						<div className="flex max-w-full min-w-0 items-center">
 							<p
 								key={nowPlayingTitle}
-								className="player-title-enter min-w-0 truncate font-medium text-player-title text-sm sm:leading-6"
+								className="motion-safe:animate-player-title min-w-0 truncate font-medium text-player-title text-sm sm:leading-6"
 								title={nowPlayingTitle}
 							>
 								{nowPlayingTitle}
@@ -694,8 +724,10 @@ export function PlayerBar({
 									type="button"
 									data-player-control
 									className={cn(
-										"ml-2 inline-flex size-6 relative after:absolute after:-inset-1 after:content-[''] shrink-0 items-center justify-center rounded-sm text-player-foreground hover:text-player-control-primary disabled:opacity-40",
-										favoriteTarget?.isFavorite && "text-player-control-primary",
+										"ml-2 inline-flex size-6 relative after:absolute after:-inset-1 after:content-empty shrink-0 items-center justify-center rounded-sm text-player-foreground disabled:opacity-40",
+										favoriteTarget?.isFavorite
+											? "text-player-control-primary"
+											: "hover:text-heading",
 									)}
 									aria-label={
 										favoriteTarget?.isFavorite
@@ -719,7 +751,7 @@ export function PlayerBar({
 								type="button"
 								data-player-control
 								className={cn(
-									"ml-1 inline-flex size-6 relative after:absolute after:-inset-1 after:content-[''] shrink-0 items-center justify-center rounded-sm text-player-foreground hover:text-player-control-primary disabled:opacity-40",
+									"ml-1 inline-flex size-6 relative after:absolute after:-inset-1 after:content-empty shrink-0 items-center justify-center rounded-sm text-player-foreground hover:text-heading disabled:opacity-40",
 									actionsOpen && "text-player-control-primary",
 								)}
 								aria-label="Track actions"
@@ -756,11 +788,13 @@ export function PlayerBar({
 							<Portal>
 								<div
 									id="player-track-actions-menu"
-									className="fixed z-50 min-w-44 -translate-y-full rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg"
-									style={{
-										top: menuPosition.top,
-										left: menuPosition.left,
-									}}
+									className="fixed top-(--menu-top) left-(--menu-left) z-50 min-w-44 -translate-y-full rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg"
+									style={
+										{
+											"--menu-top": `${menuPosition.top}px`,
+											"--menu-left": `${menuPosition.left}px`,
+										} as CSSProperties
+									}
 									role="menu"
 								>
 									<AddToPlaylistMenuItem
@@ -957,6 +991,8 @@ export function PlayerBar({
 				<LyricsOverlay
 					track={currentTrack}
 					coverUrl={largeArtworkUrl}
+					accent={accent}
+					windowControls={windowControls}
 					loadLyrics={getTrackLyrics}
 					onClose={() => setLyricsOpen(false)}
 				/>
@@ -980,7 +1016,7 @@ export function PlayerBar({
 				<NowPlayingView
 					track={currentTrack}
 					coverUrl={largeArtworkUrl}
-					accentStyle={accentStyle}
+					accent={accent}
 					onOpenLyrics={() => {
 						setNowPlayingOpen(false);
 						setLyricsOpen(true);
@@ -1191,7 +1227,7 @@ function TrackInfoDialog({
 					aria-modal="true"
 					aria-label={track.title}
 					tabIndex={-1}
-					className="max-h-[80vh] w-full max-w-2xl overflow-hidden rounded-md border border-border bg-popover text-popover-foreground shadow-xl"
+					className="max-h-dialog-height w-full max-w-2xl overflow-hidden rounded-md border border-border bg-popover text-popover-foreground shadow-xl"
 				>
 					<div className="flex items-center justify-between gap-3 border-border border-b p-4">
 						<h2 className="truncate font-semibold text-heading text-xl">
@@ -1206,11 +1242,11 @@ function TrackInfoDialog({
 							<X className="size-4" />
 						</button>
 					</div>
-					<div className="max-h-[65vh] overflow-auto p-4">
+					<div className="max-h-dialog-body-height overflow-auto p-4">
 						{rows.map(([label, value]) => (
 							<div
 								key={label}
-								className="grid grid-cols-[8rem_minmax(0,1fr)] gap-3 border-border border-b py-2 text-sm"
+								className="grid grid-cols-label gap-3 border-border border-b py-2 text-sm"
 							>
 								<span className="text-caption">{label}</span>
 								<span className="min-w-0 break-words font-medium text-foreground">

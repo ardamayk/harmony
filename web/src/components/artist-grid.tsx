@@ -1,36 +1,48 @@
 import type { Artist } from "@repo/api-client";
+import { AlbumArt } from "@repo/ui";
+import { Link } from "@tanstack/react-router";
 import {
 	CollectionGrid,
 	CARD_INTERACTION_CLASS,
 } from "#/components/collection-grid-layout";
+import { apiClient } from "#/lib/api";
 import { cn } from "#/lib/utils";
 
+/** Artist cards share the Album card's look: photo (or initial) and caption. */
 export function ArtistGrid({ artists }: { artists: Artist[] }) {
 	return (
 		<CollectionGrid>
 			{artists.map((artist) => (
-				<div
+				<Link
 					key={artist.id}
+					to="/library/artists/$artistId"
+					params={{ artistId: artist.id }}
 					className={cn(
-						"group flex aspect-square min-w-0 flex-col overflow-hidden rounded-md border border-border p-3 hover:bg-muted/50",
+						"group relative aspect-square overflow-hidden rounded-md border border-border bg-card",
 						CARD_INTERACTION_CLASS,
 					)}
 				>
-					<div className="mb-3 flex min-h-0 flex-1 transform-gpu items-center justify-center rounded-sm bg-muted font-semibold text-2xl uppercase transition duration-500 ease-out group-hover:scale-[1.04]">
-						{artist.name.slice(0, 1)}
-					</div>
-					<p
-						className="truncate font-medium text-heading text-sm"
+					<AlbumArt
+						coverUrl={apiClient.getArtistPhotoUrl(artist.id)}
 						title={artist.name}
-					>
-						{artist.name}
-					</p>
-					{artist.albumCount != null ? (
-						<p className="text-foreground text-xs">
-							{artist.albumCount} albums
+						className="absolute inset-0 size-full transform-gpu text-2xl transition duration-500 ease-out group-hover:scale-104 group-focus-visible:scale-104"
+					/>
+					<div className="absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-background/97 via-background/86 via-45% to-transparent px-2 pt-12 pb-2 text-foreground">
+						<p
+							className="truncate font-semibold text-heading text-xs leading-tight"
+							title={artist.name}
+						>
+							{artist.name}
 						</p>
-					) : null}
-				</div>
+						{artist.albumCount != null ? (
+							<p className="text-xs text-caption leading-tight">
+								{artist.albumCount === 1
+									? "1 album"
+									: `${artist.albumCount} albums`}
+							</p>
+						) : null}
+					</div>
+				</Link>
 			))}
 		</CollectionGrid>
 	);

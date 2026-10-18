@@ -1,4 +1,5 @@
 import type { Track } from "@repo/api-client";
+import { cn } from "../lib/utils";
 import { usePlayback } from "../playback/PlaybackProvider";
 import { AlbumArt } from "./AlbumArt";
 import { PlaybackControls } from "./PlayerBarControls";
@@ -8,10 +9,12 @@ export function CurrentTrackPanel({
 	track,
 	coverUrl,
 	isArtworkFocused = false,
+	className,
 }: {
 	track: Track;
 	coverUrl: string | null;
 	isArtworkFocused?: boolean;
+	className?: string;
 }) {
 	const {
 		isPlaying,
@@ -37,7 +40,10 @@ export function CurrentTrackPanel({
 	return (
 		<section
 			aria-label="Current track"
-			className="flex min-h-0 min-w-0 flex-1 flex-col items-center justify-center gap-6 p-6"
+			className={cn(
+				"flex min-h-0 min-w-0 flex-1 flex-col items-center justify-center gap-8 p-6",
+				className,
+			)}
 		>
 			{isArtworkFocused ? (
 				<TiltingArtwork coverUrl={coverUrl} title={track.title} />
@@ -45,20 +51,25 @@ export function CurrentTrackPanel({
 				<AlbumArt
 					coverUrl={coverUrl}
 					title={track.title}
-					className="aspect-square w-full max-w-sm shrink-0 rounded-lg text-3xl shadow-xl"
+					className="aspect-square w-artwork-stage shrink-0 rounded-md text-3xl shadow-xl"
 				/>
 			)}
-			<div className="w-full max-w-xl text-center">
-				<h1 className="truncate font-semibold text-2xl text-heading">
+			{/* Spans the cover and sizes its type from it, so title and cover keep their proportion. */}
+			<div className="@container w-artwork-stage text-center">
+				<h1
+					className="line-clamp-2 text-balance break-words font-semibold text-heading text-xl @xs:text-2xl @sm:text-3xl"
+					title={track.title}
+				>
 					{track.title}
 				</h1>
-				<p className="mt-1 truncate text-base text-caption">
+				<p className="mt-2 line-clamp-2 text-balance text-caption text-base @sm:text-xl">
 					{track.artistName}
 					{track.albumTitle ? ` · ${track.albumTitle}` : ""}
 				</p>
 			</div>
-			<div className="w-full max-w-xl [--player-control-primary:var(--primary)] [--player-control-primary-foreground:var(--primary-foreground)] [--player-foreground:var(--foreground)]">
+			<div className="w-full max-w-md player-neutral 2xl:max-w-xl">
 				<PlaybackControls
+					stage
 					isRadioPlaying={false}
 					isPlaying={isPlaying}
 					hasPlayableSource

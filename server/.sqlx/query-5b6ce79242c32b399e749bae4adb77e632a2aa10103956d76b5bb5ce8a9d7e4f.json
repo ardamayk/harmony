@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO artist_biographies (artist_id, outcome, text, source_url, checked_at)\n            VALUES (?1, ?2, ?3, ?4, CURRENT_TIMESTAMP)\n            ON CONFLICT (artist_id) DO UPDATE SET outcome = excluded.outcome,\n                text = excluded.text, source_url = excluded.source_url, checked_at = excluded.checked_at",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "5b6ce79242c32b399e749bae4adb77e632a2aa10103956d76b5bb5ce8a9d7e4f"
+}

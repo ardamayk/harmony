@@ -1,6 +1,7 @@
 import type { ThemePreferences } from "@repo/api-client";
 import { useLayout } from "@repo/ui";
 import { useQuery } from "@tanstack/react-query";
+import type { CSSProperties } from "react";
 import { Button } from "#/components/ui/button";
 import { getDesktopMpvStatus, isDesktopClient } from "#/desktop/bridge";
 import { apiClient } from "#/lib/api";
@@ -67,8 +68,8 @@ export function SettingsPage() {
 									{preset.swatches.map((color) => (
 										<span
 											key={color}
-											className="h-full flex-1"
-											style={{ backgroundColor: color }}
+											className="h-full flex-1 bg-(--swatch)"
+											style={{ "--swatch": color } as CSSProperties}
 										/>
 									))}
 								</div>

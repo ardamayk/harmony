@@ -1,5 +1,10 @@
 import type { QueueItemSource, Track } from "@repo/api-client";
-import { buildTrackDetailRows, toast, usePlayback } from "@repo/ui";
+import {
+	buildTrackDetailRows,
+	QueueEqualizer,
+	toast,
+	usePlayback,
+} from "@repo/ui";
 import {
 	Clock,
 	Heart,
@@ -11,7 +16,6 @@ import {
 	Trash2,
 	X,
 } from "lucide-react";
-import { Dialog as DialogPrimitive } from "radix-ui";
 import { useRef, useState } from "react";
 import {
 	ContextMenu,
@@ -19,6 +23,13 @@ import {
 	ContextMenuItem,
 	ContextMenuTrigger,
 } from "#/components/ui/context-menu";
+import { Button } from "#/components/ui/button";
+import {
+	Dialog,
+	DialogClose,
+	DialogContent,
+	DialogTitle,
+} from "#/components/ui/dialog";
 import { useFavoriteTracks } from "#/hooks/use-favorite-tracks";
 import { useReturnFocus } from "#/hooks/use-return-focus";
 import { useServerCapability } from "#/hooks/use-server-capability";
@@ -54,6 +65,7 @@ export function TrackList({
 	onDeleteTrackSuccess,
 	onReplaceTrackSuccess,
 	removeLabel = "Remove",
+	playCounts,
 }: {
 	tracks: Track[];
 	contextTracks?: Track[];
@@ -69,9 +81,17 @@ export function TrackList({
 	onDeleteTrackSuccess?: (track: Track) => void;
 	onReplaceTrackSuccess?: (track: Track) => void;
 	removeLabel?: string;
+	/** Last.fm play counts by Track id; the column shows only when there are any. */
+	playCounts?: Map<string, number>;
 }) {
-	const { playTrack, addToQueue, playNext, currentTrack, getAlbumCoverUrl } =
-		usePlayback();
+	const {
+		playTrack,
+		addToQueue,
+		playNext,
+		currentTrack,
+		isPlaying: isPlaybackRunning,
+		getAlbumCoverUrl,
+	} = usePlayback();
 	const { isFavorite, toggleFavorite } = useFavoriteTracks();
 	const trackDeletion = useTrackDeletionFlow(onDeleteTrackSuccess);
 	const hasDeletionCapability = useServerCapability(
@@ -89,8 +109,7 @@ export function TrackList({
 	const returnFocus = useReturnFocus();
 	const captureRowFocus = (trackId: string) =>
 		returnFocus.capture(rowRefs.current.get(trackId));
-	const restoreRowFocus = (event: Event) =>
-		returnFocus.restore(event, tableRef.current);
+	const restoreRowFocus = () => returnFocus.restore(tableRef.current);
 
 	// Selecting a Track replaces the Queue with the context from that Track
 	// onward, so the previous Queue is gone and no earlier Track in the list
@@ -122,18 +141,24 @@ export function TrackList({
 	const shouldShowArtistLine = !albumId;
 	const shouldShowAlbumCover = !albumId;
 	const hasMultipleDiscs = tracks.some((track) => track.discNo > 1);
+	const showPlays = (playCounts?.size ?? 0) > 0;
 
 	return (
 		<>
 			<table
 				ref={tableRef}
 				tabIndex={-1}
-				className={cn("w-full outline-none", compact ? "text-xs" : "text-sm")}
+				className="w-full text-sm outline-none"
 			>
 				<thead>
 					<tr className="border-border border-b text-left text-caption text-xs">
 						<th className={cn("w-10 font-medium", rowPadding)}>#</th>
 						<th className={cn("font-medium", rowPadding)}>Title</th>
+						{showPlays ? (
+							<th className={cn("w-32 text-right font-medium", rowPadding)}>
+								Plays
+							</th>
+						) : null}
 						<th className={cn("w-16 text-right font-medium", rowPadding)}>
 							<span className="sr-only">Duration</span>
 							<Clock className="ml-auto size-3.5" />
@@ -162,95 +187,133 @@ export function TrackList({
 
 						return (
 							<ContextMenu key={track.id}>
-								<ContextMenuTrigger asChild>
-									<tr
-										ref={(row) => {
-											if (row) rowRefs.current.set(track.id, row);
-											else rowRefs.current.delete(track.id);
-										}}
+								<ContextMenuTrigger
+									render={
+										<tr
+											ref={(row) => {
+												if (row) rowRefs.current.set(track.id, row);
+												else rowRefs.current.delete(track.id);
+											}}
+											className={cn(
+												"group cursor-pointer border-border/70 border-b transition",
+												// The playing row takes the neutral active step, above the hover step;
+												// flat, no shadow, so it stays part of the list. The warm lit fill
+												// stays with the Queue; here the title and equalizer carry the accent.
+												isPlaying ? "bg-neutral-active" : "hover:bg-muted",
+											)}
+											tabIndex={0}
+											onClick={() => {
+												if (playMode === "single") handlePlay(track);
+											}}
+											onDoubleClick={() => {
+												if (playMode === "double") handlePlay(track);
+											}}
+											onKeyDown={(event) => {
+												if (event.key === "Enter") handlePlay(track);
+											}}
+										/>
+									}
+								>
+									<td
 										className={cn(
-											"group cursor-pointer border-border/40 border-b transition hover:bg-muted/50",
-											isPlaying && "bg-primary/5",
+											"tabular-nums",
+											// Caption loses 4.5:1 on the active step.
+											isPlaying ? "text-foreground" : "text-caption",
+											rowPadding,
 										)}
-										tabIndex={0}
-										onClick={() => {
-											if (playMode === "single") handlePlay(track);
-										}}
-										onDoubleClick={() => {
-											if (playMode === "double") handlePlay(track);
-										}}
-										onKeyDown={(event) => {
-											if (event.key === "Enter") handlePlay(track);
-										}}
 									>
-										<td className={cn("text-caption tabular-nums", rowPadding)}>
-											{visibleNumber}
-										</td>
-										<td className={rowPadding}>
-											<div className="flex min-w-0 items-center gap-2">
-												{shouldShowAlbumCover ? (
-													<img
-														alt=""
-														src={getAlbumCoverUrl(track.albumId, 64)}
-														className="size-8 shrink-0 rounded-sm object-cover text-xs"
-													/>
-												) : null}
-												<div className="min-w-0">
+										{isPlaying ? (
+											<QueueEqualizer
+												isPlaying={isPlaybackRunning}
+												className="text-neutral-active-foreground"
+											/>
+										) : (
+											visibleNumber
+										)}
+									</td>
+									<td className={rowPadding}>
+										<div className="flex min-w-0 items-center gap-2">
+											{shouldShowAlbumCover ? (
+												<img
+													alt=""
+													src={getAlbumCoverUrl(track.albumId, 64)}
+													className="size-8 shrink-0 rounded-sm object-cover text-xs"
+												/>
+											) : null}
+											<div className="min-w-0">
+												<span
+													className={cn(
+														"block truncate font-medium text-base leading-snug",
+														isPlaying
+															? "text-neutral-active-foreground"
+															: "text-foreground",
+													)}
+												>
+													{track.title}
+												</span>
+												{shouldShowArtistLine ? (
 													<span
 														className={cn(
-															"block truncate font-medium leading-snug",
-															compact ? "text-sm" : "text-base",
-															isPlaying ? "text-heading" : "text-foreground",
+															"mt-0.5 block truncate text-xs leading-tight",
+															isPlaying ? "text-foreground" : "text-caption",
 														)}
 													>
-														{track.title}
+														{getTrackArtistName(track)}
 													</span>
-													{shouldShowArtistLine ? (
-														<span className="mt-0.5 block truncate text-caption text-xs leading-tight">
-															{getTrackArtistName(track)}
-														</span>
-													) : null}
-												</div>
+												) : null}
 											</div>
-										</td>
+										</div>
+									</td>
+									{showPlays ? (
 										<td
 											className={cn(
 												"text-right text-caption tabular-nums",
 												rowPadding,
 											)}
 										>
-											{formatDuration(track.durationMs)}
+											{playCounts?.get(track.id)?.toLocaleString() ?? ""}
 										</td>
-										{showFavorite ? (
-											<td className={cn("text-center", favoritePadding)}>
-												<button
-													type="button"
-													aria-label={
-														favorited
-															? "Remove from favorites"
-															: "Add to favorites"
-													}
-													className={cn(
-														"inline-flex size-8 items-center justify-center rounded-full text-caption transition hover:bg-muted hover:text-heading",
-														favorited && "text-heading",
-													)}
-													onClick={(event) => {
-														event.stopPropagation();
-														toggleFavorite(track.id);
-													}}
-												>
-													<Heart
-														className="size-3.5"
-														fill={favorited ? "currentColor" : "none"}
-													/>
-												</button>
-											</td>
-										) : null}
-									</tr>
+									) : null}
+									<td
+										className={cn(
+											"text-right tabular-nums",
+											isPlaying ? "text-foreground" : "text-caption",
+											rowPadding,
+										)}
+									>
+										{formatDuration(track.durationMs)}
+									</td>
+									{showFavorite ? (
+										<td className={cn("text-center", favoritePadding)}>
+											<Button
+												type="button"
+												variant="ghost"
+												size="icon-sm"
+												aria-label={
+													favorited
+														? "Remove from favorites"
+														: "Add to favorites"
+												}
+												className={cn(
+													"rounded-full text-caption hover:bg-muted hover:text-heading dark:hover:bg-muted",
+													favorited && "text-heading",
+												)}
+												onClick={(event) => {
+													event.stopPropagation();
+													toggleFavorite(track.id);
+												}}
+											>
+												<Heart
+													className="size-3.5"
+													fill={favorited ? "currentColor" : "none"}
+												/>
+											</Button>
+										</td>
+									) : null}
 								</ContextMenuTrigger>
 								<ContextMenuContent>
 									<ContextMenuItem
-										onSelect={() =>
+										onClick={() =>
 											void handleQueueAction(
 												track.id,
 												playNext,
@@ -262,7 +325,7 @@ export function TrackList({
 										Play next
 									</ContextMenuItem>
 									<ContextMenuItem
-										onSelect={() =>
+										onClick={() =>
 											void handleQueueAction(
 												track.id,
 												addToQueue,
@@ -274,7 +337,7 @@ export function TrackList({
 										Add to queue
 									</ContextMenuItem>
 									<ContextMenuItem
-										onSelect={() => {
+										onClick={() => {
 											captureRowFocus(track.id);
 											setDetailsTrack(track);
 										}}
@@ -283,7 +346,7 @@ export function TrackList({
 										Details
 									</ContextMenuItem>
 									{onRemoveTrack ? (
-										<ContextMenuItem onSelect={() => onRemoveTrack(track)}>
+										<ContextMenuItem onClick={() => onRemoveTrack(track)}>
 											<ListMinus className="size-4" />
 											{removeLabel}
 										</ContextMenuItem>
@@ -291,7 +354,7 @@ export function TrackList({
 									{showDelete && hasReplacementCapability ? (
 										<ContextMenuItem
 											disabled={trackReplacement.isBusy}
-											onSelect={() => {
+											onClick={() => {
 												captureRowFocus(track.id);
 												trackReplacement.open(track);
 											}}
@@ -304,7 +367,7 @@ export function TrackList({
 										<ContextMenuItem
 											variant="destructive"
 											disabled={trackDeletion.isDeleting}
-											onSelect={() => {
+											onClick={() => {
 												captureRowFocus(track.id);
 												trackDeletion.open(track);
 											}}
@@ -324,11 +387,11 @@ export function TrackList({
 				onOpenChange={(isOpen) => {
 					if (!isOpen) setDetailsTrack(null);
 				}}
-				onCloseAutoFocus={restoreRowFocus}
+				finalFocus={restoreRowFocus}
 			/>
 			<TrackDeletionDialog
 				track={trackDeletion.track}
-				onCloseAutoFocus={restoreRowFocus}
+				finalFocus={restoreRowFocus}
 				preview={trackDeletion.preview}
 				error={trackDeletion.error}
 				isLoading={trackDeletion.isLoading}
@@ -338,7 +401,7 @@ export function TrackList({
 			/>
 			<TrackReplacementDialog
 				track={trackReplacement.track}
-				onCloseAutoFocus={restoreRowFocus}
+				finalFocus={restoreRowFocus}
 				step={trackReplacement.step}
 				preview={trackReplacement.preview}
 				progress={trackReplacement.progress}
@@ -358,48 +421,45 @@ export function TrackList({
 function TrackDetailsDialog({
 	track,
 	onOpenChange,
-	onCloseAutoFocus,
+	finalFocus,
 }: {
 	track: Track | null;
 	onOpenChange: (isOpen: boolean) => void;
-	onCloseAutoFocus?: (event: Event) => void;
+	finalFocus?: () => HTMLElement | true;
 }) {
 	const rows = track ? buildTrackDetailRows(track) : [];
 
 	return (
-		<DialogPrimitive.Root open={Boolean(track)} onOpenChange={onOpenChange}>
-			<DialogPrimitive.Portal>
-				<DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-background/70" />
-				<DialogPrimitive.Content
-					onCloseAutoFocus={onCloseAutoFocus}
-					className="-translate-x-1/2 -translate-y-1/2 fixed top-1/2 left-1/2 z-50 max-h-[80vh] w-[calc(100vw-2rem)] max-w-2xl overflow-hidden rounded-md border border-border bg-popover text-popover-foreground shadow-xl outline-none"
-				>
-					<div className="flex items-center justify-between gap-3 border-border border-b p-4">
-						<DialogPrimitive.Title className="truncate font-semibold text-heading text-xl">
-							{track?.title}
-						</DialogPrimitive.Title>
-						<DialogPrimitive.Close className="inline-flex size-8 items-center justify-center rounded-full hover:bg-muted">
-							<span className="sr-only">Close</span>
-							<X className="size-4" />
-						</DialogPrimitive.Close>
+		<Dialog open={Boolean(track)} onOpenChange={onOpenChange}>
+			<DialogContent
+				finalFocus={finalFocus}
+				className="max-h-dialog-height max-w-2xl overflow-hidden p-0"
+			>
+				<div className="flex items-center justify-between gap-3 border-border border-b p-4">
+					<DialogTitle className="truncate">{track?.title}</DialogTitle>
+					<DialogClose
+						render={<Button type="button" variant="ghost" size="icon-sm" />}
+					>
+						<span className="sr-only">Close</span>
+						<X className="size-4" />
+					</DialogClose>
+				</div>
+				{rows.length > 0 ? (
+					<div className="max-h-dialog-body-height overflow-auto p-4">
+						{rows.map(([label, value]) => (
+							<DetailRow key={label} label={label} value={value} />
+						))}
 					</div>
-					{rows.length > 0 ? (
-						<div className="max-h-[65vh] overflow-auto p-4">
-							{rows.map(([label, value]) => (
-								<DetailRow key={label} label={label} value={value} />
-							))}
-						</div>
-					) : null}
-				</DialogPrimitive.Content>
-			</DialogPrimitive.Portal>
-		</DialogPrimitive.Root>
+				) : null}
+			</DialogContent>
+		</Dialog>
 	);
 }
 
 function DetailRow({ label, value }: { label: string; value?: string | null }) {
 	if (!value) return null;
 	return (
-		<div className="grid grid-cols-[8rem_minmax(0,1fr)] gap-3 border-border border-b py-2 text-sm">
+		<div className="grid grid-cols-label gap-3 border-border border-b py-2 text-sm">
 			<span className="text-caption">{label}</span>
 			<span className="min-w-0 break-words font-medium text-foreground">
 				{value}

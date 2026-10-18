@@ -1,6 +1,5 @@
 import { ChevronDown, ListMusic, Pin, PinOff } from "lucide-react";
 import { useRef, useState } from "react";
-import { cn } from "../lib/utils";
 import { usePlayback } from "../playback/PlaybackProvider";
 import { getQueuePanel } from "../widgets/layout-utils";
 import { useLayout } from "./LayoutProvider";
@@ -8,6 +7,11 @@ import { PanelCollapseButton } from "./PanelCollapseButton";
 import { useQueuePin } from "./QueuePinProvider";
 import { QueueSections } from "./QueueSections";
 import { findCurrentQueueIndex, getQueueMinutes } from "./queue-groups";
+
+// Body text at rest, the hover step on hover and focus, and the shared lit look
+// with accent glyph when pressed (Pin), as the Top Nav controls do.
+const QUEUE_ICON_BUTTON_CLASS =
+	"inline-flex size-8 items-center justify-center rounded-sm text-foreground transition hover:bg-muted hover:text-heading focus-visible:bg-muted focus-visible:text-heading focus-visible:outline-none aria-pressed:bg-neutral-active aria-pressed:text-shell-active-foreground aria-pressed:shadow-lit";
 
 export function QueuePanel({
 	embedded = false,
@@ -86,7 +90,7 @@ export function QueuePanel({
 		<div className="flex h-full min-h-0 flex-col">
 			<div className="flex items-center justify-between gap-2 border-sidebar-border border-b pt-3 pr-3 pb-3 pl-4">
 				<div className="min-w-0">
-					<h2 className="font-semibold text-heading text-base leading-[22px]">
+					<h2 className="font-semibold text-heading text-base leading-5.5">
 						Queue
 					</h2>
 					<p className="whitespace-nowrap text-xs text-caption leading-4 tabular-nums">
@@ -97,7 +101,7 @@ export function QueuePanel({
 				<div className="flex shrink-0 items-center gap-1">
 					<button
 						type="button"
-						className="h-8 rounded-sm border border-sidebar-border bg-player-pill px-3 text-caption text-xs hover:text-heading disabled:opacity-40"
+						className="h-8 rounded-sm border border-sidebar-border bg-player-pill px-3 text-foreground text-xs hover:bg-muted hover:text-heading focus-visible:bg-muted focus-visible:text-heading focus-visible:outline-none disabled:pointer-events-none disabled:opacity-40"
 						disabled={!hasClearableItems || isUpdating}
 						onClick={() => void runAction("Failed to clear queue", clearQueue)}
 					>
@@ -113,11 +117,7 @@ export function QueuePanel({
 									? "Unpin: float the queue over the page"
 									: "Pin: make room for the queue beside the page"
 							}
-							className={cn(
-								"inline-flex size-8 items-center justify-center rounded-sm text-caption hover:bg-player-pill hover:text-heading",
-								queuePin.pinned &&
-									"bg-player-pill text-shell-active-foreground",
-							)}
+							className={QUEUE_ICON_BUTTON_CLASS}
 							onClick={queuePin.togglePinned}
 						>
 							{queuePin.pinned ? (
@@ -132,7 +132,7 @@ export function QueuePanel({
 							type="button"
 							aria-label="Hide queue"
 							title="Hide queue"
-							className="inline-flex size-8 items-center justify-center rounded-sm text-caption hover:bg-player-pill hover:text-heading"
+							className={QUEUE_ICON_BUTTON_CLASS}
 							onClick={onClose ?? (() => togglePanel(panelSide))}
 						>
 							<ChevronDown className="size-4" />
@@ -142,7 +142,7 @@ export function QueuePanel({
 			</div>
 			<div
 				ref={scrollContainerRef}
-				className="min-h-0 flex-1 overflow-y-auto pt-2 pr-2 pb-3 pl-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+				className="min-h-0 flex-1 overflow-y-auto pt-2 pr-2 pb-3 pl-4 scrollbar-hidden"
 			>
 				{(queueConflict || actionError) && (
 					<p

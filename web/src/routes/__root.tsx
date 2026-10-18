@@ -102,6 +102,7 @@ function PlayerBarWithSync() {
 			onToggleMiniPlayer={
 				isDesktopClient() ? () => void toggleMiniPlayer() : undefined
 			}
+			windowControls={isDesktopClient() ? desktopWindowControls : undefined}
 			canShowWaveform={canShowWaveform}
 		/>
 	);

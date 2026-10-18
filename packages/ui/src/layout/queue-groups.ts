@@ -76,14 +76,15 @@ export function getQueueGroupDetails(
 			return {
 				title: source.albumTitle,
 				meta: `From album · ${source.artistName} · ${count}`,
-				color: "var(--primary)",
+				// The ring's slate: a source marker, never the accent.
+				color: "var(--ring)",
 				href: `/library/${encodeURIComponent(source.albumId)}`,
 			};
 		case "playlist":
 			return {
 				title: source.name,
 				meta: `From playlist · ${count}`,
-				color: "var(--primary)",
+				color: "var(--ring)",
 				href: `/playlists/${encodeURIComponent(source.playlistId)}`,
 			};
 		case "suggestion": {

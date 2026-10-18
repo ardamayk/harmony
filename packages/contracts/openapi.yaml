@@ -103,6 +103,121 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ArtistList"
+  /api/v1/library/artists/{artistId}:
+    get:
+      tags: [library]
+      operationId: getArtist
+      summary: Get an artist
+      description: Any credited Artist. Album counts include active Album Artist credits only.
+      parameters:
+        - $ref: "#/components/parameters/artistId"
+      responses:
+        "200":
+          description: Artist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Artist"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/library/artists/{artistId}/photo:
+    get:
+      tags: [library]
+      operationId: getArtistPhoto
+      summary: Get an artist photo
+      description: >-
+        Looked up on Deezer on first request and stored on the Music Server
+        (ADR 0027), so clients never contact Deezer. Not found when Deezer has
+        no photo, the lookup failed, or online lookups are switched off.
+      parameters:
+        - $ref: "#/components/parameters/artistId"
+      responses:
+        "200":
+          description: Artist photo
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/library/artists/{artistId}/biography:
+    get:
+      tags: [library]
+      operationId: getArtistBiography
+      summary: Get an artist biography
+      description: >-
+        The Artist's Wikipedia summary, found through MusicBrainz and Wikidata
+        on first request and stored (ADR 0027). Show `sourceUrl` with it, as
+        Wikipedia's CC BY-SA licence requires. Not found when there is none,
+        the lookup failed, or online lookups are switched off.
+      parameters:
+        - $ref: "#/components/parameters/artistId"
+      responses:
+        "200":
+          description: Artist biography
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArtistBiography"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/library/artists/{artistId}/popular-tracks:
+    get:
+      tags: [library]
+      operationId: listArtistPopularTracks
+      summary: List an artist's popular tracks
+      description: >-
+        The Artist's Tracks in the library that are among their 50 most
+        popular on Deezer, best first. The Deezer list is looked up on first
+        request and refreshed weekly (ADR 0027); titles are matched without
+        case or bracketed versions. Empty when there is no list, the lookup
+        failed, or online lookups are switched off.
+      parameters:
+        - $ref: "#/components/parameters/artistId"
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 10
+      responses:
+        "200":
+          description: Popular tracks, best first
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PopularTrackList"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/library/tracks/play-counts:
+    get:
+      tags: [library]
+      operationId: listTrackPlayCounts
+      summary: List Last.fm play counts for tracks
+      description: >-
+        Last.fm play counts for the named Tracks, read from their first
+        credited Artist's 1000 most played Tracks on Last.fm, matched without
+        case or bracketed versions and refreshed weekly (ADR 0030). Only when
+        the operator set LASTFM_API_KEY; Tracks without a count are left out,
+        so the list is empty without a key.
+      parameters:
+        - name: ids
+          in: query
+          required: true
+          description: Comma-separated Track ids, at most 200.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Play counts for the Tracks that have one
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlayCountList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
   /api/v1/library/albums:
     get:
       tags: [library]
@@ -128,6 +243,27 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AlbumList"
+  /api/v1/library/albums/{albumId}/online-genres:
+    get:
+      tags: [library]
+      operationId: listAlbumOnlineGenres
+      summary: List Deezer's genres for an album whose tags name none
+      description: >-
+        Deezer's genres for the Album, looked up on first request and stored
+        (ADR 0027). Shown on the Album page only; Genre pages, filters and
+        radio still read the tags. Empty when the Album's tags name a genre,
+        when Deezer has none, or when online lookups are off.
+      parameters:
+        - $ref: "#/components/parameters/albumId"
+      responses:
+        "200":
+          description: Genre names, Deezer's order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenreNameList"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /api/v1/library/albums/{albumId}:
     get:
       tags: [library]
@@ -352,8 +488,13 @@ paths:
     get:
       tags: [library]
       operationId: getTrackLyrics
-      summary: Get the lyrics text stored for a track
-      description: Unsynchronised lyrics read from the file tags at import; empty when the file carried none.
+      summary: Get a track's lyrics
+      description: >-
+        The lyrics read from the file tags at import; when the file carried
+        none, LRCLIB's for the Track's title, Artist, Album and duration,
+        looked up on first request and stored (ADR 0029). Synced lyrics come
+        as LRC text. Empty when there are none, the lookup failed, or online
+        lookups are switched off.
       parameters:
         - $ref: "#/components/parameters/trackId"
       responses:
@@ -1568,6 +1709,13 @@ components:
         type: integer
         minimum: 0
         default: 0
+    artistId:
+      name: artistId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
     albumId:
       name: albumId
       in: path
@@ -2524,6 +2672,46 @@ components:
           type: integer
           format: int64
           minimum: 1
+    ArtistBiography:
+      type: object
+      required: [text, sourceUrl]
+      properties:
+        text:
+          type: string
+        sourceUrl:
+          type: string
+          format: uri
+    GenreNameList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            type: string
+    PlayCountList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required: [trackId, playCount]
+            properties:
+              trackId:
+                type: string
+              playCount:
+                type: integer
+                format: int64
+    PopularTrackList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Track"
     ArtistList:
       type: object
       required: [items, total]
@@ -2631,7 +2819,7 @@ components:
           format: uuid
         lyrics:
           type: string
-          description: Plain lyrics text with newline-separated lines; empty when none are stored.
+          description: Plain lyrics, or LRC text (`[mm:ss.xx] words`) when synced, with newline-separated lines; empty when there are none.
 
     Track:
       type: object

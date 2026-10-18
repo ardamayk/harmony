@@ -161,9 +161,7 @@ describe("genre routes", () => {
 		expect(synthpop.className).toContain("duration-300");
 		expect(synthpop.className).toContain("ease-out");
 		expect(synthpop.className).toContain("hover:-translate-y-1");
-		expect(synthpop.className).toContain(
-			"hover:border-shell-active-foreground/35",
-		);
+		expect(synthpop.className).toContain("hover:border-heading/35");
 		expect(synthpop.className).toContain("focus-visible:-translate-y-1");
 		expect(synthpop.className).toContain("motion-reduce:transition-none");
 		expect(synthpop.className).toContain("aspect-square");
@@ -172,7 +170,7 @@ describe("genre routes", () => {
 			"overflow-hidden",
 		);
 		expect(screen.getByTestId("genres-page-content").className).toContain(
-			"[scrollbar-width:none]",
+			"scrollbar-hidden",
 		);
 		expect(
 			screen
@@ -182,7 +180,7 @@ describe("genre routes", () => {
 		expect(
 			screen
 				.getByTestId("genres-page-content")
-				.querySelector('[class*="auto-fill"]'),
+				.querySelector(".grid-cols-cards"),
 		).toBeTruthy();
 		expect(
 			container.querySelector('[data-testid="playlist-card-cover-stack"]'),

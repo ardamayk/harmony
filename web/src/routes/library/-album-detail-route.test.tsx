@@ -16,6 +16,30 @@ const mocks = vi.hoisted(() => ({
 	queueTracks: vi.fn(),
 }));
 
+vi.mock("@tanstack/react-router", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@tanstack/react-router")>()),
+	Link: ({
+		children,
+		to,
+		params,
+		...props
+	}: {
+		children: React.ReactNode;
+		to: string;
+		params?: Record<string, string>;
+	}) => (
+		<a
+			href={Object.entries(params ?? {}).reduce(
+				(href, [key, value]) => href.replace(`$${key}`, value),
+				to,
+			)}
+			{...props}
+		>
+			{children}
+		</a>
+	),
+}));
+
 vi.mock("#/hooks/use-server-capability", () => ({
 	useServerCapability: () => true,
 }));
@@ -32,7 +56,9 @@ vi.mock("#/hooks/use-delete-library", () => {
 
 vi.mock("#/lib/api", () => ({
 	apiClient: {
+		listTrackPlayCounts: async () => new Map(),
 		getAlbum: mocks.getAlbum,
+		listAlbumOnlineGenres: async () => [],
 		getAlbumCoverUrl: (albumId: string) => `/cover/${albumId}`,
 		listAlbums: vi.fn().mockResolvedValue({ items: [] }),
 	},
@@ -46,6 +72,9 @@ vi.mock("@repo/ui", () => ({
 		coverUrl?: string | null;
 		className?: string;
 	}) => (coverUrl ? <img alt="" src={coverUrl} className={className} /> : null),
+	useCoverAccent: () => ({}),
+	useLayout: () => ({ preferences: { theme: { mode: "dark" } } }),
+	useResolvedThemeMode: () => "dark",
 	usePlayback: () => ({
 		playTrack: mocks.playTrack,
 		queueTracks: mocks.queueTracks,
@@ -136,8 +165,7 @@ describe("album detail route", () => {
 		await screen.findByRole("heading", { name: "1989" });
 		const content = screen.getByTestId("album-detail-content");
 		expect(content.className).toContain("page-content-column");
-		expect(content.parentElement?.className).toContain(
-			"px-[var(--shell-inset)]",
-		);
+		expect(content.parentElement?.className).toContain("pl-(--shell-inset)");
+		expect(content.parentElement?.className).toContain("page-edge-right");
 	});
 });

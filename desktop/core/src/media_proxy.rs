@@ -347,12 +347,13 @@ fn is_media_path(path: &str) -> bool {
         || is_image_path(path)
 }
 
-/// Album covers and Managed Import artwork. The renderer loads them from here
+/// Album covers, Artist photos and Managed Import artwork. The renderer loads them from here
 /// (its CSP allows no other image origin), and MPRIS clients fetch the cover
 /// art URL outside the renderer.
 fn is_image_path(path: &str) -> bool {
     match path.split('/').collect::<Vec<_>>().as_slice() {
         ["", "api", "v1", "library", "albums", album_id, "cover"] => !album_id.is_empty(),
+        ["", "api", "v1", "library", "artists", artist_id, "photo"] => !artist_id.is_empty(),
         [
             "",
             "api",
@@ -465,6 +466,10 @@ mod tests {
                 "/api/v1/library/albums/album-1/cover",
             ),
             (
+                "/token/api/v1/library/artists/artist-1/photo",
+                "/api/v1/library/artists/artist-1/photo",
+            ),
+            (
                 "/token/api/v1/import-batches/batch-1/artwork/cover-1",
                 "/api/v1/import-batches/batch-1/artwork/cover-1",
             ),
@@ -480,6 +485,7 @@ mod tests {
             "/token/api/v1/library/albums/album-1",
             "/token/api/v1/library/tracks/track-1",
             "/token/api/v1/library/albums",
+            "/token/api/v1/library/artists/artist-1/biography",
             "/token/api/v1/import-batches/batch-1",
             "/token/api/v1/import-batches/batch-1/artwork/",
         ] {

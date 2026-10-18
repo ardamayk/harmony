@@ -10,7 +10,7 @@ import {
 
 export type QueueRowMenuProps = {
 	item: QueueItem;
-	children: (trigger: ReactNode) => ReactElement;
+	children: ReactElement;
 };
 
 const QueueNavigationContext = createContext<

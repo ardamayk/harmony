@@ -15,7 +15,6 @@ import {
 	Tags,
 	Users,
 } from "lucide-react";
-import { Dialog as DialogPrimitive } from "radix-ui";
 import {
 	useCallback,
 	useEffect,
@@ -25,6 +24,12 @@ import {
 	useState,
 	useSyncExternalStore,
 } from "react";
+import {
+	Dialog,
+	DialogClose,
+	DialogContent,
+	DialogTitle,
+} from "#/components/ui/dialog";
 import { useDebouncedValue } from "#/hooks/use-debounced-value";
 import { useReturnFocus } from "#/hooks/use-return-focus";
 import { apiClient } from "#/lib/api";
@@ -175,8 +180,8 @@ export function LibrarySearchDialog({
 						break;
 					case "artist":
 						void navigate({
-							to: "/library/tracks",
-							search: { artistId: result.id },
+							to: "/library/artists/$artistId",
+							params: { artistId: result.id },
 						});
 						break;
 					case "genre":
@@ -311,276 +316,269 @@ export function LibrarySearchDialog({
 	};
 
 	return (
-		<DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
-			<DialogPrimitive.Portal container={portalContainer}>
-				{/* Transparent: the page stays as it is behind the search card. */}
-				<DialogPrimitive.Overlay className="fixed inset-0 z-50" />
-				<DialogPrimitive.Content
-					data-testid="library-search-dialog"
-					onTransitionEnd={(event) => {
-						if (
-							event.target === event.currentTarget &&
-							event.propertyName === "height"
-						)
-							scrollActiveResult();
-					}}
-					onOpenAutoFocus={(event) => {
-						returnFocus.capture();
-						event.preventDefault();
-						inputRef.current?.focus();
-					}}
-					onCloseAutoFocus={returnFocus.restore}
-					aria-describedby={undefined}
-					className="library-search-card fixed top-[calc(23dvh)] z-50 flex max-h-[min(85dvh,56rem)] -translate-x-1/2 flex-col overflow-hidden rounded-lg border border-border bg-popover text-popover-foreground shadow-[0_24px_80px_-20px_var(--player-shadow)] outline-none"
-				>
-					<DialogPrimitive.Title className="sr-only">
-						Search your library
-					</DialogPrimitive.Title>
-					<div className="flex shrink-0 items-center gap-3 border-border border-b px-4 sm:gap-4 sm:px-6">
-						<Search className="size-5 shrink-0 text-caption" />
-						<input
-							ref={inputRef}
-							type="search"
-							role="combobox"
-							aria-expanded={flatResults.length > 0}
-							aria-controls={listboxId}
-							aria-activedescendant={
-								activeResult ? optionId(listboxId, activeResult.key) : undefined
-							}
-							aria-autocomplete="list"
-							aria-label="Search your library"
-							maxLength={200}
-							placeholder="Search tracks, albums, artists, genres, playlists"
-							value={query}
-							onChange={(event) => {
-								setQuery(event.target.value);
-								setActiveKey(null);
-								setShowAll(false);
-							}}
-							onKeyDown={onInputKeyDown}
-							className="h-16 min-w-0 flex-1 bg-transparent text-xl outline-none placeholder:text-muted-foreground sm:h-20 sm:text-xl"
-						/>
-						{resultCount !== undefined ? (
-							<output className="shrink-0 rounded-lg border border-foreground/10 px-3 py-2 text-caption text-xs sm:text-sm">
-								{resultCount} {resultCount === 1 ? "result" : "results"}
-							</output>
-						) : null}
-						<DialogPrimitive.Close
-							aria-label="Close search"
-							className="shrink-0 rounded-md border border-foreground/10 px-3 py-2 text-caption text-xs outline-none hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-shell-active-foreground"
-						>
-							Esc
-						</DialogPrimitive.Close>
-					</div>
-					<div
-						id={listboxId}
-						aria-busy={isSearching}
-						ref={listboxRef}
-						role="listbox"
-						aria-label="Search results"
-						className="min-h-0 flex-1 overflow-y-auto"
+		<Dialog open={open} onOpenChange={onOpenChange}>
+			{/* Transparent overlay: the page stays as it is behind the search card. */}
+			<DialogContent
+				container={portalContainer ?? undefined}
+				overlayClassName="bg-transparent"
+				data-testid="library-search-dialog"
+				onTransitionEnd={(event) => {
+					if (
+						event.target === event.currentTarget &&
+						event.propertyName === "height"
+					)
+						scrollActiveResult();
+				}}
+				initialFocus={() => {
+					returnFocus.capture();
+					return inputRef.current;
+				}}
+				finalFocus={() => returnFocus.restore()}
+				className="library-search-card top-[var(--library-search-top)] left-[var(--library-search-center,50%)] flex max-w-(--library-search-width,36rem) translate-y-0 flex-col overflow-hidden p-0"
+			>
+				<DialogTitle className="sr-only">Search your library</DialogTitle>
+				{/* Lines up with the top bar's search field it opens over. */}
+				<div className="flex shrink-0 items-center gap-3 border-border border-b px-4">
+					<Search className="size-5 shrink-0 text-caption" />
+					<input
+						ref={inputRef}
+						type="search"
+						role="combobox"
+						aria-expanded={flatResults.length > 0}
+						aria-controls={listboxId}
+						aria-activedescendant={
+							activeResult ? optionId(listboxId, activeResult.key) : undefined
+						}
+						aria-autocomplete="list"
+						aria-label="Search your library"
+						maxLength={200}
+						placeholder="Search your library"
+						value={query}
+						onChange={(event) => {
+							setQuery(event.target.value);
+							setActiveKey(null);
+							setShowAll(false);
+						}}
+						onKeyDown={onInputKeyDown}
+						className="h-12 min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-muted-foreground [&::-webkit-search-cancel-button]:appearance-none"
+					/>
+					{resultCount !== undefined ? (
+						<output className="flex h-8 shrink-0 items-center rounded-sm border border-border px-3 text-caption text-xs">
+							{resultCount} {resultCount === 1 ? "result" : "results"}
+						</output>
+					) : null}
+					<DialogClose
+						aria-label="Close search"
+						className="flex h-8 shrink-0 items-center rounded-sm border border-border px-3 text-caption text-xs outline-none hover:bg-muted/50 focus-visible:bg-muted/50"
 					>
-						<div ref={measureResults} className="flow-root p-3 sm:p-4">
-							{!hasQuery ? (
-								<p className="px-3 py-6 text-center text-caption text-sm">
-									Type to search your library.
+						Esc
+					</DialogClose>
+				</div>
+				<div
+					id={listboxId}
+					aria-busy={isSearching}
+					ref={listboxRef}
+					role="listbox"
+					aria-label="Search results"
+					className="min-h-0 flex-1 overflow-y-auto"
+				>
+					<div ref={measureResults} className="flow-root p-3 sm:p-4">
+						{!hasQuery ? (
+							<p className="px-3 py-6 text-center text-caption text-sm">
+								Type to search your library.
+							</p>
+						) : null}
+						{failed ? (
+							<div role="alert" className="px-3 py-3 text-sm">
+								<p>
+									{flatResults.length > 0
+										? "Search results could not be refreshed."
+										: "Search results could not be loaded."}
 								</p>
-							) : null}
-							{failed ? (
-								<div role="alert" className="px-3 py-3 text-sm">
-									<p>
-										{flatResults.length > 0
-											? "Search results could not be refreshed."
-											: "Search results could not be loaded."}
-									</p>
-									<button
-										type="button"
-										className="mt-2 underline"
-										disabled={isSearching}
-										onClick={() => {
-											void search.refetch();
-										}}
+								<button
+									type="button"
+									className="mt-2 underline"
+									disabled={isSearching}
+									onClick={() => {
+										void search.refetch();
+									}}
+								>
+									Retry
+								</button>
+							</div>
+						) : null}
+						{showEmpty ? (
+							<p className="px-3 py-6 text-center text-caption text-sm">
+								Nothing in your library matches “{debouncedQuery}”.
+							</p>
+						) : null}
+						{isSearching && flatResults.length === 0 ? (
+							<p className="px-3 py-6 text-center text-caption text-sm">
+								Searching…
+							</p>
+						) : null}
+						{groups.length > 0 ? (
+							<section aria-label="From Your Library">
+								<p className="sr-only">From Your Library</p>
+								{groups.map((group) => (
+									// biome-ignore lint/a11y/useSemanticElements: listbox option groups are not form fieldsets.
+									<div
+										key={group.label}
+										role="group"
+										aria-label={group.label}
+										className="pb-3 last:pb-0"
 									>
-										Retry
-									</button>
-								</div>
-							) : null}
-							{showEmpty ? (
-								<p className="px-3 py-6 text-center text-caption text-sm">
-									Nothing in your library matches “{debouncedQuery}”.
-								</p>
-							) : null}
-							{isSearching && flatResults.length === 0 ? (
-								<p className="px-3 py-6 text-center text-caption text-sm">
-									Searching…
-								</p>
-							) : null}
-							{groups.length > 0 ? (
-								<section aria-label="From Your Library">
-									<p className="sr-only">From Your Library</p>
-									{groups.map((group) => (
-										// biome-ignore lint/a11y/useSemanticElements: listbox option groups are not form fieldsets.
-										<div
-											key={group.label}
-											role="group"
-											aria-label={group.label}
-											className="pb-3 last:pb-0"
-										>
-											<p className="flex items-center gap-2 px-3 py-2 font-medium text-caption text-xs uppercase tracking-wider">
-												<group.icon className="size-3.5" />
-												{group.label}
-											</p>
-											<ul className="flex flex-col">
-												{group.results.map((result) => {
-													const isActive = activeResult?.key === result.key;
-													return (
-														<li
-															key={result.key}
-															className={cn(
-																"flex items-center rounded-lg border pr-2 transition-colors motion-reduce:transition-none",
-																isActive
-																	? "border-shell-active-foreground bg-shell-active"
-																	: "border-transparent hover:bg-muted/50",
-															)}
+										<p className="flex items-center gap-2 px-3 py-2 font-medium text-caption text-xs uppercase tracking-wider">
+											<group.icon className="size-3.5" />
+											{group.label}
+										</p>
+										<ul className="flex flex-col">
+											{group.results.map((result) => {
+												const isActive = activeResult?.key === result.key;
+												return (
+													<li
+														key={result.key}
+														className={cn(
+															"flex items-center rounded-md border pr-2 transition-colors motion-reduce:transition-none",
+															isActive
+																? "border-shell-active-foreground bg-neutral-active"
+																: "border-transparent hover:bg-muted/50",
+														)}
+													>
+														<button
+															type="button"
+															id={optionId(listboxId, result.key)}
+															role="option"
+															aria-selected={isActive}
+															tabIndex={-1}
+															className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-left outline-none"
+															onMouseEnter={() => setActiveKey(result.key)}
+															onMouseDown={(event) => event.preventDefault()}
+															onClick={result.action}
 														>
+															{result.albumId ? (
+																<AlbumArt
+																	coverUrl={apiClient.getAlbumCoverUrl(
+																		result.albumId,
+																		128,
+																	)}
+																	title={result.title}
+																	className="size-10 shrink-0 rounded-sm"
+																/>
+															) : (
+																<span className="flex size-10 shrink-0 items-center justify-center rounded-sm bg-muted/50 text-caption">
+																	<group.icon className="size-4" />
+																</span>
+															)}
+															<span className="min-w-0 flex-1">
+																<span
+																	className={cn(
+																		"block truncate text-sm",
+																		isActive && "text-shell-active-foreground",
+																	)}
+																>
+																	{result.title}
+																</span>
+																{result.subtitle ? (
+																	<span className="mt-0.5 block truncate text-caption text-xs">
+																		{result.subtitle}
+																	</span>
+																) : null}
+															</span>
+															<span
+																aria-hidden
+																className="flex shrink-0 items-center gap-2 text-caption text-xs"
+															>
+																{!result.trackId ? (
+																	<span className="hidden sm:inline">Open</span>
+																) : null}
+																<CornerDownLeft
+																	className={cn(
+																		"size-4 text-shell-active-foreground",
+																		!isActive && "invisible",
+																	)}
+																/>
+															</span>
+														</button>
+														{result.trackId ? (
 															<button
 																type="button"
-																id={optionId(listboxId, result.key)}
-																role="option"
-																aria-selected={isActive}
-																tabIndex={-1}
-																className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-lg p-3 text-left outline-none sm:gap-4"
-																onMouseEnter={() => setActiveKey(result.key)}
-																onMouseDown={(event) => event.preventDefault()}
-																onClick={result.action}
-															>
-																{result.albumId ? (
-																	<AlbumArt
-																		coverUrl={apiClient.getAlbumCoverUrl(
-																			result.albumId,
-																			128,
-																		)}
-																		title={result.title}
-																		className="size-11 shrink-0 rounded-sm sm:size-12"
-																	/>
-																) : (
-																	<span className="flex size-11 shrink-0 items-center justify-center rounded-md bg-muted/50 text-caption sm:size-12">
-																		<group.icon className="size-5" />
-																	</span>
+																aria-label={`Add ${result.title} to queue`}
+																title="Add to queue (Shift+Enter)"
+																aria-disabled={pendingTracks.has(
+																	result.trackId,
 																)}
-																<span className="min-w-0 flex-1">
-																	<span
-																		className={cn(
-																			"block truncate text-base",
-																			isActive &&
-																				"text-shell-active-foreground",
-																		)}
-																	>
-																		{result.title}
-																	</span>
-																	{result.subtitle ? (
-																		<span className="mt-0.5 block truncate text-caption text-sm">
-																			{result.subtitle}
-																		</span>
-																	) : null}
-																</span>
-																<span
-																	aria-hidden
-																	className="flex shrink-0 items-center gap-2 text-caption text-xs"
-																>
-																	{!result.trackId ? (
-																		<span className="hidden sm:inline">
-																			Open
-																		</span>
-																	) : null}
-																	<CornerDownLeft
-																		className={cn(
-																			"size-4 text-shell-active-foreground",
-																			!isActive && "invisible",
-																		)}
-																	/>
-																</span>
+																onFocus={() => setActiveKey(result.key)}
+																onClick={() => {
+																	void queueResult(result);
+																}}
+																className="flex size-10 shrink-0 items-center justify-center rounded-md text-caption outline-none hover:bg-foreground/10 hover:text-heading focus-visible:bg-foreground/10 focus-visible:text-heading aria-disabled:opacity-50"
+															>
+																{pendingTracks.has(result.trackId) ? (
+																	<LoaderCircle className="size-4 motion-safe:animate-spin" />
+																) : (
+																	<ListPlus className="size-4" />
+																)}
 															</button>
-															{result.trackId ? (
-																<button
-																	type="button"
-																	aria-label={`Add ${result.title} to queue`}
-																	title="Add to queue (Shift+Enter)"
-																	aria-disabled={pendingTracks.has(
-																		result.trackId,
-																	)}
-																	onFocus={() => setActiveKey(result.key)}
-																	onClick={() => {
-																		void queueResult(result);
-																	}}
-																	className="flex size-11 shrink-0 items-center justify-center rounded-md text-caption outline-none hover:bg-foreground/10 hover:text-shell-active-foreground focus-visible:ring-2 focus-visible:ring-shell-active-foreground aria-disabled:opacity-50"
-																>
-																	{pendingTracks.has(result.trackId) ? (
-																		<LoaderCircle className="size-5 motion-safe:animate-spin" />
-																	) : (
-																		<ListPlus className="size-5" />
-																	)}
-																</button>
-															) : null}
-														</li>
-													);
-												})}
-											</ul>
-										</div>
-									))}
-								</section>
-							) : null}
-						</div>
-					</div>
-					<div
-						ref={footerRef}
-						className="flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-3 border-foreground/10 border-t px-4 py-3 text-caption text-xs sm:px-6"
-					>
-						<div className="flex flex-wrap items-center gap-3">
-							<span className="inline-flex items-center gap-2">
-								<kbd className="rounded-sm border border-foreground/10 p-1">
-									<ArrowUp className="size-3" />
-								</kbd>
-								<kbd className="rounded-sm border border-foreground/10 p-1">
-									<ArrowDown className="size-3" />
-								</kbd>{" "}
-								Navigate
-							</span>
-							<span className="inline-flex items-center gap-2">
-								<kbd className="rounded-sm border border-foreground/10 p-1">
-									<CornerDownLeft className="size-3" />
-								</kbd>{" "}
-								Play / open
-							</span>
-							<span className="inline-flex items-center gap-2">
-								<kbd className="rounded-sm border border-foreground/10 px-2 py-1">
-									Shift ↵
-								</kbd>{" "}
-								Add to queue
-							</span>
-						</div>
-						{hasQuery ? (
-							<button
-								type="button"
-								disabled={isSearching || failed || !resultCount}
-								onClick={() => {
-									setShowAll(!showAll);
-									inputRef.current?.focus();
-								}}
-								className="inline-flex min-w-0 max-w-full items-center gap-2 rounded-sm px-1 py-1 text-shell-active-foreground outline-none hover:underline focus-visible:ring-2 focus-visible:ring-shell-active-foreground disabled:opacity-50"
-							>
-								<span className="truncate">
-									{showAll
-										? "Show top results"
-										: `See all results for “${query.trim()}”`}
-								</span>
-								<CornerDownLeft className="size-4 shrink-0" />
-							</button>
+														) : null}
+													</li>
+												);
+											})}
+										</ul>
+									</div>
+								))}
+							</section>
 						) : null}
 					</div>
-				</DialogPrimitive.Content>
-			</DialogPrimitive.Portal>
-		</DialogPrimitive.Root>
+				</div>
+				<div
+					ref={footerRef}
+					className="flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-3 border-border border-t px-4 py-3 text-caption text-xs sm:px-6"
+				>
+					<div className="flex flex-wrap items-center gap-3">
+						<span className="inline-flex items-center gap-2">
+							<kbd className="rounded-sm border border-border p-1">
+								<ArrowUp className="size-3" />
+							</kbd>
+							<kbd className="rounded-sm border border-border p-1">
+								<ArrowDown className="size-3" />
+							</kbd>{" "}
+							Navigate
+						</span>
+						<span className="inline-flex items-center gap-2">
+							<kbd className="rounded-sm border border-border p-1">
+								<CornerDownLeft className="size-3" />
+							</kbd>{" "}
+							Play / open
+						</span>
+						<span className="inline-flex items-center gap-2">
+							<kbd className="rounded-sm border border-border px-2 py-1">
+								Shift ↵
+							</kbd>{" "}
+							Add to queue
+						</span>
+					</div>
+					{hasQuery ? (
+						<button
+							type="button"
+							disabled={isSearching || failed || !resultCount}
+							onClick={() => {
+								setShowAll(!showAll);
+								inputRef.current?.focus();
+							}}
+							className="inline-flex min-w-0 max-w-full items-center gap-2 rounded-sm px-1 py-1 text-shell-active-foreground outline-none hover:underline focus-visible:underline disabled:opacity-50"
+						>
+							<span className="truncate">
+								{showAll
+									? "Show top results"
+									: `See all results for “${query.trim()}”`}
+							</span>
+							<CornerDownLeft className="size-4 shrink-0" />
+						</button>
+					) : null}
+				</div>
+			</DialogContent>
+		</Dialog>
 	);
 }
 

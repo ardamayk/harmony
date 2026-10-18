@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { usePlayback } from "../playback/PlaybackProvider";
 import type { WidgetDefinition } from "./types";
 
@@ -41,8 +41,8 @@ function NowPlayingWidget() {
 			</p>
 			<div className="h-1 overflow-hidden rounded-full bg-muted">
 				<div
-					className="h-full bg-primary transition-all"
-					style={{ width: `${progress}%` }}
+					className="h-full w-(--progress) bg-primary transition-all"
+					style={{ "--progress": `${progress}%` } as CSSProperties}
 				/>
 			</div>
 			<div className="flex min-w-0 items-center justify-between gap-2 text-caption text-xs">

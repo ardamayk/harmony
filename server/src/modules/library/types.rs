@@ -156,13 +156,6 @@ pub struct Page<T> {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct TrackLyrics {
-    pub track_id: String,
-    pub lyrics: String,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
 pub struct TrackWaveform {
     pub track_id: String,
     pub peak_count: usize,

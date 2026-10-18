@@ -34,12 +34,16 @@ import {
 import { SeekBar } from "./SeekBar";
 
 const CONTROL_BUTTON_CLASS =
-	"inline-flex size-6 items-center justify-center rounded-sm text-player-foreground hover:text-player-control-primary disabled:opacity-40";
-const CONTROL_ICON_CLASS = "size-[18px]";
+	"inline-flex size-6 items-center justify-center rounded-sm text-player-foreground hover:text-heading disabled:opacity-40 group-data-stage/controls:size-10 group-data-stage/controls:2xl:size-12";
+const CONTROL_ICON_CLASS =
+	"size-4.5 group-data-stage/controls:size-6 group-data-stage/controls:2xl:size-7";
 // The right cluster sits alone at the edge, so its icons run one step larger.
 const SIDE_ICON_CLASS = "size-5";
 const SIDE_BUTTON_CLASS = "size-7";
-const ACTIVE_CONTROL_BUTTON_CLASS = "text-player-control-primary";
+// An on toggle (Shuffle, Repeat, open Queue) takes the shared lit look with
+// the accent glyph; hover only lifts the glyph to heading, never the accent.
+const ACTIVE_CONTROL_BUTTON_CLASS =
+	"bg-neutral-active text-shell-active-foreground shadow-lit";
 const VOLUME_WHEEL_STEP = 0.05;
 const MAX_QUEUE_BADGE_COUNT = 9;
 
@@ -63,13 +67,16 @@ type PlaybackControlsProps = {
 	onPrevious: () => void;
 	onNext: () => void;
 	onSeek: (seconds: number) => void;
+	/** Full-screen views show the controls one size up. */
+	stage?: boolean;
 };
 
 export function PlaybackControls(props: PlaybackControlsProps) {
 	return (
 		<section
 			aria-label="Playback controls"
-			className="flex min-w-px max-w-[448px] translate-y-[5px] flex-[1_0_0] flex-col items-center justify-center justify-self-center"
+			data-stage={props.stage || undefined}
+			className="group/controls flex min-w-px max-w-112 translate-y-1.25 grow shrink-0 basis-0 flex-col items-center justify-center justify-self-center data-stage:w-full data-stage:max-w-xl data-stage:translate-y-0"
 		>
 			<TransportControls {...props} />
 			<PlaybackProgress {...props} />
@@ -90,7 +97,7 @@ function TransportControls({
 	onNext,
 }: PlaybackControlsProps) {
 	return (
-		<div className="flex items-center gap-6">
+		<div className="flex items-center gap-6 group-data-stage/controls:w-full group-data-stage/controls:justify-between group-data-stage/controls:gap-2">
 			<ShuffleButton
 				isEnabled={shuffleEnabled}
 				disabled={!hasCurrentTrack}
@@ -161,6 +168,7 @@ function ShuffleButton({
 			data-player-control
 			className={cn(
 				CONTROL_BUTTON_CLASS,
+				"relative",
 				isEnabled && ACTIVE_CONTROL_BUTTON_CLASS,
 			)}
 			aria-label={isEnabled ? "Shuffle on" : "Shuffle off"}
@@ -168,6 +176,13 @@ function ShuffleButton({
 			disabled={disabled}
 		>
 			<Shuffle className={CONTROL_ICON_CLASS} />
+			{/* On differs from off by more than colour: a dot under the glyph. */}
+			{isEnabled ? (
+				<span
+					aria-hidden
+					className="-bottom-1 absolute left-1/2 size-1 -translate-x-1/2 rounded-full bg-current"
+				/>
+			) : null}
 		</button>
 	);
 }
@@ -185,7 +200,7 @@ function PrimaryPlaybackButton({
 		<button
 			type="button"
 			data-player-control
-			className="inline-flex size-11 items-center justify-center rounded-full bg-player-control-primary text-player-control-primary-foreground shadow-[0px_10px_15px_-3px_var(--player-control-shadow),0px_4px_6px_-4px_var(--player-control-shadow)] transition hover:scale-105 hover:opacity-95 disabled:opacity-50 disabled:hover:scale-100"
+			className="inline-flex size-11 items-center justify-center rounded-full bg-player-control-primary group-data-stage/controls:size-14 group-data-stage/controls:2xl:size-20 text-player-control-primary-foreground shadow-lg shadow-player-control-shadow transition hover:scale-105 hover:opacity-95 disabled:bg-player-pill disabled:text-caption disabled:shadow-none disabled:hover:scale-100"
 			onClick={onClick}
 			disabled={disabled}
 			aria-label={isPlaying ? "Pause" : "Play"}
@@ -193,12 +208,15 @@ function PrimaryPlaybackButton({
 			{isPlaying ? (
 				<Pause
 					key="pause"
-					className={cn(CONTROL_ICON_CLASS, "player-glyph-enter")}
+					className={cn(CONTROL_ICON_CLASS, "motion-safe:animate-player-glyph")}
 				/>
 			) : (
 				<Play
 					key="play"
-					className={cn(CONTROL_ICON_CLASS, "player-glyph-enter ml-0.5")}
+					className={cn(
+						CONTROL_ICON_CLASS,
+						"motion-safe:animate-player-glyph ml-0.5",
+					)}
 				/>
 			)}
 		</button>
@@ -275,11 +293,27 @@ function PlaybackProgress({
 	keyboardLargeStepSeconds?: number;
 	onSeek: (seconds: number) => void;
 }) {
+	const [showRemaining, setShowRemaining] = useState(false);
 	return (
-		<div className="mt-1 flex w-full min-w-0 items-center gap-2 text-xs tabular-nums">
-			<span className="w-8 shrink-0 text-right text-player-foreground">
-				{isRadioPlaying ? "LIVE" : formatTime(currentTime)}
-			</span>
+		<div className="mt-1 flex w-full min-w-0 items-center gap-2 text-xs tabular-nums group-data-stage/controls:mt-4 group-data-stage/controls:gap-3 group-data-stage/controls:text-sm group-data-stage/controls:2xl:mt-6 group-data-stage/controls:2xl:text-base">
+			{isRadioPlaying ? (
+				<span className="w-10 shrink-0 text-right text-player-foreground group-data-stage/controls:w-14">
+					LIVE
+				</span>
+			) : (
+				<button
+					type="button"
+					data-player-control
+					disabled={!hasCurrentTrack}
+					title={showRemaining ? "Show elapsed time" : "Show remaining time"}
+					onClick={() => setShowRemaining((value) => !value)}
+					className="-my-2 w-10 shrink-0 cursor-pointer rounded-sm py-2 text-right whitespace-nowrap text-player-foreground hover:text-heading disabled:cursor-default disabled:opacity-40 group-data-stage/controls:w-14"
+				>
+					{showRemaining
+						? `-${formatTime(effectiveDuration - currentTime)}`
+						: formatTime(currentTime)}
+				</button>
+			)}
 			{isRadioPlaying ? (
 				<div className="h-1 min-w-0 flex-1 rounded-full bg-player-live-progress/45" />
 			) : (
@@ -296,7 +330,7 @@ function PlaybackProgress({
 				/>
 			)}
 			{isRadioPlaying ? null : (
-				<span className="w-8 shrink-0 text-player-foreground">
+				<span className="w-10 shrink-0 text-player-foreground group-data-stage/controls:w-14">
 					{formatTime(effectiveDuration)}
 				</span>
 			)}
@@ -352,7 +386,7 @@ export function VolumeAndQueueControls({
 	return (
 		<section
 			aria-label="Volume and queue"
-			className="flex min-w-[200px] flex-[1_0_0] items-center justify-end gap-3 justify-self-end @min-[66rem]/player-bar:gap-4"
+			className="flex min-w-50 grow shrink-0 basis-0 items-center justify-end gap-3 justify-self-end @min-[66rem]/player-bar:gap-4"
 		>
 			{isGapless ? (
 				<span
@@ -418,7 +452,9 @@ export function VolumeAndQueueControls({
 			>
 				<ListMusic className={SIDE_ICON_CLASS} />
 				{!isQueueOpen && hasQueueItems ? (
-					<span className="-top-1 -right-1.5 absolute flex h-4 min-w-4 items-center justify-center rounded-full bg-player-control-primary px-1 font-semibold text-xs text-player-control-primary-foreground">
+					// A count is not a primary action: the badge takes the lit pair, so
+					// the cover accent never has to carry text.
+					<span className="-top-1 -right-1.5 absolute flex h-4 min-w-4 items-center justify-center rounded-full bg-neutral-active px-1 font-semibold text-xs text-shell-active-foreground">
 						{upcomingCount > MAX_QUEUE_BADGE_COUNT
 							? `${MAX_QUEUE_BADGE_COUNT}+`
 							: upcomingCount}
@@ -510,7 +546,7 @@ function VolumeControl({
 				className={cn(
 					CONTROL_BUTTON_CLASS,
 					SIDE_BUTTON_CLASS,
-					"group-focus-within:text-player-control-primary group-hover:text-player-control-primary",
+					"group-focus-within:text-heading group-hover:text-heading",
 				)}
 				aria-label={volume <= 0 ? "Unmute" : "Mute"}
 				onPointerDown={(event) => {
@@ -533,7 +569,7 @@ function VolumeControl({
 					touchOpen && "pointer-events-auto opacity-100",
 				)}
 			>
-				<div className="flex h-32 w-9 items-center justify-center rounded-lg border border-player-border bg-player px-2 py-3 shadow-[0_8px_24px_-4px_var(--player-shadow)]">
+				<div className="flex h-32 w-9 items-center justify-center rounded-lg border border-player-border bg-player px-2 py-3 shadow-lg">
 					<div className="relative h-full w-4">
 						<input
 							type="range"

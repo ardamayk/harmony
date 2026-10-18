@@ -55,7 +55,7 @@ test("library search opens from the top nav and groups results", async ({
 		}),
 	);
 	await page.goto("/library/albums");
-	await page.getByRole("button", { name: "Search" }).click();
+	await page.getByRole("button", { name: "Search your library" }).click();
 	const dialog = page.getByTestId("library-search-dialog");
 	await expect(dialog).toBeVisible();
 	await dialog.getByRole("combobox").fill("a");
@@ -125,7 +125,7 @@ test("queue reserves space beside the page on narrow and wide desktop windows", 
 	}
 });
 
-test("library search follows the full album grid and animates result height", async ({
+test("library search drops down over the top bar field and animates result height", async ({
 	page,
 }) => {
 	await page.route("**/api/v1/library/search?*", (route) =>
@@ -153,16 +153,29 @@ test("library search follows the full album grid and animates result height", as
 	await page.setViewportSize({ width: 2800, height: 700 });
 	const drawer = page.locator("[data-queue-drawer]");
 	const card = page.getByTestId("library-search-dialog");
+	const opener = page.getByRole("button", { name: "Search your library" });
+	// The open modal hides the page from the accessibility tree, so the field
+	// is measured by its attribute.
+	const field = page.locator("[data-library-search-field]");
+	// ADR 0028: the card drops down exactly over the top bar's field.
+	const expectOverField = () =>
+		expect
+			.poll(async () => {
+				const box = await card.boundingBox();
+				const under = await field.boundingBox();
+				return box && under
+					? [box.x - under.x, box.y - under.y, box.width - under.width].map(
+							Math.round,
+						)
+					: null;
+			})
+			.toEqual([0, 0, 0]);
 	for (const open of [true, false]) {
 		if (((await drawer.getAttribute("data-state")) === "open") !== open)
 			await page.getByRole("button", { name: "Toggle queue panel" }).click();
-		await page.getByRole("button", { name: "Search", exact: true }).click();
+		await opener.click();
 		await expect(card).toHaveCSS("animation-name", "library-search-enter");
-		// Eight 250px cards, 12px gaps, 272px shell inset: third/sixth centers.
-		await expect(card).toHaveCSS("width", "786px");
-		await expect
-			.poll(async () => Math.round((await card.boundingBox())?.x ?? 0))
-			.toBe(921);
+		await expectOverField();
 		if (open) {
 			await expect
 				.poll(async () => {
@@ -172,7 +185,10 @@ test("library search follows the full album grid and animates result height", as
 				})
 				.toBeGreaterThan(24);
 		}
-		await expect(card).toHaveCSS("max-height", "595px");
+		// Viewport less the card's top, the Player Bar's clearance and a 24px gap.
+		const maxHeight = await card.evaluate((element) =>
+			Number.parseFloat(getComputedStyle(element).maxHeight),
+		);
 		const input = page.getByRole("combobox");
 		await card.evaluate((element) =>
 			Promise.all(
@@ -206,9 +222,9 @@ test("library search follows the full album grid and animates result height", as
 		});
 		await expect
 			.poll(async () => (await card.boundingBox())?.height ?? 0)
-			.toBe(595);
+			.toBe(maxHeight);
 		expect(halfway).toBeGreaterThan(initialHeight);
-		expect(halfway).toBeLessThan(595);
+		expect(halfway).toBeLessThan(maxHeight);
 		await input.press("ArrowUp");
 		await expect
 			.poll(() =>
@@ -221,20 +237,20 @@ test("library search follows the full album grid and animates result height", as
 			.toBe(initialHeight);
 		await input.press("Escape");
 	}
-	await page.setViewportSize({ width: 375, height: 812 });
+	// The narrowest supported width (design rules: Widths).
+	await page.setViewportSize({ width: 640, height: 812 });
 	await page.emulateMedia({ reducedMotion: "reduce" });
-	await page.getByRole("button", { name: "Search", exact: true }).click();
-	await expect(card).toHaveCSS("width", "343px");
+	await opener.click();
 	await expect(card).toHaveCSS("animation-name", "none");
 	await expect(card).toHaveCSS("transition-duration", "0s");
-	await expect.poll(async () => (await card.boundingBox())?.x).toBe(16);
+	await expectOverField();
 });
 
 test("library search restores its opener after closing and reopening", async ({
 	page,
 }) => {
 	await page.goto("/library/albums");
-	const opener = page.getByRole("button", { name: "Search", exact: true });
+	const opener = page.getByRole("button", { name: "Search your library" });
 	for (let attempt = 0; attempt < 2; attempt += 1) {
 		await opener.click();
 		await expect(page.getByRole("combobox")).toBeFocused();

@@ -11,6 +11,7 @@ import { Input } from "#/components/ui/input";
 import { apiClient } from "#/lib/api";
 import { radioQueryKeys } from "#/lib/radio-query-keys";
 import { parseStationTags } from "#/lib/radio-station-tags";
+import { isGone } from "#/lib/query-persistence";
 
 // Route components live outside the route file: with automatic code
 // splitting, a component defined inside the route module can be rendered
@@ -82,7 +83,7 @@ export function RadioStationDetailContent({
 		);
 	}
 
-	if (station.isError || !station.data) {
+	if (!station.data || isGone(station.error)) {
 		return (
 			<div className="p-6">
 				<Link

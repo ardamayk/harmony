@@ -18,6 +18,14 @@ pub struct Config {
     pub managed_import_file_limit_bytes: i64,
     pub managed_import_batch_limit_bytes: i64,
     pub radio_browser_base_url: String,
+    /// Online Artist photo and biography lookups (ADR 0027).
+    pub artist_info_enabled: bool,
+    /// Wikipedia language for Artist biographies, English as fallback.
+    pub artist_info_language: String,
+    /// Online LRCLIB lookups for Tracks without lyrics (ADR 0029).
+    pub lyrics_lookup_enabled: bool,
+    /// The operator's own Last.fm API key, for Track play counts (ADR 0030).
+    pub lastfm_api_key: Option<String>,
 }
 
 #[derive(Debug, thiserror::Error, PartialEq)]
@@ -28,6 +36,8 @@ pub enum ConfigError {
     InvalidAddress(String, String),
     #[error("SERVER_ADDR {0:?} must bind to a loopback address while authentication is disabled")]
     NotLoopback(String),
+    #[error("ARTIST_INFO_LANGUAGE {0:?} must be a Wikipedia language code such as en or tr")]
+    InvalidLanguage(String),
 }
 
 impl Config {
@@ -59,6 +69,14 @@ impl Config {
                 _ => Err(ConfigError::InvalidByteCount(key, description)),
             }
         };
+        // It becomes a Wikipedia host name, so only a language code passes.
+        let artist_info_language = get("ARTIST_INFO_LANGUAGE", "en");
+        if !artist_info_language
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c == '-')
+        {
+            return Err(ConfigError::InvalidLanguage(artist_info_language));
+        }
         Ok(Self {
             addr: get("SERVER_ADDR", "127.0.0.1:8090"),
             database_path: get("DATABASE_PATH", "./data/app.db"),
@@ -87,6 +105,21 @@ impl Config {
                 "RADIO_BROWSER_BASE_URL",
                 "https://de1.api.radio-browser.info",
             ),
+            artist_info_enabled: !matches!(
+                get("ARTIST_INFO_ENABLED", "true")
+                    .to_ascii_lowercase()
+                    .as_str(),
+                "false" | "0"
+            ),
+            artist_info_language,
+            lyrics_lookup_enabled: !matches!(
+                get("LYRICS_LOOKUP_ENABLED", "true")
+                    .to_ascii_lowercase()
+                    .as_str(),
+                "false" | "0"
+            ),
+            lastfm_api_key: Some(get("LASTFM_API_KEY", "").trim().to_owned())
+                .filter(|key| !key.is_empty()),
         })
     }
 }
@@ -148,6 +181,54 @@ mod tests {
         assert_eq!(
             config.radio_browser_base_url,
             "https://de1.api.radio-browser.info"
+        );
+        assert!(config.artist_info_enabled);
+        assert_eq!(config.artist_info_language, "en");
+        assert!(config.lyrics_lookup_enabled);
+        assert_eq!(config.lastfm_api_key, None);
+    }
+
+    #[test]
+    fn takes_a_lastfm_key_and_ignores_a_blank_one() {
+        assert_eq!(
+            config(&[("LASTFM_API_KEY", " abc ")])
+                .expect("config")
+                .lastfm_api_key,
+            Some("abc".to_owned())
+        );
+        assert_eq!(
+            config(&[("LASTFM_API_KEY", "  ")])
+                .expect("config")
+                .lastfm_api_key,
+            None
+        );
+    }
+
+    #[test]
+    fn lyrics_lookup_can_be_switched_off() {
+        assert!(
+            !config(&[("LYRICS_LOOKUP_ENABLED", "0")])
+                .expect("config")
+                .lyrics_lookup_enabled
+        );
+    }
+
+    #[test]
+    fn artist_info_can_be_switched_off_and_takes_only_language_codes() {
+        assert!(
+            !config(&[("ARTIST_INFO_ENABLED", "false")])
+                .expect("config")
+                .artist_info_enabled
+        );
+        assert_eq!(
+            config(&[("ARTIST_INFO_LANGUAGE", "tr")])
+                .expect("config")
+                .artist_info_language,
+            "tr"
+        );
+        assert_eq!(
+            config(&[("ARTIST_INFO_LANGUAGE", "evil.example/x")]).err(),
+            Some(ConfigError::InvalidLanguage("evil.example/x".to_owned()))
         );
     }
 

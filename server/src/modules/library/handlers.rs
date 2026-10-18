@@ -17,6 +17,7 @@ use axum::{Json, Router};
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/v1/library/artists", get(list_artists))
+        .route("/api/v1/library/artists/{artist_id}", get(get_artist))
         .route("/api/v1/library/albums", get(list_albums))
         .route(
             "/api/v1/library/albums/{album_id}/cover",
@@ -25,10 +26,6 @@ pub fn routes() -> Router<AppState> {
         .route("/api/v1/library/albums/{album_id}", get(get_album))
         .route("/api/v1/library/tracks", get(list_tracks))
         .route("/api/v1/library/tracks/{track_id}", get(get_track))
-        .route(
-            "/api/v1/library/tracks/{track_id}/lyrics",
-            get(get_track_lyrics),
-        )
         .route(
             "/api/v1/library/tracks/{track_id}/waveform",
             get(get_track_waveform),
@@ -63,6 +60,17 @@ async fn list_artists(
         .await
         .map_err(ApiError::internal)?;
     Ok(Json(page))
+}
+
+async fn get_artist(
+    State(state): State<AppState>,
+    Path(artist_id): Path<String>,
+) -> ApiResult<Json<types::Artist>> {
+    let artist = Service::new(state.db)
+        .get_artist(&artist_id)
+        .await
+        .map_err(not_found("artist not found"))?;
+    Ok(Json(artist))
 }
 
 async fn list_albums(
@@ -137,17 +145,6 @@ async fn get_track(
         .await
         .map_err(not_found("track not found"))?;
     Ok(Json(track))
-}
-
-async fn get_track_lyrics(
-    State(state): State<AppState>,
-    Path(track_id): Path<String>,
-) -> ApiResult<Json<types::TrackLyrics>> {
-    let lyrics = Service::new(state.db)
-        .get_track_lyrics(&track_id)
-        .await
-        .map_err(not_found("track not found"))?;
-    Ok(Json(types::TrackLyrics { track_id, lyrics }))
 }
 
 /// Cached peaks, 202 while they are generated, 404 for an unknown Track or

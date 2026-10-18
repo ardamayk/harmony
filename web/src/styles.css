@@ -11,13 +11,16 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-	/* Horizontal inset shared by the Top Nav, page content and Player Bar.
-     Content grows to --shell-max-content and only wider screens get side
-     gutters; narrower ones keep ordinary page padding so the layout hugs the
-     window edges. Mirrored by SHELL_INSET_CLASS in
-     packages/ui/src/layout/shell-metrics.ts. */
+	/* Horizontal inset of page content beside the 15rem Sidebar. Content
+     grows to --shell-max-content and only wider screens get side gutters;
+     narrower ones keep ordinary page padding. Mirrored by SHELL_INSET_CLASS
+     in packages/ui/src/layout/shell-metrics.ts. */
 	--shell-max-content: 1600px;
-	--shell-inset: clamp(1.5rem, (100vw - var(--shell-max-content)) / 2, 17rem);
+	--shell-inset: clamp(
+		1.5rem,
+		(100vw - 15rem - var(--shell-max-content)) / 2,
+		17rem
+	);
 }
 
 html[data-theme-preset] {
@@ -33,6 +36,49 @@ html[data-theme-preset] {
 }
 
 @theme inline {
+	/* Layout geometry as spacing tokens, so widths and offsets stay on
+     theme classes (w-dialog-width) instead of arbitrary values. */
+	--spacing-dialog-width: calc(100vw - 2rem);
+	--spacing-dialog-height: 85dvh;
+	--spacing-dialog-body-height: 65dvh;
+	--spacing-search-card-height: min(85dvh, 56rem);
+	/* The cover leaves the window room for the title and transport under it
+     (about 24rem with the view header), so short windows shrink the cover. */
+	--spacing-artwork-stage: min(100%, 65vh, max(10rem, 100dvh - 24rem));
+	--spacing-queue-preview: clamp(18rem, 22vw, 26rem);
+	--spacing-queue-drawer-max: calc(100% - 2 * var(--shell-inset, 2rem));
+	/* Artist page photo banner: tall enough for a face, never the whole screen. */
+	--spacing-artist-banner: clamp(18rem, 42vh, 28rem);
+	/* Shadows: the lit pill, the lifted card, the shell surfaces and the
+     cover strip; everything else takes Tailwind's shadow scale. */
+	--shadow-lit:
+		inset 0 1px 0 color-mix(in srgb, var(--heading) 10%, transparent),
+		0 8px 20px -12px rgb(0 0 0 / 0.8);
+	--shadow-card-lift: 0 18px 40px -18px rgb(0 0 0 / 0.75);
+	/* Kept tight: a wide dark halo reads as a lifted card around the shell. */
+	--shadow-cover-strip: 10px 0 20px rgb(0 0 0 / 0.35);
+	--color-player-control-shadow: var(--player-control-shadow);
+	--color-warning: var(--warning);
+	--color-success: var(--success);
+	--font-display: "Fraunces", Georgia, serif;
+	/* Full-screen lyrics read from across the room: one display step above
+     the type scale that grows with the window. */
+	--text-lyrics: clamp(1.875rem, 1rem + 1.6vw, 3rem);
+	--text-lyrics--line-height: 1.2;
+	/* Detail page titles: text-3xl at narrow widths, growing with the window
+     so the album or artist name leads on wide screens. */
+	--text-page-title: clamp(1.875rem, 1rem + 1.6vw, 3rem);
+	--text-page-title--line-height: 1.1;
+	/* Enter animations; used behind motion-safe: so reduced motion gets an
+     instant swap. Keyframes live with the components layer below. */
+	--animate-lyrics-view: lyrics-view-enter 300ms
+		cubic-bezier(0.22, 0.8, 0.24, 1) both;
+	--animate-lyrics-view-exit: lyrics-view-exit 250ms cubic-bezier(0.4, 0, 1, 1)
+		both;
+	--animate-player-cover: player-cover-crossfade 250ms ease-out both;
+	--animate-player-title: player-title-slide 200ms
+		cubic-bezier(0.22, 0.8, 0.24, 1) both;
+	--animate-player-glyph: player-glyph-pop 150ms ease-out both;
 	--font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
 	--color-background: var(--background);
 	--color-foreground: var(--foreground);
@@ -80,6 +126,8 @@ html[data-theme-preset] {
 	--color-player-foreground: var(--player-foreground);
 	--color-shell-brand: var(--shell-brand);
 	--color-shell-active: var(--shell-active);
+	--color-neutral-active: var(--neutral-active);
+	--color-neutral-active-foreground: var(--neutral-active-foreground);
 	--color-shell-active-foreground: var(--shell-active-foreground);
 	--color-shell-subtle-border: var(--shell-subtle-border);
 	--color-player-title: var(--player-title);
@@ -214,7 +262,16 @@ html[data-desktop-window] body::after {
 	border-radius: var(--radius-md);
 }
 
+/* Full-screen views portal to body, outside #root's clip, so they draw the
+   window corners and edge themselves. */
+html[data-desktop-window] :is(.z-fullscreen, .z-above-fullscreen) {
+	overflow: hidden;
+	border: 1px solid color-mix(in srgb, var(--foreground) 12%, transparent);
+	border-radius: var(--radius-md);
+}
+
 html[data-window-maximized] #root,
+html[data-window-maximized] :is(.z-fullscreen, .z-above-fullscreen),
 html[data-window-maximized] body::before,
 html[data-window-maximized] body::after {
 	border: 0;
@@ -239,6 +296,110 @@ html[data-window-maximized] body::after {
 	.text-caption {
 		color: var(--caption);
 	}
+}
+
+/* Named utilities for the few layout patterns Tailwind has no class for. */
+@utility scrollbar-hidden {
+	scrollbar-width: none;
+	-ms-overflow-style: none;
+	&::-webkit-scrollbar {
+		display: none;
+	}
+}
+@utility content-empty {
+	content: "";
+}
+@utility z-fullscreen {
+	z-index: 60;
+}
+@utility z-above-fullscreen {
+	z-index: 70;
+}
+@utility grid-cols-label {
+	grid-template-columns: 8rem minmax(0, 1fr);
+}
+@utility grid-cols-media {
+	grid-template-columns: auto minmax(0, 1fr);
+}
+@utility grid-cols-media-actions {
+	grid-template-columns: auto minmax(0, 1fr) auto;
+}
+@utility grid-cols-cards {
+	grid-template-columns: repeat(auto-fill, min(250px, 100%));
+}
+@utility grid-cols-panels {
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 560px), 1fr));
+}
+@utility transition-ring {
+	transition-property: color, box-shadow, border-color;
+	transition-timing-function: var(
+		--tw-ease,
+		var(--default-transition-timing-function)
+	);
+	transition-duration: var(--tw-duration, var(--default-transition-duration));
+}
+/* Detail page scroller: right padding = shell inset, plus the Queue
+   Drawer's clearance while it takes space; the scroller then reaches the
+   window edge so a full-bleed backdrop runs behind the drawer. */
+@utility page-edge-right {
+	--page-edge-right: var(--shell-inset);
+	padding-right: var(--page-edge-right);
+	:where([data-queue-open]) & {
+		--page-edge-right: calc(var(--shell-inset) + var(--queue-drawer-clearance));
+		margin-right: calc(var(--queue-drawer-clearance) * -1);
+	}
+}
+@utility transition-padding {
+	transition-property: padding;
+	transition-timing-function: var(
+		--tw-ease,
+		var(--default-transition-timing-function)
+	);
+	transition-duration: var(--tw-duration, var(--default-transition-duration));
+}
+@utility transition-slide {
+	transition-property: translate, visibility;
+	transition-timing-function: var(
+		--tw-ease,
+		var(--default-transition-timing-function)
+	);
+	transition-duration: var(--tw-duration, var(--default-transition-duration));
+}
+/* Runtime geometry read from custom properties set in style. */
+@utility clip-right {
+	clip-path: inset(0 var(--clip-right) 0 0);
+}
+@utility sortable-widget {
+	transform: var(--sortable-transform);
+	transition: var(--sortable-transition);
+}
+@utility contain-inline-size {
+	contain: inline-size;
+}
+/* Player Bar surfaces that keep the theme's neutral accent. */
+@utility player-neutral {
+	--player-control-primary: var(--primary);
+	--player-control-primary-foreground: var(--primary-foreground);
+	--player-foreground: var(--foreground);
+}
+/* Artist photo laid on its cover-colour band: sharp across most of its
+   width, a light eased fade (a linear one shows an edge where it starts)
+   over its right third into the band, never fully gone, and a thin strip
+   into the page. */
+@utility mask-artist-photo {
+	mask-image:
+		linear-gradient(
+			to left,
+			rgb(0 0 0 / 0.3) 0%,
+			rgb(0 0 0 / 0.5) 10%,
+			rgb(0 0 0 / 0.75) 21%,
+			black 35%
+		),
+		linear-gradient(to top, transparent 0%, rgb(0 0 0 / 0.5) 6%, black 14%);
+	mask-composite: intersect;
+}
+@utility translate-x-switch-on {
+	translate: calc(100% - 2px) 0;
 }
 
 @layer components {
@@ -386,14 +547,26 @@ html[data-window-maximized] body::after {
 	}
 
 	.library-search-card {
+		/* Drops down over the top bar's search field, as wide as it (the App
+		   Shell measures the field); its input row covers the field. */
+		top: var(--library-search-top, 0.5rem);
+		/* At most three album rows tall (250px cards, 0.75rem gaps); always
+		   clear of the Player Bar. */
+		max-height: min(
+			3 * (250px + 0.75rem),
+			calc(
+				100dvh - var(--library-search-top, 0.5rem) -
+					var(--player-dock-clearance, 1rem) - 1.5rem
+			)
+		);
 		left: var(--library-search-center, 50%);
-		width: var(--library-search-width, min(52rem, calc(100vw - 2rem)));
+		width: var(--library-search-width, min(36rem, calc(100vw - 2rem)));
 		transform-origin: top center;
 	}
 	@keyframes library-search-enter {
 		from {
 			opacity: 0;
-			transform: translateX(var(--library-search-offset, 0)) translateY(0.75rem)
+			transform: translateX(var(--library-search-offset, 0)) translateY(-0.5rem)
 				scale(0.98);
 		}
 		to {
@@ -403,7 +576,7 @@ html[data-window-maximized] body::after {
 		}
 	}
 	@media (prefers-reduced-motion: no-preference) {
-		.library-search-card[data-state="open"] {
+		.library-search-card[data-open] {
 			animation: library-search-enter 220ms cubic-bezier(0.22, 0.8, 0.24, 1);
 			/* ponytail: JS height measurement exists only to drive this transition; drop
          both once `interpolate-size: allow-keywords` is supported everywhere. */
@@ -433,18 +606,20 @@ html[data-window-maximized] body::after {
 			opacity: 1;
 		}
 	}
-	.lyrics-view-enter {
-		animation: lyrics-view-enter 320ms cubic-bezier(0.22, 0.8, 0.24, 1) both;
-	}
-	@media (prefers-reduced-motion: reduce) {
-		.lyrics-view-enter {
-			animation: none;
+	@keyframes lyrics-view-exit {
+		from {
+			transform: translate3d(0, 0, 0);
+			opacity: 1;
+		}
+		to {
+			transform: translate3d(0, 100%, 0);
+			opacity: 0.6;
 		}
 	}
 
 	/* Player Bar track transitions: the new cover fades in over the old one,
-     the title slides up, and the play/pause glyph pops. Every animation is
-     guarded so reduced-motion users get an instant swap. */
+     the title slides up, and the play/pause glyph pops (--animate-* tokens
+     in @theme). */
 	@keyframes player-cover-crossfade {
 		from {
 			opacity: 0;
@@ -471,17 +646,6 @@ html[data-window-maximized] body::after {
 		to {
 			transform: scale(1);
 			opacity: 1;
-		}
-	}
-	@media (prefers-reduced-motion: no-preference) {
-		.player-cover-enter {
-			animation: player-cover-crossfade 260ms ease-out both;
-		}
-		.player-title-enter {
-			animation: player-title-slide 220ms cubic-bezier(0.22, 0.8, 0.24, 1) both;
-		}
-		.player-glyph-enter {
-			animation: player-glyph-pop 160ms ease-out both;
 		}
 	}
 }
@@ -515,6 +679,13 @@ html[data-window-maximized] body::after {
 
 	* {
 		@apply border-border outline-ring/50;
+	}
+
+	/* Tailwind v4 dropped the pointer from buttons; every clickable control
+	   gets it back, disabled ones keep the default. */
+	button:not(:disabled),
+	[role="button"]:not([aria-disabled="true"]) {
+		cursor: pointer;
 	}
 
 	body {
@@ -562,10 +733,6 @@ pre code {
 .page-wrap {
 	width: min(1080px, calc(100% - 2rem));
 	margin-inline: auto;
-}
-
-.display-title {
-	font-family: "Fraunces", Georgia, serif;
 }
 
 .island-shell {

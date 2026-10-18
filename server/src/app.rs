@@ -26,6 +26,8 @@ pub struct AppState {
     pub waveforms: Arc<modules::library::WaveformService>,
     pub search: Arc<modules::search::SearchService>,
     pub radio: Arc<modules::radio::Radio>,
+    pub artist_info: Arc<modules::artist_info::ArtistInfo>,
+    pub lyrics: Arc<modules::lyrics::Lyrics>,
     /// Shared with Managed Import, whose writes change queues too.
     pub queue_events: Arc<modules::playback::QueueEventBroker>,
     pub managed_import: Arc<modules::managed_import::ManagedImport>,
@@ -38,6 +40,20 @@ impl AppState {
             db.clone(),
             dependencies.has(crate::dependencies::FFMPEG),
         );
+        let artist_info = modules::artist_info::ArtistInfo::new(
+            db.clone(),
+            modules::artist_info::Sources::public(),
+            config.artist_info_enabled,
+            &config.artist_info_language,
+            &config.version,
+            config.lastfm_api_key.clone(),
+        );
+        let lyrics = modules::lyrics::Lyrics::new(
+            db.clone(),
+            "https://lrclib.net",
+            config.lyrics_lookup_enabled,
+            &config.version,
+        );
         let queue_events: Arc<modules::playback::QueueEventBroker> = Arc::default();
         let managed_import =
             modules::managed_import::ManagedImport::new(db.clone(), &config, queue_events.clone());
@@ -48,6 +64,8 @@ impl AppState {
             waveforms: Arc::new(waveforms),
             search: Arc::new(modules::search::SearchService::new(db.clone())),
             radio: Arc::new(radio),
+            artist_info: Arc::new(artist_info),
+            lyrics: Arc::new(lyrics),
             queue_events,
             managed_import: Arc::new(managed_import),
         }
@@ -62,6 +80,8 @@ pub fn router(state: AppState) -> Router {
         .merge(modules::docs::routes())
         .merge(modules::preferences::routes())
         .merge(modules::library::routes())
+        .merge(modules::artist_info::routes())
+        .merge(modules::lyrics::routes())
         .merge(modules::playlists::routes())
         .merge(modules::search::routes())
         .merge(modules::radio::routes())

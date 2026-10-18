@@ -73,6 +73,106 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/library/artists/{artistId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get an artist
+         * @description Any credited Artist. Album counts include active Album Artist credits only.
+         */
+        get: operations["getArtist"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/library/artists/{artistId}/photo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get an artist photo
+         * @description Looked up on Deezer on first request and stored on the Music Server (ADR 0027), so clients never contact Deezer. Not found when Deezer has no photo, the lookup failed, or online lookups are switched off.
+         */
+        get: operations["getArtistPhoto"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/library/artists/{artistId}/biography": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get an artist biography
+         * @description The Artist's Wikipedia summary, found through MusicBrainz and Wikidata on first request and stored (ADR 0027). Show `sourceUrl` with it, as Wikipedia's CC BY-SA licence requires. Not found when there is none, the lookup failed, or online lookups are switched off.
+         */
+        get: operations["getArtistBiography"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/library/artists/{artistId}/popular-tracks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List an artist's popular tracks
+         * @description The Artist's Tracks in the library that are among their 50 most popular on Deezer, best first. The Deezer list is looked up on first request and refreshed weekly (ADR 0027); titles are matched without case or bracketed versions. Empty when there is no list, the lookup failed, or online lookups are switched off.
+         */
+        get: operations["listArtistPopularTracks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/library/tracks/play-counts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Last.fm play counts for tracks
+         * @description Last.fm play counts for the named Tracks, read from their first credited Artist's 1000 most played Tracks on Last.fm, matched without case or bracketed versions and refreshed weekly (ADR 0030). Only when the operator set LASTFM_API_KEY; Tracks without a count are left out, so the list is empty without a key.
+         */
+        get: operations["listTrackPlayCounts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/library/albums": {
         parameters: {
             query?: never;
@@ -82,6 +182,26 @@ export interface paths {
         };
         /** List albums */
         get: operations["listAlbums"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/library/albums/{albumId}/online-genres": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Deezer's genres for an album whose tags name none
+         * @description Deezer's genres for the Album, looked up on first request and stored (ADR 0027). Shown on the Album page only; Genre pages, filters and radio still read the tags. Empty when the Album's tags name a genre, when Deezer has none, or when online lookups are off.
+         */
+        get: operations["listAlbumOnlineGenres"];
         put?: never;
         post?: never;
         delete?: never;
@@ -208,8 +328,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Get the lyrics text stored for a track
-         * @description Unsynchronised lyrics read from the file tags at import; empty when the file carried none.
+         * Get a track's lyrics
+         * @description The lyrics read from the file tags at import; when the file carried none, LRCLIB's for the Track's title, Artist, Album and duration, looked up on first request and stored (ADR 0029). Synced lyrics come as LRC text. Empty when there are none, the lookup failed, or online lookups are switched off.
          */
         get: operations["getTrackLyrics"];
         put?: never;
@@ -1287,6 +1407,24 @@ export interface components {
             /** Format: int64 */
             sizeBytes: number;
         };
+        ArtistBiography: {
+            text: string;
+            /** Format: uri */
+            sourceUrl: string;
+        };
+        GenreNameList: {
+            items: string[];
+        };
+        PlayCountList: {
+            items: {
+                trackId: string;
+                /** Format: int64 */
+                playCount: number;
+            }[];
+        };
+        PopularTrackList: {
+            items: components["schemas"]["Track"][];
+        };
         ArtistList: {
             items: components["schemas"]["Artist"][];
             total: number;
@@ -1336,7 +1474,7 @@ export interface components {
         TrackLyrics: {
             /** Format: uuid */
             trackId: string;
-            /** @description Plain lyrics text with newline-separated lines; empty when none are stored. */
+            /** @description Plain lyrics, or LRC text (`[mm:ss.xx] words`) when synced, with newline-separated lines; empty when there are none. */
             lyrics: string;
         };
         Track: {
@@ -1844,6 +1982,7 @@ export interface components {
     parameters: {
         limit: number;
         offset: number;
+        artistId: string;
         albumId: string;
         trackId: string;
         importId: string;
@@ -1971,6 +2110,124 @@ export interface operations {
             };
         };
     };
+    getArtist: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                artistId: components["parameters"]["artistId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Artist */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Artist"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getArtistPhoto: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                artistId: components["parameters"]["artistId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Artist photo */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": string;
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getArtistBiography: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                artistId: components["parameters"]["artistId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Artist biography */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtistBiography"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listArtistPopularTracks: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                artistId: components["parameters"]["artistId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Popular tracks, best first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PopularTrackList"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listTrackPlayCounts: {
+        parameters: {
+            query: {
+                /** @description Comma-separated Track ids, at most 200. */
+                ids: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Play counts for the Tracks that have one */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlayCountList"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+        };
+    };
     listAlbums: {
         parameters: {
             query?: {
@@ -1995,6 +2252,29 @@ export interface operations {
                     "application/json": components["schemas"]["AlbumList"];
                 };
             };
+        };
+    };
+    listAlbumOnlineGenres: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                albumId: components["parameters"]["albumId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Genre names, Deezer's order */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenreNameList"];
+                };
+            };
+            404: components["responses"]["NotFound"];
         };
     };
     getAlbum: {

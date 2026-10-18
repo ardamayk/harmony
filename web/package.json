@@ -17,6 +17,7 @@
     "lighthouse": "node scripts/lighthouse-budget.ts"
   },
   "dependencies": {
+    "@base-ui/react": "^1.9.0",
     "@repo/api-client": "workspace:*",
     "@repo/desktop-bridge": "workspace:*",
     "@repo/ui": "workspace:*",
@@ -25,13 +26,13 @@
     "@tanstack/react-devtools": "latest",
     "@tanstack/react-query": "latest",
     "@tanstack/react-query-devtools": "latest",
+    "@tanstack/react-query-persist-client": "5.104.3",
     "@tanstack/react-router": "1.170.32",
     "@tanstack/router-plugin": "^1.132.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "hls.js": "^1.6.16",
     "lucide-react": "^0.577.0",
-    "radix-ui": "^1.6.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "tailwind-merge": "^3.0.2",

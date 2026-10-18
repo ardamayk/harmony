@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { cn } from "../lib/utils";
 import { getQueuePanel } from "../widgets/layout-utils";
 import { useLayout } from "./LayoutProvider";
@@ -6,13 +7,12 @@ import {
 	QUEUE_DRAWER_BOTTOM,
 	QUEUE_DRAWER_BOTTOM_ABOVE_PLAYER,
 	QUEUE_DRAWER_TOP,
-	QUEUE_DRAWER_WIDTH,
 } from "./shell-metrics";
 
 /**
- * The Queue as a card that slides up from the bottom edge and parks between
- * the Top Nav and the Player Bar, its right edge on the page inset line. Open
- * state is the Queue panel's `collapsed` preference, so the Player Bar's queue
+ * The Queue as a column docked on the right window edge, between the Top Nav
+ * and the Player Bar, set off from the page by one line; it slides in from
+ * the right. Open state is the Queue panel's `collapsed` preference, so the Player Bar's queue
  * button and this card's close button drive the same flag.
  */
 export function QueueDrawer({ abovePlayerBar }: { abovePlayerBar: boolean }) {
@@ -29,23 +29,18 @@ export function QueueDrawer({ abovePlayerBar }: { abovePlayerBar: boolean }) {
 			aria-hidden={!open}
 			inert={!open}
 			className={cn(
-				"absolute z-40 overflow-hidden rounded-lg border border-player-border shadow-[0_-16px_48px_-12px_var(--player-shadow),0_14px_40px_-8px_var(--player-shadow)] transition-[translate,visibility] duration-300 ease-out",
-				// Closed: slides below the viewport, then goes fully invisible so
-				// it can never peek out under the Player Bar, whatever the host
-				// window's geometry does to the shell.
-				open
-					? "visible translate-y-0"
-					: "invisible translate-y-[calc(100%+8rem)]",
+				"absolute top-(--queue-drawer-top) right-0 bottom-(--queue-drawer-bottom) z-40 w-(--queue-drawer-width,18rem) max-w-queue-drawer-max overflow-hidden border-player-border border-l transition-slide duration-300 ease-out",
+				// Closed: slides past the right edge, then goes fully invisible.
+				open ? "visible translate-x-0" : "invisible translate-x-full",
 			)}
-			style={{
-				width: QUEUE_DRAWER_WIDTH,
-				maxWidth: "calc(100% - 2 * var(--shell-inset, 2rem))",
-				right: "var(--shell-inset, 2rem)",
-				top: QUEUE_DRAWER_TOP,
-				bottom: abovePlayerBar
-					? QUEUE_DRAWER_BOTTOM_ABOVE_PLAYER
-					: QUEUE_DRAWER_BOTTOM,
-			}}
+			style={
+				{
+					"--queue-drawer-top": QUEUE_DRAWER_TOP,
+					"--queue-drawer-bottom": abovePlayerBar
+						? QUEUE_DRAWER_BOTTOM_ABOVE_PLAYER
+						: QUEUE_DRAWER_BOTTOM,
+				} as CSSProperties
+			}
 		>
 			<div className="relative flex h-full w-full flex-col overflow-hidden bg-player text-player-foreground">
 				<QueuePanel embedded onClose={() => togglePanel(queuePanel)} />

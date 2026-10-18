@@ -32,7 +32,7 @@ export function GenresPage() {
 		return <div className="p-6 text-foreground text-sm">Loading genres…</div>;
 	}
 
-	if (tracks.isError) {
+	if (tracks.isError && !tracks.data) {
 		return (
 			<div className="p-6 text-destructive text-sm">Failed to load genres</div>
 		);
@@ -69,12 +69,12 @@ export function GenresPage() {
 							/>
 							<div
 								data-genre-card-overlay
-								className="absolute inset-x-0 bottom-0 z-50 bg-gradient-to-t from-background/95 via-background/70 to-transparent px-3 pt-12 pb-3 text-foreground"
+								className="absolute inset-x-0 bottom-0 z-50 bg-gradient-to-t from-background/97 via-background/86 via-45% to-transparent px-3 pt-12 pb-3 text-foreground"
 							>
-								<p className="truncate font-semibold text-heading text-sm leading-tight tracking-[-0.012em]">
+								<p className="truncate font-semibold text-heading text-sm leading-tight tracking-tight">
 									{genre.name}
 								</p>
-								<p className="mt-0.5 truncate text-xs text-caption leading-tight tracking-[0.01em]">
+								<p className="mt-0.5 truncate text-xs text-caption leading-tight">
 									{genre.trackCount} track{genre.trackCount === 1 ? "" : "s"}
 								</p>
 							</div>

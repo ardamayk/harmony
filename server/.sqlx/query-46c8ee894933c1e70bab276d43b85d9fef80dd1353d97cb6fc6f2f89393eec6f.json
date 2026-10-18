@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO album_online_genres (album_id, outcome, genres, checked_at)\n            VALUES (?1, ?2, ?3, CURRENT_TIMESTAMP)\n            ON CONFLICT (album_id) DO UPDATE SET outcome = excluded.outcome,\n                genres = excluded.genres, checked_at = excluded.checked_at",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "46c8ee894933c1e70bab276d43b85d9fef80dd1353d97cb6fc6f2f89393eec6f"
+}

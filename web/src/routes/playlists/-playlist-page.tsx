@@ -1,12 +1,11 @@
 import type { QueueItemSource } from "@repo/api-client";
+import { SearchField } from "#/components/search-field";
 import { usePlayback } from "@repo/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "@tanstack/react-router";
-import { Search } from "lucide-react";
 import { CollectionDetailHeader } from "#/components/collection-detail-header";
 import { DetailPageShell } from "#/components/page-layout";
 import { TrackList } from "#/components/track-list";
-import { Input } from "#/components/ui/input";
 import { apiClient } from "#/lib/api";
 import {
 	invalidatePlaylistCache,
@@ -16,6 +15,7 @@ import {
 	formatTrackCollectionDuration,
 	useTrackCollectionViewState,
 } from "#/lib/track-collection-view-state";
+import { isGone } from "#/lib/query-persistence";
 
 // Route components live outside the route file: with automatic code
 // splitting, a component defined inside the route module can be rendered
@@ -65,7 +65,7 @@ export function PlaylistDetailContent({ playlistId }: { playlistId: string }) {
 		return <div className="p-6 text-foreground text-sm">Loading playlist…</div>;
 	}
 
-	if (playlist.isError || !playlist.data) {
+	if (!playlist.data || isGone(playlist.error)) {
 		return (
 			<div className="p-6 text-destructive text-sm">Playlist not found</div>
 		);
@@ -95,13 +95,9 @@ export function PlaylistDetailContent({ playlistId }: { playlistId: string }) {
 
 			<section className="mt-6">
 				{data.tracks.length > 0 ? (
-					<div
-						data-testid="playlist-track-search"
-						className="relative mb-4 w-full"
-					>
-						<Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-caption" />
-						<Input
-							className="h-11 rounded-lg bg-player pl-8 text-sm"
+					<div data-testid="playlist-track-search" className="mb-4 w-full">
+						<SearchField
+							variant="shell"
 							placeholder={`Search ${data.name}…`}
 							value={collection.search}
 							onChange={(event) => collection.setSearch(event.target.value)}

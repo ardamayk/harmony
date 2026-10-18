@@ -239,8 +239,8 @@ describe("PlayerBar", () => {
 		});
 
 		const nowPlaying = screen.getByLabelText("Now playing");
-		expect(nowPlaying.className).toContain("min-w-[200px]");
-		expect(nowPlaying.className).toContain("flex-[1_0_0]");
+		expect(nowPlaying.className).toContain("min-w-50");
+		expect(nowPlaying.className).toContain("grow shrink-0 basis-0");
 	});
 
 	it("keeps playback controls centered in the full player bar", async () => {
@@ -254,7 +254,7 @@ describe("PlayerBar", () => {
 	it("renders the Figma player bar shell dimensions", () => {
 		renderPlayerBar();
 
-		expect(screen.getByRole("contentinfo").className).toContain("h-[86px]");
+		expect(screen.getByRole("contentinfo").className).toContain("h-21.5");
 		expect(screen.getByRole("contentinfo").className).toContain("bg-player");
 	});
 
@@ -315,7 +315,7 @@ describe("PlayerBar", () => {
 		expect(await within(view).findByText("Line one")).toBeTruthy();
 		expect(within(view).getByText("Line two")).toBeTruthy();
 		expect(api.getTrackLyrics).toHaveBeenCalledWith(track.id);
-		expect(within(view).getByRole("heading", { name: "Queue" })).toBeTruthy();
+		expect(within(view).getByRole("region", { name: "Queue" })).toBeTruthy();
 		expect(within(view).getAllByText("Track 1").length).toBeGreaterThan(0);
 
 		fireEvent.keyDown(document, { key: "Escape" });
@@ -480,6 +480,51 @@ describe("PlayerBar", () => {
 			track.id,
 			expect.any(String),
 		);
+	});
+
+	it("follows synced lyrics and seeks to a line when it is clicked", async () => {
+		const { engine } = renderPlayerBar();
+		vi.mocked(api.getTrackLyrics)?.mockResolvedValueOnce({
+			lyrics: "[00:10.00] First line\n[00:20.00] Second line",
+		});
+		await act(async () => {
+			screen.getByRole("button", { name: "Start track" }).click();
+		});
+		fireEvent.click(screen.getByRole("button", { name: "Lyrics" }));
+		const second = await screen.findByRole("button", { name: "Second line" });
+		await act(async () => engine.seek(12));
+		expect(
+			screen
+				.getByRole("button", { name: "First line" })
+				.getAttribute("aria-current"),
+		).toBe("true");
+
+		const seek = vi.spyOn(engine, "seek");
+		fireEvent.click(second);
+		expect(seek).toHaveBeenLastCalledWith(20);
+	});
+
+	it("shows the host's window buttons in the Lyrics view", async () => {
+		const windowControls = {
+			minimize: vi.fn(),
+			toggleMaximize: vi.fn(),
+			close: vi.fn(),
+		};
+		render(
+			<LayoutProvider initialPreferences={defaultPreferences}>
+				<PlaybackProvider api={api} engine={new InMemoryPlaybackEngine()}>
+					<PlaybackStarter />
+					<PlayerBar windowControls={windowControls} />
+				</PlaybackProvider>
+			</LayoutProvider>,
+		);
+		await act(async () => {
+			screen.getByRole("button", { name: "Start track" }).click();
+		});
+		fireEvent.click(screen.getByRole("button", { name: "Lyrics" }));
+		const view = screen.getByRole("dialog", { name: "Lyrics" });
+		fireEvent.click(within(view).getByRole("button", { name: "Minimize" }));
+		expect(windowControls.minimize).toHaveBeenCalled();
 	});
 
 	it("keeps empty lyrics settled while the playhead advances", async () => {
@@ -753,7 +798,7 @@ describe("PlayerBar", () => {
 			fireEvent.click(toggle);
 			expect(toggle.textContent).toBe("");
 			expect(toggle.getAttribute("aria-expanded")).toBe("true");
-			expect(toggle.className).toContain("text-player-control-primary");
+			expect(toggle.className).toContain("shadow-lit");
 		},
 	);
 
@@ -936,8 +981,8 @@ describe("PlayerBar", () => {
 		const menu = document.getElementById("player-track-actions-menu");
 		expect(menu).toBeTruthy();
 		expect(menu?.parentElement).toBe(document.body);
-		expect(menu?.style.top).toBe("312px");
-		expect(menu?.style.left).toBe("48px");
+		expect(menu?.style.getPropertyValue("--menu-top")).toBe("312px");
+		expect(menu?.style.getPropertyValue("--menu-left")).toBe("48px");
 	});
 
 	it("navigates to album and artist from the actions menu", async () => {

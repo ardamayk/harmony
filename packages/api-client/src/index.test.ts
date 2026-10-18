@@ -132,6 +132,35 @@ describe("createApiClient", () => {
 		);
 	});
 
+	it("reads a missing Artist biography as null and other failures as errors", async () => {
+		const notFound = () =>
+			Response.json(
+				{ code: "not_found", message: "artist biography not found" },
+				{ status: 404 },
+			);
+		const transport = vi
+			.fn<typeof fetch>()
+			.mockResolvedValueOnce(
+				Response.json({ text: "A band.", sourceUrl: "https://w.example/a" }),
+			)
+			.mockResolvedValueOnce(notFound())
+			.mockResolvedValueOnce(
+				Response.json({ code: "internal", message: "boom" }, { status: 500 }),
+			);
+		const client = createApiClient({ baseUrl: "http://music.test", transport });
+
+		await expect(client.getArtistBiography("artist-1")).resolves.toEqual({
+			text: "A band.",
+			sourceUrl: "https://w.example/a",
+		});
+		await expect(client.getArtistBiography("artist-1")).resolves.toBeNull();
+		await expect(client.getArtistBiography("artist-1")).rejects.toThrow("boom");
+		expect(transport).toHaveBeenCalledWith(
+			"http://music.test/api/v1/library/artists/artist-1/biography",
+			expect.anything(),
+		);
+	});
+
 	it("probes a Track stream with HEAD and reports the status without throwing", async () => {
 		const transport = vi
 			.fn<typeof fetch>()
@@ -852,6 +881,9 @@ describe("createApiClient", () => {
 		// A size asks the server for a scaled-down cover.
 		expect(client.getAlbumCoverUrl("album-1", 512)).toBe(
 			"earthly-media://localhost/api/v1/library/albums/album-1/cover?size=512",
+		);
+		expect(client.getArtistPhotoUrl("artist-1")).toBe(
+			"earthly-media://localhost/api/v1/library/artists/artist-1/photo",
 		);
 		expect(client.getTrackStreamUrl("track-1")).toBe(
 			"http://127.0.0.1:41000/token-1/api/v1/tracks/track-1/stream",

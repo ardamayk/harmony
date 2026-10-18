@@ -1,10 +1,12 @@
 import type { Track, TrackDeletionPreview } from "@repo/api-client";
-import { Dialog as DialogPrimitive } from "radix-ui";
-
-export const DELETION_DIALOG_OVERLAY_CLASS =
-	"fixed inset-0 z-50 bg-background/70";
-export const DELETION_DIALOG_CONTENT_CLASS =
-	"-translate-x-1/2 -translate-y-1/2 fixed top-1/2 left-1/2 z-50 w-[calc(100vw-2rem)] max-w-lg rounded-md border border-border bg-popover p-6 text-popover-foreground shadow-xl outline-none";
+import { Button } from "#/components/ui/button";
+import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogFooter,
+	DialogTitle,
+} from "#/components/ui/dialog";
 
 export function TrackDeletionDialog({
 	track,
@@ -14,7 +16,7 @@ export function TrackDeletionDialog({
 	isDeleting,
 	onCancel,
 	onConfirm,
-	onCloseAutoFocus,
+	finalFocus,
 }: {
 	track: Track | null;
 	preview: TrackDeletionPreview | null;
@@ -23,50 +25,39 @@ export function TrackDeletionDialog({
 	isDeleting: boolean;
 	onCancel: () => void;
 	onConfirm: () => void;
-	onCloseAutoFocus?: (event: Event) => void;
+	finalFocus?: () => HTMLElement | true;
 }) {
 	return (
-		<DialogPrimitive.Root
-			open={Boolean(track)}
-			onOpenChange={(open) => !open && onCancel()}
-		>
-			<DialogPrimitive.Portal>
-				<DialogPrimitive.Overlay className={DELETION_DIALOG_OVERLAY_CLASS} />
-				<DialogPrimitive.Content
-					onCloseAutoFocus={onCloseAutoFocus}
-					className={DELETION_DIALOG_CONTENT_CLASS}
-				>
-					<DeletionHeading track={track} />
-					{isLoading ? (
-						<p className="mt-4 text-sm">Loading deletion details…</p>
-					) : null}
-					{preview ? <DeletionPreviewDetails preview={preview} /> : null}
-					{error ? (
-						<p role="alert" className="mt-4 text-destructive text-sm">
-							{error}
-						</p>
-					) : null}
-					<DeletionActions
-						isReady={Boolean(preview)}
-						isDeleting={isDeleting}
-						onCancel={onCancel}
-						onConfirm={onConfirm}
-					/>
-				</DialogPrimitive.Content>
-			</DialogPrimitive.Portal>
-		</DialogPrimitive.Root>
+		<Dialog open={Boolean(track)} onOpenChange={(open) => !open && onCancel()}>
+			<DialogContent finalFocus={finalFocus}>
+				<DeletionHeading track={track} />
+				{isLoading ? (
+					<p className="mt-4 text-sm">Loading deletion details…</p>
+				) : null}
+				{preview ? <DeletionPreviewDetails preview={preview} /> : null}
+				{error ? (
+					<p role="alert" className="mt-4 text-destructive text-sm">
+						{error}
+					</p>
+				) : null}
+				<DeletionActions
+					isReady={Boolean(preview)}
+					isDeleting={isDeleting}
+					onCancel={onCancel}
+					onConfirm={onConfirm}
+				/>
+			</DialogContent>
+		</Dialog>
 	);
 }
 
 function DeletionHeading({ track }: { track: Track | null }) {
 	return (
 		<>
-			<DialogPrimitive.Title className="font-semibold text-heading text-xl">
-				Permanently delete {track?.title}?
-			</DialogPrimitive.Title>
-			<DialogPrimitive.Description className="mt-2 text-caption text-sm">
+			<DialogTitle>Permanently delete {track?.title}?</DialogTitle>
+			<DialogDescription className="mt-2">
 				This cannot be undone. No trash or restore copy will be kept.
-			</DialogPrimitive.Description>
+			</DialogDescription>
 		</>
 	);
 }
@@ -75,7 +66,7 @@ export function DeletionRows({ rows }: { rows: string[][] }) {
 	return (
 		<dl className="mt-4 space-y-3 text-sm">
 			{rows.map(([label, value]) => (
-				<div key={label} className="grid grid-cols-[7rem_minmax(0,1fr)] gap-3">
+				<div key={label} className="grid grid-cols-label gap-3">
 					<dt className="text-caption">{label}</dt>
 					<dd className="break-all text-foreground">{value}</dd>
 				</div>
@@ -124,24 +115,24 @@ export function DeletionActions({
 	onConfirm: () => void;
 }) {
 	return (
-		<div className="mt-6 flex justify-end gap-2">
-			<button
+		<DialogFooter className="mt-6">
+			<Button
 				type="button"
-				className="rounded-sm border border-border px-4 py-2 text-sm"
+				variant="outline"
 				disabled={isDeleting}
 				onClick={onCancel}
 			>
 				Cancel
-			</button>
-			<button
+			</Button>
+			<Button
 				type="button"
-				className="rounded-sm bg-destructive px-4 py-2 text-destructive-foreground text-sm"
+				variant="destructive"
 				disabled={!isReady || isDeleting}
 				onClick={onConfirm}
 			>
 				{isDeleting ? "Deleting…" : "Delete permanently"}
-			</button>
-		</div>
+			</Button>
+		</DialogFooter>
 	);
 }
 

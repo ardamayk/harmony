@@ -430,7 +430,10 @@ describe("LibrarySearchDialog", () => {
 	);
 
 	it.each([
-		["artist", { to: "/library/tracks", search: { artistId: "selected" } }],
+		[
+			"artist",
+			{ to: "/library/artists/$artistId", params: { artistId: "selected" } },
+		],
 		["genre", { to: "/library/genres/$genre", params: { genre: "İzmir" } }],
 		[
 			"playlist",
@@ -616,6 +619,10 @@ describe("LibrarySearchDialog", () => {
 			if (opener === "button") fireEvent.click(button);
 			else fireEvent.keyDown(button, { key: "k", ctrlKey: true });
 			const input = screen.getByRole("combobox");
+			// Base UI moves focus into the dialog on the next frame.
+			await act(async () => {
+				await vi.advanceTimersByTimeAsync(50);
+			});
 			expect(document.activeElement).toBe(input);
 			fireEvent.keyDown(input, { key: "Escape" });
 			await act(async () => {

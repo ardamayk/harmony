@@ -4,7 +4,7 @@ import { useCallback, useRef } from "react";
  * Remembers the element that opened a programmatically controlled dialog so
  * closing the dialog restores keyboard focus to it.
  *
- * Radix modal dialog content moves focus back to its `DialogTrigger` on close.
+ * A Base UI modal dialog moves focus back to its `DialogTrigger` on close.
  * Dialogs that open from application state (the Import Music action, context
  * menu items whose menu unmounts before the dialog opens) have no trigger, so
  * without this focus falls to `document.body` and keyboard users lose their
@@ -24,15 +24,19 @@ export function useReturnFocus() {
 			active instanceof HTMLElement && active !== document.body ? active : null;
 	}, []);
 
-	/** Radix `onCloseAutoFocus` handler; `fallback` is used when the opener left the DOM. */
-	const restore = useCallback((event: Event, fallback?: HTMLElement | null) => {
-		const captured = targetRef.current;
-		targetRef.current = null;
-		const target = captured?.isConnected ? captured : fallback;
-		if (!target?.isConnected) return;
-		event.preventDefault();
-		target.focus();
-	}, []);
+	/**
+	 * The Base UI `finalFocus` target: the opener, else `fallback` when the
+	 * opener left the DOM, else `true` for the dialog's default.
+	 */
+	const restore = useCallback(
+		(fallback?: HTMLElement | null): HTMLElement | true => {
+			const captured = targetRef.current;
+			targetRef.current = null;
+			const target = captured?.isConnected ? captured : fallback;
+			return target?.isConnected ? target : true;
+		},
+		[],
+	);
 
 	return { capture, restore };
 }

@@ -1,6 +1,6 @@
 import type { ErrorComponentProps } from "@tanstack/react-router";
 import { Link } from "@tanstack/react-router";
-import { Button } from "#/components/ui/button";
+import { Button, buttonVariants } from "#/components/ui/button";
 
 /**
  * Last-resort screen for an unhandled render error. It keeps the app frame
@@ -22,9 +22,9 @@ export function RootErrorComponent({ error, reset }: ErrorComponentProps) {
 				<Button type="button" variant="outline" onClick={reset}>
 					Try again
 				</Button>
-				<Button asChild>
-					<Link to="/library/albums">Go to albums</Link>
-				</Button>
+				<Link to="/library/albums" className={buttonVariants()}>
+					Go to albums
+				</Link>
 			</div>
 		</div>
 	);
