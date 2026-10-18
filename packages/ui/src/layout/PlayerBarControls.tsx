@@ -304,7 +304,7 @@ function PlaybackProgress({
 					disabled={!hasCurrentTrack}
 					title={showRemaining ? "Show elapsed time" : "Show remaining time"}
 					onClick={() => setShowRemaining((value) => !value)}
-					className="-my-2 w-10 shrink-0 cursor-pointer rounded-sm py-2 text-right whitespace-nowrap text-player-foreground hover:text-player-control-primary disabled:cursor-default group-data-stage/controls:w-14"
+					className="-my-2 w-10 shrink-0 cursor-pointer rounded-sm py-2 text-right whitespace-nowrap text-player-foreground hover:text-player-control-primary disabled:cursor-default disabled:opacity-40 group-data-stage/controls:w-14"
 				>
 					{showRemaining
 						? `-${formatTime(effectiveDuration - currentTime)}`
