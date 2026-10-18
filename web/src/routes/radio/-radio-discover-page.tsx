@@ -1130,7 +1130,7 @@ function CatalogArtwork({
 		return (
 			<div
 				className={cn(
-					"flex shrink-0 items-center justify-center border border-border bg-player-artwork text-player-control-primary",
+					"flex shrink-0 items-center justify-center border border-border bg-muted text-caption",
 					sizeClass,
 				)}
 			>
@@ -1231,7 +1231,7 @@ function MetaChip({
 	return (
 		<span
 			className={cn(
-				"inline-flex h-6 max-w-full items-center gap-1 truncate rounded-full border border-border bg-player-pill px-2 text-caption text-xs",
+				"inline-flex h-6 max-w-full items-center gap-1 truncate rounded-full border border-border px-2 text-caption text-xs",
 				className,
 			)}
 		>

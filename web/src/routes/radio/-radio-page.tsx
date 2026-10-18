@@ -355,7 +355,7 @@ function StationArtwork({
 	) : (
 		<div
 			aria-hidden
-			className="flex h-20 w-20 shrink-0 items-center justify-center rounded-md border border-border bg-player-artwork text-player-control-primary"
+			className="flex h-20 w-20 shrink-0 items-center justify-center rounded-md border border-border bg-muted text-caption"
 		>
 			<Headphones className="size-7" />
 		</div>

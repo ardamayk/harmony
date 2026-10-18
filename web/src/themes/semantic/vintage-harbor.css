@@ -68,14 +68,16 @@
 }
 
 /* Light mode keeps the shell bars dark against the light page, with their
-   own light text (contrast.css re-scopes the text tokens inside them). */
+   own light text (contrast.css re-scopes the text tokens inside them). Body
+   text takes the bars' navy hue (252) at the old beige's L and C, so it
+   follows the surface's temperature and grayscale stays put. */
 [data-theme-preset="vintage-harbor"]:not(.dark) {
 	--sidebar: #132030;
-	--sidebar-foreground: #d3c4b9;
+	--sidebar-foreground: oklch(83% 0.023 252);
 	--sidebar-heading: #e6bf9e;
 	--sidebar-accent: rgba(40, 54, 70, 0.5);
 	--player: rgba(30, 43, 59, 0.95);
-	--player-foreground: #d3c4b9;
+	--player-foreground: var(--sidebar-foreground);
 	--shell-active: rgba(40, 54, 70, 0.5);
 	--player-title: #d6e4f9;
 	--player-artwork: #283646;
@@ -108,9 +110,11 @@
 	--muted: oklch(33% 0.033 252);
 	--accent: var(--muted);
 	--sidebar-accent: oklch(36% 0.036 252);
-	/* The Queue's playing row, the one warm fill: the accent family
+	/* The lit look (open section, pressed toggle, selected option, playing
+	   rows), the one warm fill: the accent family
 	   (--accent-hue, C/L 0.1) at the active step's L, so grayscale stays put
 	   and the accent text on it shares its hue. Hover stays neutral.
+	   --neutral-active keeps layers.css's alias of this step.
 	   A pale or colourless cover mixes it toward the navy active step by its
 	   chroma scale, so the lit row never reads greyer than the panel. */
 	--shell-active: color-mix(
@@ -118,10 +122,6 @@
 		oklch(36% 0.036 var(--accent-hue)) calc(var(--accent-chroma) * 100%),
 		var(--sidebar-accent)
 	);
-	/* Every other active look (open section, pressed toggle, selected option,
-	   the playing track-list row) sits on the neutral active step; its accent
-	   text or glyph marks it. */
-	--neutral-active: var(--sidebar-accent);
 	--heading: oklch(93% 0.02 252);
 	--text: oklch(82% 0.02 252);
 	--caption: oklch(73% 0.02 252);
@@ -143,4 +143,15 @@
 			var(--accent-hue)
 	);
 	--ring: oklch(58.2% 0.05 252);
+}
+
+/* Text on the lit fill takes the accent family at its own tier's L, so it
+   follows the surface's temperature and grayscale stays put. */
+[data-theme-preset="vintage-harbor"].dark
+	:is(.bg-shell-active, .bg-neutral-active) {
+	--heading: oklch(93% calc(0.02 * var(--accent-chroma)) var(--accent-hue));
+	--text: oklch(82% calc(0.02 * var(--accent-chroma)) var(--accent-hue));
+	--foreground: var(--text);
+	--caption: oklch(73% calc(0.02 * var(--accent-chroma)) var(--accent-hue));
+	--muted-foreground: var(--caption);
 }
