@@ -180,8 +180,8 @@ export function LibrarySearchDialog({
 						break;
 					case "artist":
 						void navigate({
-							to: "/library/tracks",
-							search: { artistId: result.id },
+							to: "/library/artists/$artistId",
+							params: { artistId: result.id },
 						});
 						break;
 					case "genre":

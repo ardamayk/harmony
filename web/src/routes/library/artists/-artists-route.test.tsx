@@ -21,9 +21,34 @@ const mocks = vi.hoisted(() => ({
 	listArtists: vi.fn(),
 }));
 
+vi.mock("@tanstack/react-router", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@tanstack/react-router")>()),
+	Link: ({
+		children,
+		to,
+		params,
+		...props
+	}: {
+		children: React.ReactNode;
+		to: string;
+		params?: Record<string, string>;
+	}) => (
+		<a
+			href={Object.entries(params ?? {}).reduce(
+				(href, [key, value]) => href.replace(`$${key}`, value),
+				to,
+			)}
+			{...props}
+		>
+			{children}
+		</a>
+	),
+}));
+
 vi.mock("#/lib/api", () => ({
 	apiClient: {
 		listArtists: mocks.listArtists,
+		getArtistPhotoUrl: (artistId: string) => `/photo/${artistId}`,
 	},
 }));
 

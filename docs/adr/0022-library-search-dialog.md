@@ -12,7 +12,7 @@ The Library Search experience specification of 2026-09-12 supersedes the origina
 
 Results sit under one accessible "From Your Library" heading. One eligible Best Match appears first, followed by groups in the order Track, Album, Artist, Genre, Playlist. Only strong direct results qualify for Best Match; typo-only results do not. The highlighted record also appears first in its category and counts toward that category's five-result limit. Its two presentations use distinct row keys and DOM IDs; keyboard selection marks only one presentation, while activation uses the same real record identity.
 
-Choosing a Track plays it; an Album, Genre or Playlist retains its existing navigation. Artists have no detail page: an Artist result opens `/library/tracks?artistId=<id>`, matching either Track or Album credits by identity. Search includes all visible credited Artists, including Track-only contributors; it is not restricted to the Album Artists browse list.
+Choosing a Track plays it; an Album, Genre or Playlist retains its existing navigation. An Artist result opens the Artist page (`/library/artists/<id>`, [ADR 0027](0027-artist-photos-from-deezer-biographies-from-wikipedia.md)); before Artists had one it opened `/library/tracks?artistId=<id>`. Search includes all visible credited Artists, including Track-only contributors; it is not restricted to the Album Artists browse list.
 
 ## Where the matches come from
 

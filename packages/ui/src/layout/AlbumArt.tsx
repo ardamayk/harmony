@@ -18,6 +18,9 @@ export function AlbumArt({
 			<img
 				src={coverUrl}
 				alt=""
+				// A long grid asks only for what scrolls into view; an Artist
+				// photo may still need its first online lookup.
+				loading="lazy"
 				className={cn("bg-muted object-cover", className)}
 				onError={() => setFailed(true)}
 			/>

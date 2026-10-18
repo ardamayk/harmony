@@ -73,6 +73,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/library/artists/{artistId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get an artist
+         * @description Any credited Artist. Album counts include active Album Artist credits only.
+         */
+        get: operations["getArtist"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/library/artists/{artistId}/photo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get an artist photo
+         * @description Looked up on Deezer on first request and stored on the Music Server (ADR 0027), so clients never contact Deezer. Not found when Deezer has no photo, the lookup failed, or online lookups are switched off.
+         */
+        get: operations["getArtistPhoto"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/library/artists/{artistId}/biography": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get an artist biography
+         * @description The Artist's Wikipedia summary, found through MusicBrainz and Wikidata on first request and stored (ADR 0027). Show `sourceUrl` with it, as Wikipedia's CC BY-SA licence requires. Not found when there is none, the lookup failed, or online lookups are switched off.
+         */
+        get: operations["getArtistBiography"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/library/albums": {
         parameters: {
             query?: never;
@@ -1287,6 +1347,11 @@ export interface components {
             /** Format: int64 */
             sizeBytes: number;
         };
+        ArtistBiography: {
+            text: string;
+            /** Format: uri */
+            sourceUrl: string;
+        };
         ArtistList: {
             items: components["schemas"]["Artist"][];
             total: number;
@@ -1844,6 +1909,7 @@ export interface components {
     parameters: {
         limit: number;
         offset: number;
+        artistId: string;
         albumId: string;
         trackId: string;
         importId: string;
@@ -1969,6 +2035,75 @@ export interface operations {
                     "application/json": components["schemas"]["ArtistList"];
                 };
             };
+        };
+    };
+    getArtist: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                artistId: components["parameters"]["artistId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Artist */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Artist"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getArtistPhoto: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                artistId: components["parameters"]["artistId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Artist photo */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": string;
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getArtistBiography: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                artistId: components["parameters"]["artistId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Artist biography */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtistBiography"];
+                };
+            };
+            404: components["responses"]["NotFound"];
         };
     };
     listAlbums: {

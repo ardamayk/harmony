@@ -34,6 +34,7 @@ async fn router(directory: &Path) -> axum::Router {
         "APP_VERSION" => Some("contract-test".to_owned()),
         // Nothing here may reach the real Radio Browser catalog.
         "RADIO_BROWSER_BASE_URL" => Some("http://127.0.0.1:9".to_owned()),
+        "ARTIST_INFO_ENABLED" => Some("false".to_owned()),
         _ => None,
     })
     .expect("config");

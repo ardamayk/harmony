@@ -1,3 +1,4 @@
+pub mod artist_info;
 pub mod docs;
 pub mod library;
 pub mod managed_import;

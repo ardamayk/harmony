@@ -25,6 +25,10 @@ impl Service {
         self.repo.list_artists(limit, offset, query).await
     }
 
+    pub async fn get_artist(&self, artist_id: &str) -> Result<Artist, LibraryError> {
+        self.repo.get_artist(artist_id).await
+    }
+
     pub async fn list_albums(
         &self,
         limit: i64,

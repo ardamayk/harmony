@@ -17,6 +17,7 @@ use axum::{Json, Router};
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/v1/library/artists", get(list_artists))
+        .route("/api/v1/library/artists/{artist_id}", get(get_artist))
         .route("/api/v1/library/albums", get(list_albums))
         .route(
             "/api/v1/library/albums/{album_id}/cover",
@@ -63,6 +64,17 @@ async fn list_artists(
         .await
         .map_err(ApiError::internal)?;
     Ok(Json(page))
+}
+
+async fn get_artist(
+    State(state): State<AppState>,
+    Path(artist_id): Path<String>,
+) -> ApiResult<Json<types::Artist>> {
+    let artist = Service::new(state.db)
+        .get_artist(&artist_id)
+        .await
+        .map_err(not_found("artist not found"))?;
+    Ok(Json(artist))
 }
 
 async fn list_albums(

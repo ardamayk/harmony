@@ -103,6 +103,65 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ArtistList"
+  /api/v1/library/artists/{artistId}:
+    get:
+      tags: [library]
+      operationId: getArtist
+      summary: Get an artist
+      description: Any credited Artist. Album counts include active Album Artist credits only.
+      parameters:
+        - $ref: "#/components/parameters/artistId"
+      responses:
+        "200":
+          description: Artist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Artist"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/library/artists/{artistId}/photo:
+    get:
+      tags: [library]
+      operationId: getArtistPhoto
+      summary: Get an artist photo
+      description: >-
+        Looked up on Deezer on first request and stored on the Music Server
+        (ADR 0027), so clients never contact Deezer. Not found when Deezer has
+        no photo, the lookup failed, or online lookups are switched off.
+      parameters:
+        - $ref: "#/components/parameters/artistId"
+      responses:
+        "200":
+          description: Artist photo
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/library/artists/{artistId}/biography:
+    get:
+      tags: [library]
+      operationId: getArtistBiography
+      summary: Get an artist biography
+      description: >-
+        The Artist's Wikipedia summary, found through MusicBrainz and Wikidata
+        on first request and stored (ADR 0027). Show `sourceUrl` with it, as
+        Wikipedia's CC BY-SA licence requires. Not found when there is none,
+        the lookup failed, or online lookups are switched off.
+      parameters:
+        - $ref: "#/components/parameters/artistId"
+      responses:
+        "200":
+          description: Artist biography
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArtistBiography"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /api/v1/library/albums:
     get:
       tags: [library]
@@ -1568,6 +1627,13 @@ components:
         type: integer
         minimum: 0
         default: 0
+    artistId:
+      name: artistId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
     albumId:
       name: albumId
       in: path
@@ -2524,6 +2590,15 @@ components:
           type: integer
           format: int64
           minimum: 1
+    ArtistBiography:
+      type: object
+      required: [text, sourceUrl]
+      properties:
+        text:
+          type: string
+        sourceUrl:
+          type: string
+          format: uri
     ArtistList:
       type: object
       required: [items, total]

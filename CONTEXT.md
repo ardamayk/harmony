@@ -78,6 +78,14 @@ _Avoid_: Album Artist, free-text artist label, Composer
 The Artist credit under which an Album is grouped. It is required independently from each Track's Artist credit and is never inferred from it.
 _Avoid_: Track Artist, fallback Artist, Composer
 
+**Artist Photo**:
+An Artist's picture, looked up on Deezer through one of their Albums on first request and stored on the Music Server; without one the Artist shows their initial.
+_Avoid_: artist image, avatar, Album Artwork
+
+**Artist Biography**:
+An Artist's Wikipedia summary, reached through MusicBrainz and Wikidata on first request, stored, and always shown with its source link.
+_Avoid_: bio, artist description
+
 **Album**:
 A grouping of Tracks matched by Album Artist credits and the full Album title, independent of year and each Track's Artist credits, with case and redundant whitespace ignored. Edition qualifiers remain part of the title, so "Album X" and "Album X (Deluxe)" are separate Albums; users may explicitly create a separate Album for a differently intended edition with otherwise matching tags.
 _Avoid_: Playlist, folder, import batch, grouping by Track Artist

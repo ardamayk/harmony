@@ -18,6 +18,10 @@ pub struct Config {
     pub managed_import_file_limit_bytes: i64,
     pub managed_import_batch_limit_bytes: i64,
     pub radio_browser_base_url: String,
+    /// Online Artist photo and biography lookups (ADR 0027).
+    pub artist_info_enabled: bool,
+    /// Wikipedia language for Artist biographies, English as fallback.
+    pub artist_info_language: String,
 }
 
 #[derive(Debug, thiserror::Error, PartialEq)]
@@ -28,6 +32,8 @@ pub enum ConfigError {
     InvalidAddress(String, String),
     #[error("SERVER_ADDR {0:?} must bind to a loopback address while authentication is disabled")]
     NotLoopback(String),
+    #[error("ARTIST_INFO_LANGUAGE {0:?} must be a Wikipedia language code such as en or tr")]
+    InvalidLanguage(String),
 }
 
 impl Config {
@@ -59,6 +65,14 @@ impl Config {
                 _ => Err(ConfigError::InvalidByteCount(key, description)),
             }
         };
+        // It becomes a Wikipedia host name, so only a language code passes.
+        let artist_info_language = get("ARTIST_INFO_LANGUAGE", "en");
+        if !artist_info_language
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c == '-')
+        {
+            return Err(ConfigError::InvalidLanguage(artist_info_language));
+        }
         Ok(Self {
             addr: get("SERVER_ADDR", "127.0.0.1:8090"),
             database_path: get("DATABASE_PATH", "./data/app.db"),
@@ -87,6 +101,13 @@ impl Config {
                 "RADIO_BROWSER_BASE_URL",
                 "https://de1.api.radio-browser.info",
             ),
+            artist_info_enabled: !matches!(
+                get("ARTIST_INFO_ENABLED", "true")
+                    .to_ascii_lowercase()
+                    .as_str(),
+                "false" | "0"
+            ),
+            artist_info_language,
         })
     }
 }
@@ -148,6 +169,27 @@ mod tests {
         assert_eq!(
             config.radio_browser_base_url,
             "https://de1.api.radio-browser.info"
+        );
+        assert!(config.artist_info_enabled);
+        assert_eq!(config.artist_info_language, "en");
+    }
+
+    #[test]
+    fn artist_info_can_be_switched_off_and_takes_only_language_codes() {
+        assert!(
+            !config(&[("ARTIST_INFO_ENABLED", "false")])
+                .expect("config")
+                .artist_info_enabled
+        );
+        assert_eq!(
+            config(&[("ARTIST_INFO_LANGUAGE", "tr")])
+                .expect("config")
+                .artist_info_language,
+            "tr"
+        );
+        assert_eq!(
+            config(&[("ARTIST_INFO_LANGUAGE", "evil.example/x")]).err(),
+            Some(ConfigError::InvalidLanguage("evil.example/x".to_owned()))
         );
     }
 

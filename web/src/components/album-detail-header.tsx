@@ -2,15 +2,11 @@ import {
 	type AlbumDetail,
 	MANAGED_ALBUM_DELETION_CAPABILITY,
 } from "@repo/api-client";
-import {
-	AlbumArt,
-	useCoverAccent,
-	useLayout,
-	useResolvedThemeMode,
-} from "@repo/ui";
-import type { CSSProperties } from "react";
+import { AlbumArt } from "@repo/ui";
+import { Link } from "@tanstack/react-router";
 import { Disc3, Play, SkipForward, Trash2 } from "lucide-react";
 import { AlbumDeletionDialog } from "#/components/album-deletion-dialog";
+import { CoverWash } from "#/components/cover-wash";
 import { ExternalLinkButton } from "#/components/external-link-button";
 import { Button } from "#/components/ui/button";
 import {
@@ -66,21 +62,11 @@ export function AlbumDetailHeader({
 	const canDeleteAlbums = useServerCapability(
 		MANAGED_ALBUM_DELETION_CAPABILITY,
 	);
-	const { preferences } = useLayout();
-	// Same cache key and size as the Player Bar, so the cover is read once.
-	const coverAccent = useCoverAccent({
-		cacheKey: album.id,
-		coverUrl: apiClient.getAlbumCoverUrl(album.id, 128),
-		enabled: true,
-		mode: useResolvedThemeMode(preferences.theme.mode),
-	});
 	return (
-		// Bleeds to the scroller's edges, behind the Queue Drawer too; the wash
-		// ends where the track list begins. No cover colour yet leaves the plain
-		// page background.
-		<div
-			className="-mt-6 -ml-(--shell-inset) -mr-(--page-edge-right) bg-linear-to-b from-(--cover-tint)/20 to-(--cover-tint)/5 pt-6 pr-(--page-edge-right) pb-6 pl-(--shell-inset)"
-			style={{ "--cover-tint": coverAccent["--cover-tint"] } as CSSProperties}
+		// Same cache key and size as the Player Bar, so the cover is read once.
+		<CoverWash
+			cacheKey={album.id}
+			imageUrl={apiClient.getAlbumCoverUrl(album.id, 128)}
 		>
 			<ContextMenu>
 				<ContextMenuTrigger render={<div className="@container" />}>
@@ -95,9 +81,13 @@ export function AlbumDetailHeader({
 							<h1 className="font-semibold text-3xl tracking-tight">
 								{album.title}
 							</h1>
-							<p className="mt-2 font-medium text-foreground text-xl">
+							<Link
+								to="/library/artists/$artistId"
+								params={{ artistId: album.artistId }}
+								className="mt-2 self-start font-medium text-foreground text-xl hover:text-heading"
+							>
 								{artistName}
-							</p>
+							</Link>
 
 							{/* Release date under the artist, track count and length last;
 							    both on the caption step. */}
@@ -162,6 +152,6 @@ export function AlbumDetailHeader({
 					onConfirm={albumDeletion.confirm}
 				/>
 			</ContextMenu>
-		</div>
+		</CoverWash>
 	);
 }

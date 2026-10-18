@@ -430,7 +430,10 @@ describe("LibrarySearchDialog", () => {
 	);
 
 	it.each([
-		["artist", { to: "/library/tracks", search: { artistId: "selected" } }],
+		[
+			"artist",
+			{ to: "/library/artists/$artistId", params: { artistId: "selected" } },
+		],
 		["genre", { to: "/library/genres/$genre", params: { genre: "İzmir" } }],
 		[
 			"playlist",

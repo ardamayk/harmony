@@ -53,6 +53,7 @@ export type Genre = Schemas["Genre"];
 export type ReleaseIdentifier = Schemas["ReleaseIdentifier"];
 export type AlbumArtwork = Schemas["AlbumArtwork"];
 export type ArtistList = Schemas["ArtistList"];
+export type ArtistBiography = Schemas["ArtistBiography"];
 export type Album = Omit<
 	WireAlbum,
 	"albumArtists" | "genreItems" | "releaseIdentifiers"
@@ -415,6 +416,16 @@ export function createApiClient(config: ApiClientConfig) {
 
 		listArtists: (params?: ListParams) =>
 			request<ArtistList>(`/api/v1/library/artists${buildQuery(params)}`),
+		getArtist: (artistId: string) =>
+			request<Artist>(`/api/v1/library/artists/${artistId}`),
+		/** Resolves `null` when the Artist has no biography (yet). */
+		getArtistBiography: (artistId: string) =>
+			request<ArtistBiography>(
+				`/api/v1/library/artists/${artistId}/biography`,
+			).catch((error: unknown) => {
+				if (error instanceof ApiError && error.status === 404) return null;
+				throw error;
+			}),
 		listAlbums: (params?: ListParams) =>
 			request<WireAlbumList>(
 				`/api/v1/library/albums${buildQuery(params)}`,
@@ -678,6 +689,9 @@ export function createApiClient(config: ApiClientConfig) {
 		/** `size` fits the cover into that many pixels; omit for the original. */
 		getAlbumCoverUrl: (albumId: string, size?: CoverSize) =>
 			`${getMediaBaseUrl()}/api/v1/library/albums/${albumId}/cover${size ? `?size=${size}` : ""}`,
+		/** Not found while the Artist has no photo; show their initial then. */
+		getArtistPhotoUrl: (artistId: string) =>
+			`${getMediaBaseUrl()}/api/v1/library/artists/${artistId}/photo`,
 	};
 }
 

@@ -177,6 +177,29 @@ impl Repository {
         })
     }
 
+    /// Any credited Artist, Album Artist or not; the count covers active
+    /// Album Artist credits only, as in [`Self::list_artists`].
+    pub async fn get_artist(&self, artist_id: &str) -> Result<Artist, LibraryError> {
+        let row = sqlx::query!(
+            r#"SELECT a.id AS "id!", a.name AS "name!",
+                (SELECT COUNT(*) FROM album_artists credits
+                 WHERE credits.artist_id = a.id
+                   AND EXISTS (SELECT 1 FROM visible_tracks WHERE visible_tracks.album_id = credits.album_id)
+                ) AS "album_count!: i64"
+            FROM artists a WHERE a.id = ?1"#,
+            artist_id
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .context(|| format!("get Artist {artist_id}"))?
+        .ok_or(LibraryError::NotFound)?;
+        Ok(Artist {
+            id: row.id,
+            name: row.name,
+            album_count: row.album_count,
+        })
+    }
+
     pub async fn list_albums(
         &self,
         limit: i64,

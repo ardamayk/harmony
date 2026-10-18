@@ -3,6 +3,30 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { AlbumDetailHeader } from "./album-detail-header";
 
+vi.mock("@tanstack/react-router", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@tanstack/react-router")>()),
+	Link: ({
+		children,
+		to,
+		params,
+		...props
+	}: {
+		children: React.ReactNode;
+		to: string;
+		params?: Record<string, string>;
+	}) => (
+		<a
+			href={Object.entries(params ?? {}).reduce(
+				(href, [key, value]) => href.replace(`$${key}`, value),
+				to,
+			)}
+			{...props}
+		>
+			{children}
+		</a>
+	),
+}));
+
 vi.mock("#/hooks/use-server-capability", () => ({
 	useServerCapability: () => true,
 }));
