@@ -176,9 +176,9 @@ export function TrackList({
 											}}
 											className={cn(
 												"group cursor-pointer border-border/40 border-b transition",
-												// The playing row takes the shared lit look, so it stays lighter than hover.
+												// The playing row takes the lit look on the active step, above the hover step.
 												isPlaying
-													? "bg-heading/12 shadow-lit"
+													? "bg-shell-active shadow-lit"
 													: "hover:bg-muted/50",
 											)}
 											tabIndex={0}
@@ -194,7 +194,14 @@ export function TrackList({
 										/>
 									}
 								>
-									<td className={cn("text-caption tabular-nums", rowPadding)}>
+									<td
+										className={cn(
+											"tabular-nums",
+											// Caption loses 4.5:1 on the active step.
+											isPlaying ? "text-foreground" : "text-caption",
+											rowPadding,
+										)}
+									>
 										{visibleNumber}
 									</td>
 									<td className={rowPadding}>
@@ -217,7 +224,12 @@ export function TrackList({
 													{track.title}
 												</span>
 												{shouldShowArtistLine ? (
-													<span className="mt-0.5 block truncate text-caption text-xs leading-tight">
+													<span
+														className={cn(
+															"mt-0.5 block truncate text-xs leading-tight",
+															isPlaying ? "text-foreground" : "text-caption",
+														)}
+													>
 														{getTrackArtistName(track)}
 													</span>
 												) : null}
@@ -226,7 +238,8 @@ export function TrackList({
 									</td>
 									<td
 										className={cn(
-											"text-right text-caption tabular-nums",
+											"text-right tabular-nums",
+											isPlaying ? "text-foreground" : "text-caption",
 											rowPadding,
 										)}
 									>
