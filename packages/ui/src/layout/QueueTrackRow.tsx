@@ -46,10 +46,10 @@ export function QueueTrackRow({
 				}
 			}}
 			className={cn(
-				"group relative flex cursor-pointer items-center gap-3 rounded-r-sm py-2 pr-3 pl-6 -outline-offset-2 hover:bg-player-pill/60 focus-visible:outline-2 focus-visible:outline-player-control-primary",
+				"group relative flex cursor-pointer items-center gap-3 rounded-r-sm py-2 pr-3 pl-6 -outline-offset-2 hover:bg-muted focus-visible:outline-2 focus-visible:outline-player-control-primary",
 				// Margin plus padding match other rows' `pl-6` / `pr-3`, so number and duration columns stay put.
 				isCurrent &&
-					"my-1 mr-1 ml-2 rounded-sm bg-player-pill/70 pr-2 pl-4 ring-1 ring-player-control-primary shadow-md shadow-player-control-shadow",
+					"my-1 mr-1 ml-2 rounded-sm bg-player-pill pr-2 pl-4 ring-1 ring-player-control-primary shadow-md shadow-player-control-shadow",
 			)}
 		>
 			{isCurrent ? (
