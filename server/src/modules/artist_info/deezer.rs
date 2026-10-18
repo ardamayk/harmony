@@ -33,6 +33,9 @@ struct Artist {
     name: String,
     #[serde(default)]
     picture_big: String,
+    /// 1000px; the Artist page shows the photo as a full-width banner.
+    #[serde(default)]
+    picture_xl: String,
     #[serde(default)]
     nb_fan: i64,
 }
@@ -46,7 +49,8 @@ struct TopTrack {
     title_short: String,
 }
 
-/// The URL of the Artist's 500px picture, `None` when Deezer has none.
+/// The URL of the Artist's 1000px picture (500px when that is all there
+/// is), `None` when Deezer has none.
 pub async fn find_picture(
     client: &reqwest::Client,
     base_url: &str,
@@ -154,8 +158,11 @@ fn best_by_name(artists: Vec<Artist>, name: &str) -> Option<Artist> {
 }
 
 fn picture(artist: &Artist) -> Option<String> {
-    let url = artist.picture_big.trim();
-    (!url.is_empty() && !url.contains(PLACEHOLDER_PATH)).then(|| url.to_owned())
+    [&artist.picture_xl, &artist.picture_big]
+        .into_iter()
+        .map(|url| url.trim())
+        .find(|url| !url.is_empty() && !url.contains(PLACEHOLDER_PATH))
+        .map(str::to_owned)
 }
 
 #[cfg(test)]
@@ -167,6 +174,7 @@ mod tests {
             id: 1,
             name: name.to_owned(),
             picture_big: format!("https://cdn.example/images/artist/{name}/500x500.jpg"),
+            picture_xl: String::new(),
             nb_fan: fans,
         }
     }
@@ -195,6 +203,9 @@ mod tests {
             "https://cdn.example/images/artist//500x500-000000-80-0-0.jpg".to_owned();
         assert_eq!(picture(&empty), None);
         assert!(picture(&artist("Skillet", 1)).is_some());
+        let mut both = artist("Skillet", 1);
+        both.picture_xl = "https://cdn.example/images/artist/a/1000x1000.jpg".to_owned();
+        assert_eq!(picture(&both).as_deref(), Some(both.picture_xl.as_str()));
     }
 
     #[test]
