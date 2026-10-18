@@ -90,7 +90,7 @@ export function MoreFromArtist({
 						params={{ albumId: album.id }}
 						className="group w-40 shrink-0 rounded-sm outline-none sm:w-44"
 					>
-						<div className="mb-3 aspect-square transform-gpu overflow-hidden rounded-md border border-border backface-hidden transition duration-300 ease-out group-hover:-translate-y-1 group-hover:border-shell-active-foreground/35 group-hover:shadow-card-lift group-focus-visible:-translate-y-1 group-focus-visible:border-shell-active-foreground/60 group-focus-visible:shadow-card-lift">
+						<div className="mb-3 aspect-square transform-gpu overflow-hidden rounded-md border border-border backface-hidden transition duration-300 ease-out group-hover:-translate-y-1 group-hover:border-heading/35 group-hover:shadow-card-lift group-focus-visible:-translate-y-1 group-focus-visible:border-heading/60 group-focus-visible:shadow-card-lift">
 							<AlbumArt
 								coverUrl={apiClient.getAlbumCoverUrl(album.id, 512)}
 								title={album.title}

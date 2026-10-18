@@ -7,7 +7,12 @@ import {
 	it,
 	vi,
 } from "vite-plus/test";
-import { clearCoverAccentCache, useCoverAccent } from "./use-cover-accent";
+import {
+	clearCoverAccentCache,
+	nearestTurn,
+	useCoverAccent,
+	useRootAccentHue,
+} from "./use-cover-accent";
 
 vi.mock("../lib/cover-accent", async (importOriginal) => {
 	const original = await importOriginal<typeof import("../lib/cover-accent")>();
@@ -64,5 +69,55 @@ describe("useCoverAccent", () => {
 
 		render(<Harness cacheKey="album-3" enabled={false} loadImage={vi.fn()} />);
 		expect(screen.getAllByTestId("accent")[1]?.textContent).toBe("");
+	});
+});
+
+function HueHarness({
+	hue,
+	chroma,
+	active,
+}: {
+	hue?: string;
+	chroma?: string;
+	active: boolean;
+}) {
+	useRootAccentHue(
+		{
+			...(hue ? { "--accent-hue": hue } : {}),
+			...(chroma ? { "--accent-chroma": chroma } : {}),
+		},
+		active,
+	);
+	return null;
+}
+
+describe("useRootAccentHue", () => {
+	afterEach(() => {
+		cleanup();
+		document.documentElement.style.removeProperty("--accent-hue");
+		document.documentElement.style.removeProperty("--accent-chroma");
+		document.documentElement.style.removeProperty("--accent-lightness");
+	});
+
+	it("takes the short way round the hue wheel", () => {
+		expect(nearestTurn(20, 340)).toBe(380);
+		expect(nearestTurn(340, 20)).toBe(-20);
+		expect(nearestTurn(200, 62)).toBe(200);
+	});
+
+	it("writes the cover hue to the root, the theme hue without one, nothing when inactive", () => {
+		const root = document.documentElement;
+		// From the peach (62), 340 is nearer one turn down.
+		const view = render(<HueHarness hue="340.0" active />);
+		expect(root.style.getPropertyValue("--accent-hue")).toBe("-20.0");
+		expect(root.style.getPropertyValue("--accent-chroma")).toBe("1");
+		expect(root.style.getPropertyValue("--accent-lightness")).toBe("83");
+		// A colourless cover: the theme hue, no chroma.
+		view.rerender(<HueHarness chroma="0" active />);
+		expect(root.style.getPropertyValue("--accent-hue")).toBe("62.0");
+		expect(root.style.getPropertyValue("--accent-chroma")).toBe("0");
+		view.rerender(<HueHarness hue="120.0" active={false} />);
+		expect(root.style.getPropertyValue("--accent-hue")).toBe("");
+		expect(root.style.getPropertyValue("--accent-chroma")).toBe("");
 	});
 });

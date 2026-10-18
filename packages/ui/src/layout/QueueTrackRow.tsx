@@ -51,7 +51,7 @@ export function QueueTrackRow({
 				!isCurrent && "hover:bg-muted",
 				// Margin plus padding match other rows' `pl-6` / `pr-3`, so number and duration columns stay put.
 				isCurrent &&
-					"my-1 mr-1 ml-2 rounded-sm bg-shell-active pr-2 pl-4 ring-1 ring-player-control-primary shadow-md shadow-player-control-shadow",
+					"my-1 mr-1 ml-2 rounded-sm bg-shell-active pr-2 pl-4 ring-1 ring-player-control-primary",
 			)}
 		>
 			{isCurrent ? (
@@ -82,7 +82,7 @@ export function QueueTrackRow({
 							? "font-semibold text-heading"
 							: state === "played"
 								? "text-caption group-hover:text-heading group-focus-within:text-heading"
-								: "text-heading",
+								: "text-foreground group-hover:text-heading group-focus-within:text-heading",
 					)}
 					title={item.track.title}
 				>
@@ -114,11 +114,20 @@ export function QueueTrackRow({
 	return renderMenu ? renderMenu({ item, children: row }) : row;
 }
 
-function QueueEqualizer({ isPlaying }: { isPlaying: boolean }) {
+export function QueueEqualizer({
+	isPlaying,
+	className = "text-player-control-primary",
+}: {
+	isPlaying: boolean;
+	className?: string;
+}) {
 	return (
 		<span
 			aria-hidden
-			className="queue-equalizer flex size-4 shrink-0 items-end justify-center gap-0.5 pb-px text-player-control-primary"
+			className={cn(
+				"queue-equalizer flex size-4 shrink-0 items-end justify-center gap-0.5 pb-px",
+				className,
+			)}
 			data-playing={isPlaying}
 		>
 			<span className="h-1.5 w-0.5 rounded-full bg-current" />

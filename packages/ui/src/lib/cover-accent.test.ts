@@ -3,8 +3,10 @@ import {
 	accentContrast,
 	accentCssVariables,
 	accentFromPixels,
+	accentHueVariables,
 	clampAccent,
 	rgbToHsl,
+	themeAccentHue,
 } from "./cover-accent";
 
 function pixels(colors: Array<[number, number, number]>): Uint8ClampedArray {
@@ -14,6 +16,54 @@ function pixels(colors: Array<[number, number, number]>): Uint8ClampedArray {
 	});
 	return data;
 }
+
+describe("cover accent hue", () => {
+	it("takes the picked colour's OKLCH hue, chroma 0 for a colourless cover", () => {
+		// sRGB red sits near OKLCH hue 29.
+		const red = Number(
+			accentHueVariables({ h: 0, s: 1, l: 0.5 })["--accent-hue"],
+		);
+		expect(red).toBeGreaterThan(25);
+		expect(red).toBeLessThan(33);
+		// A pale cover keeps its paleness, a dark one reads darker, down to the
+		// contrast floor (L 64).
+		const pale = accentHueVariables({ h: 281, s: 0.13, l: 0.55, soft: true });
+		expect(Number(pale["--accent-chroma"])).toBeLessThan(1);
+		const dark = accentHueVariables({ h: 166, s: 0.37, l: 0.23 });
+		expect(dark["--accent-lightness"]).toBe("64.0");
+		expect(accentHueVariables({ h: 0, s: 1, l: 0.5 })["--accent-chroma"]).toBe(
+			"1.00",
+		);
+		expect(accentHueVariables({ h: 0, s: 0, l: 0.7, muted: true })).toEqual({
+			"--accent-chroma": "0",
+		});
+		// A blue sky winning on a pink cover gives way to the pink.
+		const barbie = accentFromPixels(
+			pixels([
+				...Array.from({ length: 6 }, (): [number, number, number] => [
+					90, 160, 230,
+				]),
+				[230, 60, 150],
+				[220, 50, 140],
+			]),
+		);
+		const barbieHue = Number(
+			barbie && accentHueVariables(barbie)["--accent-hue"],
+		);
+		expect(barbieHue).toBeGreaterThan(330);
+		// Pure blue lands near the navy base: the theme keeps its own hue.
+		expect(accentHueVariables({ h: 230, s: 0.6, l: 0.5 })).toEqual({});
+	});
+
+	it("keeps the theme accent for hues within 30° of the navy base", () => {
+		expect(themeAccentHue(252)).toBeUndefined();
+		expect(themeAccentHue(222)).toBeUndefined();
+		expect(themeAccentHue(282)).toBeUndefined();
+		expect(themeAccentHue(220)).toBe(220);
+		expect(themeAccentHue(340)).toBe(340);
+		expect(themeAccentHue(undefined)).toBeUndefined();
+	});
+});
 
 describe("cover accent", () => {
 	it("converts RGB to HSL", () => {
@@ -35,6 +85,18 @@ describe("cover accent", () => {
 		);
 		expect(accent).not.toBeNull();
 		expect(Math.round(accent?.h ?? -1)).toBe(0);
+	});
+
+	it("treats a small coloured detail on a colourless cover as colourless", () => {
+		const accent = accentFromPixels(
+			pixels([
+				[200, 120, 90],
+				...Array.from({ length: 9 }, (): [number, number, number] => [
+					200, 200, 200,
+				]),
+			]),
+		);
+		expect(accent?.muted).toBe(true);
 	});
 
 	it("returns null for a monochrome image", () => {
@@ -85,11 +147,11 @@ describe("cover accent", () => {
 		expect(light["--player-control-primary-foreground"]).toBe("hsl(0 0% 98%)");
 	});
 
-	it("lifts a dark accent only as far as the bar needs for 4.5:1", () => {
+	it("lifts a dark accent only as far as the bar needs for 3:1", () => {
 		// Nightwish "Decades": a dark teal the old 55% floor washed out.
 		const teal = clampAccent({ h: 165, s: 0.36, l: 0.23 }, "dark", 0.021);
-		expect(accentContrast(teal, 0.021)).toBeGreaterThanOrEqual(4.5);
-		expect(teal.l).toBeLessThan(0.55);
+		expect(accentContrast(teal, 0.021)).toBeGreaterThanOrEqual(3);
+		expect(teal.l).toBeLessThan(0.4);
 		expect(teal.h).toBe(165);
 		// A light cover keeps its own lightness, up to the ceiling.
 		expect(clampAccent({ h: 40, s: 0.5, l: 0.66 }, "dark", 0.021).l).toBe(0.66);
@@ -99,7 +161,7 @@ describe("cover accent", () => {
 	it("lifts a saturated blue past the old band on a light bar", () => {
 		// HSL 55% blue gave 1.9:1 on Coastal Mist's bar; lightness is measured now.
 		const blue = clampAccent({ h: 240, s: 0.85, l: 0.55 }, "dark", 0.0588);
-		expect(accentContrast(blue, 0.0588)).toBeGreaterThanOrEqual(4.5);
+		expect(accentContrast(blue, 0.0588)).toBeGreaterThanOrEqual(3);
 	});
 
 	it("keeps the light-mode band", () => {

@@ -33,11 +33,12 @@ export const COLLECTION_GRID_CLASS =
 	"grid grid-cols-cards gap-3 max-lg:in-data-[queue-open]:grid-cols-2";
 
 // Hover and keyboard focus for every collection and station card
-// (docs/design-rules.md, Interaction states): lift, accent border, soft shadow.
+// (docs/design-rules.md, Interaction states): lift, neutral heading-tone border, soft shadow;
+// hover never takes the accent.
 // `transform-gpu backface-hidden` keeps the desktop webview from flickering
 // card edges while they move.
 export const CARD_INTERACTION_CLASS =
-	"transform-gpu backface-hidden outline-none transition duration-300 ease-out hover:-translate-y-1 hover:border-shell-active-foreground/35 hover:shadow-card-lift focus-visible:-translate-y-1 focus-visible:border-shell-active-foreground/60 focus-visible:shadow-card-lift motion-reduce:transform-none motion-reduce:transition-none";
+	"transform-gpu backface-hidden outline-none transition duration-300 ease-out hover:-translate-y-1 hover:border-heading/35 hover:shadow-card-lift focus-visible:-translate-y-1 focus-visible:border-heading/60 focus-visible:shadow-card-lift motion-reduce:transform-none motion-reduce:transition-none";
 
 export function CollectionPageContainer({
 	className,

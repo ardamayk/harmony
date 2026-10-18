@@ -161,9 +161,7 @@ describe("genre routes", () => {
 		expect(synthpop.className).toContain("duration-300");
 		expect(synthpop.className).toContain("ease-out");
 		expect(synthpop.className).toContain("hover:-translate-y-1");
-		expect(synthpop.className).toContain(
-			"hover:border-shell-active-foreground/35",
-		);
+		expect(synthpop.className).toContain("hover:border-heading/35");
 		expect(synthpop.className).toContain("focus-visible:-translate-y-1");
 		expect(synthpop.className).toContain("motion-reduce:transition-none");
 		expect(synthpop.className).toContain("aspect-square");

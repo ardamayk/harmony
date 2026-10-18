@@ -28,8 +28,10 @@ Applies to `web/src`, `packages/ui/src`. Pattern no rule covers: raise with main
 
 - **60-30-10 guide, not law.** ~60% dominant neutral, ~30% secondary surfaces, ~10% accent. In-between tones: mix two tokens or opacity step; never fourth color.
   - Project: 60: `background`. 30: `card`, `sidebar`, `player`, `popover`, Queue Drawer. 10: `primary`, `player-control-primary`, `shell-active-foreground`, `shell-brand`.
-- Accent at rest marks only: area's primary action, current item, selected option, brand mark, progress. Hover, focus, pressed may use briefly. Resting decoration never.
-  - Project: Current item = track playing now. Progress = playback progress.
+- Accent marks state, never interaction. Says what matters, where user is: area's primary action, current item, selected option, open section, pressed toggle, brand mark, progress. Resting decoration never.
+  - Project: Current item = track playing now. Progress = playback progress. Open section = Top Nav link. Pressed toggle = Shuffle, Repeat, Queue, Pin.
+- Hover, focus say clickable only: neutral surface step, text one tier up. Accent family never, lit controls too; else color follows pointer, hover and active look alike.
+  - Project: Hover `muted`, text `heading`, lit controls too. Favorite on: accent, no hover change.
 - Contrast is emphasis tool. Highest contrast where eye reaches first; secondary text steps down. Raise one thing, never color many.
   - Project: Text steps: `heading`, `foreground`, `caption`.
 - Contrast never below WCAG AA, every theme and mode: 4.5:1 text (also on filled controls), 3:1 large text, icons, control against surface.
@@ -43,15 +45,18 @@ Build palette in this order; each step uses previous.
    - Project: Accent per preset (`--primary`, `--player-control-primary`); cover accent overrides in Player Bar. Neutrals tinted to preset base hue (Vintage Harbor h 252).
 2. Family ladders: L steps of neutral and accent families.
 3. Surface ladder (60/30): page, alt surface, card, dark band, footer. Light-dark rhythm set here; grayscale test shows it.
-   - Project: Vintage Harbor dark: one family, OKLCH h 252 C 0.05, L step 4. Page, Top Nav 23.5; card, popover, Player Bar, Queue Drawer 27.5; raised control, line 31.5; hover (`muted`, `accent`) 35.5; active (`shell-active`) 39.5. Steps absolute, any surface; never per-component tint.
+   - Project: Vintage Harbor dark: one family, OKLCH h 252, C/L 0.1. Page, Top Nav 22; Player Bar, Queue Drawer 24 (page 60% + card mix); card, popover 27; raised control, line 30; hover (`muted`, `accent`) 33; active (`shell-active`) 36. Steps absolute, any surface; never per-component tint.
    - Project: Vintage Harbor light: dark shell (`data-shell-surface`) hover / active = `player-title` 8% / 16%; page active = light family's.
 4. Text hierarchy: each surface gets primary, secondary, faint text. 4.5:1, 7:1 decide here. Dark surfaces own text set.
    - Project: Tokens `heading`, `text`, `caption`. Vintage Harbor dark L 93 / 82 / 73, C 0.02; caption 4.5:1 up to hover step, so caption never on active step.
    - Project: Text temperature = family of surface under it: on neutral surface neutral hue (h 252), on accent accent hue. L unchanged, so grayscale unchanged.
+   - Project: Queue rows: current `heading` semibold, upcoming `text`, played `caption`; hover lifts to `heading`. Album and track list titles `text`.
 5. Lines, controls: decorative line no threshold; input border, icon 3:1.
+   - Project: Vintage Harbor dark: one line step, `border` (L 30); `sidebar-border`, `input` alias it. Panel edges full `border`; list row lines `border` 70%.
 6. Accent placement (10): button fill, text on it 4.5:1, dark-surface variant, accent surface.
+   - Project: Vintage Harbor dark `primary` = peach, so page primary action (album Play) matches Player Bar play. `ring` keeps slate: focus, Queue album/playlist source line. Album, collection header: flat `card` 40% (L 24, as Queue), `border`; no gradient.
    - Project: One accent per surface: seek fill = play button colour. Ink on accent: accent-hue near black or near white, stronger contrast wins (`packages/ui/src/lib/cover-accent.ts`).
-7. States: hover, focus 3:1, error, disabled.
+7. States: hover, focus from surface ladder, never accent; focus 3:1, error, disabled.
 8. Verify: contrast every pair, grayscale test, warm/cool test, color-blind simulation, dark mode.
    - Project: Contrast: `web/src/themes/themes.test.ts`. Grayscale, warm/cool, color-blind: by hand in browser, every page.
 
@@ -233,10 +238,10 @@ Ratios: decision tool in steps 4–7, check in step 8.
 ## Interaction states
 
 - Hover and keyboard focus look same. Focus style never removed without visible replacement.
-- Current page, open section, pressed toggle share one active look across app.
-  - Project: Lit look: active step background (`shell-active`), `heading` text, inset top highlight, soft drop shadow. Hover `muted`; active never darkens on hover. Caption on lit row → `foreground`.
-- Cards that open something share one hover and focus look (small lift, tinted border, soft shadow, media scale). Titles never underlined.
-  - Project: Card look: 4px lift, `shell-active-foreground` border 35% (60% focus), soft dark shadow, artwork scale 1.04.
+- Current page, open section, pressed toggle share one active look across app: active step L, surface may take accent hue; accent text or glyph 4.5:1. Hover never accent, so active look stays only marked one.
+  - Project: Lit look: `shell-active` background (Vintage Harbor dark: accent family, OKLCH 36% 0.036 62; accent ladder h 62, C/L 0.1, L = neutral ladder's: lit 36 under peach 83, fill 83 under ink 24), `shell-active-foreground` text or glyph, inset top highlight, soft drop shadow. Active never darkens on hover. Playing row: `shell-active` background, body text, no shadow; Queue adds accent ring, equalizer. Caption on lit row → `foreground`.
+- Cards that open something share one hover and focus look (small lift, neutral border toward text tone, soft shadow, media scale). Accent never. Titles never underlined.
+  - Project: Card look: 4px lift, `heading` border 35% (60% focus), soft dark shadow, artwork scale 1.04. Radio option hover same border; checked option keeps accent.
 
 ## Motion
 

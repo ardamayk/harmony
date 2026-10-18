@@ -907,7 +907,7 @@ function FilterRadioGroup({
 					<Label
 						key={option.value}
 						className={cn(
-							"h-11 gap-3 rounded-lg border border-border bg-player px-3 font-normal text-player-foreground transition-ring hover:border-player-control-primary has-focus-visible:border-ring has-focus-visible:ring-3 has-focus-visible:ring-ring/50",
+							"h-11 gap-3 rounded-lg border border-border bg-player px-3 font-normal text-player-foreground transition-ring hover:border-heading/35 has-focus-visible:border-ring has-focus-visible:ring-3 has-focus-visible:ring-ring/50",
 							option.value === value &&
 								"border-player-control-primary bg-player-pill",
 						)}
@@ -1042,7 +1042,7 @@ function CatalogRow({
 						ref={ref}
 						data-testid={`radio-catalog-card-${entry.stationUuid}`}
 						onClick={onPreview}
-						className="group grid min-w-0 cursor-pointer grid-cols-media gap-3 rounded-lg border border-border bg-card/45 p-3 text-left shadow-sm outline-none transition duration-300 ease-out hover:-translate-y-1 hover:border-player-control-primary/60 hover:bg-card/65 hover:shadow-lg focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:grid-cols-media-actions"
+						className="group grid min-w-0 cursor-pointer grid-cols-media gap-3 rounded-lg border border-border bg-card/45 p-3 text-left shadow-sm outline-none transition duration-300 ease-out hover:-translate-y-1 hover:border-heading/35 hover:bg-card/65 hover:shadow-lg focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:grid-cols-media-actions"
 					/>
 				}
 			>

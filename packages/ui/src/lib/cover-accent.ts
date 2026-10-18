@@ -11,6 +11,8 @@ export type Accent = {
 	muted?: boolean;
 	/** A pale colour the soft pixels agree on; it stays pale on the controls. */
 	soft?: boolean;
+	/** The next hue buckets by weight, for a theme that cannot take the winner. */
+	runnersUp?: Array<{ h: number; s: number; l: number }>;
 };
 
 export type AccentThemeMode = "light" | "dark";
@@ -26,18 +28,34 @@ const MIN_HUE_SHARE = 0.3;
 const MIN_HUE_AGREEMENT = 0.85;
 // A soft accent is lifted only this far, so a pale lilac does not turn purple.
 const MAX_SOFT_SATURATION = 0.2;
+// Below this share of saturated pixels the colour is a detail (an eye on a
+// white cover), not the cover's colour, so it does not set the accent.
+const MIN_COLOUR_SHARE = 0.15;
 
 const ACCENT_LIGHTNESS_RANGE: Record<AccentThemeMode, [number, number]> = {
 	dark: [0.55, 0.7],
 	light: [0.3, 0.45],
 };
-// Dark mode lifts the accent only until it reads on the bar: 4.5:1, since
-// the current queue title is set in it. HSL lightness is not perceived
-// lightness (a saturated blue at 55% is darker than a teal at 45%), so the
-// lift is measured, not a fixed band.
-// 4.6, not 4.5: the browser rounds the colour to 8 bits per channel, which
-// can cost a few hundredths.
-const ACCENT_MIN_CONTRAST = 4.6;
+// Dark mode lifts the accent only until it reads on the bar at the 3:1 a
+// control needs: the cover accent never sets text, only the play disc, seek
+// fill and active icons (ink on it is chosen separately). HSL lightness is
+// not perceived lightness (a saturated blue at 55% is darker than a teal at
+// 45%), so the lift is measured, not a fixed band. 3.1, not 3: the browser
+// rounds the colour to 8 bits per channel, which can cost a few hundredths.
+const ACCENT_MIN_CONTRAST = 3.1;
+// Vintage Harbor's navy; a cover hue this close to it would make the lit
+// surface read as the neutral active step, so the theme's peach stays.
+const BASE_HUE = 252;
+const BASE_HUE_GUARD = 30;
+// Vintage Harbor's accent fill (the peach): OKLCH L 83, C 0.063. A cover's
+// colour scales the C down (paler cover) and the L down (darker cover), to
+// the lowest L whose fill keeps 3:1 against the bar and the lit step and
+// 4.5:1 under its label at every hue.
+const SLOT_CHROMA = 0.063;
+const MIN_CHROMA_SCALE = 0.3;
+const SLOT_LIGHTNESS = 83;
+const MIN_FILL_LIGHTNESS = 64;
+const COVER_LIGHTNESS_LIFT = 20;
 const DARK_ACCENT_CEILING = 0.7;
 // Vintage Harbor's dark Player Bar, for callers that cannot read the bar.
 const DEFAULT_DARK_SURFACE_LUMINANCE = 0.021;
@@ -59,6 +77,37 @@ export function rgbToHsl(r: number, g: number, b: number): Accent {
 	return { h: (h / 6) * 360, s, l };
 }
 
+function srgbToOklch(r: number, g: number, b: number) {
+	const [red, green, blue] = [r, g, b].map((channel) => {
+		const c = channel / 255;
+		return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+	});
+	const l = Math.cbrt(
+		0.4122214708 * red + 0.5363325363 * green + 0.0514459929 * blue,
+	);
+	const m = Math.cbrt(
+		0.2119034982 * red + 0.6806995451 * green + 0.1073969566 * blue,
+	);
+	const s = Math.cbrt(
+		0.0883024619 * red + 0.2817188376 * green + 0.6299787005 * blue,
+	);
+	const a = 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s;
+	const bb = 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s;
+	const h = (Math.atan2(bb, a) * 180) / Math.PI;
+	return {
+		l: 0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s,
+		c: Math.hypot(a, bb),
+		h: h < 0 ? h + 360 : h,
+	};
+}
+
+/** The hue the theme's accent may take: none near the navy base. */
+export function themeAccentHue(hue: number | undefined): number | undefined {
+	if (hue === undefined) return undefined;
+	const distance = Math.abs(((hue - BASE_HUE + 540) % 360) - 180);
+	return distance <= BASE_HUE_GUARD ? undefined : hue;
+}
+
 /**
  * Picks the accent from raw RGBA pixels: the hue bucket with the most
  * saturated weight wins, and the accent is that bucket's weighted mean.
@@ -72,10 +121,14 @@ export function accentFromPixels(data: Uint8ClampedArray): Accent | null {
 		number,
 		{ weight: number; h: number; s: number; l: number }
 	>();
+	let opaque = 0;
+	let coloured = 0;
 	for (let index = 0; index + 3 < data.length; index += 4) {
 		if (data[index + 3] < 128) continue;
+		opaque += 1;
 		const { h, s, l } = rgbToHsl(data[index], data[index + 1], data[index + 2]);
 		if (s < MIN_SATURATION || l < MIN_LIGHTNESS || l > MAX_LIGHTNESS) continue;
+		coloured += 1;
 		const bucket = Math.floor(h / 30);
 		const weight = s * (1 - Math.abs(l - 0.5));
 		const entry = buckets.get(bucket) ?? { weight: 0, h: 0, s: 0, l: 0 };
@@ -85,17 +138,19 @@ export function accentFromPixels(data: Uint8ClampedArray): Accent | null {
 		entry.l += l * weight;
 		buckets.set(bucket, entry);
 	}
-	let best: { weight: number; h: number; s: number; l: number } | null = null;
-	for (const entry of buckets.values()) {
-		if (!best || entry.weight > best.weight) best = entry;
-	}
-	if (!best || best.weight === 0)
-		return agreedSoftHue(data) ?? mutedFromPixels(data);
-	return {
-		h: best.h / best.weight,
-		s: best.s / best.weight,
-		l: best.l / best.weight,
-	};
+	const ranked = [...buckets.values()]
+		.filter((entry) => entry.weight > 0)
+		.sort((a, b) => b.weight - a.weight)
+		.map((entry) => ({
+			h: entry.h / entry.weight,
+			s: entry.s / entry.weight,
+			l: entry.l / entry.weight,
+		}));
+	if (ranked.length === 0) return agreedSoftHue(data) ?? mutedFromPixels(data);
+	// A small coloured detail on a colourless cover: colourless, not soft.
+	if (coloured < opaque * MIN_COLOUR_SHARE) return mutedFromPixels(data);
+	const [best, ...runnersUp] = ranked;
+	return runnersUp.length ? { ...best, runnersUp } : best;
 }
 
 /**
@@ -157,7 +212,7 @@ function mutedFromPixels(data: Uint8ClampedArray): Accent | null {
 /**
  * Clamps the accent so it reads on the theme's bar. Dark mode keeps the
  * cover's own lightness (up to a ceiling) and lifts it just far enough for
- * 4.5:1 against the bar; light mode keeps its fixed band.
+ * 3:1 against the bar; light mode keeps its fixed band.
  */
 export function clampAccent(
 	accent: Accent,
@@ -266,6 +321,38 @@ export function accentCssVariables(
 		"--player-control-primary-foreground": foreground,
 		"--player-live-progress": color,
 		"--player-control-shadow": `hsl(${clamped.h.toFixed(0)} ${(clamped.s * 100).toFixed(0)}% ${(clamped.l * 100).toFixed(0)}% / 0.25)`,
+		...accentHueVariables(accent),
+	};
+}
+
+/**
+ * What a hue-driven theme (Vintage Harbor) takes from the accent: the picked
+ * colour's OKLCH hue, its own L and C staying the theme's. A colourless cover
+ * drops the chroma to 0 (white-grey controls); a hue near the navy base keeps
+ * the theme's own.
+ */
+export function accentHueVariables(accent: Accent): Record<string, string> {
+	if (accent.muted) return { "--accent-chroma": "0" };
+	// The first colour, by weight, the theme can take: a blue sky winning on a
+	// pink cover gives way to the pink.
+	const picked = [accent, ...(accent.runnersUp ?? [])]
+		.map((colour) => {
+			const [r, g, b] = hslToRgb(colour).map((channel) => channel * 255);
+			return srgbToOklch(r, g, b);
+		})
+		.find((colour) => themeAccentHue(colour.h) !== undefined);
+	if (!picked) return {};
+	const { l, c, h: hue } = picked;
+	const clamp = (value: number, min: number, max: number) =>
+		Math.min(max, Math.max(min, value));
+	return {
+		"--accent-hue": hue.toFixed(1),
+		"--accent-chroma": clamp(c / SLOT_CHROMA, MIN_CHROMA_SCALE, 1).toFixed(2),
+		"--accent-lightness": clamp(
+			l * 100 + COVER_LIGHTNESS_LIFT,
+			MIN_FILL_LIGHTNESS,
+			SLOT_LIGHTNESS,
+		).toFixed(1),
 	};
 }
 

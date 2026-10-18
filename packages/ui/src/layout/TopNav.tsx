@@ -13,9 +13,9 @@ const libraryNav = [
 ] as const;
 
 const LINK_BASE_CLASS =
-	"flex items-center gap-2 whitespace-nowrap rounded-md px-3 py-2 text-sidebar-foreground text-sm transition hover:bg-muted hover:text-shell-active-foreground focus-visible:bg-muted focus-visible:text-shell-active-foreground focus-visible:outline-none";
+	"flex items-center gap-2 whitespace-nowrap rounded-md px-3 py-2 text-sidebar-foreground text-sm transition hover:bg-muted hover:text-heading focus-visible:bg-muted focus-visible:text-heading focus-visible:outline-none";
 const WINDOW_CONTROL_CLASS =
-	"inline-flex size-8 items-center justify-center rounded-md text-sidebar-foreground transition hover:bg-muted hover:text-shell-active-foreground focus-visible:bg-muted focus-visible:outline-none";
+	"inline-flex size-8 items-center justify-center rounded-md text-sidebar-foreground transition hover:bg-muted hover:text-heading focus-visible:bg-muted focus-visible:outline-none";
 
 /** Window actions for a host that draws no system title bar (Desktop Client). */
 export type WindowControls = {
@@ -25,12 +25,13 @@ export type WindowControls = {
 };
 
 // The open section (and a pressed Top Nav control) gets a lit pill: the active
-// step, full-strength text and a soft top highlight with a drop shadow.
-const NAV_LINK_CLASS = `${LINK_BASE_CLASS} [&.active]:bg-shell-active [&.active]:font-semibold [&.active]:text-heading [&.active]:shadow-lit`;
+// step, accent text and a soft top highlight with a drop shadow. Hover stays
+// off the accent, so only the open section reads as marked.
+const NAV_LINK_CLASS = `${LINK_BASE_CLASS} [&.active]:bg-neutral-active [&.active]:font-semibold [&.active]:text-shell-active-foreground [&.active]:shadow-lit`;
 
 /** Icon control in the Top Nav; `aria-pressed` lights it like the open section. */
 export const TOP_NAV_ICON_BUTTON_CLASS =
-	"inline-flex size-9 shrink-0 items-center justify-center rounded-md text-sidebar-foreground transition hover:bg-muted hover:text-shell-active-foreground focus-visible:bg-muted focus-visible:outline-none aria-pressed:bg-shell-active aria-pressed:text-heading aria-pressed:shadow-lit [&.active]:bg-shell-active [&.active]:text-heading [&.active]:shadow-lit";
+	"inline-flex size-9 shrink-0 items-center justify-center rounded-md text-sidebar-foreground transition hover:bg-muted hover:text-heading focus-visible:bg-muted focus-visible:outline-none aria-pressed:bg-neutral-active aria-pressed:text-shell-active-foreground aria-pressed:shadow-lit [&.active]:bg-neutral-active [&.active]:text-shell-active-foreground [&.active]:shadow-lit";
 
 /**
  * Top navigation bar: brand, library sections, the Search entry (opens the

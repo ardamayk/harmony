@@ -201,9 +201,7 @@ describe("radio discover route", () => {
 		expect(swissPop.className).toContain("duration-300");
 		expect(swissPop.className).toContain("ease-out");
 		expect(swissPop.className).toContain("hover:-translate-y-1");
-		expect(swissPop.className).toContain(
-			"hover:border-shell-active-foreground/35",
-		);
+		expect(swissPop.className).toContain("hover:border-heading/35");
 	});
 
 	it(

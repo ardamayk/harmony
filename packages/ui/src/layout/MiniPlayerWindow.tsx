@@ -87,7 +87,7 @@ export function MiniPlayerWindow({
 								type="button"
 								data-player-control
 								className={cn(
-									"inline-flex size-6 relative after:absolute after:-inset-1 after:content-empty items-center justify-center rounded-sm text-player-foreground hover:text-player-control-primary",
+									"inline-flex size-6 relative after:absolute after:-inset-1 after:content-empty items-center justify-center rounded-sm text-player-foreground hover:text-heading",
 								)}
 								aria-label="Open main window"
 								onClick={onExpand}
@@ -99,7 +99,7 @@ export function MiniPlayerWindow({
 							<button
 								type="button"
 								data-player-control
-								className="inline-flex size-6 relative after:absolute after:-inset-1 after:content-empty items-center justify-center rounded-sm text-player-foreground hover:text-player-control-primary"
+								className="inline-flex size-6 relative after:absolute after:-inset-1 after:content-empty items-center justify-center rounded-sm text-player-foreground hover:text-heading"
 								aria-label="Close mini player"
 								onClick={onClose}
 							>

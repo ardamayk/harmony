@@ -62,6 +62,8 @@
 	--sidebar-ring: var(--theme-4);
 	--shell-brand: var(--sidebar-heading);
 	--shell-active: var(--sidebar-accent);
+	--neutral-active: var(--shell-active);
+	--neutral-active-foreground: var(--shell-active-foreground);
 	--shell-active-foreground: var(--sidebar-accent-foreground);
 	--shell-subtle-border: color-mix(in srgb, var(--border) 35%, transparent);
 	--player-title: var(--heading);
@@ -140,6 +142,8 @@
 	--sidebar-ring: var(--theme-3);
 	--shell-brand: var(--sidebar-heading);
 	--shell-active: var(--sidebar-accent);
+	--neutral-active: var(--shell-active);
+	--neutral-active-foreground: var(--shell-active-foreground);
 	--shell-active-foreground: var(--sidebar-accent-foreground);
 	--shell-subtle-border: color-mix(in srgb, var(--border) 35%, transparent);
 	--player-title: var(--heading);

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
 	type Accent,
 	type AccentThemeMode,
@@ -90,6 +90,51 @@ export function useCoverAccent({
 	}, [activeKey, coverUrl, loadImage]);
 
 	return accentCssVariables(accent, mode, playerSurfaceLuminance());
+}
+
+// The theme's own accent hue (Vintage Harbor's peach).
+const THEME_ACCENT_HUE = 62;
+
+/**
+ * The same hue one or more turns away, picked nearest the hue shown, so the
+ * root's hue transition takes the short way round the wheel.
+ */
+export function nearestTurn(target: number, shown: number): number {
+	return target + 360 * Math.round((shown - target) / 360);
+}
+
+/**
+ * Writes the cover's --accent-hue, --accent-chroma and --accent-lightness
+ * (from accentCssVariables) to the root, where the theme's accent slots read
+ * them; the theme's own values when the cover gives none. Removed while the
+ * theme does not take a cover hue.
+ */
+export function useRootAccentHue(
+	accent: Record<string, string>,
+	active: boolean,
+) {
+	const hue = accent["--accent-hue"];
+	const chroma = accent["--accent-chroma"];
+	const lightness = accent["--accent-lightness"];
+	const shown = useRef(THEME_ACCENT_HUE);
+	useEffect(() => {
+		const root = document.documentElement;
+		if (!active) {
+			root.style.removeProperty("--accent-hue");
+			root.style.removeProperty("--accent-chroma");
+			root.style.removeProperty("--accent-lightness");
+			shown.current = THEME_ACCENT_HUE;
+			return;
+		}
+		const next = nearestTurn(
+			hue === undefined ? THEME_ACCENT_HUE : Number(hue),
+			shown.current,
+		);
+		shown.current = next;
+		root.style.setProperty("--accent-hue", next.toFixed(1));
+		root.style.setProperty("--accent-chroma", chroma ?? "1");
+		root.style.setProperty("--accent-lightness", lightness ?? "83");
+	}, [hue, chroma, lightness, active]);
 }
 
 function defaultLoadImage(url: string): Promise<HTMLImageElement> {

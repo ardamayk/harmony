@@ -35,7 +35,7 @@ export const defaultPlayback: PlaybackPreferences = {
 	playbackRate: 1,
 	transitionFadeMs: 0,
 	showWaveform: true,
-	accentFromCover: true,
+	accentFromCover: false,
 	showUpNext: true,
 	autoSkipOnErrorSeconds: 5,
 	hoverTimestamp: true,

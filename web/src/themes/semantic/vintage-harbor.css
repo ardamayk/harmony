@@ -1,17 +1,70 @@
 /* Vintage Harbor: Figma shell bar treatment for sidebar and playback chrome. */
+
+/* The accent's hue. The peach (62) by default; with "accent from cover" the
+   Player Bar sets it on the root to the playing cover's OKLCH hue, so every
+   accent slot below follows at its own fixed L and C. Registered as a number
+   so a track change slides the hue instead of jumping. */
+@property --accent-hue {
+	syntax: "<number>";
+	inherits: true;
+	initial-value: 62;
+}
+
+/* 0 for a colourless cover (white-grey controls), lower for a pale one,
+   else 1: scales each slot's C. */
+@property --accent-chroma {
+	syntax: "<number>";
+	inherits: true;
+	initial-value: 1;
+}
+
+/* The accent fill's L: the peach's 83, lower for a dark cover down to 64,
+   where the fill still keeps 3:1 on the bar and 4.5:1 under its label.
+   Accent text keeps 83 for its 4.5:1 on the lit step. */
+@property --accent-lightness {
+	syntax: "<number>";
+	inherits: true;
+	initial-value: 83;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	html[data-theme-preset="vintage-harbor"] {
+		transition:
+			--accent-hue 400ms ease,
+			--accent-chroma 400ms ease,
+			--accent-lightness 400ms ease;
+	}
+}
+
 [data-theme-preset="vintage-harbor"].dark,
 [data-theme-preset="vintage-harbor"]:not(.dark) {
-	--sidebar-accent-foreground: #e6bf9e;
+	--sidebar-accent-foreground: oklch(
+		83% calc(0.063 * var(--accent-chroma)) var(--accent-hue)
+	);
 	--sidebar-border: rgba(255, 255, 255, 0.1);
+	/* The logo keeps the peach whatever the cover. */
 	--shell-brand: #e6bf9e;
-	--shell-active-foreground: #e6bf9e;
+	--shell-active-foreground: oklch(
+		83% calc(0.063 * var(--accent-chroma)) var(--accent-hue)
+	);
 	--shell-subtle-border: rgba(255, 255, 255, 0.05);
-	--player-control-primary: #e6bf9e;
-	/* Text on the accent takes the accent family (hue 62), not the navy. */
-	--player-control-primary-foreground: oklch(24% 0.04 62);
-	--player-control-shadow: rgba(230, 191, 158, 0.2);
+	--player-control-primary: oklch(
+		calc(var(--accent-lightness) * 1%) calc(0.063 * var(--accent-chroma))
+			var(--accent-hue)
+	);
+	/* Text on the accent takes the accent family, not the navy. */
+	--player-control-primary-foreground: oklch(
+		24% calc(0.04 * var(--accent-chroma)) var(--accent-hue)
+	);
+	--player-control-shadow: oklch(
+		calc(var(--accent-lightness) * 1%) calc(0.063 * var(--accent-chroma))
+			var(--accent-hue) / 0.2
+	);
 	/* One accent: the seek bar fills with the play button's colour. */
-	--player-live-progress: #e6bf9e;
+	--player-live-progress: oklch(
+		calc(var(--accent-lightness) * 1%) calc(0.063 * var(--accent-chroma))
+			var(--accent-hue)
+	);
 }
 
 /* Light mode keeps the shell bars dark against the light page, with their
@@ -29,29 +82,46 @@
 	--player-pill: rgba(19, 32, 48, 0.5);
 }
 
-/* Dark mode: every surface is one navy family (OKLCH hue 252, C 0.05)
-   on an equal 4 L ladder, so page, cards, Player Bar and Queue Drawer read
-   as one material: page and Top Nav 23.5, panels 27.5, raised controls and
-   lines 31.5, hover 35.5, active 39.5. Text sits on that neutral family,
+/* Dark mode: every surface is one navy family (OKLCH hue 252) on one L
+   ladder, so page, cards, Player Bar and Queue Drawer read as one
+   material: page and Top Nav 22, Player Bar and Queue 24, then 3 L a step:
+   cards 27, raised controls and lines 30, hover 33, active 36. Chroma grows with L at a fixed C/L of 0.1 (C 0.022 → 0.036),
+   so each step keeps the page's relative saturation. Text sits on that neutral family,
    so it takes the family's hue too, in three tiers (93 / 82 / 73) that keep
    4.5:1 up to the hover step. */
 [data-theme-preset="vintage-harbor"].dark {
-	--background: oklch(23.5% 0.05 252);
+	--background: oklch(22% 0.022 252);
 	--sidebar: var(--background);
-	--card: oklch(27.5% 0.05 252);
+	--card: oklch(27% 0.027 252);
 	--popover: var(--card);
-	--player: var(--card);
-	--queue: var(--card);
-	--player-pill: oklch(31.5% 0.05 252);
+	/* Large panels sit half a step under the cards (a page/card mix, not a
+	   new colour): at the same L their area read brighter. Their edge comes
+	   from --player-border. */
+	--player: color-mix(in oklab, var(--background) 60%, var(--card));
+	--queue: var(--player);
+	--player-pill: oklch(30% 0.03 252);
 	--secondary: var(--player-pill);
 	--border: var(--player-pill);
 	/* A 4 L step alone (1.13:1) lost the panel edge in grayscale; Player
 	   Bar and Queue Drawer take the cards' line step, still without a shadow. */
 	--player-border: var(--border);
-	--muted: oklch(35.5% 0.05 252);
+	--muted: oklch(33% 0.033 252);
 	--accent: var(--muted);
-	--sidebar-accent: oklch(39.5% 0.05 252);
-	--shell-active: var(--sidebar-accent);
+	--sidebar-accent: oklch(36% 0.036 252);
+	/* The Queue's playing row, the one warm fill: the accent family
+	   (--accent-hue, C/L 0.1) at the active step's L, so grayscale stays put
+	   and the accent text on it shares its hue. Hover stays neutral.
+	   A pale or colourless cover mixes it toward the navy active step by its
+	   chroma scale, so the lit row never reads greyer than the panel. */
+	--shell-active: color-mix(
+		in oklab,
+		oklch(36% 0.036 var(--accent-hue)) calc(var(--accent-chroma) * 100%),
+		var(--sidebar-accent)
+	);
+	/* Every other active look (open section, pressed toggle, selected option,
+	   the playing track-list row) sits on the neutral active step; its accent
+	   text or glyph marks it. */
+	--neutral-active: var(--sidebar-accent);
 	--heading: oklch(93% 0.02 252);
 	--text: oklch(82% 0.02 252);
 	--caption: oklch(73% 0.02 252);
@@ -62,8 +132,15 @@
 	--player-artwork: var(--muted);
 	/* Lines and the slate accent inside the shell join the family too: the
 	   white-alpha borders read as grey, and the slate sat at C 0.035 h 248. */
-	--sidebar-border: var(--sidebar-accent);
+	--sidebar-border: var(--border);
+	/* Outline controls draw on the same line step as every other line. */
+	--input: var(--border);
 	--shell-subtle-border: var(--border);
-	--primary: oklch(58.2% 0.05 252);
-	--ring: var(--primary);
+	/* One accent: primary actions and selected options take the peach. Focus
+	   rings and Queue source lines keep the slate, off the accent. */
+	--primary: oklch(
+		calc(var(--accent-lightness) * 1%) calc(0.063 * var(--accent-chroma))
+			var(--accent-hue)
+	);
+	--ring: oklch(58.2% 0.05 252);
 }

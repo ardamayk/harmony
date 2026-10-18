@@ -1,5 +1,10 @@
 import type { QueueItemSource, Track } from "@repo/api-client";
-import { buildTrackDetailRows, toast, usePlayback } from "@repo/ui";
+import {
+	buildTrackDetailRows,
+	QueueEqualizer,
+	toast,
+	usePlayback,
+} from "@repo/ui";
 import {
 	Clock,
 	Heart,
@@ -76,8 +81,14 @@ export function TrackList({
 	onReplaceTrackSuccess?: (track: Track) => void;
 	removeLabel?: string;
 }) {
-	const { playTrack, addToQueue, playNext, currentTrack, getAlbumCoverUrl } =
-		usePlayback();
+	const {
+		playTrack,
+		addToQueue,
+		playNext,
+		currentTrack,
+		isPlaying: isPlaybackRunning,
+		getAlbumCoverUrl,
+	} = usePlayback();
 	const { isFavorite, toggleFavorite } = useFavoriteTracks();
 	const trackDeletion = useTrackDeletionFlow(onDeleteTrackSuccess);
 	const hasDeletionCapability = useServerCapability(
@@ -175,11 +186,11 @@ export function TrackList({
 												else rowRefs.current.delete(track.id);
 											}}
 											className={cn(
-												"group cursor-pointer border-border/40 border-b transition",
-												// The playing row takes the lit look on the active step, above the hover step.
-												isPlaying
-													? "bg-shell-active shadow-lit"
-													: "hover:bg-muted/50",
+												"group cursor-pointer border-border/70 border-b transition",
+												// The playing row takes the neutral active step, above the hover step;
+												// flat, no shadow, so it stays part of the list. The warm lit fill
+												// stays with the Queue; here the title and equalizer carry the accent.
+												isPlaying ? "bg-neutral-active" : "hover:bg-muted",
 											)}
 											tabIndex={0}
 											onClick={() => {
@@ -202,7 +213,14 @@ export function TrackList({
 											rowPadding,
 										)}
 									>
-										{visibleNumber}
+										{isPlaying ? (
+											<QueueEqualizer
+												isPlaying={isPlaybackRunning}
+												className="text-neutral-active-foreground"
+											/>
+										) : (
+											visibleNumber
+										)}
 									</td>
 									<td className={rowPadding}>
 										<div className="flex min-w-0 items-center gap-2">
@@ -218,7 +236,9 @@ export function TrackList({
 													className={cn(
 														"block truncate font-medium leading-snug",
 														compact ? "text-sm" : "text-base",
-														isPlaying ? "text-heading" : "text-foreground",
+														isPlaying
+															? "text-neutral-active-foreground"
+															: "text-foreground",
 													)}
 												>
 													{track.title}

@@ -440,7 +440,7 @@ export function LibrarySearchDialog({
 														className={cn(
 															"flex items-center rounded-md border pr-2 transition-colors motion-reduce:transition-none",
 															isActive
-																? "border-shell-active-foreground bg-shell-active"
+																? "border-shell-active-foreground bg-neutral-active"
 																: "border-transparent hover:bg-muted/50",
 														)}
 													>
@@ -511,7 +511,7 @@ export function LibrarySearchDialog({
 																onClick={() => {
 																	void queueResult(result);
 																}}
-																className="flex size-10 shrink-0 items-center justify-center rounded-md text-caption outline-none hover:bg-foreground/10 hover:text-shell-active-foreground focus-visible:bg-foreground/10 focus-visible:text-shell-active-foreground aria-disabled:opacity-50"
+																className="flex size-10 shrink-0 items-center justify-center rounded-md text-caption outline-none hover:bg-foreground/10 hover:text-heading focus-visible:bg-foreground/10 focus-visible:text-heading aria-disabled:opacity-50"
 															>
 																{pendingTracks.has(result.trackId) ? (
 																	<LoaderCircle className="size-4 motion-safe:animate-spin" />

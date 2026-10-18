@@ -230,7 +230,15 @@ function splitArgs(args: string): string[] {
 
 // Collects the custom properties one preset and mode resolve to, in the
 // stylesheet order of styles.css; descendant rules (shell surfaces) are skipped.
-function resolvedTokens(id: string, dark: boolean) {
+// accentHue, accentChroma and accentLightness stand in for the --accent-hue,
+// --accent-chroma and --accent-lightness the root carries (Vintage Harbor).
+function resolvedTokens(
+	id: string,
+	dark: boolean,
+	accentHue = 62,
+	accentChroma = 1,
+	accentLightness = 83,
+) {
 	const files = [
 		`${id}.css`,
 		"layers.css",
@@ -258,7 +266,15 @@ function resolvedTokens(id: string, dark: boolean) {
 		}
 	}
 
-	const evaluate = (value: string): Rgb => {
+	const evaluate = (raw: string): Rgb => {
+		const value = raw
+			.replace(
+				/calc\(([\d.]+) \* var\(--accent-chroma\)\)/g,
+				(_, chroma: string) => String(Number(chroma) * accentChroma),
+			)
+			.replaceAll("calc(var(--accent-lightness) * 1%)", `${accentLightness}%`)
+			.replaceAll("calc(var(--accent-chroma) * 100%)", `${accentChroma * 100}%`)
+			.replaceAll("var(--accent-hue)", String(accentHue));
 		if (value.startsWith("#")) {
 			return [1, 3, 5].map(
 				(i) => Number.parseInt(value.slice(i, i + 2), 16) / 255,
@@ -271,7 +287,10 @@ function resolvedTokens(id: string, dark: boolean) {
 		const [, name, args] = fn;
 		if (name === "var") return token(args.trim());
 		if (name === "oklch") {
-			const [l, c, h] = args.split(/\s+/).map((n) => Number.parseFloat(n));
+			const [l, c, h] = args
+				.trim()
+				.split(/\s+/)
+				.map((n) => Number.parseFloat(n));
 			const rad = (h * Math.PI) / 180;
 			return oklabToRgb([l / 100, c * Math.cos(rad), c * Math.sin(rad)]);
 		}
@@ -301,56 +320,97 @@ function resolvedTokens(id: string, dark: boolean) {
 	return (name: string) => toHex(token(name));
 }
 
+// Vintage Harbor's accent takes any cover hue, a lower chroma for a pale or
+// colourless cover and a lower fill L for a dark one, so its contrast holds
+// at every one: [hue, chroma scale, fill L].
+type AccentCase = [number, number, number];
+const ACCENTS: AccentCase[] = [
+	...Array.from({ length: 36 }, (_, index) =>
+		[1, 0.3].flatMap((chroma) =>
+			[83, 64].map((lightness): AccentCase => [index * 10, chroma, lightness]),
+		),
+	).flat(),
+	[62, 0, 83],
+];
+
 describe("text tiers", () => {
 	for (const preset of THEME_PRESET_REGISTRY) {
-		for (const dark of [true, false]) {
-			it(`${preset.id} ${dark ? "dark" : "light"}: heading ≥ text > caption, caption and text on active ≥ 4.5:1`, () => {
-				const token = resolvedTokens(preset.id, dark);
-				const background = token("--background");
-				const tier = (name: string) => contrastRatio(token(name), background);
-				expect(tier("--heading")).toBeGreaterThanOrEqual(tier("--text"));
-				expect(tier("--text")).toBeGreaterThan(tier("--caption"));
+		const accents: AccentCase[] =
+			preset.id === "vintage-harbor" ? ACCENTS : [[62, 1, 83]];
+		for (const dark of [true, false])
+			for (const [hue, chroma, lightness] of accents) {
+				it(`${preset.id} ${dark ? "dark" : "light"} hue ${hue} chroma ${chroma} fill L ${lightness}: heading ≥ text > caption, caption and text on active ≥ 4.5:1`, () => {
+					const token = resolvedTokens(preset.id, dark, hue, chroma, lightness);
+					const background = token("--background");
+					const tier = (name: string) => contrastRatio(token(name), background);
+					expect(tier("--heading")).toBeGreaterThanOrEqual(tier("--text"));
+					expect(tier("--text")).toBeGreaterThan(tier("--caption"));
 
-				// Vintage Harbor light keeps the Player Bar dark and re-scopes
-				// its text there (contrast.css), so only page and card apply.
-				const surfaces =
-					preset.id === "vintage-harbor" && !dark
-						? ["--background", "--card"]
-						: ["--background", "--card", "--player", "--player-pill"];
-				for (const surface of surfaces) {
-					expect(
-						contrastRatio(token("--caption"), token(surface)),
-						`caption on ${surface}`,
-					).toBeGreaterThanOrEqual(4.5);
-				}
-				// The playing Queue row sits on the active step with body text.
-				if (surfaces.includes("--player")) {
-					expect(
-						contrastRatio(token("--text"), token("--shell-active")),
-						"text on --shell-active",
-					).toBeGreaterThanOrEqual(4.5);
-					// Its equalizer is a graphic in the accent on the same step.
-					expect(
-						contrastRatio(
-							token("--player-control-primary"),
-							token("--shell-active"),
-						),
-						"equalizer on --shell-active",
-					).toBeGreaterThanOrEqual(3);
-					// The same accent fills the Player Bar's primary button.
-					expect(
-						contrastRatio(token("--player-control-primary"), token("--player")),
-						"primary control on --player",
-					).toBeGreaterThanOrEqual(3);
-					expect(
-						contrastRatio(
-							token("--player-control-primary-foreground"),
-							token("--player-control-primary"),
-						),
-						"glyph on the primary control",
-					).toBeGreaterThanOrEqual(4.5);
-				}
-			});
-		}
+					// Vintage Harbor light keeps the Player Bar dark and re-scopes
+					// its text there (contrast.css), so only page and card apply.
+					const surfaces =
+						preset.id === "vintage-harbor" && !dark
+							? ["--background", "--card"]
+							: ["--background", "--card", "--player", "--player-pill"];
+					for (const surface of surfaces) {
+						expect(
+							contrastRatio(token("--caption"), token(surface)),
+							`caption on ${surface}`,
+						).toBeGreaterThanOrEqual(4.5);
+					}
+					// The playing track-list row: body text, accent title on the neutral active step.
+					for (const ink of ["--text", "--neutral-active-foreground"]) {
+						expect(
+							contrastRatio(token(ink), token("--neutral-active")),
+							`${ink} on --neutral-active`,
+						).toBeGreaterThanOrEqual(4.5);
+					}
+					// The playing Queue row sits on the active step with body text.
+					if (surfaces.includes("--player")) {
+						expect(
+							contrastRatio(token("--text"), token("--shell-active")),
+							"text on --shell-active",
+						).toBeGreaterThanOrEqual(4.5);
+						// The open section and pressed toggles letter in the accent on the
+						// neutral active step; the playing Queue row on the warm one.
+						for (const step of ["--shell-active", "--neutral-active"]) {
+							expect(
+								contrastRatio(token("--shell-active-foreground"), token(step)),
+								`accent text on ${step}`,
+							).toBeGreaterThanOrEqual(4.5);
+						}
+						// Its equalizer is a graphic in the accent on the same step.
+						expect(
+							contrastRatio(
+								token("--player-control-primary"),
+								token("--shell-active"),
+							),
+							"equalizer on --shell-active",
+						).toBeGreaterThanOrEqual(3);
+						// The same accent fills the Player Bar's primary button.
+						expect(
+							contrastRatio(
+								token("--player-control-primary"),
+								token("--player"),
+							),
+							"primary control on --player",
+						).toBeGreaterThanOrEqual(3);
+						expect(
+							contrastRatio(
+								token("--player-control-primary-foreground"),
+								token("--player-control-primary"),
+							),
+							"glyph on the primary control",
+						).toBeGreaterThanOrEqual(4.5);
+					}
+					// Page primary actions (the album's Play) fill with the accent too.
+					if (preset.id === "vintage-harbor") {
+						expect(
+							contrastRatio(token("--primary-foreground"), token("--primary")),
+							"label on --primary",
+						).toBeGreaterThanOrEqual(4.5);
+					}
+				});
+			}
 	}
 });

@@ -34,15 +34,16 @@ import {
 import { SeekBar } from "./SeekBar";
 
 const CONTROL_BUTTON_CLASS =
-	"inline-flex size-6 items-center justify-center rounded-sm text-player-foreground hover:text-player-control-primary disabled:opacity-40 group-data-stage/controls:size-10 group-data-stage/controls:2xl:size-12";
+	"inline-flex size-6 items-center justify-center rounded-sm text-player-foreground hover:text-heading disabled:opacity-40 group-data-stage/controls:size-10 group-data-stage/controls:2xl:size-12";
 const CONTROL_ICON_CLASS =
 	"size-4.5 group-data-stage/controls:size-6 group-data-stage/controls:2xl:size-7";
 // The right cluster sits alone at the edge, so its icons run one step larger.
 const SIDE_ICON_CLASS = "size-5";
 const SIDE_BUTTON_CLASS = "size-7";
-// An on toggle (Shuffle, Repeat, open Queue) takes the shared lit look; hover
-// keeps the accent glyph alone, so the two never read alike.
-const ACTIVE_CONTROL_BUTTON_CLASS = "bg-shell-active text-heading shadow-lit";
+// An on toggle (Shuffle, Repeat, open Queue) takes the shared lit look with
+// the accent glyph; hover only lifts the glyph to heading, never the accent.
+const ACTIVE_CONTROL_BUTTON_CLASS =
+	"bg-neutral-active text-shell-active-foreground shadow-lit";
 const VOLUME_WHEEL_STEP = 0.05;
 const MAX_QUEUE_BADGE_COUNT = 9;
 
@@ -306,7 +307,7 @@ function PlaybackProgress({
 					disabled={!hasCurrentTrack}
 					title={showRemaining ? "Show elapsed time" : "Show remaining time"}
 					onClick={() => setShowRemaining((value) => !value)}
-					className="-my-2 w-10 shrink-0 cursor-pointer rounded-sm py-2 text-right whitespace-nowrap text-player-foreground hover:text-player-control-primary disabled:cursor-default disabled:opacity-40 group-data-stage/controls:w-14"
+					className="-my-2 w-10 shrink-0 cursor-pointer rounded-sm py-2 text-right whitespace-nowrap text-player-foreground hover:text-heading disabled:cursor-default disabled:opacity-40 group-data-stage/controls:w-14"
 				>
 					{showRemaining
 						? `-${formatTime(effectiveDuration - currentTime)}`
@@ -451,7 +452,9 @@ export function VolumeAndQueueControls({
 			>
 				<ListMusic className={SIDE_ICON_CLASS} />
 				{!isQueueOpen && hasQueueItems ? (
-					<span className="-top-1 -right-1.5 absolute flex h-4 min-w-4 items-center justify-center rounded-full bg-player-control-primary px-1 font-semibold text-xs text-player-control-primary-foreground">
+					// A count is not a primary action: the badge takes the lit pair, so
+					// the cover accent never has to carry text.
+					<span className="-top-1 -right-1.5 absolute flex h-4 min-w-4 items-center justify-center rounded-full bg-neutral-active px-1 font-semibold text-xs text-shell-active-foreground">
 						{upcomingCount > MAX_QUEUE_BADGE_COUNT
 							? `${MAX_QUEUE_BADGE_COUNT}+`
 							: upcomingCount}
@@ -543,7 +546,7 @@ function VolumeControl({
 				className={cn(
 					CONTROL_BUTTON_CLASS,
 					SIDE_BUTTON_CLASS,
-					"group-focus-within:text-player-control-primary group-hover:text-player-control-primary",
+					"group-focus-within:text-heading group-hover:text-heading",
 				)}
 				aria-label={volume <= 0 ? "Unmute" : "Mute"}
 				onPointerDown={(event) => {
