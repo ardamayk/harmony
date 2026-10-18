@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE managed_import_jobs SET preview_json = NULL, import_plan_json = NULL WHERE batch_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "fd31e7aaa91a5578493d49b656044031934090e67dd348afdf1cf5106f41c50a"
+}

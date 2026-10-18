@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT media_type AS \"media_type!\", file_path AS \"file_path!\", content_sha256 AS \"content_sha256!\"\n            FROM visible_album_artwork WHERE album_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "media_type!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "album_artwork",
+            "name": "media_type"
+          }
+        }
+      },
+      {
+        "name": "file_path!",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "album_artwork",
+            "name": "file_path"
+          }
+        }
+      },
+      {
+        "name": "content_sha256!",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "album_artwork",
+            "name": "content_sha256"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "77c98cd74d0e215f23df0e1f37bf25e569588b7ee03a0f024caceecfbef03283"
+}

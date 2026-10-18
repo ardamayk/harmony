@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE album_artwork SET source_track_id = ?, content_sha256 = ?, media_type = ?, width = ?, height = ?,\n                    encoded_size_bytes = ?, file_path = ?, revision = revision + 1, updated_at = CURRENT_TIMESTAMP\n                WHERE album_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 8
+    },
+    "nullable": []
+  },
+  "hash": "2324bb0e343ad37fa7fbb84a747ef2e69b6f9d8963fc344a75b8ac6bcb17c5e8"
+}

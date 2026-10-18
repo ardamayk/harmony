@@ -1,0 +1,52 @@
+{
+  "db_name": "SQLite",
+  "query": "WITH params AS (SELECT CAST(?1 AS TEXT) AS album_key, CAST(?2 AS TEXT) AS prefix)\n            SELECT albums.id AS \"id!\", albums.identity_key, COALESCE(albums.year, 0) AS \"year!: i64\",\n                EXISTS(SELECT 1 FROM album_artwork WHERE album_artwork.album_id = albums.id) AS \"has_artwork!: bool\"\n            FROM albums, params p\n            WHERE albums.identity_key = p.album_key OR substr(albums.identity_key, 1, length(p.prefix)) = p.prefix\n            ORDER BY albums.identity_key, albums.id",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "albums",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "identity_key",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "albums",
+            "name": "identity_key"
+          }
+        }
+      },
+      {
+        "name": "year!: i64",
+        "ordinal": 2,
+        "type_info": "Integer",
+        "origin": "Expression"
+      },
+      {
+        "name": "has_artwork!: bool",
+        "ordinal": 3,
+        "type_info": "Integer",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "392672f6320811a13346b5984b6fda9bbef339da93679c8b3bb4d7aac780c38f"
+}

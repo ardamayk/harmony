@@ -1,7 +1,14 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AlbumDetailContent } from "./$albumId";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+	afterEach,
+	beforeEach,
+	describe,
+	expect,
+	it,
+	vi,
+} from "vite-plus/test";
+import { AlbumDetailContent } from "./-album-page";
 
 const mocks = vi.hoisted(() => ({
 	getAlbum: vi.fn(),
@@ -9,9 +16,49 @@ const mocks = vi.hoisted(() => ({
 	queueTracks: vi.fn(),
 }));
 
+vi.mock("@tanstack/react-router", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@tanstack/react-router")>()),
+	Link: ({
+		children,
+		to,
+		params,
+		...props
+	}: {
+		children: React.ReactNode;
+		to: string;
+		params?: Record<string, string>;
+	}) => (
+		<a
+			href={Object.entries(params ?? {}).reduce(
+				(href, [key, value]) => href.replace(`$${key}`, value),
+				to,
+			)}
+			{...props}
+		>
+			{children}
+		</a>
+	),
+}));
+
+vi.mock("#/hooks/use-server-capability", () => ({
+	useServerCapability: () => true,
+}));
+
+vi.mock("#/hooks/use-delete-library", () => {
+	const idle = () => ({ mutate: vi.fn(), isPending: false });
+	return {
+		useDeleteTrack: idle,
+		usePreviewTrackDeletion: idle,
+		useDeleteAlbum: idle,
+		usePreviewAlbumDeletion: idle,
+	};
+});
+
 vi.mock("#/lib/api", () => ({
 	apiClient: {
+		listTrackPlayCounts: async () => new Map(),
 		getAlbum: mocks.getAlbum,
+		listAlbumOnlineGenres: async () => [],
 		getAlbumCoverUrl: (albumId: string) => `/cover/${albumId}`,
 		listAlbums: vi.fn().mockResolvedValue({ items: [] }),
 	},
@@ -25,6 +72,9 @@ vi.mock("@repo/ui", () => ({
 		coverUrl?: string | null;
 		className?: string;
 	}) => (coverUrl ? <img alt="" src={coverUrl} className={className} /> : null),
+	useCoverAccent: () => ({}),
+	useLayout: () => ({ preferences: { theme: { mode: "dark" } } }),
+	useResolvedThemeMode: () => "dark",
 	usePlayback: () => ({
 		playTrack: mocks.playTrack,
 		queueTracks: mocks.queueTracks,
@@ -82,5 +132,40 @@ describe("album detail route", () => {
 		expect(screen.getByText("2014-10-27")).toBeTruthy();
 		expect(screen.queryByText("Legacy Album Artist")).toBeNull();
 		expect(screen.queryByRole("link", { name: /Back to library/ })).toBeNull();
+	});
+
+	it("passes album provenance to album actions and track playback", async () => {
+		renderWithQuery(<AlbumDetailContent albumId="album-1" />);
+		await screen.findByRole("heading", { name: "1989" });
+		const source = {
+			kind: "album",
+			albumId: "album-1",
+			albumTitle: "1989",
+			artistName: "Taylor Swift, Guest Artist",
+		};
+		fireEvent.click(screen.getByRole("button", { name: "Play" }));
+		expect(mocks.playTrack).toHaveBeenLastCalledWith(
+			"track-1",
+			["track-1"],
+			source,
+		);
+		fireEvent.click(screen.getByRole("button", { name: "Queue album" }));
+		expect(mocks.queueTracks).toHaveBeenLastCalledWith(["track-1"], source);
+		fireEvent.click(screen.getByText("Style"));
+		expect(mocks.playTrack).toHaveBeenLastCalledWith(
+			"track-1",
+			["track-1"],
+			source,
+		);
+	});
+
+	it("aligns its content with the Albums list page width", async () => {
+		renderWithQuery(<AlbumDetailContent albumId="album-1" />);
+
+		await screen.findByRole("heading", { name: "1989" });
+		const content = screen.getByTestId("album-detail-content");
+		expect(content.className).toContain("page-content-column");
+		expect(content.parentElement?.className).toContain("pl-(--shell-inset)");
+		expect(content.parentElement?.className).toContain("page-edge-right");
 	});
 });

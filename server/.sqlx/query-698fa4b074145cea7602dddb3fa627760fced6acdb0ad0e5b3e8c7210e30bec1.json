@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO artist_photos (artist_id, outcome, media_type, data, checked_at)\n            VALUES (?1, ?2, ?3, ?4, CURRENT_TIMESTAMP)\n            ON CONFLICT (artist_id) DO UPDATE SET outcome = excluded.outcome,\n                media_type = excluded.media_type, data = excluded.data, checked_at = excluded.checked_at",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "698fa4b074145cea7602dddb3fa627760fced6acdb0ad0e5b3e8c7210e30bec1"
+}

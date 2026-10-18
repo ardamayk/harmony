@@ -1,11 +1,19 @@
-import { playbackEngineContract } from "@repo/ui/playback/testing";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { playbackEngineContract, trackSource } from "@repo/ui/playback/testing";
+import {
+	afterEach,
+	beforeEach,
+	describe,
+	expect,
+	it,
+	vi,
+} from "vite-plus/test";
 import {
 	BrowserPlaybackEngine,
 	type BrowserPlaybackMedia,
 } from "./BrowserPlaybackEngine";
 
 class MemoryMedia extends EventTarget implements BrowserPlaybackMedia {
+	buffered?: BrowserPlaybackMedia["buffered"];
 	currentTime = 0;
 	duration = 0;
 	paused = true;
@@ -80,6 +88,123 @@ playbackEngineContract("browser", () => {
 });
 
 describe("BrowserPlaybackEngine", () => {
+	it("drives the Media Session: metadata, playback state, position and actions", async () => {
+		const handlers = new Map<string, MediaSessionActionHandler | null>();
+		const positions: Array<MediaPositionState | undefined> = [];
+		const session = {
+			metadata: null as MediaMetadata | null,
+			playbackState: "none" as MediaSessionPlaybackState,
+			setActionHandler: vi.fn(
+				(action: string, handler: MediaSessionActionHandler | null) => {
+					handlers.set(action, handler);
+				},
+			),
+			setPositionState: vi.fn((state?: MediaPositionState) => {
+				positions.push(state);
+			}),
+		};
+		vi.stubGlobal(
+			"MediaMetadata",
+			class {
+				constructor(public init: MediaMetadataInit) {}
+			},
+		);
+		const engine = new BrowserPlaybackEngine({
+			createMedia: () => media,
+			mediaSession: session,
+		});
+
+		await engine.play({ ...trackSource, artworkUrl: "/cover/album-1" });
+		expect(session.playbackState).toBe("playing");
+		expect(
+			(session.metadata as unknown as { init: MediaMetadataInit }).init,
+		).toMatchObject({
+			title: "Track 1",
+			artist: "Artist",
+			artwork: [{ src: "/cover/album-1" }],
+		});
+		expect(positions.at(-1)).toMatchObject({ duration: 120, position: 0 });
+
+		handlers.get("seekto")?.({ action: "seekto", seekTime: 42 });
+		expect(engine.getState().currentTime).toBe(42);
+		handlers.get("seekforward")?.({ action: "seekforward" });
+		expect(engine.getState().currentTime).toBe(52);
+		handlers.get("pause")?.({ action: "pause" });
+		expect(engine.getState().status).toBe("paused");
+		expect(session.playbackState).toBe("paused");
+
+		const navigations: string[] = [];
+		engine.subscribeNavigation((direction) => navigations.push(direction));
+		handlers.get("nexttrack")?.({ action: "nexttrack" });
+		handlers.get("previoustrack")?.({ action: "previoustrack" });
+		expect(navigations).toEqual(["next", "previous"]);
+
+		handlers.get("stop")?.({ action: "stop" });
+		expect(engine.getState().source).toBeNull();
+		expect(session.metadata).toBeNull();
+		expect(session.playbackState).toBe("none");
+		expect(positions.at(-1)).toBeUndefined();
+
+		engine.destroy();
+		expect(handlers.get("play")).toBeNull();
+		expect(session.metadata).toBeNull();
+		vi.unstubAllGlobals();
+	});
+
+	it.each(["off", "once", "loop"] as const)(
+		"consumes stop-after-current without queue advancement or repetition in %s repeat mode",
+		async (repeatMode) => {
+			const engine = new BrowserPlaybackEngine({ createMedia: () => media });
+			await engine.play(trackSource);
+			while (engine.getState().repeatMode !== repeatMode) {
+				engine.cycleRepeatMode();
+			}
+			engine.setStopAfterCurrent(true);
+			const listener = vi.fn();
+			engine.subscribe(listener);
+			media.currentTime = 120;
+			media.dispatchEvent(new Event("timeupdate"));
+			listener.mockClear();
+			media.paused = true;
+
+			media.dispatchEvent(new Event("ended"));
+
+			expect(listener).toHaveBeenCalledExactlyOnceWith(
+				expect.objectContaining({
+					status: "paused",
+					stopAfterCurrent: false,
+					source: trackSource,
+					currentTime: 120,
+					repeatMode,
+				}),
+			);
+			expect(media.play).toHaveBeenCalledOnce();
+			engine.destroy();
+		},
+	);
+
+	it("publishes the buffered range end on progress events", async () => {
+		const engine = new BrowserPlaybackEngine({ createMedia: () => media });
+		await engine.play(trackSource);
+		expect(engine.getState().bufferedEnd).toBeNull();
+
+		media.buffered = {
+			length: 2,
+			start: (index: number) => [0, 80][index] ?? 0,
+			end: (index: number) => [30, 100][index] ?? 0,
+		};
+		media.currentTime = 10;
+		media.dispatchEvent(new Event("timeupdate"));
+		media.dispatchEvent(new Event("progress"));
+		expect(engine.getState().bufferedEnd).toBe(30);
+
+		media.currentTime = 50;
+		media.dispatchEvent(new Event("timeupdate"));
+		media.dispatchEvent(new Event("progress"));
+		expect(engine.getState().bufferedEnd).toBe(100);
+		engine.destroy();
+	});
+
 	it("reconnects a started Radio Station after its stream ends", async () => {
 		vi.useFakeTimers();
 		const engine = new BrowserPlaybackEngine({ createMedia: () => media });

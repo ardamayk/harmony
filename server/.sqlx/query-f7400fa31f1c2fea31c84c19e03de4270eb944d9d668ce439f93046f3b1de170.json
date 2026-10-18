@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE managed_track_replacements\n            SET phase = 'completed', recovery_reason = COALESCE(recovery_reason, 'replacement completed'), updated_at = CURRENT_TIMESTAMP\n            WHERE id = ? AND phase = 'database_committed'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "f7400fa31f1c2fea31c84c19e03de4270eb944d9d668ce439f93046f3b1de170"
+}

@@ -5,13 +5,21 @@ import {
 	type RadioStation,
 } from "@repo/api-client";
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import {
 	type PlaybackApi,
 	PlaybackProvider,
 	usePlayback,
 } from "./PlaybackProvider";
 import { InMemoryPlaybackEngine } from "./testing/InMemoryPlaybackEngine";
+
+const toastError = vi.fn();
+vi.mock("sonner", () => ({
+	toast: {
+		error: (...args: unknown[]) => toastError(...args),
+		success: vi.fn(),
+	},
+}));
 
 const track = {
 	id: "track-1",
@@ -76,6 +84,13 @@ function createApi(items = queueItems): PlaybackApi {
 		reorderQueue: vi.fn(async () => ({ items, revision: "2" })),
 		appendQueueItem: vi.fn(async () => ({ items: queueItems, revision: "2" })),
 		removeQueueItem: vi.fn(async () => ({ items: [], revision: "2" })),
+		clearQueue: vi.fn(async (afterItemId: string | null) => ({
+			items: items.slice(
+				0,
+				items.findIndex((item) => item.id === afterItemId) + 1,
+			),
+			revision: "2",
+		})),
 		subscribeQueueEvents: vi.fn(() => vi.fn()),
 		getStreamUrl: (trackId) => `/stream/${trackId}`,
 		getAlbumCoverUrl: (albumId) => `/cover/${albumId}`,
@@ -133,11 +148,65 @@ function Harness() {
 			<span data-testid="volume">{playback.volume}</span>
 			<span data-testid="repeat">{playback.repeatMode}</span>
 			<span data-testid="queue-conflict">{playback.queueConflict ?? ""}</span>
+			<span data-testid="error-cause">
+				{playback.errorRecovery?.cause ?? ""}
+			</span>
+			<span data-testid="error-countdown">
+				{playback.errorRecovery?.countdownSeconds ?? ""}
+			</span>
+			<button type="button" onClick={() => playback.errorRecovery?.retry()}>
+				Retry
+			</button>
+			<button type="button" onClick={() => playback.errorRecovery?.skip()}>
+				Skip
+			</button>
+			<button
+				type="button"
+				onClick={() => playback.errorRecovery?.cancelCountdown()}
+			>
+				Wait
+			</button>
+			<button type="button" onClick={() => void playback.playNext(track.id)}>
+				Play next
+			</button>
 			<button type="button" onClick={() => void playback.playTrack(track.id)}>
 				Track
 			</button>
 			<button type="button" onClick={() => void playback.playTrack(track2.id)}>
 				Track 2
+			</button>
+			<button
+				type="button"
+				onClick={() => void playback.playTrack(track2.id, [track2.id])}
+			>
+				Play from album
+			</button>
+			<button
+				type="button"
+				onClick={() =>
+					void playback.playTrack(track2.id, [track2.id], {
+						kind: "playlist",
+						playlistId: "p1",
+						name: "Favorites",
+					})
+				}
+			>
+				Play playlist
+			</button>
+			<button
+				type="button"
+				onClick={() =>
+					void playback.queueTracks([track.id, track2.id], {
+						kind: "playlist",
+						playlistId: "p1",
+						name: "Favorites",
+					})
+				}
+			>
+				Queue playlist
+			</button>
+			<button type="button" onClick={() => void playback.addToQueue(track.id)}>
+				Add to queue
 			</button>
 			<button type="button" onClick={() => void playback.playQueueIndex(0)}>
 				First Queue item
@@ -200,6 +269,110 @@ function renderPlayback(
 afterEach(cleanup);
 
 describe("PlaybackProvider", () => {
+	it("explains a missing file and skips after the countdown", async () => {
+		vi.useFakeTimers();
+		try {
+			const api = createApi();
+			api.headTrackStream = vi.fn(async () => ({ status: 404 }));
+			const { engine } = renderPlayback(api);
+			await act(async () => {});
+			await act(async () =>
+				screen.getByRole("button", { name: "Track" }).click(),
+			);
+
+			await act(async () =>
+				engine.fail({ code: "playback-failed", message: "Playback failed" }),
+			);
+			await act(async () => {});
+
+			expect(api.headTrackStream).toHaveBeenCalledWith("track-1");
+			expect(screen.getByTestId("error-cause").textContent).toBe(
+				"file-missing",
+			);
+			expect(screen.getByTestId("error-countdown").textContent).toBe("5");
+			expect(engine.getState().source).toMatchObject({
+				track: { id: "track-1" },
+			});
+
+			// Each tick schedules the next one from an effect, so advance the
+			// clock one second per act.
+			for (let tick = 0; tick < 5; tick += 1) {
+				await act(async () => {
+					vi.advanceTimersByTime(1000);
+				});
+			}
+			await act(async () => {});
+			expect(engine.getState().source).toMatchObject({
+				track: { id: "track-2" },
+			});
+			expect(screen.getByTestId("error-cause").textContent).toBe("");
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it("lets the user retry a failed Track and stop the countdown", async () => {
+		vi.useFakeTimers();
+		try {
+			const api = createApi();
+			api.headTrackStream = vi.fn(async () => {
+				throw new Error("offline");
+			});
+			const { engine } = renderPlayback(api);
+			await act(async () => {});
+			await act(async () =>
+				screen.getByRole("button", { name: "Track" }).click(),
+			);
+			await act(async () =>
+				engine.fail({ code: "playback-failed", message: "Playback failed" }),
+			);
+			await act(async () => {});
+			expect(screen.getByTestId("error-cause").textContent).toBe("network");
+
+			await act(async () =>
+				screen.getByRole("button", { name: "Wait" }).click(),
+			);
+			await act(async () => {
+				vi.advanceTimersByTime(10000);
+			});
+			expect(engine.getState().source).toMatchObject({
+				track: { id: "track-1" },
+			});
+			expect(engine.getState().status).toBe("error");
+
+			const play = vi.spyOn(engine, "play");
+			await act(async () =>
+				screen.getByRole("button", { name: "Retry" }).click(),
+			);
+			expect(play).toHaveBeenCalledWith(
+				expect.objectContaining({
+					track: expect.objectContaining({ id: "track-1" }),
+				}),
+			);
+			expect(engine.getState().status).toBe("playing");
+			expect(screen.getByTestId("error-cause").textContent).toBe("");
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it("skips immediately from the recovery controls and asks a native engine to advance", async () => {
+		const api = createApi();
+		const engine = new InMemoryPlaybackEngine();
+		const next = vi.spyOn(engine, "next");
+		Object.assign(engine, { syncQueueContext: vi.fn(async () => undefined) });
+		renderPlayback(api, engine);
+		await act(async () => {});
+		await act(async () =>
+			screen.getByRole("button", { name: "Track" }).click(),
+		);
+		await act(async () =>
+			engine.fail({ code: "playback-failed", message: "Playback failed" }),
+		);
+		await act(async () => screen.getByRole("button", { name: "Skip" }).click());
+		expect(next).toHaveBeenCalledOnce();
+	});
+
 	it("plays previous and next Queue items from native tray navigation", async () => {
 		const { engine } = renderPlayback();
 		await act(async () => {});
@@ -231,6 +404,7 @@ describe("PlaybackProvider", () => {
 			track,
 			playbackUrl: "/stream/track-1",
 			queueItemId: "item-1",
+			artworkUrl: "/cover/album-1",
 		});
 		expect(screen.getByTestId("track").textContent).toBe("Track 1");
 		expect(screen.getByTestId("playing").textContent).toBe("true");
@@ -320,6 +494,75 @@ describe("PlaybackProvider", () => {
 		expect(screen.getByTestId("repeat").textContent).toBe("once");
 	});
 
+	it("inserts a duplicate after the playing entry without replacing item identities", async () => {
+		const api = createApi();
+		const appended = [
+			...queueItems,
+			{ ...queueItems[0], id: "new-item", position: 2 },
+		];
+		api.appendQueueItem = vi.fn(async () => ({
+			items: appended,
+			revision: "2",
+		}));
+		api.reorderQueue = vi.fn(async (ids: string[]) => ({
+			items: ids.map((id, position) => {
+				const item = appended.find((item) => item.id === id);
+				if (!item) throw new Error(`Unknown queue item: ${id}`);
+				return { ...item, position };
+			}),
+			revision: "3",
+		}));
+		const { engine } = renderPlayback(api);
+		await act(async () =>
+			screen.getByRole("button", { name: /^Track$/ }).click(),
+		);
+		await act(async () =>
+			screen.getByRole("button", { name: /^Play next$/ }).click(),
+		);
+		expect(api.replaceQueue).not.toHaveBeenCalled();
+		expect(api.reorderQueue).toHaveBeenCalledWith(
+			["item-1", "new-item", "item-2"],
+			"2",
+		);
+		expect(engine.getState().source).toMatchObject({ queueItemId: "item-1" });
+		await act(async () => engine.finish());
+		expect(engine.getState().source).toMatchObject({ queueItemId: "new-item" });
+	});
+
+	it("does not coordinate queue, repeat, or error skipping from an observer window", async () => {
+		const engine = new InMemoryPlaybackEngine();
+		await engine.play({
+			type: "track",
+			track,
+			playbackUrl: "/stream/track-1",
+			queueItemId: "item-1",
+		});
+		engine.cycleRepeatMode();
+		const cycleRepeatMode = vi.spyOn(engine, "cycleRepeatMode");
+		const next = vi.spyOn(engine, "next");
+		const syncQueueContext = vi.fn(async () => {});
+		Object.assign(engine, { syncQueueContext });
+		render(
+			<PlaybackProvider
+				api={createApi()}
+				engine={engine}
+				shouldCoordinateQueue={false}
+			>
+				<Harness />
+			</PlaybackProvider>,
+		);
+		await waitFor(() =>
+			expect(screen.getByTestId("queue").textContent).toBe("track-1,track-2"),
+		);
+		expect(syncQueueContext).not.toHaveBeenCalled();
+		expect(cycleRepeatMode).not.toHaveBeenCalled();
+		await act(async () =>
+			engine.fail({ code: "playback-failed", message: "Playback failed" }),
+		);
+		expect(screen.getByTestId("error-countdown").textContent).toBe("");
+		expect(next).not.toHaveBeenCalled();
+	});
+
 	it("advances Queue after engine reports Track ended", async () => {
 		const { engine } = renderPlayback();
 		await act(async () =>
@@ -378,8 +621,9 @@ describe("PlaybackProvider", () => {
 		});
 	});
 
-	it("lets current Track finish before stopping after Queue clear", async () => {
-		const { engine } = renderPlayback();
+	it("removes upcoming Tracks on Clear and lets the playing one finish", async () => {
+		const api = createApi();
+		const { engine } = renderPlayback(api);
 		await act(async () =>
 			screen.getByRole("button", { name: "Track" }).click(),
 		);
@@ -387,6 +631,8 @@ describe("PlaybackProvider", () => {
 			screen.getByRole("button", { name: "Clear" }).click(),
 		);
 
+		expect(api.clearQueue).toHaveBeenCalledWith("item-1", "2");
+		expect(screen.getByTestId("queue").textContent).toBe("track-1");
 		expect(engine.getState()).toMatchObject({
 			source: { type: "track", track: { id: "track-1" } },
 			status: "playing",
@@ -394,6 +640,35 @@ describe("PlaybackProvider", () => {
 
 		await act(async () => engine.finish());
 		expect(engine.getState()).toMatchObject({ source: null, status: "idle" });
+	});
+
+	it("keeps played Tracks before the playing one after Clear", async () => {
+		const api = createApi();
+		renderPlayback(api);
+		await act(async () => {});
+		await act(async () =>
+			screen.getByRole("button", { name: "Track 2" }).click(),
+		);
+
+		await act(async () =>
+			screen.getByRole("button", { name: "Clear" }).click(),
+		);
+
+		expect(api.clearQueue).toHaveBeenCalledWith("item-2", "1");
+		expect(screen.getByTestId("queue").textContent).toBe("track-1,track-2");
+	});
+
+	it("clears every Queue item when nothing is playing", async () => {
+		const api = createApi();
+		renderPlayback(api);
+		await act(async () => {});
+
+		await act(async () =>
+			screen.getByRole("button", { name: "Clear" }).click(),
+		);
+
+		expect(api.clearQueue).toHaveBeenCalledWith(null, "1");
+		expect(screen.getByTestId("queue").textContent).toBe("");
 	});
 
 	it("keeps current audio after remote removal and resolves latest Queue when it ends", async () => {
@@ -484,36 +759,39 @@ describe("PlaybackProvider", () => {
 	it.each([
 		["once", 1],
 		["loop", 2],
-	] as const)("remote Queue clear overrides %s repeat after current Track", async (_repeatMode, repeatClicks) => {
-		const api = createApi();
-		vi.mocked(api.getQueue)
-			.mockResolvedValueOnce({ items: queueItems, revision: "1" })
-			.mockResolvedValueOnce({ items: [], revision: "2" });
-		const { engine } = renderPlayback(api);
-		await act(async () => {});
-		await act(async () =>
-			screen.getByRole("button", { name: "Track" }).click(),
-		);
-		await act(async () => {
-			for (let clickIndex = 0; clickIndex < repeatClicks; clickIndex += 1) {
-				screen.getByRole("button", { name: "Repeat" }).click();
-			}
-		});
+	] as const)(
+		"remote Queue clear overrides %s repeat after current Track",
+		async (_repeatMode, repeatClicks) => {
+			const api = createApi();
+			vi.mocked(api.getQueue)
+				.mockResolvedValueOnce({ items: queueItems, revision: "1" })
+				.mockResolvedValueOnce({ items: [], revision: "2" });
+			const { engine } = renderPlayback(api);
+			await act(async () => {});
+			await act(async () =>
+				screen.getByRole("button", { name: "Track" }).click(),
+			);
+			await act(async () => {
+				for (let clickIndex = 0; clickIndex < repeatClicks; clickIndex += 1) {
+					screen.getByRole("button", { name: "Repeat" }).click();
+				}
+			});
 
-		await notifyQueueEvent(api, {
-			revision: "2",
-			sequence: "2",
-			invalidates: ["queue"],
-		});
-		expect(engine.getState()).toMatchObject({
-			source: { type: "track", track: { id: "track-1" } },
-			status: "playing",
-			repeatMode: "off",
-		});
-		await act(async () => engine.finish());
+			await notifyQueueEvent(api, {
+				revision: "2",
+				sequence: "2",
+				invalidates: ["queue"],
+			});
+			expect(engine.getState()).toMatchObject({
+				source: { type: "track", track: { id: "track-1" } },
+				status: "playing",
+				repeatMode: "off",
+			});
+			await act(async () => engine.finish());
 
-		expect(engine.getState()).toMatchObject({ source: null, status: "idle" });
-	});
+			expect(engine.getState()).toMatchObject({ source: null, status: "idle" });
+		},
+	);
 
 	it("never applies Queue events to device-local Playback Session state", async () => {
 		const api = createApi();
@@ -545,6 +823,45 @@ describe("PlaybackProvider", () => {
 		});
 	});
 
+	it("preserves an explicit collection source when replacing and appending tracks", async () => {
+		const api = createApi();
+		renderPlayback(api);
+		await act(async () => {});
+		const source = { kind: "playlist", playlistId: "p1", name: "Favorites" };
+		await act(async () =>
+			screen.getByRole("button", { name: "Play playlist" }).click(),
+		);
+		expect(api.replaceQueue).toHaveBeenCalledWith(["track-2"], "1", source);
+		await act(async () =>
+			screen.getByRole("button", { name: "Queue playlist" }).click(),
+		);
+		expect(api.appendQueueItem).toHaveBeenCalledWith(
+			track.id,
+			expect.any(String),
+			source,
+		);
+		expect(api.appendQueueItem).toHaveBeenCalledWith(
+			track2.id,
+			expect.any(String),
+			source,
+		);
+	});
+
+	it.each(["Add to queue", "Play next"])(
+		"marks individual %s as user sourced",
+		async (action) => {
+			const api = createApi();
+			renderPlayback(api);
+			await act(async () => {});
+			await act(async () =>
+				screen.getByRole("button", { name: action }).click(),
+			);
+			expect(api.appendQueueItem).toHaveBeenCalledWith(track.id, "1", {
+				kind: "user",
+			});
+		},
+	);
+
 	it("refetches and retries unambiguous append intent once", async () => {
 		const api = createApi();
 		vi.mocked(api.getQueue)
@@ -560,8 +877,12 @@ describe("PlaybackProvider", () => {
 			screen.getByRole("button", { name: "Append" }).click(),
 		);
 
-		expect(api.appendQueueItem).toHaveBeenNthCalledWith(1, "track-2", "1");
-		expect(api.appendQueueItem).toHaveBeenNthCalledWith(2, "track-2", "2");
+		expect(api.appendQueueItem).toHaveBeenNthCalledWith(1, "track-2", "1", {
+			kind: "user",
+		});
+		expect(api.appendQueueItem).toHaveBeenNthCalledWith(2, "track-2", "2", {
+			kind: "user",
+		});
 		expect(api.getQueue).toHaveBeenCalledTimes(2);
 	});
 
@@ -601,33 +922,64 @@ describe("PlaybackProvider", () => {
 		expect(api.getQueue).toHaveBeenCalledTimes(2);
 	});
 
-	it.each([
-		["replace", "Clear"],
-		["reorder", "Reorder"],
-	] as const)("does not auto-merge %s conflicts and exposes them", async (operation, buttonName) => {
+	it("refetches and retries an explicit play-with-context replace once", async () => {
 		const api = createApi();
 		vi.mocked(api.getQueue)
 			.mockResolvedValueOnce({ items: queueItems, revision: "1" })
 			.mockResolvedValueOnce({ items: queueItems, revision: "2" });
-		if (operation === "replace") {
-			vi.mocked(api.replaceQueue).mockRejectedValueOnce(queueConflict("2"));
-		} else {
-			vi.mocked(api.reorderQueue).mockRejectedValueOnce(queueConflict("2"));
-		}
+		vi.mocked(api.replaceQueue)
+			.mockRejectedValueOnce(queueConflict("2"))
+			.mockResolvedValueOnce({
+				items: [
+					{ id: "item-9", trackId: track2.id, position: 0, track: track2 },
+				],
+				revision: "3",
+			});
 		renderPlayback(api);
+		await act(async () => {});
 
 		await act(async () =>
-			screen.getByRole("button", { name: buttonName }).click(),
+			screen.getByRole("button", { name: "Play from album" }).click(),
 		);
 
-		const mutation =
-			operation === "replace" ? api.replaceQueue : api.reorderQueue;
-		expect(mutation).toHaveBeenCalledTimes(1);
-		expect(api.getQueue).toHaveBeenCalledTimes(2);
-		expect(screen.getByTestId("queue-conflict").textContent).toContain(
-			"changed",
-		);
+		expect(api.replaceQueue).toHaveBeenNthCalledWith(1, ["track-2"], "1");
+		expect(api.replaceQueue).toHaveBeenNthCalledWith(2, ["track-2"], "2");
+		expect(screen.getByTestId("queue").textContent).toBe("track-2");
+		expect(screen.getByTestId("track").textContent).toBe("Track 2");
+		expect(screen.getByTestId("playing").textContent).toBe("true");
+		expect(screen.getByTestId("queue-conflict").textContent).toBe("");
 	});
+
+	it.each([
+		["clear", "Clear"],
+		["reorder", "Reorder"],
+	] as const)(
+		"does not auto-merge %s conflicts and exposes them",
+		async (operation, buttonName) => {
+			const api = createApi();
+			vi.mocked(api.getQueue)
+				.mockResolvedValueOnce({ items: queueItems, revision: "1" })
+				.mockResolvedValueOnce({ items: queueItems, revision: "2" });
+			if (operation === "clear") {
+				vi.mocked(api.clearQueue).mockRejectedValueOnce(queueConflict("2"));
+			} else {
+				vi.mocked(api.reorderQueue).mockRejectedValueOnce(queueConflict("2"));
+			}
+			renderPlayback(api);
+
+			await act(async () =>
+				screen.getByRole("button", { name: buttonName }).click(),
+			);
+
+			const mutation =
+				operation === "clear" ? api.clearQueue : api.reorderQueue;
+			expect(mutation).toHaveBeenCalledTimes(1);
+			expect(api.getQueue).toHaveBeenCalledTimes(2);
+			expect(screen.getByTestId("queue-conflict").textContent).toContain(
+				"changed",
+			);
+		},
+	);
 
 	it("keeps the latest server Queue after an ambiguous reorder conflict", async () => {
 		const api = createApi();
@@ -651,43 +1003,48 @@ describe("PlaybackProvider", () => {
 		["append retry", "Append", true],
 		["remove retry", "Remove", true],
 		["already-satisfied remove", "Remove", false],
-	] as const)("clears stale conflict after %s", async (_scenario, buttonName, shouldRetry) => {
-		const api = createApi();
-		const latestItems = shouldRetry ? queueItems : [queueItems[1]];
-		vi.mocked(api.getQueue)
-			.mockResolvedValueOnce({ items: queueItems, revision: "1" })
-			.mockResolvedValueOnce({ items: queueItems, revision: "2" })
-			.mockResolvedValueOnce({ items: latestItems, revision: "3" });
-		vi.mocked(api.reorderQueue).mockRejectedValueOnce(queueConflict("2"));
-		if (buttonName === "Append") {
-			vi.mocked(api.appendQueueItem)
-				.mockRejectedValueOnce(queueConflict("3"))
-				.mockResolvedValueOnce({ items: queueItems, revision: "4" });
-		} else {
-			vi.mocked(api.removeQueueItem).mockRejectedValueOnce(queueConflict("3"));
-			if (shouldRetry) {
-				vi.mocked(api.removeQueueItem).mockResolvedValueOnce({
-					items: [queueItems[1]],
-					revision: "4",
-				});
+	] as const)(
+		"clears stale conflict after %s",
+		async (_scenario, buttonName, shouldRetry) => {
+			const api = createApi();
+			const latestItems = shouldRetry ? queueItems : [queueItems[1]];
+			vi.mocked(api.getQueue)
+				.mockResolvedValueOnce({ items: queueItems, revision: "1" })
+				.mockResolvedValueOnce({ items: queueItems, revision: "2" })
+				.mockResolvedValueOnce({ items: latestItems, revision: "3" });
+			vi.mocked(api.reorderQueue).mockRejectedValueOnce(queueConflict("2"));
+			if (buttonName === "Append") {
+				vi.mocked(api.appendQueueItem)
+					.mockRejectedValueOnce(queueConflict("3"))
+					.mockResolvedValueOnce({ items: queueItems, revision: "4" });
+			} else {
+				vi.mocked(api.removeQueueItem).mockRejectedValueOnce(
+					queueConflict("3"),
+				);
+				if (shouldRetry) {
+					vi.mocked(api.removeQueueItem).mockResolvedValueOnce({
+						items: [queueItems[1]],
+						revision: "4",
+					});
+				}
 			}
-		}
-		renderPlayback(api);
-		await act(async () => {});
+			renderPlayback(api);
+			await act(async () => {});
 
-		await act(async () =>
-			screen.getByRole("button", { name: "Reorder" }).click(),
-		);
-		expect(screen.getByTestId("queue-conflict").textContent).toContain(
-			"changed",
-		);
+			await act(async () =>
+				screen.getByRole("button", { name: "Reorder" }).click(),
+			);
+			expect(screen.getByTestId("queue-conflict").textContent).toContain(
+				"changed",
+			);
 
-		await act(async () =>
-			screen.getByRole("button", { name: buttonName }).click(),
-		);
+			await act(async () =>
+				screen.getByRole("button", { name: buttonName }).click(),
+			);
 
-		expect(screen.getByTestId("queue-conflict").textContent).toBe("");
-	});
+			expect(screen.getByTestId("queue-conflict").textContent).toBe("");
+		},
+	);
 });
 
 function queueConflict(revision: string) {

@@ -4,7 +4,7 @@ import type {
 	PlaybackSource,
 } from "@repo/ui";
 import { DEFAULT_PLAYBACK_SESSION_STATE } from "@repo/ui";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vite-plus/test";
 import { DesktopPlaybackEngine } from "./DesktopPlaybackEngine";
 
 const trackSource: PlaybackSource = {
@@ -73,6 +73,9 @@ function createBridge() {
 			togglePlay: vi.fn(async () => state),
 			seek: vi.fn(async () => state),
 			setVolume: vi.fn(async () => state),
+			setPlaybackRate: vi.fn(async () => state),
+			setStopAfterCurrent: vi.fn(async () => state),
+			setTransitionFade: vi.fn(async () => state),
 			setProcessingProfile: vi.fn(async () => state),
 			setReplayGainMode: vi.fn(async () => state),
 			setEqualizerPreset: vi.fn(async () => state),
@@ -188,6 +191,31 @@ describe("DesktopPlaybackEngine", () => {
 		expect(native.bridge.listen).toHaveBeenCalledOnce();
 		expect(native.bridge.rendererReady).toHaveBeenCalledOnce();
 		engine.destroy();
+	});
+
+	it("refreshes background playback when the main window regains focus", async () => {
+		const native = createBridge();
+		const engine = new DesktopPlaybackEngine(native.bridge);
+		await vi.waitFor(() =>
+			expect(native.bridge.rendererReady).toHaveBeenCalledOnce(),
+		);
+		native.bridge.rendererReady.mockResolvedValue({
+			...DEFAULT_PLAYBACK_SESSION_STATE,
+			source: trackSource,
+			status: "playing",
+			currentTime: 42,
+		});
+		window.dispatchEvent(new Event("focus"));
+		await vi.waitFor(() =>
+			expect(engine.getState()).toMatchObject({
+				source: trackSource,
+				status: "playing",
+				currentTime: 42,
+			}),
+		);
+		engine.destroy();
+		window.dispatchEvent(new Event("focus"));
+		expect(native.bridge.rendererReady).toHaveBeenCalledTimes(2);
 	});
 
 	it("plays a Track and projects native timing events", async () => {

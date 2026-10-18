@@ -1,41 +1,37 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
-const { convertFileSrcMock, invokeMock, listenMock } = vi.hoisted(() => ({
-	convertFileSrcMock: vi.fn(),
+const { invokeMock, listenMock } = vi.hoisted(() => ({
 	invokeMock: vi.fn(),
 	listenMock: vi.fn(),
 }));
 
-vi.mock("@tauri-apps/api/core", () => ({
-	convertFileSrc: convertFileSrcMock,
+vi.mock("./desktop-api", () => ({
+	hasDesktopBridge: () => true,
 	invoke: invokeMock,
+	listen: listenMock,
 }));
-vi.mock("@tauri-apps/api/event", () => ({ listen: listenMock }));
 
 import {
+	cancelDesktopImportUpload,
 	desktopFetch,
-	getCoverBaseUrl,
+	desktopUploadImportFile,
 	getMediaProxyBaseUrl,
 	getServerConnection,
 	initializeMediaProxy,
 	listenForQueueEvents,
 	listenForServerConnectionChanges,
+	releaseDesktopImportSelections,
 	saveServerConnection,
+	selectDesktopImportFiles,
+	selectDesktopImportFolder,
 	testServerConnection,
 } from "./bridge";
 
 describe("desktop bridge", () => {
 	beforeEach(() => {
 		invokeMock.mockReset();
-		convertFileSrcMock.mockReset();
 		listenMock.mockReset();
-	});
-
-	it("builds a platform-compatible cover protocol base", () => {
-		convertFileSrcMock.mockReturnValue("http://earthly-media.localhost/");
-
-		expect(getCoverBaseUrl()).toBe("http://earthly-media.localhost");
-		expect(convertFileSrcMock).toHaveBeenCalledWith("", "earthly-media");
+		listenMock.mockReturnValue(vi.fn());
 	});
 
 	it("exposes renderer connection commands", async () => {
@@ -56,6 +52,126 @@ describe("desktop bridge", () => {
 		expect(invokeMock).toHaveBeenNthCalledWith(3, "save_server_connection", {
 			origin: "http://127.0.0.1:8090",
 		});
+	});
+
+	it("selects native files and recursive folders without exposing paths", async () => {
+		invokeMock
+			.mockResolvedValueOnce([{ id: "opaque-1", name: "song.flac", size: 42 }])
+			.mockResolvedValueOnce([{ id: "opaque-2", name: "track.mp3", size: 84 }]);
+
+		await expect(selectDesktopImportFiles()).resolves.toEqual([
+			{ id: "opaque-1", name: "song.flac", size: 42 },
+		]);
+		await expect(selectDesktopImportFolder()).resolves.toEqual([
+			{ id: "opaque-2", name: "track.mp3", size: 84 },
+		]);
+		expect(invokeMock).toHaveBeenNthCalledWith(
+			1,
+			"desktop_select_import_files",
+		);
+		expect(invokeMock).toHaveBeenNthCalledWith(
+			2,
+			"desktop_select_import_folder",
+		);
+	});
+
+	it("releases opaque native selections", async () => {
+		invokeMock.mockResolvedValue(undefined);
+
+		await releaseDesktopImportSelections(["opaque-1", "opaque-2"]);
+
+		expect(invokeMock).toHaveBeenCalledWith(
+			"desktop_release_import_selections",
+			{
+				selectionIds: ["opaque-1", "opaque-2"],
+			},
+		);
+	});
+
+	it("uploads an opaque native selection with progress and cancellation", async () => {
+		const progressListeners: Array<(payload: unknown) => void> = [];
+		const stopProgress = vi.fn();
+		listenMock.mockImplementation(
+			(name: string, listener: (payload: unknown) => void) => {
+				if (name === "desktop-import-progress")
+					progressListeners.push(listener);
+				return stopProgress;
+			},
+		);
+		invokeMock.mockImplementation(async (command, args) => {
+			if (command === "desktop_upload_import_file") {
+				for (const listener of progressListeners) {
+					// Progress of another upload is not this one's.
+					listener({ uploadId: "other", sentBytes: 9, totalBytes: 10 });
+					listener({ uploadId: args.uploadId, sentBytes: 5, totalBytes: 10 });
+				}
+				return {
+					status: 200,
+					headers: { "content-type": "application/json" },
+					body: Array.from(new TextEncoder().encode('{"jobId":"job-1"}')),
+				};
+			}
+		});
+		const onProgress = vi.fn();
+		const controller = new AbortController();
+
+		const response = await desktopUploadImportFile(
+			"selection-1",
+			"job-1",
+			onProgress,
+			controller.signal,
+		);
+		expect(await response.json()).toEqual({ jobId: "job-1" });
+		expect(onProgress).toHaveBeenCalledWith(50, 5);
+		expect(onProgress).not.toHaveBeenCalledWith(90, 9);
+		expect(stopProgress).toHaveBeenCalledOnce();
+		const uploadCall = invokeMock.mock.calls.find(
+			([command]) => command === "desktop_upload_import_file",
+		);
+		expect(uploadCall?.[1]).toMatchObject({
+			selectionId: "selection-1",
+			jobId: "job-1",
+		});
+		expect(uploadCall?.[1]).not.toHaveProperty("url");
+
+		await cancelDesktopImportUpload("upload-2");
+		expect(invokeMock).toHaveBeenCalledWith("desktop_cancel_import_upload", {
+			uploadId: "upload-2",
+		});
+	});
+
+	it("cancels an active native upload when its signal aborts", async () => {
+		let finishUpload: (() => void) | undefined;
+		invokeMock.mockImplementation((command) => {
+			if (command === "desktop_upload_import_file") {
+				return new Promise((resolve) => {
+					finishUpload = () =>
+						resolve({
+							status: 200,
+							headers: {},
+							body: Array.from(new TextEncoder().encode("{}")),
+						});
+				});
+			}
+			return Promise.resolve();
+		});
+		const controller = new AbortController();
+		const upload = desktopUploadImportFile(
+			"selection-1",
+			"job-1",
+			undefined,
+			controller.signal,
+		);
+
+		controller.abort();
+		await vi.waitFor(() =>
+			expect(invokeMock).toHaveBeenCalledWith(
+				"desktop_cancel_import_upload",
+				expect.objectContaining({ uploadId: expect.any(String) }),
+			),
+		);
+		finishUpload?.();
+		await expect(upload).rejects.toMatchObject({ name: "AbortError" });
 	});
 
 	it("adapts desktop HTTP responses to fetch", async () => {
@@ -80,6 +196,24 @@ describe("desktop bridge", () => {
 		});
 	});
 
+	it("sends the body of a Request object", async () => {
+		invokeMock.mockResolvedValue({ status: 204, headers: {}, body: [] });
+
+		await desktopFetch(
+			new Request("http://127.0.0.1:8090/api/v1/playlists", {
+				method: "POST",
+				body: "hi",
+			}),
+		);
+
+		expect(invokeMock).toHaveBeenCalledWith("desktop_http_request", {
+			request: expect.objectContaining({
+				method: "POST",
+				body: Array.from(new TextEncoder().encode("hi")),
+			}),
+		});
+	});
+
 	it("adapts bodyless desktop HTTP responses", async () => {
 		invokeMock.mockResolvedValue({ status: 204, headers: {}, body: [] });
 
@@ -93,7 +227,6 @@ describe("desktop bridge", () => {
 
 	it("subscribes to the server connection event", async () => {
 		const callback = vi.fn();
-		listenMock.mockResolvedValue(vi.fn());
 
 		await listenForServerConnectionChanges(callback);
 
@@ -104,11 +237,11 @@ describe("desktop bridge", () => {
 	});
 
 	it("subscribes to native Queue events and errors", async () => {
-		const listeners = new Map<string, (event: { payload: unknown }) => void>();
+		const listeners = new Map<string, (payload: unknown) => void>();
 		const unlistenQueue = vi.fn();
 		const unlistenError = vi.fn();
 		listenMock.mockImplementation(
-			async (name: string, callback: (event: { payload: unknown }) => void) => {
+			(name: string, callback: (payload: unknown) => void) => {
 				listeners.set(name, callback);
 				return name === "desktop-queue-invalidated"
 					? unlistenQueue
@@ -121,11 +254,11 @@ describe("desktop bridge", () => {
 		const unsubscribe = await listenForQueueEvents(onEvent, onError);
 		expect(invokeMock).toHaveBeenCalledWith("desktop_reconnect_queue_events");
 		listeners.get("desktop-queue-invalidated")?.({
-			payload: { revision: "opaque-2", sequence: "2", invalidates: ["queue"] },
+			revision: "opaque-2",
+			sequence: "2",
+			invalidates: ["queue"],
 		});
-		listeners.get("desktop-queue-events-error")?.({
-			payload: "connection lost",
-		});
+		listeners.get("desktop-queue-events-error")?.("connection lost");
 
 		expect(onEvent).toHaveBeenCalledWith({
 			revision: "opaque-2",

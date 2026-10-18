@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO tracks (\n            id, album_id, title, title_sort, artist_name, track_no, duration_ms, format,\n            size_bytes, file_path, file_mtime, genre, sample_rate_hz, bit_depth, disc_no,\n            track_total, disc_total, channel_count, bitrate_bps, codec, container,\n            replaygain_track_gain_db, replaygain_track_peak, replaygain_album_gain_db,\n            replaygain_album_peak, identity_key, lyrics\n        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 27
+    },
+    "nullable": []
+  },
+  "hash": "078efec129d866a4a576de90d84b08910b79c89651cfbed5088f9676c48fd4a1"
+}

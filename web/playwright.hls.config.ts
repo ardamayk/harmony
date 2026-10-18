@@ -18,7 +18,7 @@ export default defineConfig({
 		},
 	},
 	webServer: {
-		command: "pnpm exec vite dev --host 127.0.0.1 --port 3417 --strictPort",
+		command: "vp dev --host 127.0.0.1 --port 3417 --strictPort",
 		url: "http://127.0.0.1:3417/e2e/fixtures/hls.html",
 		reuseExistingServer: false,
 	},

@@ -1,0 +1,146 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id AS \"id!\", job_id, track_id, phase, staged_file_path, audio_file_path, artwork_file_path,\n                audio_sha256, artwork_sha256, artwork_created, recovery_reason\n            FROM managed_import_commit_journal\n            WHERE (?1 IS NOT NULL AND id = ?1)\n                OR (?2 IS NOT NULL AND job_id = ?2 AND phase NOT IN ('completed', 'rolled_back'))",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_import_commit_journal",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "job_id",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_import_commit_journal",
+            "name": "job_id"
+          }
+        }
+      },
+      {
+        "name": "track_id",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_import_commit_journal",
+            "name": "track_id"
+          }
+        }
+      },
+      {
+        "name": "phase",
+        "ordinal": 3,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_import_commit_journal",
+            "name": "phase"
+          }
+        }
+      },
+      {
+        "name": "staged_file_path",
+        "ordinal": 4,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_import_commit_journal",
+            "name": "staged_file_path"
+          }
+        }
+      },
+      {
+        "name": "audio_file_path",
+        "ordinal": 5,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_import_commit_journal",
+            "name": "audio_file_path"
+          }
+        }
+      },
+      {
+        "name": "artwork_file_path",
+        "ordinal": 6,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_import_commit_journal",
+            "name": "artwork_file_path"
+          }
+        }
+      },
+      {
+        "name": "audio_sha256",
+        "ordinal": 7,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_import_commit_journal",
+            "name": "audio_sha256"
+          }
+        }
+      },
+      {
+        "name": "artwork_sha256",
+        "ordinal": 8,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_import_commit_journal",
+            "name": "artwork_sha256"
+          }
+        }
+      },
+      {
+        "name": "artwork_created",
+        "ordinal": 9,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "managed_import_commit_journal",
+            "name": "artwork_created"
+          }
+        }
+      },
+      {
+        "name": "recovery_reason",
+        "ordinal": 10,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_import_commit_journal",
+            "name": "recovery_reason"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "86c13467efe1de99247a16a3584325cfd51023899a76a8b803acb8ef0d5a8a21"
+}

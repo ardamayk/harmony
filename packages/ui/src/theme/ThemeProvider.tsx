@@ -1,31 +1,13 @@
 import type { ThemePreferences } from "@repo/api-client";
 import { useEffect } from "react";
-
-function resolveDarkMode(mode: ThemePreferences["mode"]): boolean {
-	if (mode === "dark") return true;
-	if (mode === "light") return false;
-	return window.matchMedia("(prefers-color-scheme: dark)").matches;
-}
+import { useResolvedThemeMode } from "./use-resolved-theme-mode";
 
 export function ThemeProvider({ theme }: { theme: ThemePreferences }) {
+	const resolvedMode = useResolvedThemeMode(theme.mode);
 	useEffect(() => {
 		const root = document.documentElement;
 		root.dataset.themePreset = theme.preset;
-
-		const apply = () => {
-			const isDark = resolveDarkMode(theme.mode);
-			root.classList.toggle("dark", isDark);
-		};
-
-		apply();
-
-		if (theme.mode !== "system") return;
-
-		const media = window.matchMedia("(prefers-color-scheme: dark)");
-		const onChange = () => apply();
-		media.addEventListener("change", onChange);
-		return () => media.removeEventListener("change", onChange);
-	}, [theme.mode, theme.preset]);
-
+		root.classList.toggle("dark", resolvedMode === "dark");
+	}, [resolvedMode, theme.preset]);
 	return null;
 }

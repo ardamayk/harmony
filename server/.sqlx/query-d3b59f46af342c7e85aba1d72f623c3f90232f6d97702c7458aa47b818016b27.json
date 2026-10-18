@@ -1,0 +1,110 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT tracks.title, tracks.album_id, tracks.revision,\n            track_sources.source_kind, track_sources.file_path, track_sources.content_sha256,\n            track_sources.size_bytes, track_sources.revision AS source_revision\n        FROM tracks JOIN track_sources ON track_sources.track_id = tracks.id\n        WHERE tracks.id = ? AND tracks.missing_at IS NULL",
+  "describe": {
+    "columns": [
+      {
+        "name": "title",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tracks",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "name": "album_id",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tracks",
+            "name": "album_id"
+          }
+        }
+      },
+      {
+        "name": "revision",
+        "ordinal": 2,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "tracks",
+            "name": "revision"
+          }
+        }
+      },
+      {
+        "name": "source_kind",
+        "ordinal": 3,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "track_sources",
+            "name": "source_kind"
+          }
+        }
+      },
+      {
+        "name": "file_path",
+        "ordinal": 4,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "track_sources",
+            "name": "file_path"
+          }
+        }
+      },
+      {
+        "name": "content_sha256",
+        "ordinal": 5,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "track_sources",
+            "name": "content_sha256"
+          }
+        }
+      },
+      {
+        "name": "size_bytes",
+        "ordinal": 6,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "track_sources",
+            "name": "size_bytes"
+          }
+        }
+      },
+      {
+        "name": "source_revision",
+        "ordinal": 7,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "track_sources",
+            "name": "revision"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "d3b59f46af342c7e85aba1d72f623c3f90232f6d97702c7458aa47b818016b27"
+}

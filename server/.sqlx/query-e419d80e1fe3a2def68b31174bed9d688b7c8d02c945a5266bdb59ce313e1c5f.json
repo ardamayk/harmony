@@ -1,0 +1,62 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT album_artwork.content_sha256, album_artwork.media_type, album_artwork.width, album_artwork.height\n            FROM album_artwork JOIN albums ON albums.id = album_artwork.album_id\n            WHERE albums.identity_key = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "content_sha256",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "album_artwork",
+            "name": "content_sha256"
+          }
+        }
+      },
+      {
+        "name": "media_type",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "album_artwork",
+            "name": "media_type"
+          }
+        }
+      },
+      {
+        "name": "width",
+        "ordinal": 2,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "album_artwork",
+            "name": "width"
+          }
+        }
+      },
+      {
+        "name": "height",
+        "ordinal": 3,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "album_artwork",
+            "name": "height"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "e419d80e1fe3a2def68b31174bed9d688b7c8d02c945a5266bdb59ce313e1c5f"
+}

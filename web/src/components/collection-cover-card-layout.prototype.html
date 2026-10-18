@@ -6,117 +6,579 @@
 		<link rel="icon" href="data:," />
 		<title>PROTOTYPE — Adaptive collection card covers</title>
 		<style>
-			:root { color: #f7f1ff; background: #11052d; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
-			* { box-sizing: border-box; }
-			button, a { font: inherit; }
-			a { color: inherit; text-decoration: none; }
-			body { min-width: 360px; min-height: 100vh; margin: 0; overflow: hidden; background: #11052d; }
-			.prototype-note { display: flex; height: 42px; align-items: center; justify-content: space-between; gap: 16px; padding: 0 18px; color: #d8cde9; background: #292c31; font-size: 12px; }
-			.prototype-note strong { color: #f1c64a; letter-spacing: 0.08em; }
-			.shell { display: flex; height: calc(100vh - 42px); }
-			.sidebar, .queue { flex: 0 0 auto; overflow: hidden; transition: width 180ms ease, opacity 180ms ease; }
-			.sidebar { width: 260px; border-right: 1px solid rgb(139 60 116 / 35%); background: #1c0c4b; }
-			.sidebar.is-closed, .queue.is-closed { width: 0; opacity: 0; }
-			.brand { padding: 22px 20px 18px; font-family: Georgia, serif; font-size: 22px; font-weight: 700; white-space: nowrap; }
-			.brand small { display: block; margin-top: 4px; color: #d3a42a; font-family: Inter, sans-serif; font-size: 11px; font-weight: 500; }
-			.sidebar nav { display: grid; gap: 5px; padding: 8px 14px; }
-			.nav-item { padding: 10px 14px; border: 0; border-radius: 5px; color: #e0b23d; background: transparent; text-align: left; white-space: nowrap; cursor: pointer; }
-			.nav-item.is-active { color: #f8f2ff; background: #51387b; }
-			.main-panel { display: flex; min-width: 0; flex: 1; flex-direction: column; background: radial-gradient(circle at 50% 0, rgb(108 58 174 / 12%), transparent 38%), #16063b; }
-			.page-header { position: relative; z-index: 30; display: flex; min-height: 86px; align-items: center; justify-content: space-between; gap: 18px; padding: 14px 24px; border-bottom: 1px solid #73335f; background: rgb(22 6 59 / 92%); backdrop-filter: blur(12px); }
-			.page-title h1 { margin: 0; font-family: Georgia, serif; font-size: 25px; }
-			.page-title p { margin: 5px 0 0; color: #d3a42a; font-size: 11px; }
-			.page-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; }
-			.control-button { padding: 7px 10px; border: 1px solid #704d91; border-radius: 7px; color: #efe8fa; background: #2b1950; font-size: 11px; cursor: pointer; }
-			.control-button[aria-pressed="false"] { color: #b7a9cb; background: #1e1238; }
-			.page-scroll { min-height: 0; flex: 1; overflow: auto; padding: 20px 24px 110px; }
-			.variant-summary { display: flex; width: 100%; max-width: 1476px; align-items: baseline; justify-content: space-between; gap: 24px; margin: 0 auto 18px; }
-			.variant-summary h2 { margin: 0; font-size: 17px; }
-			.variant-summary p { max-width: 620px; margin: 0; color: #beaed7; font-size: 12px; text-align: right; }
-			.grid-shell { width: 100%; max-width: 1476px; margin: 0 auto; }
-			.collection-grid { display: grid; grid-template-columns: repeat(var(--column-count), minmax(0, 1fr)); gap: 12px; }
-			.collection-card { position: relative; min-width: 0; aspect-ratio: 1; overflow: hidden; isolation: isolate; border: 1px solid #934073; border-radius: 9px; color: #f8f4ff; background: #302151; box-shadow: 0 12px 30px rgb(5 0 20 / 16%); outline: none; transform: translateY(0); transition: transform 300ms ease-out, border-color 300ms ease-out, box-shadow 300ms ease-out; }
-			.collection-card:hover { border-color: #ad568d; box-shadow: 0 18px 38px rgb(5 0 20 / 34%); transform: translateY(-4px); }
-			.collection-card:hover .card-copy strong { text-decoration: underline; }
-			.cover-layout { position: absolute; z-index: 0; inset: 0 0 12%; overflow: hidden; background: #302151; }
-			.cover { position: absolute; top: 0; display: block; height: 100%; overflow: hidden; border-right: 1px solid rgb(25 10 56 / 78%); border-radius: 8px; background: #302151; box-shadow: 10px 0 24px rgb(10 2 30 / 28%); transition: left 280ms cubic-bezier(.22,.8,.24,1), width 280ms cubic-bezier(.22,.8,.24,1), box-shadow 280ms ease, filter 280ms ease; will-change: left, width; }
-			.cover-image { display: block; width: 100%; height: 100%; border-radius: inherit; object-fit: cover; }
-			.cover-fallback { display: none; width: 100%; height: 100%; align-items: center; justify-content: center; color: #d8cde9; background: linear-gradient(145deg, #4a365f, #281b43); font-family: Georgia, serif; font-size: 44px; }
-			.cover.has-error .cover-image { display: none; }
-			.cover.has-error .cover-fallback { display: flex; }
-			.cover:nth-child(1) { z-index: 40; }
-			.cover:nth-child(2) { z-index: 30; }
-			.cover:nth-child(3) { z-index: 20; }
-			.cover:nth-child(4) { z-index: 10; }
+			:root {
+				color: #f7f1ff;
+				background: #11052d;
+				font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+			}
+			* {
+				box-sizing: border-box;
+			}
+			button,
+			a {
+				font: inherit;
+			}
+			a {
+				color: inherit;
+				text-decoration: none;
+			}
+			body {
+				min-width: 360px;
+				min-height: 100vh;
+				margin: 0;
+				overflow: hidden;
+				background: #11052d;
+			}
+			.prototype-note {
+				display: flex;
+				height: 42px;
+				align-items: center;
+				justify-content: space-between;
+				gap: 16px;
+				padding: 0 18px;
+				color: #d8cde9;
+				background: #292c31;
+				font-size: 12px;
+			}
+			.prototype-note strong {
+				color: #f1c64a;
+				letter-spacing: 0.08em;
+			}
+			.shell {
+				display: flex;
+				height: calc(100vh - 42px);
+			}
+			.sidebar,
+			.queue {
+				flex: 0 0 auto;
+				overflow: hidden;
+				transition:
+					width 180ms ease,
+					opacity 180ms ease;
+			}
+			.sidebar {
+				width: 260px;
+				border-right: 1px solid rgb(139 60 116 / 35%);
+				background: #1c0c4b;
+			}
+			.sidebar.is-closed,
+			.queue.is-closed {
+				width: 0;
+				opacity: 0;
+			}
+			.brand {
+				padding: 22px 20px 18px;
+				font-family: Georgia, serif;
+				font-size: 22px;
+				font-weight: 700;
+				white-space: nowrap;
+			}
+			.brand small {
+				display: block;
+				margin-top: 4px;
+				color: #d3a42a;
+				font-family: Inter, sans-serif;
+				font-size: 11px;
+				font-weight: 500;
+			}
+			.sidebar nav {
+				display: grid;
+				gap: 5px;
+				padding: 8px 14px;
+			}
+			.nav-item {
+				padding: 10px 14px;
+				border: 0;
+				border-radius: 5px;
+				color: #e0b23d;
+				background: transparent;
+				text-align: left;
+				white-space: nowrap;
+				cursor: pointer;
+			}
+			.nav-item.is-active {
+				color: #f8f2ff;
+				background: #51387b;
+			}
+			.main-panel {
+				display: flex;
+				min-width: 0;
+				flex: 1;
+				flex-direction: column;
+				background:
+					radial-gradient(
+						circle at 50% 0,
+						rgb(108 58 174 / 12%),
+						transparent 38%
+					),
+					#16063b;
+			}
+			.page-header {
+				position: relative;
+				z-index: 30;
+				display: flex;
+				min-height: 86px;
+				align-items: center;
+				justify-content: space-between;
+				gap: 18px;
+				padding: 14px 24px;
+				border-bottom: 1px solid #73335f;
+				background: rgb(22 6 59 / 92%);
+				backdrop-filter: blur(12px);
+			}
+			.page-title h1 {
+				margin: 0;
+				font-family: Georgia, serif;
+				font-size: 25px;
+			}
+			.page-title p {
+				margin: 5px 0 0;
+				color: #d3a42a;
+				font-size: 11px;
+			}
+			.page-actions {
+				display: flex;
+				flex-wrap: wrap;
+				justify-content: flex-end;
+				gap: 7px;
+			}
+			.control-button {
+				padding: 7px 10px;
+				border: 1px solid #704d91;
+				border-radius: 7px;
+				color: #efe8fa;
+				background: #2b1950;
+				font-size: 11px;
+				cursor: pointer;
+			}
+			.control-button[aria-pressed="false"] {
+				color: #b7a9cb;
+				background: #1e1238;
+			}
+			.page-scroll {
+				min-height: 0;
+				flex: 1;
+				overflow: auto;
+				padding: 20px 24px 110px;
+			}
+			.variant-summary {
+				display: flex;
+				width: 100%;
+				max-width: 1476px;
+				align-items: baseline;
+				justify-content: space-between;
+				gap: 24px;
+				margin: 0 auto 18px;
+			}
+			.variant-summary h2 {
+				margin: 0;
+				font-size: 17px;
+			}
+			.variant-summary p {
+				max-width: 620px;
+				margin: 0;
+				color: #beaed7;
+				font-size: 12px;
+				text-align: right;
+			}
+			.grid-shell {
+				width: 100%;
+				max-width: 1476px;
+				margin: 0 auto;
+			}
+			.collection-grid {
+				display: grid;
+				grid-template-columns: repeat(var(--column-count), minmax(0, 1fr));
+				gap: 12px;
+			}
+			.collection-card {
+				position: relative;
+				min-width: 0;
+				aspect-ratio: 1;
+				overflow: hidden;
+				isolation: isolate;
+				border: 1px solid #934073;
+				border-radius: 9px;
+				color: #f8f4ff;
+				background: #302151;
+				box-shadow: 0 12px 30px rgb(5 0 20 / 16%);
+				outline: none;
+				transform: translateY(0);
+				transition:
+					transform 300ms ease-out,
+					border-color 300ms ease-out,
+					box-shadow 300ms ease-out;
+			}
+			.collection-card:hover {
+				border-color: #ad568d;
+				box-shadow: 0 18px 38px rgb(5 0 20 / 34%);
+				transform: translateY(-4px);
+			}
+			.collection-card:hover .card-copy strong {
+				text-decoration: underline;
+			}
+			.cover-layout {
+				position: absolute;
+				z-index: 0;
+				inset: 0 0 12%;
+				overflow: hidden;
+				background: #302151;
+			}
+			.cover {
+				position: absolute;
+				top: 0;
+				display: block;
+				height: 100%;
+				overflow: hidden;
+				border-right: 1px solid rgb(25 10 56 / 78%);
+				border-radius: 8px;
+				background: #302151;
+				box-shadow: 10px 0 24px rgb(10 2 30 / 28%);
+				transition:
+					left 280ms cubic-bezier(0.22, 0.8, 0.24, 1),
+					width 280ms cubic-bezier(0.22, 0.8, 0.24, 1),
+					box-shadow 280ms ease,
+					filter 280ms ease;
+				will-change: left, width;
+			}
+			.cover-image {
+				display: block;
+				width: 100%;
+				height: 100%;
+				border-radius: inherit;
+				object-fit: cover;
+			}
+			.cover-fallback {
+				display: none;
+				width: 100%;
+				height: 100%;
+				align-items: center;
+				justify-content: center;
+				color: #d8cde9;
+				background: linear-gradient(145deg, #4a365f, #281b43);
+				font-family: Georgia, serif;
+				font-size: 44px;
+			}
+			.cover.has-error .cover-image {
+				display: none;
+			}
+			.cover.has-error .cover-fallback {
+				display: flex;
+			}
+			.cover:nth-child(1) {
+				z-index: 40;
+			}
+			.cover:nth-child(2) {
+				z-index: 30;
+			}
+			.cover:nth-child(3) {
+				z-index: 20;
+			}
+			.cover:nth-child(4) {
+				z-index: 10;
+			}
 			/* Accepted adaptive overlap: the union always fills the available cover area. */
-			.adaptive-covers[data-count="1"] .cover { left: 0; width: 100%; }
-			.adaptive-covers[data-count="2"] .cover { width: 70%; }
-			.adaptive-covers[data-count="2"] .cover:nth-child(1) { left: 0; }
-			.adaptive-covers[data-count="2"] .cover:nth-child(2) { left: 30%; }
-			.adaptive-covers[data-count="3"] .cover { width: 60%; }
-			.adaptive-covers[data-count="3"] .cover:nth-child(1) { left: 0; }
-			.adaptive-covers[data-count="3"] .cover:nth-child(2) { left: 20%; }
-			.adaptive-covers[data-count="3"] .cover:nth-child(3) { left: 40%; }
-			.adaptive-covers[data-count="4"] .cover { width: 50%; }
-			.adaptive-covers[data-count="4"] .cover:nth-child(1) { left: 0; }
-			.adaptive-covers[data-count="4"] .cover:nth-child(2) { left: 20%; }
-			.adaptive-covers[data-count="4"] .cover:nth-child(3) { left: 35%; }
-			.adaptive-covers[data-count="4"] .cover:nth-child(4) { left: 50%; }
-			.adaptive-covers .cover.is-hovered { left: 0 !important; z-index: 50 !important; width: 100% !important; box-shadow: none; }
-			.card-copy { position: absolute; z-index: 25; right: 0; bottom: 0; left: 0; padding: 48px 11px 9px; background: linear-gradient(transparent, rgb(19 7 51 / 96%) 70%); pointer-events: none; }
-			.card-copy strong, .card-copy span { display: block; }
-			.card-copy strong { overflow: hidden; font-size: clamp(13px, 1.3vw, 17px); font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
-			.card-copy span { margin-top: 2px; color: #d9b64b; font-size: 12px; }
-			.state-output { min-height: 26px; padding: 6px 9px; border: 1px solid rgb(112 77 145 / 70%); border-radius: 7px; color: #d9cfea; background: rgb(30 18 56 / 72%); font-size: 11px; }
-			.prototype-toolbar { position: fixed; z-index: 100; right: 50%; bottom: 18px; display: flex; align-items: center; gap: 5px; padding: 6px; border: 1px solid #765397; border-radius: 12px; background: rgb(27 17 48 / 94%); box-shadow: 0 18px 48px rgb(4 0 17 / 50%); transform: translateX(50%); backdrop-filter: blur(14px); }
-			.prototype-toolbar a, .prototype-toolbar button { min-height: 30px; padding: 6px 10px; border: 0; border-radius: 7px; color: #cfc3df; background: transparent; font-size: 11px; cursor: pointer; }
-			.prototype-toolbar a:hover, .prototype-toolbar button:hover { color: #fff; background: #49326e; }
-			.prototype-toolbar button.is-active { color: #1b1230; background: #f1c64a; font-weight: 700; }
-			.toolbar-divider { width: 1px; height: 22px; margin: 0 2px; background: #654782; }
+			.adaptive-covers[data-count="1"] .cover {
+				left: 0;
+				width: 100%;
+			}
+			.adaptive-covers[data-count="2"] .cover {
+				width: 70%;
+			}
+			.adaptive-covers[data-count="2"] .cover:nth-child(1) {
+				left: 0;
+			}
+			.adaptive-covers[data-count="2"] .cover:nth-child(2) {
+				left: 30%;
+			}
+			.adaptive-covers[data-count="3"] .cover {
+				width: 60%;
+			}
+			.adaptive-covers[data-count="3"] .cover:nth-child(1) {
+				left: 0;
+			}
+			.adaptive-covers[data-count="3"] .cover:nth-child(2) {
+				left: 20%;
+			}
+			.adaptive-covers[data-count="3"] .cover:nth-child(3) {
+				left: 40%;
+			}
+			.adaptive-covers[data-count="4"] .cover {
+				width: 50%;
+			}
+			.adaptive-covers[data-count="4"] .cover:nth-child(1) {
+				left: 0;
+			}
+			.adaptive-covers[data-count="4"] .cover:nth-child(2) {
+				left: 20%;
+			}
+			.adaptive-covers[data-count="4"] .cover:nth-child(3) {
+				left: 35%;
+			}
+			.adaptive-covers[data-count="4"] .cover:nth-child(4) {
+				left: 50%;
+			}
+			.adaptive-covers .cover.is-hovered {
+				left: 0 !important;
+				z-index: 50 !important;
+				width: 100% !important;
+				box-shadow: none;
+			}
+			.card-copy {
+				position: absolute;
+				z-index: 25;
+				right: 0;
+				bottom: 0;
+				left: 0;
+				padding: 48px 11px 9px;
+				background: linear-gradient(transparent, rgb(19 7 51 / 96%) 70%);
+				pointer-events: none;
+			}
+			.card-copy strong,
+			.card-copy span {
+				display: block;
+			}
+			.card-copy strong {
+				overflow: hidden;
+				font-size: clamp(13px, 1.3vw, 17px);
+				font-weight: 500;
+				text-overflow: ellipsis;
+				white-space: nowrap;
+			}
+			.card-copy span {
+				margin-top: 2px;
+				color: #d9b64b;
+				font-size: 12px;
+			}
+			.state-output {
+				min-height: 26px;
+				padding: 6px 9px;
+				border: 1px solid rgb(112 77 145 / 70%);
+				border-radius: 7px;
+				color: #d9cfea;
+				background: rgb(30 18 56 / 72%);
+				font-size: 11px;
+			}
+			.prototype-toolbar {
+				position: fixed;
+				z-index: 100;
+				right: 50%;
+				bottom: 18px;
+				display: flex;
+				align-items: center;
+				gap: 5px;
+				padding: 6px;
+				border: 1px solid #765397;
+				border-radius: 12px;
+				background: rgb(27 17 48 / 94%);
+				box-shadow: 0 18px 48px rgb(4 0 17 / 50%);
+				transform: translateX(50%);
+				backdrop-filter: blur(14px);
+			}
+			.prototype-toolbar a,
+			.prototype-toolbar button {
+				min-height: 30px;
+				padding: 6px 10px;
+				border: 0;
+				border-radius: 7px;
+				color: #cfc3df;
+				background: transparent;
+				font-size: 11px;
+				cursor: pointer;
+			}
+			.prototype-toolbar a:hover,
+			.prototype-toolbar button:hover {
+				color: #fff;
+				background: #49326e;
+			}
+			.prototype-toolbar button.is-active {
+				color: #1b1230;
+				background: #f1c64a;
+				font-weight: 700;
+			}
+			.toolbar-divider {
+				width: 1px;
+				height: 22px;
+				margin: 0 2px;
+				background: #654782;
+			}
 
 			/* Proposal 1: one dominant hover motion. */
-			body.polish-hover-hierarchy.mode-proposal .collection-card:hover { border-color: #c468a3; box-shadow: 0 16px 36px rgb(5 0 20 / 30%); transform: translateY(-1px); }
-			body.polish-hover-hierarchy.mode-proposal .collection-card:hover .card-copy strong { text-decoration: none; }
+			body.polish-hover-hierarchy.mode-proposal .collection-card:hover {
+				border-color: #c468a3;
+				box-shadow: 0 16px 36px rgb(5 0 20 / 30%);
+				transform: translateY(-1px);
+			}
+			body.polish-hover-hierarchy.mode-proposal
+				.collection-card:hover
+				.card-copy
+				strong {
+				text-decoration: none;
+			}
 
 			/* Proposal 2: quieter seams with directional depth. */
-			body.polish-seams.mode-proposal .cover { border: 0; border-right: 1px solid rgb(237 222 249 / 22%); border-radius: 6px; box-shadow: 12px 0 20px rgb(8 1 26 / 38%); }
-			body.polish-seams.mode-proposal .cover.is-hovered { border-right-color: transparent; border-radius: 8px; box-shadow: none; }
+			body.polish-seams.mode-proposal .cover {
+				border: 0;
+				border-right: 1px solid rgb(237 222 249 / 22%);
+				border-radius: 6px;
+				box-shadow: 12px 0 20px rgb(8 1 26 / 38%);
+			}
+			body.polish-seams.mode-proposal .cover.is-hovered {
+				border-right-color: transparent;
+				border-radius: 8px;
+				box-shadow: none;
+			}
 
 			/* Proposal 4: deliberate motion with an optional reduced-motion state. */
-			body.polish-motion.mode-proposal .cover { transition-duration: 260ms; transition-delay: 0ms; transition-timing-function: cubic-bezier(.22,.8,.24,1); }
-			body.polish-motion.mode-proposal .cover.is-hovered { filter: brightness(1.025) saturate(1.04); transition-delay: 60ms; }
-			body.polish-motion.is-reduced .cover { transition: none !important; }
+			body.polish-motion.mode-proposal .cover {
+				transition-duration: 260ms;
+				transition-delay: 0ms;
+				transition-timing-function: cubic-bezier(0.22, 0.8, 0.24, 1);
+			}
+			body.polish-motion.mode-proposal .cover.is-hovered {
+				filter: brightness(1.025) saturate(1.04);
+				transition-delay: 60ms;
+			}
+			body.polish-motion.is-reduced .cover {
+				transition: none !important;
+			}
 
 			/* Proposal 5: visible keyboard focus on the actionable card. */
-			body.polish-focus.mode-proposal .collection-card:focus-visible { z-index: 70; border-color: #f1c64a; outline: 3px solid #f1c64a; outline-offset: 3px; box-shadow: 0 0 0 6px rgb(22 6 59 / 92%), 0 18px 42px rgb(5 0 20 / 45%); }
+			body.polish-focus.mode-proposal .collection-card:focus-visible {
+				z-index: 70;
+				border-color: #f1c64a;
+				outline: 3px solid #f1c64a;
+				outline-offset: 3px;
+				box-shadow:
+					0 0 0 6px rgb(22 6 59 / 92%),
+					0 18px 42px rgb(5 0 20 / 45%);
+			}
 
 			/* Proposal 6: calmer copy hierarchy and a tighter lower scrim. */
-			body.polish-typography.mode-proposal .card-copy { padding: 58px 12px 10px; background: linear-gradient(transparent 5%, rgb(19 7 51 / 70%) 48%, rgb(19 7 51 / 98%) 78%); }
-			body.polish-typography.mode-proposal .card-copy strong { font-size: clamp(14px, 1.25vw, 16px); font-weight: 600; letter-spacing: -.012em; text-decoration: none; }
-			body.polish-typography.mode-proposal .card-copy span { margin-top: 3px; color: #bfb3d0; font-size: 11px; letter-spacing: .01em; }
+			body.polish-typography.mode-proposal .card-copy {
+				padding: 58px 12px 10px;
+				background: linear-gradient(
+					transparent 5%,
+					rgb(19 7 51 / 70%) 48%,
+					rgb(19 7 51 / 98%) 78%
+				);
+			}
+			body.polish-typography.mode-proposal .card-copy strong {
+				font-size: clamp(14px, 1.25vw, 16px);
+				font-weight: 600;
+				letter-spacing: -0.012em;
+				text-decoration: none;
+			}
+			body.polish-typography.mode-proposal .card-copy span {
+				margin-top: 3px;
+				color: #bfb3d0;
+				font-size: 11px;
+				letter-spacing: 0.01em;
+			}
 
 			/* Proposal 7: replayable muted placeholder and gentle image reveal. */
-			body.polish-loading .cover.is-loading .cover-image { opacity: 0; }
-			body.polish-loading .cover.is-loaded .cover-image { opacity: 1; }
-			body.polish-loading.mode-proposal .cover-image { transition: opacity 150ms ease-out; }
-			body.polish-loading.mode-proposal .cover.is-loading::after { position: absolute; inset: 0; content: ""; background: linear-gradient(105deg, transparent 30%, rgb(255 255 255 / 8%) 48%, transparent 66%); transform: translateX(-100%); animation: loading-sheen 900ms ease-in-out infinite; }
-			@keyframes loading-sheen { to { transform: translateX(100%); } }
-			.queue { width: 320px; border-left: 1px solid rgb(139 60 116 / 35%); background: #180b37; }
-			.queue h2 { margin: 0; padding: 22px 18px 15px; font-size: 16px; }
-			.queue-list { display: grid; gap: 9px; padding: 0 12px; }
-			.queue-item { display: grid; grid-template-columns: 42px minmax(0, 1fr); gap: 10px; align-items: center; padding: 7px; border-radius: 7px; background: #241745; }
-			.queue-art { width: 42px; aspect-ratio: 1; border-radius: 5px; background: linear-gradient(145deg, #93627e, #74a6aa); }
-			.queue-item strong, .queue-item small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-			.queue-item strong { font-size: 12px; }
-			.queue-item small { margin-top: 3px; color: #a99bbd; font-size: 10px; }
+			body.polish-loading .cover.is-loading .cover-image {
+				opacity: 0;
+			}
+			body.polish-loading .cover.is-loaded .cover-image {
+				opacity: 1;
+			}
+			body.polish-loading.mode-proposal .cover-image {
+				transition: opacity 150ms ease-out;
+			}
+			body.polish-loading.mode-proposal .cover.is-loading::after {
+				position: absolute;
+				inset: 0;
+				content: "";
+				background: linear-gradient(
+					105deg,
+					transparent 30%,
+					rgb(255 255 255 / 8%) 48%,
+					transparent 66%
+				);
+				transform: translateX(-100%);
+				animation: loading-sheen 900ms ease-in-out infinite;
+			}
+			@keyframes loading-sheen {
+				to {
+					transform: translateX(100%);
+				}
+			}
+			.queue {
+				width: 320px;
+				border-left: 1px solid rgb(139 60 116 / 35%);
+				background: #180b37;
+			}
+			.queue h2 {
+				margin: 0;
+				padding: 22px 18px 15px;
+				font-size: 16px;
+			}
+			.queue-list {
+				display: grid;
+				gap: 9px;
+				padding: 0 12px;
+			}
+			.queue-item {
+				display: grid;
+				grid-template-columns: 42px minmax(0, 1fr);
+				gap: 10px;
+				align-items: center;
+				padding: 7px;
+				border-radius: 7px;
+				background: #241745;
+			}
+			.queue-art {
+				width: 42px;
+				aspect-ratio: 1;
+				border-radius: 5px;
+				background: linear-gradient(145deg, #93627e, #74a6aa);
+			}
+			.queue-item strong,
+			.queue-item small {
+				display: block;
+				overflow: hidden;
+				text-overflow: ellipsis;
+				white-space: nowrap;
+			}
+			.queue-item strong {
+				font-size: 12px;
+			}
+			.queue-item small {
+				margin-top: 3px;
+				color: #a99bbd;
+				font-size: 10px;
+			}
 			@media (max-width: 820px) {
-				.prototype-note span { display: none; }
-				.sidebar, .queue { position: absolute; z-index: 50; top: 42px; bottom: 0; }
-				.queue { right: 0; }
-				.page-header { align-items: flex-start; flex-direction: column; }
-				.page-actions { justify-content: flex-start; }
-				.variant-summary p { display: none; }
-				.prototype-toolbar { right: 12px; left: 12px; justify-content: center; transform: none; }
+				.prototype-note span {
+					display: none;
+				}
+				.sidebar,
+				.queue {
+					position: absolute;
+					z-index: 50;
+					top: 42px;
+					bottom: 0;
+				}
+				.queue {
+					right: 0;
+				}
+				.page-header {
+					align-items: flex-start;
+					flex-direction: column;
+				}
+				.page-actions {
+					justify-content: flex-start;
+				}
+				.variant-summary p {
+					display: none;
+				}
+				.prototype-toolbar {
+					right: 12px;
+					left: 12px;
+					justify-content: center;
+					transform: none;
+				}
 			}
 		</style>
 	</head>
@@ -131,40 +593,88 @@
 				<nav>
 					<button class="nav-item" type="button">Albums</button>
 					<button class="nav-item" type="button">Artists</button>
-					<button class="nav-item page-link is-active" data-page="genres" type="button">Genres</button>
+					<button
+						class="nav-item page-link is-active"
+						data-page="genres"
+						type="button"
+					>
+						Genres
+					</button>
 					<button class="nav-item" type="button">Folders</button>
 					<button class="nav-item" type="button">Radio Stations</button>
 					<button class="nav-item" type="button">Tracks</button>
-					<button class="nav-item page-link" data-page="playlists" type="button">Playlists</button>
+					<button
+						class="nav-item page-link"
+						data-page="playlists"
+						type="button"
+					>
+						Playlists
+					</button>
 				</nav>
 			</aside>
 			<section class="main-panel">
 				<header class="page-header">
-					<div class="page-title"><h1 id="page-title">Genres</h1><p id="page-subtitle">Browse tracks by genre.</p></div>
+					<div class="page-title">
+						<h1 id="page-title">Genres</h1>
+						<p id="page-subtitle">Browse tracks by genre.</p>
+					</div>
 					<div class="page-actions">
-						<div class="state-output" id="state-output">Proposal state is active.</div>
+						<div class="state-output" id="state-output">
+							Proposal state is active.
+						</div>
 						<div id="experiment-actions"></div>
-						<button class="control-button" id="page-toggle" type="button">Show Playlists</button>
+						<button class="control-button" id="page-toggle" type="button">
+							Show Playlists
+						</button>
 					</div>
 				</header>
 				<div class="page-scroll">
-					<div class="variant-summary"><h2 id="experiment-title">Collection-card polish</h2><p id="experiment-summary">Compare the accepted card baseline with one isolated proposal.</p></div>
-					<div class="grid-shell" id="grid-shell"><div class="collection-grid" id="collection-grid"></div></div>
+					<div class="variant-summary">
+						<h2 id="experiment-title">Collection-card polish</h2>
+						<p id="experiment-summary">
+							Compare the accepted card baseline with one isolated proposal.
+						</p>
+					</div>
+					<div class="grid-shell" id="grid-shell">
+						<div class="collection-grid" id="collection-grid"></div>
+					</div>
 				</div>
 			</section>
 			<aside class="queue" id="queue">
 				<h2>Queue</h2>
 				<div class="queue-list">
-					<div class="queue-item"><div class="queue-art"></div><div><strong>Lavender Haze</strong><small>Midnights</small></div></div>
-					<div class="queue-item"><div class="queue-art"></div><div><strong>Style</strong><small>1989</small></div></div>
-					<div class="queue-item"><div class="queue-art"></div><div><strong>Clara Bow</strong><small>The Tortured Poets Department</small></div></div>
+					<div class="queue-item">
+						<div class="queue-art"></div>
+						<div><strong>Lavender Haze</strong><small>Midnights</small></div>
+					</div>
+					<div class="queue-item">
+						<div class="queue-art"></div>
+						<div><strong>Style</strong><small>1989</small></div>
+					</div>
+					<div class="queue-item">
+						<div class="queue-art"></div>
+						<div>
+							<strong>Clara Bow</strong
+							><small>The Tortured Poets Department</small>
+						</div>
+					</div>
 				</div>
 			</aside>
 		</div>
 		<nav class="prototype-toolbar" aria-label="Prototype navigation">
-			<a id="previous-prototype" href="#" target="_top" aria-label="Previous prototype">←</a>
-			<a href="collection-cover-polish-prototypes.html" target="_top">All proposals</a>
-			<a id="next-prototype" href="#" target="_top" aria-label="Next prototype">→</a>
+			<a
+				id="previous-prototype"
+				href="#"
+				target="_top"
+				aria-label="Previous prototype"
+				>←</a
+			>
+			<a href="collection-cover-polish-prototypes.html" target="_top"
+				>All proposals</a
+			>
+			<a id="next-prototype" href="#" target="_top" aria-label="Next prototype"
+				>→</a
+			>
 			<span class="toolbar-divider" aria-hidden="true"></span>
 			<button data-mode="baseline" type="button">Baseline</button>
 			<button data-mode="proposal" type="button">Proposal</button>
@@ -172,17 +682,76 @@
 		<script>
 			// Seven isolated polish experiments, each hosted by its own throwaway HTML page.
 			const prototypePages = [
-				{ key: "hover-hierarchy", file: "collection-cover-polish-hover-hierarchy.prototype.html", title: "1 — Simplified hover hierarchy", question: "Does one dominant hover motion feel calmer and more deliberate?", summary: "Proposal keeps the cover expansion, reduces whole-card lift to one pixel, removes title underline, and relies on restrained border and shadow feedback." },
-				{ key: "seams", file: "collection-cover-polish-seams.prototype.html", title: "2 — Refined cover seams", question: "Do quieter dividers and directional shadows make the stack feel like one composed card?", summary: "Proposal replaces heavy full-edge separation with a restrained right divider, smaller inner radius, and directional layer depth." },
-				{ key: "stable-selection", file: "collection-cover-polish-stable-selection.prototype.html", title: "3 — Stable cover identity", question: "Should each genre or playlist keep a recognizable cover composition across refreshes?", summary: "Use Simulate refresh: baseline rotates the selected artwork, while proposal derives a stable order from the collection identity." },
-				{ key: "motion", file: "collection-cover-polish-motion.prototype.html", title: "4 — Refined cover motion", question: "Does hover intent plus premium easing make expansion feel more intentional?", summary: "Proposal adds a short intent delay, a faster settle, subtle image lift, and a reduced-motion comparison control." },
-				{ key: "focus", file: "collection-cover-polish-focus.prototype.html", title: "5 — Keyboard focus", question: "Is the actionable collection card unmistakable when navigating by keyboard?", summary: "Press Tab to focus cards and Enter to activate one. Proposal adds a high-contrast ring without making decorative covers separate focus targets." },
-				{ key: "typography", file: "collection-cover-polish-typography.prototype.html", title: "6 — Calmer title hierarchy", question: "Does a quieter lower scrim improve polish without reducing legibility?", summary: "Proposal tightens the gradient, strengthens the title hierarchy, lowers track-count emphasis, and removes link-like underline treatment." },
-				{ key: "loading", file: "collection-cover-polish-loading.prototype.html", title: "7 — Cover loading polish", question: "Does a muted placeholder and short fade make image arrival feel more intentional?", summary: "Use Replay loading: baseline artwork pops in, while proposal uses a restrained placeholder sheen, short opacity reveal, and a consistent fallback." },
+				{
+					key: "hover-hierarchy",
+					file: "collection-cover-polish-hover-hierarchy.prototype.html",
+					title: "1 — Simplified hover hierarchy",
+					question:
+						"Does one dominant hover motion feel calmer and more deliberate?",
+					summary:
+						"Proposal keeps the cover expansion, reduces whole-card lift to one pixel, removes title underline, and relies on restrained border and shadow feedback.",
+				},
+				{
+					key: "seams",
+					file: "collection-cover-polish-seams.prototype.html",
+					title: "2 — Refined cover seams",
+					question:
+						"Do quieter dividers and directional shadows make the stack feel like one composed card?",
+					summary:
+						"Proposal replaces heavy full-edge separation with a restrained right divider, smaller inner radius, and directional layer depth.",
+				},
+				{
+					key: "stable-selection",
+					file: "collection-cover-polish-stable-selection.prototype.html",
+					title: "3 — Stable cover identity",
+					question:
+						"Should each genre or playlist keep a recognizable cover composition across refreshes?",
+					summary:
+						"Use Simulate refresh: baseline rotates the selected artwork, while proposal derives a stable order from the collection identity.",
+				},
+				{
+					key: "motion",
+					file: "collection-cover-polish-motion.prototype.html",
+					title: "4 — Refined cover motion",
+					question:
+						"Does hover intent plus premium easing make expansion feel more intentional?",
+					summary:
+						"Proposal adds a short intent delay, a faster settle, subtle image lift, and a reduced-motion comparison control.",
+				},
+				{
+					key: "focus",
+					file: "collection-cover-polish-focus.prototype.html",
+					title: "5 — Keyboard focus",
+					question:
+						"Is the actionable collection card unmistakable when navigating by keyboard?",
+					summary:
+						"Press Tab to focus cards and Enter to activate one. Proposal adds a high-contrast ring without making decorative covers separate focus targets.",
+				},
+				{
+					key: "typography",
+					file: "collection-cover-polish-typography.prototype.html",
+					title: "6 — Calmer title hierarchy",
+					question:
+						"Does a quieter lower scrim improve polish without reducing legibility?",
+					summary:
+						"Proposal tightens the gradient, strengthens the title hierarchy, lowers track-count emphasis, and removes link-like underline treatment.",
+				},
+				{
+					key: "loading",
+					file: "collection-cover-polish-loading.prototype.html",
+					title: "7 — Cover loading polish",
+					question:
+						"Does a muted placeholder and short fade make image arrival feel more intentional?",
+					summary:
+						"Use Replay loading: baseline artwork pops in, while proposal uses a restrained placeholder sheen, short opacity reveal, and a consistent fallback.",
+				},
 			];
 			const url = new URL(window.location.href);
 			const requestedPrototype = url.searchParams.get("polish");
-			const prototypeIndex = Math.max(0, prototypePages.findIndex(({ key }) => key === requestedPrototype));
+			const prototypeIndex = Math.max(
+				0,
+				prototypePages.findIndex(({ key }) => key === requestedPrototype),
+			);
 			const activePrototype = prototypePages[prototypeIndex];
 			let isProposal = url.searchParams.get("mode") !== "baseline";
 			let refreshIteration = 0;
@@ -190,30 +759,55 @@
 			let loadingTimers = [];
 			const collections = {
 				genres: [
-					{ name: "Pop", trackCount: 30, coverCount: 1 }, { name: "R&B", trackCount: 4, coverCount: 2 },
-					{ name: "Soft Rock", trackCount: 11, coverCount: 3 }, { name: "Synthpop", trackCount: 23, coverCount: 4 },
-					{ name: "Jazz", trackCount: 15, coverCount: 2 }, { name: "Electronic", trackCount: 41, coverCount: 4 },
+					{ name: "Pop", trackCount: 30, coverCount: 1 },
+					{ name: "R&B", trackCount: 4, coverCount: 2 },
+					{ name: "Soft Rock", trackCount: 11, coverCount: 3 },
+					{ name: "Synthpop", trackCount: 23, coverCount: 4 },
+					{ name: "Jazz", trackCount: 15, coverCount: 2 },
+					{ name: "Electronic", trackCount: 41, coverCount: 4 },
 					{ name: "Acoustic", trackCount: 7, coverCount: 1 },
 				],
 				playlists: [
-					{ name: "Favorites", trackCount: 5, coverCount: 2 }, { name: "Road Trip", trackCount: 38, coverCount: 4 },
-					{ name: "Late Night", trackCount: 16, coverCount: 3 }, { name: "Focus", trackCount: 44, coverCount: 4 },
+					{ name: "Favorites", trackCount: 5, coverCount: 2 },
+					{ name: "Road Trip", trackCount: 38, coverCount: 4 },
+					{ name: "Late Night", trackCount: 16, coverCount: 3 },
+					{ name: "Focus", trackCount: 44, coverCount: 4 },
 					{ name: "Sunday Morning", trackCount: 9, coverCount: 1 },
 				],
 			};
-			let currentPage = collections[url.searchParams.get("page")] ? url.searchParams.get("page") : "genres";
+			let currentPage = collections[url.searchParams.get("page")]
+				? url.searchParams.get("page")
+				: "genres";
 
 			function createCover(colors, motif) {
 				const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="700" height="700" viewBox="0 0 700 700"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="${colors[0]}"/><stop offset="1" stop-color="${colors[1]}"/></linearGradient></defs><rect width="700" height="700" fill="url(#g)"/>${motif}</svg>`;
 				return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 			}
 			const covers = [
-				createCover(["#1d163b", "#b45d73"], '<circle cx="350" cy="390" r="225" fill="#d4a4a7"/><path d="M160 530 Q350 260 540 530" fill="#1b1531"/><circle cx="275" cy="350" r="25" fill="#24122d"/><circle cx="425" cy="350" r="25" fill="#24122d"/>'),
-				createCover(["#89b8cf", "#e9d5b2"], '<circle cx="350" cy="390" r="205" fill="#f2c9ab"/><path d="M170 350 Q350 80 530 350 L500 205 Q350 90 200 205Z" fill="#e5c7a4"/><path d="M155 600 Q350 430 545 600" fill="#e4f2ed"/>'),
-				createCover(["#12100d", "#956c44"], '<path d="M0 560 Q240 210 700 150 L700 700 L0 700Z" fill="#36261e"/><circle cx="440" cy="340" r="180" fill="#15100e"/><path d="M330 180 Q500 90 590 250" fill="none" stroke="#aa7e52" stroke-width="24"/>'),
-				createCover(["#60b9a8", "#e18665"], '<circle cx="390" cy="360" r="195" fill="#efb8a0"/><path d="M178 660 Q380 420 610 660" fill="#55a794"/><path d="M250 220 Q400 70 540 220" fill="none" stroke="#976c45" stroke-width="50"/><circle cx="330" cy="350" r="20" fill="#37213c"/><circle cx="455" cy="350" r="20" fill="#37213c"/>'),
-				createCover(["#55234f", "#dd8c68"], '<circle cx="220" cy="220" r="130" fill="#f4c072"/><path d="M70 640 Q310 250 660 520 L700 700 L0 700Z" fill="#3b214d"/><path d="M190 520 Q340 330 560 470" fill="none" stroke="#eeaf8e" stroke-width="34"/>'),
-				createCover(["#1c4361", "#8671b5"], '<rect x="105" y="105" width="490" height="490" rx="36" fill="#bdd3dc" opacity=".75"/><circle cx="350" cy="350" r="145" fill="#25304f"/><circle cx="350" cy="350" r="45" fill="#d8b66a"/>'),
+				createCover(
+					["#1d163b", "#b45d73"],
+					'<circle cx="350" cy="390" r="225" fill="#d4a4a7"/><path d="M160 530 Q350 260 540 530" fill="#1b1531"/><circle cx="275" cy="350" r="25" fill="#24122d"/><circle cx="425" cy="350" r="25" fill="#24122d"/>',
+				),
+				createCover(
+					["#89b8cf", "#e9d5b2"],
+					'<circle cx="350" cy="390" r="205" fill="#f2c9ab"/><path d="M170 350 Q350 80 530 350 L500 205 Q350 90 200 205Z" fill="#e5c7a4"/><path d="M155 600 Q350 430 545 600" fill="#e4f2ed"/>',
+				),
+				createCover(
+					["#12100d", "#956c44"],
+					'<path d="M0 560 Q240 210 700 150 L700 700 L0 700Z" fill="#36261e"/><circle cx="440" cy="340" r="180" fill="#15100e"/><path d="M330 180 Q500 90 590 250" fill="none" stroke="#aa7e52" stroke-width="24"/>',
+				),
+				createCover(
+					["#60b9a8", "#e18665"],
+					'<circle cx="390" cy="360" r="195" fill="#efb8a0"/><path d="M178 660 Q380 420 610 660" fill="#55a794"/><path d="M250 220 Q400 70 540 220" fill="none" stroke="#976c45" stroke-width="50"/><circle cx="330" cy="350" r="20" fill="#37213c"/><circle cx="455" cy="350" r="20" fill="#37213c"/>',
+				),
+				createCover(
+					["#55234f", "#dd8c68"],
+					'<circle cx="220" cy="220" r="130" fill="#f4c072"/><path d="M70 640 Q310 250 660 520 L700 700 L0 700Z" fill="#3b214d"/><path d="M190 520 Q340 330 560 470" fill="none" stroke="#eeaf8e" stroke-width="34"/>',
+				),
+				createCover(
+					["#1c4361", "#8671b5"],
+					'<rect x="105" y="105" width="490" height="490" rx="36" fill="#bdd3dc" opacity=".75"/><circle cx="350" cy="350" r="145" fill="#25304f"/><circle cx="350" cy="350" r="45" fill="#d8b66a"/>',
+				),
 			];
 			const gridShell = document.getElementById("grid-shell");
 			const collectionGrid = document.getElementById("collection-grid");
@@ -222,16 +816,21 @@
 
 			function hash(value) {
 				let result = 0;
-				for (let index = 0; index < value.length; index += 1) result = (result * 31 + value.charCodeAt(index)) >>> 0;
+				for (let index = 0; index < value.length; index += 1)
+					result = (result * 31 + value.charCodeAt(index)) >>> 0;
 				return result;
 			}
 
 			function getSelectedCovers(collection, collectionIndex) {
-				const isStable = activePrototype.key === "stable-selection" && isProposal;
+				const isStable =
+					activePrototype.key === "stable-selection" && isProposal;
 				const startIndex = isStable
 					? hash(`${currentPage}:${collection.name}`) % covers.length
 					: (collectionIndex + refreshIteration) % covers.length;
-				return Array.from({ length: collection.coverCount }, (_, index) => covers[(startIndex + index) % covers.length]);
+				return Array.from(
+					{ length: collection.coverCount },
+					(_, index) => covers[(startIndex + index) % covers.length],
+				);
 			}
 
 			function getColumnCount() {
@@ -242,17 +841,26 @@
 			}
 
 			function createCoverMarkup(selectedCovers, collectionIndex) {
-				return selectedCovers.map((cover, index) => {
-					const hasMissingArt = activePrototype.key === "loading" && collectionIndex === collections[currentPage].length - 1 && index === 0;
-					const source = hasMissingArt ? "" : cover;
-					return `<div class="cover is-loaded" data-source="${source}"><img class="cover-image" src="${source}" alt="" /><div class="cover-fallback" aria-hidden="true">♪</div></div>`;
-				}).join("");
+				return selectedCovers
+					.map((cover, index) => {
+						const hasMissingArt =
+							activePrototype.key === "loading" &&
+							collectionIndex === collections[currentPage].length - 1 &&
+							index === 0;
+						const source = hasMissingArt ? "" : cover;
+						return `<div class="cover is-loaded" data-source="${source}"><img class="cover-image" src="${source}" alt="" /><div class="cover-fallback" aria-hidden="true">♪</div></div>`;
+					})
+					.join("");
 			}
 
 			function attachCardInteractions(card, collection) {
 				card.querySelectorAll(".cover").forEach((cover) => {
-					cover.addEventListener("mouseenter", () => cover.classList.add("is-hovered"));
-					cover.addEventListener("mouseleave", () => cover.classList.remove("is-hovered"));
+					cover.addEventListener("mouseenter", () =>
+						cover.classList.add("is-hovered"),
+					);
+					cover.addEventListener("mouseleave", () =>
+						cover.classList.remove("is-hovered"),
+					);
 				});
 				card.addEventListener("keydown", (event) => {
 					if (event.key !== "Enter") return;
@@ -262,12 +870,17 @@
 
 			function renderCards() {
 				collectionGrid.replaceChildren();
-				for (const [collectionIndex, collection] of collections[currentPage].entries()) {
+				for (const [collectionIndex, collection] of collections[
+					currentPage
+				].entries()) {
 					const card = document.createElement("article");
 					card.className = "collection-card";
 					card.tabIndex = 0;
 					card.role = "link";
-					card.setAttribute("aria-label", `${collection.name}, ${collection.trackCount} tracks`);
+					card.setAttribute(
+						"aria-label",
+						`${collection.name}, ${collection.trackCount} tracks`,
+					);
 					const selectedCovers = getSelectedCovers(collection, collectionIndex);
 					card.innerHTML = `<div class="cover-layout adaptive-covers" data-count="${collection.coverCount}">${createCoverMarkup(selectedCovers, collectionIndex)}</div><div class="card-copy"><strong>${collection.name}</strong><span>${collection.trackCount} tracks</span></div>`;
 					attachCardInteractions(card, collection);
@@ -286,18 +899,23 @@
 					cover.classList.remove("is-loaded", "has-error");
 					cover.classList.add("is-loading");
 					image.removeAttribute("src");
-					const timer = setTimeout(() => {
-						cover.classList.remove("is-loading");
-						if (!source) {
-							cover.classList.add("has-error");
-							return;
-						}
-						image.src = source;
-						cover.classList.add("is-loaded");
-					}, 320 + (index % 4) * 90);
+					const timer = setTimeout(
+						() => {
+							cover.classList.remove("is-loading");
+							if (!source) {
+								cover.classList.add("has-error");
+								return;
+							}
+							image.src = source;
+							cover.classList.add("is-loaded");
+						},
+						320 + (index % 4) * 90,
+					);
 					loadingTimers.push(timer);
 				});
-				stateOutput.textContent = isProposal ? "Muted placeholders fade into artwork; the final card demonstrates fallback." : "Baseline artwork appears without a reveal transition; the final card demonstrates fallback.";
+				stateOutput.textContent = isProposal
+					? "Muted placeholders fade into artwork; the final card demonstrates fallback."
+					: "Baseline artwork appears without a reveal transition; the final card demonstrates fallback.";
 			}
 
 			function updateLayoutState() {
@@ -318,7 +936,8 @@
 				document.body.classList.toggle("mode-proposal", isProposal);
 				document.body.classList.toggle("mode-baseline", !isProposal);
 				document.querySelectorAll("[data-mode]").forEach((button) => {
-					const isActive = button.dataset.mode === (isProposal ? "proposal" : "baseline");
+					const isActive =
+						button.dataset.mode === (isProposal ? "proposal" : "baseline");
 					button.classList.toggle("is-active", isActive);
 					button.setAttribute("aria-pressed", String(isActive));
 				});
@@ -361,7 +980,8 @@
 					});
 					button.setAttribute("aria-pressed", "false");
 				}
-				if (activePrototype.key === "loading") createAction("Replay loading", startLoadingDemo);
+				if (activePrototype.key === "loading")
+					createAction("Replay loading", startLoadingDemo);
 			}
 
 			function updateExperimentState() {
@@ -385,11 +1005,18 @@
 			function configurePrototype() {
 				document.body.classList.add(`polish-${activePrototype.key}`);
 				document.title = `PROTOTYPE — ${activePrototype.title}`;
-				document.getElementById("prototype-question").textContent = activePrototype.question;
-				document.getElementById("experiment-title").textContent = activePrototype.title;
-				document.getElementById("experiment-summary").textContent = activePrototype.summary;
-				document.getElementById("previous-prototype").href = prototypePages[(prototypeIndex - 1 + prototypePages.length) % prototypePages.length].file;
-				document.getElementById("next-prototype").href = prototypePages[(prototypeIndex + 1) % prototypePages.length].file;
+				document.getElementById("prototype-question").textContent =
+					activePrototype.question;
+				document.getElementById("experiment-title").textContent =
+					activePrototype.title;
+				document.getElementById("experiment-summary").textContent =
+					activePrototype.summary;
+				document.getElementById("previous-prototype").href =
+					prototypePages[
+						(prototypeIndex - 1 + prototypePages.length) % prototypePages.length
+					].file;
+				document.getElementById("next-prototype").href =
+					prototypePages[(prototypeIndex + 1) % prototypePages.length].file;
 				configureExperimentAction();
 				updateModeState();
 				updateExperimentState();
@@ -397,9 +1024,15 @@
 
 			function render() {
 				const isGenresPage = currentPage === "genres";
-				document.getElementById("page-title").textContent = isGenresPage ? "Genres" : "Playlists";
-				document.getElementById("page-subtitle").textContent = isGenresPage ? "Browse tracks by genre." : "Your saved playlists.";
-				document.getElementById("page-toggle").textContent = isGenresPage ? "Show Playlists" : "Show Genres";
+				document.getElementById("page-title").textContent = isGenresPage
+					? "Genres"
+					: "Playlists";
+				document.getElementById("page-subtitle").textContent = isGenresPage
+					? "Browse tracks by genre."
+					: "Your saved playlists.";
+				document.getElementById("page-toggle").textContent = isGenresPage
+					? "Show Playlists"
+					: "Show Genres";
 				document.querySelectorAll(".page-link").forEach((link) => {
 					link.classList.toggle("is-active", link.dataset.page === currentPage);
 				});
@@ -409,17 +1042,32 @@
 				requestAnimationFrame(updateLayoutState);
 			}
 
-			document.getElementById("page-toggle").addEventListener("click", () => { currentPage = currentPage === "genres" ? "playlists" : "genres"; render(); });
+			document.getElementById("page-toggle").addEventListener("click", () => {
+				currentPage = currentPage === "genres" ? "playlists" : "genres";
+				render();
+			});
 			document.querySelectorAll(".page-link").forEach((link) => {
-				link.addEventListener("click", () => { currentPage = link.dataset.page; render(); });
+				link.addEventListener("click", () => {
+					currentPage = link.dataset.page;
+					render();
+				});
 			});
 			document.querySelectorAll("[data-mode]").forEach((button) => {
 				button.addEventListener("click", () => setMode(button.dataset.mode));
 			});
 			window.addEventListener("keydown", (event) => {
 				if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return;
-				if (["INPUT", "TEXTAREA", "BUTTON"].includes(document.activeElement?.tagName) || document.activeElement?.isContentEditable) return;
-				const target = event.key === "ArrowLeft" ? document.getElementById("previous-prototype") : document.getElementById("next-prototype");
+				if (
+					["INPUT", "TEXTAREA", "BUTTON"].includes(
+						document.activeElement?.tagName,
+					) ||
+					document.activeElement?.isContentEditable
+				)
+					return;
+				const target =
+					event.key === "ArrowLeft"
+						? document.getElementById("previous-prototype")
+						: document.getElementById("next-prototype");
 				target.click();
 			});
 			const resizeObserver = new ResizeObserver(updateLayoutState);

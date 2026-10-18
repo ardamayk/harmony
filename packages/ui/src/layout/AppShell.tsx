@@ -1,82 +1,125 @@
-import type { ReactNode } from "react";
-import { getNavPanel, getQueuePanel } from "../widgets/layout-utils";
+import { type CSSProperties, type ReactNode, useRef } from "react";
+import { getQueuePanel } from "../widgets/layout-utils";
 import { useLayout } from "./LayoutProvider";
-import { QueuePanel } from "./QueuePanel";
-import { WidgetDndProvider, WidgetDock } from "./WidgetDock";
+import { QueueDrawer } from "./QueueDrawer";
+import { QueuePinProvider, useQueuePin } from "./QueuePinProvider";
+import { Sidebar } from "./Sidebar";
+import {
+	PLAYER_BAR_HEIGHT_PX,
+	QUEUE_DRAWER_CONTENT_CLEARANCE,
+} from "./shell-metrics";
+import { Toaster } from "./Toaster";
+import { TopNav, type WindowControls } from "./TopNav";
+import { TopNavActionsProvider } from "./TopNavActions";
+import { useQueueDrawerWidth } from "./use-queue-drawer-width";
+import { WidgetDndProvider } from "./WidgetDock";
 
-export function AppShell({
-	children,
-	sidebar,
-	bottom,
-}: {
+export { PLAYER_BAR_HEIGHT_PX } from "./shell-metrics";
+
+// Docked Player Bar: scrolled content never ends hidden under the bar.
+const PLAYER_DOCK_CONTENT_PADDING = "pb-(--player-dock-clearance)";
+const PLAYER_DOCK_CLEARANCE = `${PLAYER_BAR_HEIGHT_PX}px`;
+
+/**
+ * App Shell: the top bar (Home and search) across the top, the Sidebar with
+ * the library sections on the left, the page beside it, the Player Bar
+ * docked along the bottom and the Queue Drawer on the right. While the
+ * drawer is open and pinned the page gives way to it; unpinned it floats
+ * over the page.
+ */
+export function AppShell(props: AppShellProps) {
+	return (
+		<QueuePinProvider>
+			<TopNavActionsProvider>
+				<AppShellFrame {...props} />
+			</TopNavActionsProvider>
+		</QueuePinProvider>
+	);
+}
+
+type AppShellProps = {
 	children?: ReactNode;
-	sidebar?: ReactNode;
 	bottom?: ReactNode;
-}) {
+	/** Opens the host's library search from the top bar's search field. */
+	onSearch?: () => void;
+	/** Minimize/maximize/close in the Top Nav, for a host without a title bar. */
+	windowControls?: WindowControls;
+};
+
+function AppShellFrame({
+	children,
+	bottom,
+	onSearch,
+	windowControls,
+}: AppShellProps) {
+	const shellRef = useRef<HTMLDivElement>(null);
+	const metrics = useQueueDrawerWidth(shellRef);
 	const { preferences } = useLayout();
-	const { layout } = preferences;
-	const navPanel = getNavPanel(layout.sidebarPosition);
-	const queuePanel = getQueuePanel(layout.sidebarPosition);
-	const navCollapsed = layout.collapsed[navPanel];
-	const queueCollapsed = layout.collapsed[queuePanel];
-
-	const navWidgetPanel = navPanel === "left" ? "left" : "right";
-	const queueWidgetPanel = queuePanel === "left" ? "left" : "right";
-
-	const navColumn = (
-		<div className="flex h-full w-full flex-col overflow-hidden bg-sidebar">
-			{sidebar}
-			{!navCollapsed ? (
-				<div className="min-h-0 flex-1 overflow-y-auto border-sidebar-border border-t">
-					<WidgetDock panel={navWidgetPanel} />
-				</div>
-			) : null}
-		</div>
-	);
-	const fixedNavColumn = (
-		<aside className="h-full w-fit min-w-max max-w-[min(22rem,45vw)] shrink-0 overflow-hidden">
-			{navColumn}
-		</aside>
-	);
-
-	const queueColumn = (
-		<div className="flex h-full w-full flex-col overflow-hidden bg-queue text-queue-foreground">
-			<div className="min-h-0 flex-[2] overflow-hidden">
-				<QueuePanel />
-			</div>
-			{!queueCollapsed ? (
-				<div className="min-h-0 flex-1 overflow-y-auto border-border border-t">
-					<WidgetDock panel={queueWidgetPanel} />
-				</div>
-			) : null}
-		</div>
-	);
-	const fixedQueueColumn = (
-		<aside
-			data-queue-column
-			className={`h-full w-80 shrink-0 overflow-hidden border-border ${
-				queuePanel === "left" ? "border-r" : "border-l"
-			}`}
-		>
-			{queueColumn}
-		</aside>
-	);
+	const queuePanel = getQueuePanel(preferences.layout.sidebarPosition);
+	const queuePin = useQueuePin();
+	// `data-queue-open` marks the page as making room for the drawer, which
+	// only a pinned drawer asks for.
+	const queueTakesSpace =
+		!preferences.layout.collapsed[queuePanel] && (queuePin?.pinned ?? true);
 
 	return (
 		<WidgetDndProvider>
-			<div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden bg-background text-foreground">
-				<div className="flex min-h-0 flex-1 overflow-hidden">
-					{navPanel === "left" ? fixedNavColumn : null}
-					{queuePanel === "left" && !queueCollapsed ? fixedQueueColumn : null}
-					<main className="flex h-full min-w-0 flex-1 flex-col overflow-auto bg-background">
+			<div
+				ref={shellRef}
+				style={
+					{
+						"--queue-drawer-width": metrics && `${metrics.queueWidth}px`,
+						"--library-search-width": metrics && `${metrics.searchWidth}px`,
+						"--library-search-center": metrics && `${metrics.searchCenter}px`,
+						"--library-search-top": metrics && `${metrics.searchTop}px`,
+					} as CSSProperties
+				}
+				data-app-shell
+				className="relative flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden bg-background text-foreground"
+			>
+				<TopNav onSearch={onSearch} windowControls={windowControls} />
+				<div
+					data-shell-inset-probe
+					aria-hidden
+					className="pointer-events-none invisible absolute w-(--shell-inset,2rem)"
+				/>
+				<div
+					className="relative flex h-full min-h-0 min-w-0 flex-1 overflow-hidden"
+					style={
+						{
+							"--player-dock-clearance": bottom
+								? PLAYER_DOCK_CLEARANCE
+								: undefined,
+						} as CSSProperties
+					}
+				>
+					<Sidebar />
+					<main
+						data-queue-open={queueTakesSpace ? "" : undefined}
+						className={`flex h-full min-w-0 flex-1 flex-col overflow-auto bg-background pr-0 data-[queue-open]:pr-(--queue-drawer-clearance) transition-padding duration-300 ease-out ${
+							bottom ? PLAYER_DOCK_CONTENT_PADDING : ""
+						}`}
+						style={
+							{
+								"--queue-drawer-clearance": QUEUE_DRAWER_CONTENT_CLEARANCE,
+							} as CSSProperties
+						}
+					>
 						{children}
 					</main>
-					{queuePanel === "right" && !queueCollapsed ? fixedQueueColumn : null}
-					{navPanel === "right" ? fixedNavColumn : null}
+					{bottom ? (
+						<div
+							data-player-dock
+							className="pointer-events-none absolute inset-x-0 bottom-0 z-50"
+						>
+							<div data-player-dock-column className="w-full">
+								<div className="pointer-events-auto">{bottom}</div>
+							</div>
+						</div>
+					) : null}
 				</div>
-				{bottom ? (
-					<div className="shrink-0 border-border border-t">{bottom}</div>
-				) : null}
+				<QueueDrawer abovePlayerBar={Boolean(bottom)} />
+				<Toaster />
 			</div>
 		</WidgetDndProvider>
 	);

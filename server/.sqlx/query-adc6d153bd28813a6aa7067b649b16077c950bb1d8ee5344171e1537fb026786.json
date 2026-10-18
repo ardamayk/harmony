@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE managed_import_jobs\n                SET import_plan_json = ?1, replace_track_id = NULLIF(CAST(?2 AS TEXT), '')\n                WHERE id = ?3 AND batch_id = ?4 AND status = 'awaiting_confirmation'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "adc6d153bd28813a6aa7067b649b16077c950bb1d8ee5344171e1537fb026786"
+}

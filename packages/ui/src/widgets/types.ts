@@ -1,5 +1,6 @@
 import type {
 	LayoutPreferences,
+	PlaybackPreferences,
 	ThemePreferences,
 	UserPreferences,
 } from "@repo/api-client";
@@ -28,7 +29,20 @@ export const defaultTheme: ThemePreferences = {
 	preset: "earthly",
 };
 
+export const defaultPlayback: PlaybackPreferences = {
+	seekStepSeconds: 5,
+	seekStepLargeSeconds: 30,
+	playbackRate: 1,
+	transitionFadeMs: 0,
+	showWaveform: true,
+	accentFromCover: false,
+	showUpNext: true,
+	autoSkipOnErrorSeconds: 5,
+	hoverTimestamp: true,
+};
+
 export const defaultPreferences: UserPreferences = {
 	theme: defaultTheme,
 	layout: defaultLayout,
+	playback: defaultPlayback,
 };

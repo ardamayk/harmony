@@ -7,16 +7,48 @@ import {
 	waitFor,
 	within,
 } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+	afterEach,
+	beforeEach,
+	describe,
+	expect,
+	it,
+	vi,
+} from "vite-plus/test";
 import { ArtistsPage } from "./-artists-page";
 
 const mocks = vi.hoisted(() => ({
 	listArtists: vi.fn(),
 }));
 
+vi.mock("@tanstack/react-router", async (importOriginal) => ({
+	...(await importOriginal<typeof import("@tanstack/react-router")>()),
+	Link: ({
+		children,
+		to,
+		params,
+		...props
+	}: {
+		children: React.ReactNode;
+		to: string;
+		params?: Record<string, string>;
+	}) => (
+		<a
+			href={Object.entries(params ?? {}).reduce(
+				(href, [key, value]) => href.replace(`$${key}`, value),
+				to,
+			)}
+			{...props}
+		>
+			{children}
+		</a>
+	),
+}));
+
 vi.mock("#/lib/api", () => ({
 	apiClient: {
 		listArtists: mocks.listArtists,
+		getArtistPhotoUrl: (artistId: string) => `/photo/${artistId}`,
 	},
 }));
 
@@ -46,13 +78,11 @@ describe("artists route", () => {
 		const header = screen
 			.getByRole("heading", { name: "Artists" })
 			.closest("header");
-		expect(
-			header?.querySelector(".min-\\[1801px\\]\\:max-w-\\[1476px\\]"),
-		).toBeTruthy();
+		expect(header?.querySelector(".page-content-column")).toBeTruthy();
 		expect(
 			screen
 				.getByTestId("artists-page-content")
-				.querySelector(".min-\\[1801px\\]\\:max-w-\\[1476px\\]"),
+				.querySelector(".page-content-column"),
 		).toBeTruthy();
 	});
 
@@ -79,23 +109,16 @@ describe("artists route", () => {
 		});
 	});
 
-	it("uses different empty copy before and after an artist search", async () => {
+	it("uses different empty copy with and without a search from the URL", async () => {
 		mocks.listArtists.mockResolvedValue({ items: [] });
 		const firstRender = renderWithQuery(<ArtistsPage />);
 
 		expect(await screen.findByText("No artists yet")).toBeTruthy();
-		expect(screen.getByText("Scan your library to get started.")).toBeTruthy();
+		expect(screen.getByText("Import music to get started.")).toBeTruthy();
 		firstRender.unmount();
 
-		mocks.listArtists.mockResolvedValue({
-			items: [{ id: "artist-1", name: "Nina Simone", albumCount: 7 }],
-		});
-		renderWithQuery(<ArtistsPage />);
-		await screen.findByText("Nina Simone");
 		mocks.listArtists.mockResolvedValue({ items: [] });
-		fireEvent.change(screen.getByPlaceholderText("Search artists..."), {
-			target: { value: "unmatched" },
-		});
+		renderWithQuery(<ArtistsPage initialSearch="unmatched" />);
 
 		expect(
 			await screen.findByText("No artists match your search"),

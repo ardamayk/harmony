@@ -2,17 +2,6 @@
  * Palette slot contract (dark → light). Each preset CSS file defines --theme-1 … --theme-6.
  * layers.css maps slots to semantic tokens; optional semantic/*.css may override per preset.
  */
-export const PALETTE_SLOTS = [
-	"theme-1",
-	"theme-2",
-	"theme-3",
-	"theme-4",
-	"theme-5",
-	"theme-6",
-] as const;
-
-export type PaletteSlot = (typeof PALETTE_SLOTS)[number];
-
 /** Which palette slot each semantic role uses (see layers.css). */
 export const themeSlotContract = {
 	dark: {

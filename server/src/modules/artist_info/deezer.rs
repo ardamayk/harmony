@@ -1,0 +1,295 @@
+//! Finds an Artist's photo and most popular Track titles, and an Album's
+//! genres, on Deezer's public API (no key). The Artist is found through one of their Albums, so two
+//! Artists sharing a name resolve to the one on the user's Album (ADR 0027).
+
+use super::fetch;
+use super::popular::base_title;
+use serde::Deserialize;
+use serde_json::Value;
+
+/// How many of the Artist's Albums are tried before the name search.
+const ALBUM_ATTEMPTS: usize = 3;
+/// Deezer's empty-picture URLs have no image id between the slashes.
+const PLACEHOLDER_PATH: &str = "/images/artist//";
+/// How many top Tracks are asked for; Deezer answers at most 50.
+const TOP_TRACKS: &str = "50";
+
+#[derive(Deserialize)]
+struct Hits<T> {
+    #[serde(default = "Vec::new")]
+    data: Vec<T>,
+    // Deezer answers quota and query errors with HTTP 200 and this object.
+    error: Option<Value>,
+}
+
+#[derive(Deserialize)]
+struct AlbumHit {
+    #[serde(default)]
+    id: i64,
+    #[serde(default)]
+    title: String,
+    artist: Artist,
+}
+
+#[derive(Deserialize)]
+struct AlbumGenres {
+    #[serde(default)]
+    genres: Hits<Genre>,
+    error: Option<Value>,
+}
+
+#[derive(Deserialize)]
+struct Genre {
+    #[serde(default)]
+    name: String,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+struct Artist {
+    #[serde(default)]
+    id: i64,
+    name: String,
+    #[serde(default)]
+    picture_big: String,
+    /// 1000px; the Artist page shows the photo as a full-width banner.
+    #[serde(default)]
+    picture_xl: String,
+    #[serde(default)]
+    nb_fan: i64,
+}
+
+#[derive(Deserialize)]
+struct TopTrack {
+    #[serde(default)]
+    title: String,
+    /// The title without its version ("Live", "Remastered"); may be empty.
+    #[serde(default)]
+    title_short: String,
+}
+
+/// The URL of the Artist's 1000px picture (500px when that is all there
+/// is), `None` when Deezer has none.
+pub async fn find_picture(
+    client: &reqwest::Client,
+    base_url: &str,
+    name: &str,
+    album_titles: &[String],
+) -> Result<Option<String>, String> {
+    // A namesake's empty profile can share the Album results.
+    let artist = find_artist(client, base_url, name, album_titles, |artist| {
+        picture(artist).is_some()
+    })
+    .await?;
+    Ok(artist.and_then(|artist| picture(&artist)))
+}
+
+/// The Artist's most popular Track titles on Deezer, best first; empty when
+/// Deezer does not know the Artist.
+pub async fn find_top_titles(
+    client: &reqwest::Client,
+    base_url: &str,
+    name: &str,
+    album_titles: &[String],
+) -> Result<Vec<String>, String> {
+    let Some(artist) =
+        find_artist(client, base_url, name, album_titles, |artist| artist.id > 0).await?
+    else {
+        return Ok(Vec::new());
+    };
+    let url = format!("{base_url}/artist/{}/top", artist.id);
+    let hits: Hits<TopTrack> = fetch::json(client, &url, &[("limit", TOP_TRACKS)]).await?;
+    if let Some(error) = hits.error {
+        return Err(format!("GET {url}: {error}"));
+    }
+    Ok(hits
+        .into_iter()
+        .map(|track| {
+            if track.title_short.trim().is_empty() {
+                track.title
+            } else {
+                track.title_short
+            }
+        })
+        .filter(|title| !title.trim().is_empty())
+        .collect())
+}
+
+/// The genres Deezer gives the Album by this Artist with this title, its
+/// edition aside ("Deluxe"); empty when Deezer has no such Album.
+pub async fn find_album_genres(
+    client: &reqwest::Client,
+    base_url: &str,
+    artist_name: &str,
+    title: &str,
+) -> Result<Vec<String>, String> {
+    let query = format!("{artist_name} {title}");
+    let hits: Hits<AlbumHit> = search(client, base_url, "album", &query).await?;
+    let Some(album) = hits.into_iter().find(|hit| {
+        hit.id > 0 && same_name(&hit.artist.name, artist_name) && same_title(&hit.title, title)
+    }) else {
+        return Ok(Vec::new());
+    };
+    let url = format!("{base_url}/album/{}", album.id);
+    let album: AlbumGenres = fetch::json(client, &url, &[]).await?;
+    if let Some(error) = album.error {
+        return Err(format!("GET {url}: {error}"));
+    }
+    Ok(album
+        .genres
+        .into_iter()
+        .map(|genre| genre.name.trim().to_owned())
+        .filter(|name| !name.is_empty())
+        .collect())
+}
+
+/// The Deezer Artist on one of the user's Albums that `accept`s, else the
+/// best name match.
+async fn find_artist(
+    client: &reqwest::Client,
+    base_url: &str,
+    name: &str,
+    album_titles: &[String],
+    accept: impl Fn(&Artist) -> bool,
+) -> Result<Option<Artist>, String> {
+    // Plain words, not Deezer's `artist:"…"` syntax: that one leaves out
+    // well-known Artists (Taylor Swift) while plain words rank them first.
+    for title in album_titles.iter().take(ALBUM_ATTEMPTS) {
+        let query = format!("{name} {title}");
+        let hits: Hits<AlbumHit> = search(client, base_url, "album", &query).await?;
+        if let Some(artist) = hits
+            .into_iter()
+            .map(|hit| hit.artist)
+            .find(|artist| same_name(&artist.name, name) && accept(artist))
+        {
+            return Ok(Some(artist));
+        }
+    }
+    let hits: Hits<Artist> = search(client, base_url, "artist", name).await?;
+    Ok(best_by_name(hits.into_iter().collect(), name).filter(|artist| accept(artist)))
+}
+
+async fn search<T: serde::de::DeserializeOwned>(
+    client: &reqwest::Client,
+    base_url: &str,
+    kind: &str,
+    query: &str,
+) -> Result<Hits<T>, String> {
+    let url = format!("{base_url}/search/{kind}");
+    let hits: Hits<T> = fetch::json(client, &url, &[("q", query), ("limit", "10")]).await?;
+    match hits.error {
+        Some(error) => Err(format!("GET {url}: {error}")),
+        None => Ok(hits),
+    }
+}
+
+impl<T> Default for Hits<T> {
+    fn default() -> Self {
+        Self {
+            data: Vec::new(),
+            error: None,
+        }
+    }
+}
+
+impl<T> IntoIterator for Hits<T> {
+    type Item = T;
+    type IntoIter = std::vec::IntoIter<T>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.data.into_iter()
+    }
+}
+
+fn same_name(a: &str, b: &str) -> bool {
+    caseless::default_caseless_match_str(a.trim(), b.trim())
+}
+
+fn same_title(a: &str, b: &str) -> bool {
+    let a = base_title(a);
+    !a.is_empty() && a == base_title(b)
+}
+
+/// Deezer's ranking is unreliable for homonyms: an exact-case name first,
+/// then a case-insensitive one, then the most fans; no name match, none.
+fn best_by_name(artists: Vec<Artist>, name: &str) -> Option<Artist> {
+    artists
+        .into_iter()
+        .filter(|artist| same_name(&artist.name, name))
+        .max_by_key(|artist| (artist.name.trim() == name.trim(), artist.nb_fan))
+}
+
+fn picture(artist: &Artist) -> Option<String> {
+    [&artist.picture_xl, &artist.picture_big]
+        .into_iter()
+        .map(|url| url.trim())
+        .find(|url| !url.is_empty() && !url.contains(PLACEHOLDER_PATH))
+        .map(str::to_owned)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn artist(name: &str, fans: i64) -> Artist {
+        Artist {
+            id: 1,
+            name: name.to_owned(),
+            picture_big: format!("https://cdn.example/images/artist/{name}/500x500.jpg"),
+            picture_xl: String::new(),
+            nb_fan: fans,
+        }
+    }
+
+    #[test]
+    fn prefers_the_exact_case_name_then_the_most_fans() {
+        let found = best_by_name(
+            vec![
+                artist("Other", 900),
+                artist("SKILLET", 500),
+                artist("Skillet", 10),
+                artist("Skillet", 20),
+            ],
+            "Skillet",
+        );
+        assert_eq!(found, Some(artist("Skillet", 20)));
+        let found = best_by_name(vec![artist("SKILLET", 5), artist("Other", 9)], "Skillet");
+        assert_eq!(found, Some(artist("SKILLET", 5)));
+        assert_eq!(best_by_name(vec![artist("Other", 9)], "Skillet"), None);
+    }
+
+    #[test]
+    fn treats_the_empty_picture_as_none() {
+        let mut empty = artist("Skillet", 1);
+        empty.picture_big =
+            "https://cdn.example/images/artist//500x500-000000-80-0-0.jpg".to_owned();
+        assert_eq!(picture(&empty), None);
+        assert!(picture(&artist("Skillet", 1)).is_some());
+        let mut both = artist("Skillet", 1);
+        both.picture_xl = "https://cdn.example/images/artist/a/1000x1000.jpg".to_owned();
+        assert_eq!(picture(&both).as_deref(), Some(both.picture_xl.as_str()));
+    }
+
+    #[test]
+    fn matches_album_titles_whatever_their_edition() {
+        assert!(same_title("Awake (Deluxe Edition)", "awake"));
+        assert!(same_title("Awake", "Awake - 2009 Remaster"));
+        assert!(!same_title("Awake", "Comatose"));
+        assert!(!same_title("", ""));
+    }
+
+    #[test]
+    fn reads_album_genres() {
+        let album: AlbumGenres =
+            serde_json::from_str(r#"{"id":1,"genres":{"data":[{"id":152,"name":"Rock"}]}}"#)
+                .expect("album");
+        let names: Vec<String> = album.genres.into_iter().map(|genre| genre.name).collect();
+        assert_eq!(names, ["Rock"]);
+    }
+
+    #[test]
+    fn reads_deezer_errors_returned_with_http_200() {
+        let hits: Hits<Artist> =
+            serde_json::from_str(r#"{"error":{"type":"Exception","code":4}}"#).expect("hits");
+        assert!(hits.error.is_some());
+        assert!(hits.data.is_empty());
+    }
+}

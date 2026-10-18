@@ -9,57 +9,38 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as HomeRouteImport } from './routes/home'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as SettingsIndexRouteImport } from './routes/settings/index'
-import { Route as RadioIndexRouteImport } from './routes/radio/index'
-import { Route as PlaylistsIndexRouteImport } from './routes/playlists/index'
-import { Route as LibraryIndexRouteImport } from './routes/library/index'
-import { Route as FoldersIndexRouteImport } from './routes/folders/index'
+import { Route as HomeRouteImport } from './routes/home'
+import { Route as MiniRouteImport } from './routes/mini'
 import { Route as FavoritesIndexRouteImport } from './routes/favorites/index'
-import { Route as RadioDiscoverRouteImport } from './routes/radio/discover'
-import { Route as RadioStationIdRouteImport } from './routes/radio/$stationId'
-import { Route as PlaylistsPlaylistIdRouteImport } from './routes/playlists/$playlistId'
+import { Route as LibraryIndexRouteImport } from './routes/library/index'
 import { Route as LibraryAlbumIdRouteImport } from './routes/library/$albumId'
-import { Route as LibraryTracksIndexRouteImport } from './routes/library/tracks/index'
-import { Route as LibraryGenresIndexRouteImport } from './routes/library/genres/index'
-import { Route as LibraryArtistsIndexRouteImport } from './routes/library/artists/index'
+import { Route as PlaylistsIndexRouteImport } from './routes/playlists/index'
+import { Route as PlaylistsPlaylistIdRouteImport } from './routes/playlists/$playlistId'
+import { Route as RadioIndexRouteImport } from './routes/radio/index'
+import { Route as RadioStationIdRouteImport } from './routes/radio/$stationId'
+import { Route as RadioDiscoverRouteImport } from './routes/radio/discover'
+import { Route as SettingsIndexRouteImport } from './routes/settings/index'
 import { Route as LibraryAlbumsIndexRouteImport } from './routes/library/albums/index'
+import { Route as LibraryArtistsIndexRouteImport } from './routes/library/artists/index'
+import { Route as LibraryArtistsArtistIdRouteImport } from './routes/library/artists/$artistId'
+import { Route as LibraryGenresIndexRouteImport } from './routes/library/genres/index'
 import { Route as LibraryGenresGenreRouteImport } from './routes/library/genres/$genre'
+import { Route as LibraryTracksIndexRouteImport } from './routes/library/tracks/index'
 
-const HomeRoute = HomeRouteImport.update({
-  id: '/home',
-  path: '/home',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const SettingsIndexRoute = SettingsIndexRouteImport.update({
-  id: '/settings/',
-  path: '/settings/',
+const HomeRoute = HomeRouteImport.update({
+  id: '/home',
+  path: '/home',
   getParentRoute: () => rootRouteImport,
 } as any)
-const RadioIndexRoute = RadioIndexRouteImport.update({
-  id: '/radio/',
-  path: '/radio/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PlaylistsIndexRoute = PlaylistsIndexRouteImport.update({
-  id: '/playlists/',
-  path: '/playlists/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const LibraryIndexRoute = LibraryIndexRouteImport.update({
-  id: '/library/',
-  path: '/library/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const FoldersIndexRoute = FoldersIndexRouteImport.update({
-  id: '/folders/',
-  path: '/folders/',
+const MiniRoute = MiniRouteImport.update({
+  id: '/mini',
+  path: '/mini',
   getParentRoute: () => rootRouteImport,
 } as any)
 const FavoritesIndexRoute = FavoritesIndexRouteImport.update({
@@ -67,19 +48,9 @@ const FavoritesIndexRoute = FavoritesIndexRouteImport.update({
   path: '/favorites/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const RadioDiscoverRoute = RadioDiscoverRouteImport.update({
-  id: '/radio/discover',
-  path: '/radio/discover',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const RadioStationIdRoute = RadioStationIdRouteImport.update({
-  id: '/radio/$stationId',
-  path: '/radio/$stationId',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PlaylistsPlaylistIdRoute = PlaylistsPlaylistIdRouteImport.update({
-  id: '/playlists/$playlistId',
-  path: '/playlists/$playlistId',
+const LibraryIndexRoute = LibraryIndexRouteImport.update({
+  id: '/library/',
+  path: '/library/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LibraryAlbumIdRoute = LibraryAlbumIdRouteImport.update({
@@ -87,19 +58,34 @@ const LibraryAlbumIdRoute = LibraryAlbumIdRouteImport.update({
   path: '/library/$albumId',
   getParentRoute: () => rootRouteImport,
 } as any)
-const LibraryTracksIndexRoute = LibraryTracksIndexRouteImport.update({
-  id: '/library/tracks/',
-  path: '/library/tracks/',
+const PlaylistsIndexRoute = PlaylistsIndexRouteImport.update({
+  id: '/playlists/',
+  path: '/playlists/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const LibraryGenresIndexRoute = LibraryGenresIndexRouteImport.update({
-  id: '/library/genres/',
-  path: '/library/genres/',
+const PlaylistsPlaylistIdRoute = PlaylistsPlaylistIdRouteImport.update({
+  id: '/playlists/$playlistId',
+  path: '/playlists/$playlistId',
   getParentRoute: () => rootRouteImport,
 } as any)
-const LibraryArtistsIndexRoute = LibraryArtistsIndexRouteImport.update({
-  id: '/library/artists/',
-  path: '/library/artists/',
+const RadioIndexRoute = RadioIndexRouteImport.update({
+  id: '/radio/',
+  path: '/radio/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RadioStationIdRoute = RadioStationIdRouteImport.update({
+  id: '/radio/$stationId',
+  path: '/radio/$stationId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RadioDiscoverRoute = RadioDiscoverRouteImport.update({
+  id: '/radio/discover',
+  path: '/radio/discover',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsIndexRoute = SettingsIndexRouteImport.update({
+  id: '/settings/',
+  path: '/settings/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LibraryAlbumsIndexRoute = LibraryAlbumsIndexRouteImport.update({
@@ -107,25 +93,46 @@ const LibraryAlbumsIndexRoute = LibraryAlbumsIndexRouteImport.update({
   path: '/library/albums/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LibraryArtistsIndexRoute = LibraryArtistsIndexRouteImport.update({
+  id: '/library/artists/',
+  path: '/library/artists/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LibraryArtistsArtistIdRoute = LibraryArtistsArtistIdRouteImport.update({
+  id: '/library/artists/$artistId',
+  path: '/library/artists/$artistId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LibraryGenresIndexRoute = LibraryGenresIndexRouteImport.update({
+  id: '/library/genres/',
+  path: '/library/genres/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LibraryGenresGenreRoute = LibraryGenresGenreRouteImport.update({
   id: '/library/genres/$genre',
   path: '/library/genres/$genre',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LibraryTracksIndexRoute = LibraryTracksIndexRouteImport.update({
+  id: '/library/tracks/',
+  path: '/library/tracks/',
   getParentRoute: () => rootRouteImport,
 } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/home': typeof HomeRoute
+  '/mini': typeof MiniRoute
   '/library/$albumId': typeof LibraryAlbumIdRoute
   '/playlists/$playlistId': typeof PlaylistsPlaylistIdRoute
   '/radio/$stationId': typeof RadioStationIdRoute
   '/radio/discover': typeof RadioDiscoverRoute
   '/favorites/': typeof FavoritesIndexRoute
-  '/folders/': typeof FoldersIndexRoute
   '/library/': typeof LibraryIndexRoute
   '/playlists/': typeof PlaylistsIndexRoute
   '/radio/': typeof RadioIndexRoute
   '/settings/': typeof SettingsIndexRoute
+  '/library/artists/$artistId': typeof LibraryArtistsArtistIdRoute
   '/library/genres/$genre': typeof LibraryGenresGenreRoute
   '/library/albums/': typeof LibraryAlbumsIndexRoute
   '/library/artists/': typeof LibraryArtistsIndexRoute
@@ -135,16 +142,17 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/home': typeof HomeRoute
+  '/mini': typeof MiniRoute
   '/library/$albumId': typeof LibraryAlbumIdRoute
   '/playlists/$playlistId': typeof PlaylistsPlaylistIdRoute
   '/radio/$stationId': typeof RadioStationIdRoute
   '/radio/discover': typeof RadioDiscoverRoute
   '/favorites': typeof FavoritesIndexRoute
-  '/folders': typeof FoldersIndexRoute
   '/library': typeof LibraryIndexRoute
   '/playlists': typeof PlaylistsIndexRoute
   '/radio': typeof RadioIndexRoute
   '/settings': typeof SettingsIndexRoute
+  '/library/artists/$artistId': typeof LibraryArtistsArtistIdRoute
   '/library/genres/$genre': typeof LibraryGenresGenreRoute
   '/library/albums': typeof LibraryAlbumsIndexRoute
   '/library/artists': typeof LibraryArtistsIndexRoute
@@ -155,16 +163,17 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/home': typeof HomeRoute
+  '/mini': typeof MiniRoute
   '/library/$albumId': typeof LibraryAlbumIdRoute
   '/playlists/$playlistId': typeof PlaylistsPlaylistIdRoute
   '/radio/$stationId': typeof RadioStationIdRoute
   '/radio/discover': typeof RadioDiscoverRoute
   '/favorites/': typeof FavoritesIndexRoute
-  '/folders/': typeof FoldersIndexRoute
   '/library/': typeof LibraryIndexRoute
   '/playlists/': typeof PlaylistsIndexRoute
   '/radio/': typeof RadioIndexRoute
   '/settings/': typeof SettingsIndexRoute
+  '/library/artists/$artistId': typeof LibraryArtistsArtistIdRoute
   '/library/genres/$genre': typeof LibraryGenresGenreRoute
   '/library/albums/': typeof LibraryAlbumsIndexRoute
   '/library/artists/': typeof LibraryArtistsIndexRoute
@@ -176,16 +185,17 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/home'
+    | '/mini'
     | '/library/$albumId'
     | '/playlists/$playlistId'
     | '/radio/$stationId'
     | '/radio/discover'
     | '/favorites/'
-    | '/folders/'
     | '/library/'
     | '/playlists/'
     | '/radio/'
     | '/settings/'
+    | '/library/artists/$artistId'
     | '/library/genres/$genre'
     | '/library/albums/'
     | '/library/artists/'
@@ -195,16 +205,17 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/home'
+    | '/mini'
     | '/library/$albumId'
     | '/playlists/$playlistId'
     | '/radio/$stationId'
     | '/radio/discover'
     | '/favorites'
-    | '/folders'
     | '/library'
     | '/playlists'
     | '/radio'
     | '/settings'
+    | '/library/artists/$artistId'
     | '/library/genres/$genre'
     | '/library/albums'
     | '/library/artists'
@@ -214,16 +225,17 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/home'
+    | '/mini'
     | '/library/$albumId'
     | '/playlists/$playlistId'
     | '/radio/$stationId'
     | '/radio/discover'
     | '/favorites/'
-    | '/folders/'
     | '/library/'
     | '/playlists/'
     | '/radio/'
     | '/settings/'
+    | '/library/artists/$artistId'
     | '/library/genres/$genre'
     | '/library/albums/'
     | '/library/artists/'
@@ -234,16 +246,17 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   HomeRoute: typeof HomeRoute
+  MiniRoute: typeof MiniRoute
   LibraryAlbumIdRoute: typeof LibraryAlbumIdRoute
   PlaylistsPlaylistIdRoute: typeof PlaylistsPlaylistIdRoute
   RadioStationIdRoute: typeof RadioStationIdRoute
   RadioDiscoverRoute: typeof RadioDiscoverRoute
   FavoritesIndexRoute: typeof FavoritesIndexRoute
-  FoldersIndexRoute: typeof FoldersIndexRoute
   LibraryIndexRoute: typeof LibraryIndexRoute
   PlaylistsIndexRoute: typeof PlaylistsIndexRoute
   RadioIndexRoute: typeof RadioIndexRoute
   SettingsIndexRoute: typeof SettingsIndexRoute
+  LibraryArtistsArtistIdRoute: typeof LibraryArtistsArtistIdRoute
   LibraryGenresGenreRoute: typeof LibraryGenresGenreRoute
   LibraryAlbumsIndexRoute: typeof LibraryAlbumsIndexRoute
   LibraryArtistsIndexRoute: typeof LibraryArtistsIndexRoute
@@ -253,13 +266,6 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/home': {
-      id: '/home'
-      path: '/home'
-      fullPath: '/home'
-      preLoaderRoute: typeof HomeRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/': {
       id: '/'
       path: '/'
@@ -267,39 +273,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/settings/': {
-      id: '/settings/'
-      path: '/settings'
-      fullPath: '/settings/'
-      preLoaderRoute: typeof SettingsIndexRouteImport
+    '/home': {
+      id: '/home'
+      path: '/home'
+      fullPath: '/home'
+      preLoaderRoute: typeof HomeRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/radio/': {
-      id: '/radio/'
-      path: '/radio'
-      fullPath: '/radio/'
-      preLoaderRoute: typeof RadioIndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/playlists/': {
-      id: '/playlists/'
-      path: '/playlists'
-      fullPath: '/playlists/'
-      preLoaderRoute: typeof PlaylistsIndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/library/': {
-      id: '/library/'
-      path: '/library'
-      fullPath: '/library/'
-      preLoaderRoute: typeof LibraryIndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/folders/': {
-      id: '/folders/'
-      path: '/folders'
-      fullPath: '/folders/'
-      preLoaderRoute: typeof FoldersIndexRouteImport
+    '/mini': {
+      id: '/mini'
+      path: '/mini'
+      fullPath: '/mini'
+      preLoaderRoute: typeof MiniRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/favorites/': {
@@ -309,25 +294,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof FavoritesIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/radio/discover': {
-      id: '/radio/discover'
-      path: '/radio/discover'
-      fullPath: '/radio/discover'
-      preLoaderRoute: typeof RadioDiscoverRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/radio/$stationId': {
-      id: '/radio/$stationId'
-      path: '/radio/$stationId'
-      fullPath: '/radio/$stationId'
-      preLoaderRoute: typeof RadioStationIdRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/playlists/$playlistId': {
-      id: '/playlists/$playlistId'
-      path: '/playlists/$playlistId'
-      fullPath: '/playlists/$playlistId'
-      preLoaderRoute: typeof PlaylistsPlaylistIdRouteImport
+    '/library/': {
+      id: '/library/'
+      path: '/library'
+      fullPath: '/library/'
+      preLoaderRoute: typeof LibraryIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/library/$albumId': {
@@ -337,25 +308,46 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LibraryAlbumIdRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/library/tracks/': {
-      id: '/library/tracks/'
-      path: '/library/tracks'
-      fullPath: '/library/tracks/'
-      preLoaderRoute: typeof LibraryTracksIndexRouteImport
+    '/playlists/': {
+      id: '/playlists/'
+      path: '/playlists'
+      fullPath: '/playlists/'
+      preLoaderRoute: typeof PlaylistsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/library/genres/': {
-      id: '/library/genres/'
-      path: '/library/genres'
-      fullPath: '/library/genres/'
-      preLoaderRoute: typeof LibraryGenresIndexRouteImport
+    '/playlists/$playlistId': {
+      id: '/playlists/$playlistId'
+      path: '/playlists/$playlistId'
+      fullPath: '/playlists/$playlistId'
+      preLoaderRoute: typeof PlaylistsPlaylistIdRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/library/artists/': {
-      id: '/library/artists/'
-      path: '/library/artists'
-      fullPath: '/library/artists/'
-      preLoaderRoute: typeof LibraryArtistsIndexRouteImport
+    '/radio/': {
+      id: '/radio/'
+      path: '/radio'
+      fullPath: '/radio/'
+      preLoaderRoute: typeof RadioIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/radio/$stationId': {
+      id: '/radio/$stationId'
+      path: '/radio/$stationId'
+      fullPath: '/radio/$stationId'
+      preLoaderRoute: typeof RadioStationIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/radio/discover': {
+      id: '/radio/discover'
+      path: '/radio/discover'
+      fullPath: '/radio/discover'
+      preLoaderRoute: typeof RadioDiscoverRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings/': {
+      id: '/settings/'
+      path: '/settings'
+      fullPath: '/settings/'
+      preLoaderRoute: typeof SettingsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/library/albums/': {
@@ -365,11 +357,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LibraryAlbumsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/library/artists/': {
+      id: '/library/artists/'
+      path: '/library/artists'
+      fullPath: '/library/artists/'
+      preLoaderRoute: typeof LibraryArtistsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/library/artists/$artistId': {
+      id: '/library/artists/$artistId'
+      path: '/library/artists/$artistId'
+      fullPath: '/library/artists/$artistId'
+      preLoaderRoute: typeof LibraryArtistsArtistIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/library/genres/': {
+      id: '/library/genres/'
+      path: '/library/genres'
+      fullPath: '/library/genres/'
+      preLoaderRoute: typeof LibraryGenresIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/library/genres/$genre': {
       id: '/library/genres/$genre'
       path: '/library/genres/$genre'
       fullPath: '/library/genres/$genre'
       preLoaderRoute: typeof LibraryGenresGenreRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/library/tracks/': {
+      id: '/library/tracks/'
+      path: '/library/tracks'
+      fullPath: '/library/tracks/'
+      preLoaderRoute: typeof LibraryTracksIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -378,16 +398,17 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   HomeRoute: HomeRoute,
+  MiniRoute: MiniRoute,
   LibraryAlbumIdRoute: LibraryAlbumIdRoute,
   PlaylistsPlaylistIdRoute: PlaylistsPlaylistIdRoute,
   RadioStationIdRoute: RadioStationIdRoute,
   RadioDiscoverRoute: RadioDiscoverRoute,
   FavoritesIndexRoute: FavoritesIndexRoute,
-  FoldersIndexRoute: FoldersIndexRoute,
   LibraryIndexRoute: LibraryIndexRoute,
   PlaylistsIndexRoute: PlaylistsIndexRoute,
   RadioIndexRoute: RadioIndexRoute,
   SettingsIndexRoute: SettingsIndexRoute,
+  LibraryArtistsArtistIdRoute: LibraryArtistsArtistIdRoute,
   LibraryGenresGenreRoute: LibraryGenresGenreRoute,
   LibraryAlbumsIndexRoute: LibraryAlbumsIndexRoute,
   LibraryArtistsIndexRoute: LibraryArtistsIndexRoute,

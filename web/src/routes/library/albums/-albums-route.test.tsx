@@ -7,7 +7,14 @@ import {
 	waitFor,
 	within,
 } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+	afterEach,
+	beforeEach,
+	describe,
+	expect,
+	it,
+	vi,
+} from "vite-plus/test";
 import { AlbumsPage } from "./-albums-page";
 
 const mocks = vi.hoisted(() => ({
@@ -30,10 +37,6 @@ vi.mock("#/components/album-grid", () => ({
 			))}
 		</div>
 	),
-}));
-
-vi.mock("#/components/scan-library-button", () => ({
-	ScanLibraryButton: () => <button type="button">Scan library</button>,
 }));
 
 function renderWithQuery(ui: React.ReactElement) {
@@ -69,56 +72,42 @@ describe("albums route", () => {
 		cleanup();
 	});
 
-	it("uses the shared compact sticky header and hidden page scrollbar", async () => {
+	it("keeps the page title for screen readers only and hides the page scrollbar", async () => {
 		renderWithQuery(<AlbumsPage />);
 
 		await screen.findByText("1989");
-		const header = screen
-			.getByRole("heading", { name: "Albums" })
-			.closest("header");
-		const searchInput = screen.getByPlaceholderText("Search albums...");
+		const heading = screen.getByRole("heading", { name: "Albums" });
 
-		expect(header?.className).toContain("sticky");
-		expect(header?.className).toContain("top-0");
-		expect(header?.className).toContain("py-3");
-		expect(header?.className).not.toContain("pt-7");
-		expect(
-			header?.querySelector(".min-\\[1801px\\]\\:max-w-\\[1476px\\]"),
-		).toBeTruthy();
-		expect(searchInput.closest("header")).toBe(header);
-		expect(searchInput.className).toContain("h-11");
-		expect(searchInput.className).toContain("pl-10");
+		// The lit Top Nav section already names the page.
+		expect(heading.className).toContain("sr-only");
+		expect(heading.closest("header")?.className).toContain("sr-only");
 		expect(screen.getByTestId("albums-page-shell").className).toContain(
 			"overflow-hidden",
 		);
 		expect(screen.getByTestId("albums-page-content").className).toContain(
-			"[scrollbar-width:none]",
+			"scrollbar-hidden",
 		);
 		expect(screen.getByTestId("albums-page-content").className).toContain(
-			"py-5",
+			"py-6",
 		);
 		expect(screen.getByTestId("albums-page-content").className).not.toContain(
 			"pt-8",
 		);
 		const collectionContainer = screen
 			.getByTestId("albums-page-content")
-			.querySelector(".min-\\[1801px\\]\\:max-w-\\[1476px\\]");
+			.querySelector(".page-content-column");
 		expect(collectionContainer).toBeTruthy();
 		expect(screen.getByRole("button", { name: "Filters" })).toBeTruthy();
 		expect(screen.queryByRole("button", { name: "Scan library" })).toBeNull();
 	});
 
-	it("opens album filters in a drawer without moving search out of the header", async () => {
+	it("opens album filters in a drawer from the Top Nav filter button", async () => {
 		renderWithQuery(<AlbumsPage />);
 
 		await screen.findByText("1989");
-		const header = screen
-			.getByRole("heading", { name: "Albums" })
-			.closest("header");
-		expect(
-			screen.getByPlaceholderText("Search albums...").closest("header"),
-		).toBe(header);
-		fireEvent.click(screen.getByRole("button", { name: "Filters" }));
+		const filters = screen.getByRole("button", { name: "Filters" });
+		expect(filters.getAttribute("aria-pressed")).toBe("false");
+		fireEvent.click(filters);
 		const drawer = await screen.findByRole("dialog", {
 			name: "Album filters",
 		});
@@ -172,38 +161,12 @@ describe("albums route", () => {
 		expect(screen.queryByRole("status")).toBeNull();
 	});
 
-	it("distinguishes an empty library from filters with no matches", async () => {
+	it("shows the empty-library copy when there are no albums", async () => {
 		mocks.listAlbums.mockResolvedValue({ items: [] });
 
-		const firstRender = renderWithQuery(<AlbumsPage />);
+		renderWithQuery(<AlbumsPage />);
 
 		expect(await screen.findByText("No albums yet")).toBeTruthy();
-		expect(screen.getByText("Scan your library to get started.")).toBeTruthy();
-		firstRender.unmount();
-
-		mocks.listAlbums.mockResolvedValue({
-			items: [
-				{
-					id: "album-1",
-					title: "1989",
-					artistName: "Taylor Swift",
-					genres: ["Pop"],
-					trackCount: 2,
-				},
-			],
-		});
-		renderWithQuery(<AlbumsPage />);
-		await screen.findByText("1989");
-		mocks.listAlbums.mockResolvedValue({ items: [] });
-		fireEvent.change(screen.getByPlaceholderText("Search albums..."), {
-			target: { value: "unmatched" },
-		});
-
-		expect(
-			await screen.findByText("No albums match your filters"),
-		).toBeTruthy();
-		expect(
-			screen.getByText("Try adjusting your search or filters."),
-		).toBeTruthy();
+		expect(screen.getByText("Import music to get started.")).toBeTruthy();
 	});
 });

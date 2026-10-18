@@ -21,7 +21,7 @@ const CARD_COVER_LAYOUTS: Record<number, string[]> = {
 	],
 };
 const CARD_COVER_LAYER_CLASS =
-	"absolute top-0 h-[88%] overflow-hidden rounded-[6px] border-0 border-background/30 border-r bg-muted shadow-[10px_0_20px_rgb(0_0_0_/_35%)] transition-[left,width,box-shadow,filter] delay-0 duration-[260ms] ease-[cubic-bezier(.22,.8,.24,1)] hover:left-0 hover:z-50 hover:w-full hover:rounded-md hover:border-r-transparent hover:brightness-[1.025] hover:saturate-[1.04] hover:shadow-none hover:delay-[60ms] motion-reduce:delay-0 motion-reduce:transition-none";
+	"absolute top-0 h-11/12 overflow-hidden rounded-sm border-0 border-background/30 border-r bg-muted shadow-cover-strip transition-all delay-0 duration-300 ease-out hover:left-0 hover:z-50 hover:w-full hover:rounded-sm hover:border-r-transparent hover:shadow-none hover:delay-75 motion-reduce:delay-0 motion-reduce:transition-none";
 const CARD_COVER_PLACEHOLDER_CLASS =
 	"pointer-events-none absolute inset-0 bg-muted transition-opacity duration-150 ease-out motion-reduce:animate-none motion-reduce:transition-none";
 const CARD_COVER_ART_CLASS =
@@ -68,7 +68,7 @@ export function CollectionCoverStrip({
 		<div
 			className={cn(
 				isGrid
-					? "grid size-32 shrink-0 grid-cols-2 gap-1 overflow-hidden rounded-lg bg-muted p-1 shadow-lg"
+					? "grid size-32 shrink-0 grid-cols-2 gap-1 overflow-hidden rounded-md bg-muted p-1 shadow-lg"
 					: "flex w-fit shrink-0 items-center gap-1",
 				className,
 			)}
@@ -76,12 +76,12 @@ export function CollectionCoverStrip({
 			{preview.map((track) => (
 				<AlbumArt
 					key={track.id}
-					coverUrl={apiClient.getAlbumCoverUrl(track.albumId)}
+					coverUrl={apiClient.getAlbumCoverUrl(track.albumId, 128)}
 					title={track.title}
 					className={cn(
 						isGrid
-							? "size-full rounded-md text-sm"
-							: "size-10 rounded-md text-xs",
+							? "size-full rounded-sm text-sm"
+							: "size-10 rounded-sm text-xs",
 					)}
 				/>
 			))}
@@ -116,47 +116,12 @@ export function CollectionCoverStack({
 			{preview.map((track, index) => (
 				<AlbumArt
 					key={`${track.albumId}-${track.id}`}
-					coverUrl={apiClient.getAlbumCoverUrl(track.albumId)}
+					coverUrl={apiClient.getAlbumCoverUrl(track.albumId, 512)}
 					title={track.title}
 					className={cn(
-						"absolute rounded-md object-cover text-sm shadow-xl transition duration-200 ease-out hover:z-50 hover:scale-105 hover:rotate-0 hover:shadow-2xl",
+						"absolute rounded-sm object-cover text-sm shadow-xl transition duration-200 ease-out hover:z-50 hover:scale-105 hover:rotate-0 hover:shadow-xl",
 						offsets[index] ?? offsets.at(-1),
 						rotations[index] ?? "rotate-0",
-					)}
-				/>
-			))}
-		</div>
-	);
-}
-
-export function CollectionCoverRowStack({
-	tracks,
-	className,
-}: {
-	tracks: Track[];
-	className?: string;
-}) {
-	const preview = useMemo(() => pickRandomUniqueAlbumTracks(tracks), [tracks]);
-	const offsets = [
-		"left-0",
-		"left-[3.75rem]",
-		"left-[7.5rem]",
-		"left-[11.25rem]",
-	];
-
-	return (
-		<div
-			data-testid="playlist-row-cover-stack"
-			className={cn("relative h-[7.5rem] w-[18.75rem] shrink-0", className)}
-		>
-			{preview.map((track, index) => (
-				<AlbumArt
-					key={`${track.albumId}-${track.id}`}
-					coverUrl={apiClient.getAlbumCoverUrl(track.albumId)}
-					title={track.title}
-					className={cn(
-						"absolute top-0 size-[7.5rem] rounded-md border border-background object-cover text-sm shadow-md",
-						offsets[index] ?? offsets.at(-1),
 					)}
 				/>
 			))}
@@ -189,7 +154,7 @@ function CollectionCoverCardArt({
 				aria-hidden
 			/>
 			<AlbumArt
-				coverUrl={apiClient.getAlbumCoverUrl(track.albumId)}
+				coverUrl={apiClient.getAlbumCoverUrl(track.albumId, 512)}
 				title={track.title}
 				className={cn(
 					CARD_COVER_ART_CLASS,
@@ -269,20 +234,4 @@ export function pickStableUniqueAlbumTracks<
 		return 0;
 	});
 	return pickPreviewTracks(uniqueTracks, seed, limit);
-}
-
-export function CollectionCover({
-	track,
-	className,
-}: {
-	track: Track;
-	className?: string;
-}) {
-	return (
-		<AlbumArt
-			coverUrl={apiClient.getAlbumCoverUrl(track.albumId)}
-			title={track.title}
-			className={cn("shrink-0 rounded-md text-xs", className)}
-		/>
-	);
 }

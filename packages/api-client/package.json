@@ -7,18 +7,12 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "format": "pnpm --dir ../.. exec biome format --write packages/api-client",
-    "format:check": "pnpm --dir ../.. exec biome format packages/api-client",
-    "lint": "pnpm --dir ../.. exec biome lint packages/api-client",
-    "check": "pnpm --dir ../.. exec biome check packages/api-client",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "test:unit": "vitest run",
-    "generate": "echo 'Generated via @repo/contracts'"
+    "test": "vp test",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@repo/tsconfig": "workspace:*",
     "typescript": "^6.0.2",
-    "vitest": "^4.1.5"
+    "vite-plus": "catalog:"
   }
 }

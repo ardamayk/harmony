@@ -1,115 +1,147 @@
 name: CI
 
 on:
+  pull_request:
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
+  schedule:
+    - cron: "0 3 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  LINUX_NATIVE_PACKAGES: >-
+    build-essential ffmpeg libass-dev libavcodec-dev libavfilter-dev
+    libavformat-dev libavutil-dev libplacebo-dev libssl-dev libswresample-dev
+    libswscale-dev meson ninja-build pkg-config
 
 jobs:
-  lint-test:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: jdx/mise-action@v2
-
-      - name: Install Tauri Linux dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            ffmpeg \
-            libayatana-appindicator3-dev \
-            libass-dev \
-            libavcodec-dev \
-            libavfilter-dev \
-            libavformat-dev \
-            libavutil-dev \
-            libplacebo-dev \
-            librsvg2-dev \
-            libssl-dev \
-            libswresample-dev \
-            libswscale-dev \
-            libwebkit2gtk-4.1-dev \
-            libxdo-dev \
-            meson \
-            ninja-build \
-            pkg-config
-
-      - name: Install JS deps
-        run: pnpm install
-
-      - name: Generate OpenAPI
-        run: pnpm generate
-
-      - name: Check codegen drift
-        run: git diff --exit-code
-
-      - name: Lint web
-        run: pnpm --filter web check
-
-      - name: Core unit tests
-        run: pnpm test:core
-
-      - name: Desktop unit tests
-        run: pnpm test:desktop
-
-      - name: Build pinned mpv from verified source
-        shell: bash
-        env:
-          # Official signed v0.41.0 tag, commit 41f6a645068483470267271e1d09966ca3b9f413.
-          MPV_SOURCE_SHA256: ee21092a5ee427353392360929dc64645c54479aefdb5babc5cfbb5fad626209
-        run: |
-          PINNED_MPV_VERSION="$(tr -d '\r\n' < desktop/src-tauri/mpv-version.txt)"
-          MPV_ARCHIVE="${RUNNER_TEMP}/mpv-${PINNED_MPV_VERSION}.tar.gz"
-          MPV_SOURCE_DIRECTORY="${RUNNER_TEMP}/mpv-${PINNED_MPV_VERSION}"
-          MPV_BINARY_DIRECTORY="${RUNNER_TEMP}/earthly-audio-mpv"
-          curl --fail --location --retry 3 \
-            "https://github.com/mpv-player/mpv/archive/refs/tags/v${PINNED_MPV_VERSION}.tar.gz" \
-            --output "${MPV_ARCHIVE}"
-          echo "${MPV_SOURCE_SHA256}  ${MPV_ARCHIVE}" | sha256sum --check
-          tar --extract --gzip --file "${MPV_ARCHIVE}" --directory "${RUNNER_TEMP}"
-          meson setup "${MPV_SOURCE_DIRECTORY}/build" "${MPV_SOURCE_DIRECTORY}" \
-            --buildtype=release \
-            --auto-features=disabled \
-            -Dbuild-date=false \
-            -Dgl=disabled \
-            -Dlibmpv=false
-          meson compile -C "${MPV_SOURCE_DIRECTORY}/build" ./mpv:executable
-          install -d -m 0755 "${MPV_BINARY_DIRECTORY}"
-          install -m 0755 "${MPV_SOURCE_DIRECTORY}/build/mpv" "${MPV_BINARY_DIRECTORY}/mpv"
-          echo "EARTHLY_AUDIO_MPV_PATH=${MPV_BINARY_DIRECTORY}/mpv" >> "${GITHUB_ENV}"
-
-      - name: Stage pinned mpv sidecar
-        run: pnpm --dir desktop prepare:mpv
-
-      - name: Real mpv integration
-        run: pnpm --filter @repo/desktop test:mpv
-
-      - name: Go test
-        working-directory: server
-        run: go test ./...
-
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v7
-        with:
-          version: latest
-          working-directory: server
-
-  e2e:
+  web:
+    name: Web (check, unit tests, generated drift)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: jdx/mise-action@v2
-      - run: pnpm install
-      - run: pnpm generate
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2
+      - run: pnpm install --frozen-lockfile
+      - run: mise run web:check
+      - run: mise run web:test
+      - run: mise run generate:check
+
+  server:
+    name: Music Server (check, tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
-          go-version: "1.26.6"
-      - name: Install Playwright
-        run: pnpm --filter web exec playwright install chromium --with-deps
-      - name: E2E tests
-        run: pnpm test:e2e
-      - name: HLS browser integration
-        run: pnpm test:e2e:hls
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: cargo-server-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-server-${{ runner.os }}-
+      - run: mise run server:check
+      - run: mise run server:test
+
+  desktop:
+    name: Desktop Client (check, tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends $LINUX_NATIVE_PACKAGES
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-${{ runner.os }}-
+      - run: pnpm install --frozen-lockfile
+      - run: mise run desktop:check
+      - run: mise run desktop:test
+
+  audit:
+    name: Dependency audit (pnpm audit, cargo audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2
+      - run: pnpm install --frozen-lockfile
+      - run: mise run audit
+
+  e2e:
+    name: Web E2E
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - run: pnpm install --frozen-lockfile
+      - run: cd web && pnpm exec playwright install chromium --with-deps
+      - run: mise run web:test:e2e
+      - if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: playwright-report
+          path: web/playwright-report
+          retention-days: 14
+
+  # Slow, network- and hardware-adjacent checks: main, weekly, or on demand.
+  integration:
+    name: Integration (HLS, pinned mpv, import parity, release build)
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "EARTHLY_AUDIO_MPV_PATH=$RUNNER_TEMP/earthly-audio-mpv/mpv" >> "$GITHUB_ENV"
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends $LINUX_NATIVE_PACKAGES
+      - id: mpv
+        run: echo "version=$(tr -d '\r\n' < desktop/core/mpv-version.txt)" >> "$GITHUB_OUTPUT"
+      - id: mpv-cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ runner.temp }}/earthly-audio-mpv
+          key: mpv-${{ runner.os }}-${{ steps.mpv.outputs.version }}-${{ hashFiles('scripts/build-pinned-mpv.sh') }}
+      - if: steps.mpv-cache.outputs.cache-hit != 'true'
+        run: bash scripts/build-pinned-mpv.sh
+      - run: (cd "$RUNNER_TEMP/earthly-audio-mpv" && sha256sum --check mpv.sha256)
+      - run: pnpm install --frozen-lockfile
+      - run: cd web && pnpm exec playwright install chromium --with-deps
+      - run: mise run server:test:hls
+      - run: mise run desktop:test:mpv
+      - run: mise run desktop:test:import-parity
+      - run: mise run build
+
+  # Stable required checks for the main ruleset: each reports its jobs as one result.
+  fast-gate:
+    name: PR / Fast Gate
+    if: always()
+    needs: [web, server, desktop, audit]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo '${{ toJSON(needs) }}' | jq -e 'all(.[]; .result == "success")'
+
+  integration-gate:
+    name: PR / Integration Gate
+    if: always()
+    needs: [e2e]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo '${{ toJSON(needs) }}' | jq -e 'all(.[]; .result == "success")'

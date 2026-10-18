@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT DISTINCT artists.id AS \"id!\", artists.name, artists.name_normalized FROM artists\n            WHERE artists.id IN (\n                SELECT track_artists.artist_id FROM track_artists WHERE track_artists.track_id = ?1\n                UNION SELECT album_artists.artist_id FROM album_artists\n                WHERE album_artists.album_id = ?2 AND CAST(?3 AS INTEGER)\n            )\n            ORDER BY artists.name",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artists",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "name",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artists",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "name": "name_normalized",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artists",
+            "name": "name_normalized"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "35536469dff2e3817f194f884253a4c0a6eff01c3e1cfa77a4388831fb32f3fe"
+}

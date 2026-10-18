@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE managed_import_batches SET revision = revision + 1, updated_at = CURRENT_TIMESTAMP\n        WHERE id = (SELECT batch_id FROM managed_import_jobs WHERE managed_import_jobs.id = ?)\n            AND status = 'uploading'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "1d1ed48f5ab4520ae9037872f0704aabad5092c5b937c77d17375936146382c8"
+}

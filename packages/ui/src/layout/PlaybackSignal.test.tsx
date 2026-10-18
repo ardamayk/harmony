@@ -5,7 +5,7 @@ import {
 	screen,
 	within,
 } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { type PlaybackOutputControls, PlaybackSignal } from "./PlaybackSignal";
 
 function createControls(): PlaybackOutputControls {
@@ -19,11 +19,34 @@ function createControls(): PlaybackOutputControls {
 describe("PlaybackSignal", () => {
 	afterEach(cleanup);
 
-	it("opens a compact three-option menu above the active output label", () => {
-		const controls = createControls();
-		render(<PlaybackSignal outputMode="system" outputControls={controls} />);
+	it("names the trigger by quality and titles it with the active output mode", () => {
+		render(
+			<PlaybackSignal
+				qualityLabel="24-bit · 96 kHz"
+				outputMode="direct-alsa"
+				outputControls={createControls()}
+			/>,
+		);
+		expect(
+			screen
+				.getByRole("button", { name: "Quality 24-bit · 96 kHz" })
+				.getAttribute("title"),
+		).toBe("Output mode: Exclusive");
+	});
 
-		const trigger = screen.getByRole("button", { name: "Output mode: Normal" });
+	it("opens a compact three-option menu above the quality pill", () => {
+		const controls = createControls();
+		render(
+			<PlaybackSignal
+				qualityLabel="24-bit · 96 kHz"
+				outputMode="system"
+				outputControls={controls}
+			/>,
+		);
+
+		const trigger = screen.getByRole("button", {
+			name: "Quality 24-bit · 96 kHz",
+		});
 		fireEvent.click(trigger);
 
 		const menu = screen.getByRole("menu", { name: "Output mode" });
@@ -44,19 +67,29 @@ describe("PlaybackSignal", () => {
 	it("selects Normal and Exclusive without asking for a device", () => {
 		const controls = createControls();
 		const { rerender } = render(
-			<PlaybackSignal outputMode="direct-alsa" outputControls={controls} />,
+			<PlaybackSignal
+				qualityLabel="24-bit · 96 kHz"
+				outputMode="direct-alsa"
+				outputControls={controls}
+			/>,
 		);
 
 		fireEvent.click(
-			screen.getByRole("button", { name: "Output mode: Exclusive" }),
+			screen.getByRole("button", { name: "Quality 24-bit · 96 kHz" }),
 		);
 		fireEvent.click(screen.getByRole("menuitemradio", { name: "Normal" }));
 		expect(controls.selectNormalOutput).toHaveBeenCalledOnce();
 		expect(screen.queryByRole("menu", { name: "Output mode" })).toBeNull();
 
-		rerender(<PlaybackSignal outputMode="system" outputControls={controls} />);
+		rerender(
+			<PlaybackSignal
+				qualityLabel="24-bit · 96 kHz"
+				outputMode="system"
+				outputControls={controls}
+			/>,
+		);
 		fireEvent.click(
-			screen.getByRole("button", { name: "Output mode: Normal" }),
+			screen.getByRole("button", { name: "Quality 24-bit · 96 kHz" }),
 		);
 		fireEvent.click(screen.getByRole("menuitemradio", { name: "Exclusive" }));
 		expect(controls.selectExclusiveOutput).toHaveBeenCalledOnce();
@@ -65,10 +98,16 @@ describe("PlaybackSignal", () => {
 
 	it("selects Adaptive once and closes the compact menu", () => {
 		const controls = createControls();
-		render(<PlaybackSignal outputMode="system" outputControls={controls} />);
+		render(
+			<PlaybackSignal
+				qualityLabel="24-bit · 96 kHz"
+				outputMode="system"
+				outputControls={controls}
+			/>,
+		);
 
 		fireEvent.click(
-			screen.getByRole("button", { name: "Output mode: Normal" }),
+			screen.getByRole("button", { name: "Quality 24-bit · 96 kHz" }),
 		);
 		fireEvent.click(screen.getByRole("menuitemradio", { name: "Adaptive" }));
 
@@ -83,6 +122,7 @@ describe("PlaybackSignal", () => {
 		render(
 			<div>
 				<PlaybackSignal
+					qualityLabel="24-bit · 96 kHz"
 					outputMode="adaptive-system-rate"
 					outputControls={controls}
 				/>
@@ -91,13 +131,13 @@ describe("PlaybackSignal", () => {
 		);
 
 		fireEvent.click(
-			screen.getByRole("button", { name: "Output mode: Adaptive" }),
+			screen.getByRole("button", { name: "Quality 24-bit · 96 kHz" }),
 		);
 		fireEvent.keyDown(document, { key: "Escape" });
 		expect(screen.queryByRole("menu", { name: "Output mode" })).toBeNull();
 
 		fireEvent.click(
-			screen.getByRole("button", { name: "Output mode: Adaptive" }),
+			screen.getByRole("button", { name: "Quality 24-bit · 96 kHz" }),
 		);
 		fireEvent.mouseDown(screen.getByRole("button", { name: "Outside" }));
 		expect(screen.queryByRole("menu", { name: "Output mode" })).toBeNull();

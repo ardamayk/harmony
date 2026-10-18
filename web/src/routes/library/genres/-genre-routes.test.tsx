@@ -6,9 +6,16 @@ import {
 	screen,
 	waitFor,
 } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+	afterEach,
+	beforeEach,
+	describe,
+	expect,
+	it,
+	vi,
+} from "vite-plus/test";
+import { GenreDetailContent } from "./-genre-page";
 import { GenresPage } from "./-genres-page";
-import { GenreDetailContent } from "./$genre";
 
 const mocks = vi.hoisted(() => ({
 	listTracks: vi.fn(),
@@ -51,6 +58,12 @@ vi.mock("#/lib/api", () => ({
 		addPlaylistTrack: mocks.addPlaylistTrack,
 		removePlaylistTrack: mocks.removePlaylistTrack,
 		getAlbumCoverUrl: (albumId: string) => `/cover/${albumId}`,
+		getAlbum: vi.fn(async (albumId: string) => ({
+			id: albumId,
+			title: `Album ${albumId}`,
+			artistName: "New Order",
+			artistId: "artist-1",
+		})),
 	},
 }));
 
@@ -147,35 +160,34 @@ describe("genre routes", () => {
 		expect(dance.getAttribute("href")).toBe("/library/genres/Dance");
 		expect(synthpop.className).toContain("duration-300");
 		expect(synthpop.className).toContain("ease-out");
-		expect(synthpop.className).toContain("hover:-translate-y-px");
-		expect(synthpop.className).toContain("hover:shadow-lg");
-		expect(synthpop.className).toContain("focus-visible:ring-2");
+		expect(synthpop.className).toContain("hover:-translate-y-1");
+		expect(synthpop.className).toContain("hover:border-heading/35");
+		expect(synthpop.className).toContain("focus-visible:-translate-y-1");
 		expect(synthpop.className).toContain("motion-reduce:transition-none");
-		expect(synthpop.className).not.toContain("hover:-translate-y-1");
 		expect(synthpop.className).toContain("aspect-square");
 		expect(synthpop.className).toContain("overflow-hidden");
 		expect(screen.getByTestId("genres-page-shell").className).toContain(
 			"overflow-hidden",
 		);
 		expect(screen.getByTestId("genres-page-content").className).toContain(
-			"[scrollbar-width:none]",
+			"scrollbar-hidden",
 		);
 		expect(
 			screen
 				.getByTestId("genres-page-content")
-				.querySelector(".min-\\[1801px\\]\\:max-w-\\[1476px\\]"),
+				.querySelector(".page-content-column"),
 		).toBeTruthy();
 		expect(
 			screen
 				.getByTestId("genres-page-content")
-				.querySelector(".xl\\:grid-cols-5"),
+				.querySelector(".grid-cols-cards"),
 		).toBeTruthy();
 		expect(
 			container.querySelector('[data-testid="playlist-card-cover-stack"]'),
 		).toBeTruthy();
 		const overlay = container.querySelector("[data-genre-card-overlay]");
 		expect(overlay?.className).toContain("px-3");
-		expect(overlay?.className).toContain("pt-14");
+		expect(overlay?.className).toContain("pt-12");
 		expect(overlay?.querySelector("p")?.className).toContain("font-semibold");
 		expect(overlay?.querySelector("p")?.className).not.toContain(
 			"group-hover:underline",
@@ -215,7 +227,7 @@ describe("genre routes", () => {
 		await screen.findByRole("heading", { name: "Synthpop" });
 		expect(screen.queryByRole("link", { name: /Back to genres/ })).toBeNull();
 		expect(screen.getByTestId("genre-detail-content").className).toContain(
-			"min-[1801px]:max-w-[1476px]",
+			"page-content-column",
 		);
 
 		fireEvent.click(screen.getByRole("button", { name: "Play" }));
@@ -227,7 +239,15 @@ describe("genre routes", () => {
 		]);
 
 		fireEvent.click(screen.getByRole("button", { name: "Queue" }));
-		expect(mocks.queueTracks).toHaveBeenCalledWith(["t1", "t2", "t3", "t4"]);
+		await waitFor(() => expect(mocks.queueTracks).toHaveBeenCalledTimes(4));
+		tracks.forEach((track, index) => {
+			expect(mocks.queueTracks).toHaveBeenNthCalledWith(index + 1, [track.id], {
+				kind: "album",
+				albumId: track.albumId,
+				albumTitle: `Album ${track.albumId}`,
+				artistName: "New Order",
+			});
+		});
 
 		expect(screen.getByText("Blue Monday")).toBeTruthy();
 		expect(screen.getByText("Bizarre Love Triangle")).toBeTruthy();
@@ -240,7 +260,30 @@ describe("genre routes", () => {
 		expect(
 			screen.getByRole("row", { name: /Blue Monday/ }).querySelector("td")
 				?.className,
-		).toContain("py-1.5");
+		).toContain("py-2");
+	});
+
+	it("lists genre tracks in added order with list numbering", async () => {
+		mocks.listTracks.mockResolvedValue({
+			items: [
+				{ ...tracks[0], trackNo: 9, createdAt: "2026-03-01T00:00:00Z" },
+				{ ...tracks[1], trackNo: 4, createdAt: "2026-01-01T00:00:00Z" },
+				{ ...tracks[2], trackNo: 7, createdAt: "2026-02-01T00:00:00Z" },
+			],
+		});
+		renderWithQuery(<GenreDetailContent genre="Synthpop" />);
+
+		await screen.findByRole("heading", { name: "Synthpop" });
+		const rows = screen
+			.getAllByRole("row")
+			.slice(1)
+			.map((row) => row.textContent ?? "");
+		expect(rows[0]).toMatch(/^1.*Bizarre Love Triangle/);
+		expect(rows[1]).toMatch(/^2.*Age of Consent/);
+		expect(rows[2]).toMatch(/^3.*Blue Monday/);
+
+		fireEvent.click(screen.getByRole("button", { name: "Play" }));
+		expect(mocks.playTrack).toHaveBeenCalledWith("t2", ["t2", "t3", "t1"]);
 	});
 
 	it("filters genre detail actions to the visible tracks", async () => {
@@ -271,6 +314,13 @@ describe("genre routes", () => {
 		expect(mocks.playTrack).toHaveBeenCalledWith("t2", ["t2"]);
 
 		fireEvent.click(screen.getByRole("button", { name: "Queue" }));
-		expect(mocks.queueTracks).toHaveBeenCalledWith(["t2"]);
+		await waitFor(() =>
+			expect(mocks.queueTracks).toHaveBeenCalledExactlyOnceWith(["t2"], {
+				kind: "album",
+				albumId: "a2",
+				albumTitle: "Album a2",
+				artistName: "New Order",
+			}),
+		);
 	});
 });

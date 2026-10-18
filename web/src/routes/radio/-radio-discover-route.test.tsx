@@ -8,7 +8,14 @@ import {
 	waitFor,
 	within,
 } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+	afterEach,
+	beforeEach,
+	describe,
+	expect,
+	it,
+	vi,
+} from "vite-plus/test";
 import { RadioDiscoverPage } from "./-radio-discover-page";
 
 const mocks = vi.hoisted(() => ({
@@ -194,7 +201,7 @@ describe("radio discover route", () => {
 		expect(swissPop.className).toContain("duration-300");
 		expect(swissPop.className).toContain("ease-out");
 		expect(swissPop.className).toContain("hover:-translate-y-1");
-		expect(swissPop.className).toContain("hover:shadow-lg");
+		expect(swissPop.className).toContain("hover:border-heading/35");
 	});
 
 	it(
@@ -210,11 +217,13 @@ describe("radio discover route", () => {
 			const drawer = await screen.findByRole("dialog", {
 				name: "Radio catalog filters",
 			});
-			fireEvent.click(within(drawer).getByRole("button", { name: "Country" }));
+			fireEvent.click(
+				within(drawer).getByRole("combobox", { name: "Country" }),
+			);
 			fireEvent.click(
 				await screen.findByRole("option", { name: /Switzerland/ }),
 			);
-			fireEvent.click(within(drawer).getByRole("button", { name: "Genre" }));
+			fireEvent.click(within(drawer).getByRole("combobox", { name: "Genre" }));
 			fireEvent.click(await screen.findByRole("option", { name: "jazz" }));
 			fireEvent.click(within(drawer).getByRole("radio", { name: "MP3" }));
 			fireEvent.click(within(drawer).getByRole("radio", { name: "128 kbps+" }));
@@ -253,11 +262,13 @@ describe("radio discover route", () => {
 				within(drawer).getByRole("button", { name: "List view" }),
 			);
 			expect(screen.getByTestId("radio-catalog-list")).toBeTruthy();
-			fireEvent.click(within(drawer).getByRole("button", { name: "Country" }));
+			fireEvent.click(
+				within(drawer).getByRole("combobox", { name: "Country" }),
+			);
 			fireEvent.click(
 				await screen.findByRole("option", { name: /Switzerland/ }),
 			);
-			fireEvent.click(within(drawer).getByRole("button", { name: "Genre" }));
+			fireEvent.click(within(drawer).getByRole("combobox", { name: "Genre" }));
 			fireEvent.click(await screen.findByRole("option", { name: "jazz" }));
 			fireEvent.click(within(drawer).getByRole("radio", { name: "MP3" }));
 			fireEvent.click(within(drawer).getByRole("radio", { name: "128 kbps+" }));
@@ -304,19 +315,15 @@ describe("radio discover route", () => {
 					.getAttribute("aria-pressed"),
 			).toBe("true");
 			expect(
-				(
-					within(drawer).getByRole("radio", {
-						name: "Any format",
-					}) as HTMLInputElement
-				).checked,
-			).toBe(true);
+				within(drawer)
+					.getByRole("radio", { name: "Any format" })
+					.getAttribute("aria-checked"),
+			).toBe("true");
 			expect(
-				(
-					within(drawer).getByRole("radio", {
-						name: "Any bitrate",
-					}) as HTMLInputElement
-				).checked,
-			).toBe(true);
+				within(drawer)
+					.getByRole("radio", { name: "Any bitrate" })
+					.getAttribute("aria-checked"),
+			).toBe("true");
 		},
 		FILTER_INTERACTION_TIMEOUT_MS,
 	);
@@ -331,10 +338,12 @@ describe("radio discover route", () => {
 			const drawer = await screen.findByRole("dialog", {
 				name: "Radio catalog filters",
 			});
-			fireEvent.click(within(drawer).getByRole("button", { name: "Country" }));
+			fireEvent.click(
+				within(drawer).getByRole("combobox", { name: "Country" }),
+			);
 			expect(screen.getByRole("option", { name: /Switzerland/ })).toBeTruthy();
 			fireEvent.click(screen.getByRole("option", { name: "All countries" }));
-			fireEvent.click(within(drawer).getByRole("button", { name: "Genre" }));
+			fireEvent.click(within(drawer).getByRole("combobox", { name: "Genre" }));
 			expect(screen.getByRole("option", { name: "rock" })).toBeTruthy();
 		},
 		FILTER_INTERACTION_TIMEOUT_MS,
@@ -350,7 +359,9 @@ describe("radio discover route", () => {
 			const drawer = await screen.findByRole("dialog", {
 				name: "Radio catalog filters",
 			});
-			fireEvent.click(within(drawer).getByRole("button", { name: "Country" }));
+			fireEvent.click(
+				within(drawer).getByRole("combobox", { name: "Country" }),
+			);
 			expect(screen.getByRole("option", { name: /Afghanistan/ })).toBeTruthy();
 
 			fireEvent.change(screen.getByPlaceholderText("Search countries..."), {
@@ -373,7 +384,7 @@ describe("radio discover route", () => {
 			const drawer = await screen.findByRole("dialog", {
 				name: "Radio catalog filters",
 			});
-			fireEvent.click(within(drawer).getByRole("button", { name: "Genre" }));
+			fireEvent.click(within(drawer).getByRole("combobox", { name: "Genre" }));
 			expect(screen.getByRole("option", { name: "rock" })).toBeTruthy();
 
 			fireEvent.change(screen.getByPlaceholderText("Search genres..."), {
@@ -407,7 +418,7 @@ describe("radio discover route", () => {
 		expect(header?.className).toContain("py-3");
 		expect(header?.firstElementChild?.className).toContain("gap-2");
 		expect(searchInput.className).toContain("h-11");
-		expect(searchInput.className).toContain("rounded-xl");
+		expect(searchInput.className).toContain("rounded-lg");
 		expect(filterButton.className).toContain("size-10");
 		expect(description.parentElement?.className).toContain("items-center");
 		expect(description.className).toContain("text-xs");

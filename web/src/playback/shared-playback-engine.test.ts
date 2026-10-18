@@ -1,8 +1,8 @@
 import type { PlaybackSessionState, PlaybackSource } from "@repo/ui";
 import { DEFAULT_PLAYBACK_SESSION_STATE } from "@repo/ui";
 import { render, screen } from "@testing-library/react";
-import { createElement, StrictMode, useEffect, useState } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { createElement, StrictMode, useSyncExternalStore } from "react";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { DesktopPlaybackEngine } from "./DesktopPlaybackEngine";
 import {
 	disposeSharedPlaybackEngine,
@@ -45,11 +45,10 @@ describe("shared playback engine", () => {
 
 		function Probe() {
 			const engine = getSharedPlaybackEngine(createEngine);
-			const [state, setState] = useState(engine.getState());
-			useEffect(() => {
-				setState(engine.getState());
-				return engine.subscribe(setState);
-			}, [engine]);
+			const state = useSyncExternalStore(
+				(onChange) => engine.subscribe(onChange),
+				() => engine.getState(),
+			);
 			return createElement(
 				"span",
 				null,

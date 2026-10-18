@@ -1,4 +1,8 @@
-import type { LayoutPreferences, UserPreferences } from "@repo/api-client";
+import type {
+	LayoutPreferences,
+	PlaybackPreferences,
+	UserPreferences,
+} from "@repo/api-client";
 import {
 	createContext,
 	type ReactNode,
@@ -13,7 +17,7 @@ import {
 	MINI_PANEL_SIZE,
 	normalizeLayout,
 } from "../widgets/layout-utils";
-import { defaultPreferences } from "../widgets/types";
+import { defaultPlayback, defaultPreferences } from "../widgets/types";
 
 type PanelSide = "left" | "right";
 
@@ -46,6 +50,9 @@ export function LayoutProvider({
 	const [preferences, setPreferencesState] = useState<UserPreferences>({
 		...initialPreferences,
 		layout: normalizeLayout(initialPreferences.layout),
+		// Older servers answer without a playback section; fill it in so the
+		// Player Bar never reads an undefined preference.
+		playback: { ...defaultPlayback, ...initialPreferences.playback },
 	});
 	const expandedSizesRef = useRef({ left: 22, right: 28 });
 
@@ -72,6 +79,9 @@ export function LayoutProvider({
 				layout: patch.layout
 					? normalizeLayout({ ...preferences.layout, ...patch.layout })
 					: preferences.layout,
+				playback: patch.playback
+					? { ...preferences.playback, ...patch.playback }
+					: preferences.playback,
 			});
 		},
 		[commit, preferences],
@@ -212,4 +222,15 @@ export function useLayout() {
 		throw new Error("useLayout must be used within LayoutProvider");
 	}
 	return ctx;
+}
+
+/** Playback Preferences plus a sparse setter; convenience over useLayout. */
+export function usePlaybackPreferences() {
+	const { preferences, setPreferences } = useLayout();
+	const setPlaybackPreferences = useCallback(
+		(patch: Partial<PlaybackPreferences>) =>
+			setPreferences({ playback: { ...preferences.playback, ...patch } }),
+		[preferences.playback, setPreferences],
+	);
+	return { playback: preferences.playback, setPlaybackPreferences };
 }

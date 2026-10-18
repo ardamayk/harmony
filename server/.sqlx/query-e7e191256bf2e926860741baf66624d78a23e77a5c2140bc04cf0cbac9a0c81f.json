@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM managed_import_artwork WHERE batch_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "e7e191256bf2e926860741baf66624d78a23e77a5c2140bc04cf0cbac9a0c81f"
+}

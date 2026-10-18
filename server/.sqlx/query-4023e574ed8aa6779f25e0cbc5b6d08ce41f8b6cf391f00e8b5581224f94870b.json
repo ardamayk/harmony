@@ -1,0 +1,153 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT COALESCE(NULLIF(client_file_id, ''), id) AS \"file_id!: String\", id AS \"job_id!: String\",\n            original_filename AS \"safe_filename?: String\", created_at AS \"started_at!: String\",\n            updated_at AS \"completed_at!: String\", content_sha256 AS \"content_sha256?: String\",\n            status AS \"status!: String\", outcome AS \"outcome?: String\", error_code AS \"error_code?: String\",\n            track_id AS \"track_id?: String\", validation_issues AS \"validation_issues!: String\",\n            batch_position AS \"position!: i64\"\n        FROM managed_import_jobs jobs WHERE jobs.batch_id = ?1\n        UNION ALL\n        SELECT file_id, job_id, safe_filename, started_at, completed_at, content_sha256,\n            'failed', 'not_attempted', 'canceled', NULL, '[]', position\n        FROM managed_import_canceled_files canceled WHERE canceled.batch_id = ?1\n        ORDER BY 12",
+  "describe": {
+    "columns": [
+      {
+        "name": "file_id!: String",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "name": "job_id!: String",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_import_jobs",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "safe_filename?: String",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_import_jobs",
+            "name": "original_filename"
+          }
+        }
+      },
+      {
+        "name": "started_at!: String",
+        "ordinal": 3,
+        "type_info": "Datetime",
+        "origin": {
+          "Table": {
+            "table": "managed_import_jobs",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "name": "completed_at!: String",
+        "ordinal": 4,
+        "type_info": "Datetime",
+        "origin": {
+          "Table": {
+            "table": "managed_import_jobs",
+            "name": "updated_at"
+          }
+        }
+      },
+      {
+        "name": "content_sha256?: String",
+        "ordinal": 5,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_import_jobs",
+            "name": "content_sha256"
+          }
+        }
+      },
+      {
+        "name": "status!: String",
+        "ordinal": 6,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_import_jobs",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "name": "outcome?: String",
+        "ordinal": 7,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_import_jobs",
+            "name": "outcome"
+          }
+        }
+      },
+      {
+        "name": "error_code?: String",
+        "ordinal": 8,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_import_jobs",
+            "name": "error_code"
+          }
+        }
+      },
+      {
+        "name": "track_id?: String",
+        "ordinal": 9,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_import_jobs",
+            "name": "track_id"
+          }
+        }
+      },
+      {
+        "name": "validation_issues!: String",
+        "ordinal": 10,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_import_jobs",
+            "name": "validation_issues"
+          }
+        }
+      },
+      {
+        "name": "position!: i64",
+        "ordinal": 11,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "managed_import_jobs",
+            "name": "batch_position"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "4023e574ed8aa6779f25e0cbc5b6d08ce41f8b6cf391f00e8b5581224f94870b"
+}

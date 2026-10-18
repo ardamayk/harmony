@@ -53,6 +53,11 @@ export async function invalidateLibraryCache(
 
 	await queryClient.invalidateQueries({
 		queryKey: libraryQueryKeys.root,
-		refetchType: "all",
+	});
+	// Inactive search entries only go stale; refetching every cached query
+	// string after each mutation fans out into many full-library rankings.
+	await queryClient.invalidateQueries({
+		queryKey: libraryQueryKeys.searches,
+		refetchType: "none",
 	});
 }

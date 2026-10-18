@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE managed_import_jobs\n            SET validation_progress = ?1, updated_at = CURRENT_TIMESTAMP\n            WHERE id = ?2 AND status = 'uploading' AND validation_progress < ?1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "077d0de86abd7a65a81d4ce899e6073fa21f68f90418e2d24943d467106f2c1f"
+}

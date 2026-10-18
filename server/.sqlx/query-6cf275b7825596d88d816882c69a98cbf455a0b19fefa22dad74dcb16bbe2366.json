@@ -1,0 +1,134 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT file_id, job_id, safe_filename, started_at AS \"started_at!: String\",\n                    completed_at AS \"completed_at!: String\", content_sha256, result_code,\n                    created_track_id, replaced_track_id, validation_issues\n                FROM managed_import_history_files WHERE import_id = ? ORDER BY position",
+  "describe": {
+    "columns": [
+      {
+        "name": "file_id",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_import_history_files",
+            "name": "file_id"
+          }
+        }
+      },
+      {
+        "name": "job_id",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_import_history_files",
+            "name": "job_id"
+          }
+        }
+      },
+      {
+        "name": "safe_filename",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_import_history_files",
+            "name": "safe_filename"
+          }
+        }
+      },
+      {
+        "name": "started_at!: String",
+        "ordinal": 3,
+        "type_info": "Datetime",
+        "origin": {
+          "Table": {
+            "table": "managed_import_history_files",
+            "name": "started_at"
+          }
+        }
+      },
+      {
+        "name": "completed_at!: String",
+        "ordinal": 4,
+        "type_info": "Datetime",
+        "origin": {
+          "Table": {
+            "table": "managed_import_history_files",
+            "name": "completed_at"
+          }
+        }
+      },
+      {
+        "name": "content_sha256",
+        "ordinal": 5,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_import_history_files",
+            "name": "content_sha256"
+          }
+        }
+      },
+      {
+        "name": "result_code",
+        "ordinal": 6,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_import_history_files",
+            "name": "result_code"
+          }
+        }
+      },
+      {
+        "name": "created_track_id",
+        "ordinal": 7,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_import_history_files",
+            "name": "created_track_id"
+          }
+        }
+      },
+      {
+        "name": "replaced_track_id",
+        "ordinal": 8,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_import_history_files",
+            "name": "replaced_track_id"
+          }
+        }
+      },
+      {
+        "name": "validation_issues",
+        "ordinal": 9,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_import_history_files",
+            "name": "validation_issues"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      false,
+      true,
+      false,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "6cf275b7825596d88d816882c69a98cbf455a0b19fefa22dad74dcb16bbe2366"
+}

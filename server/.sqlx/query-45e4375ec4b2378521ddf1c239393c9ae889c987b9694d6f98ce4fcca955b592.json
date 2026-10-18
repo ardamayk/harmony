@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT cover_mime, cover_data FROM albums WHERE id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "cover_mime",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "albums",
+            "name": "cover_mime"
+          }
+        }
+      },
+      {
+        "name": "cover_data",
+        "ordinal": 1,
+        "type_info": "Blob",
+        "origin": {
+          "Table": {
+            "table": "albums",
+            "name": "cover_data"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      true
+    ]
+  },
+  "hash": "45e4375ec4b2378521ddf1c239393c9ae889c987b9694d6f98ce4fcca955b592"
+}

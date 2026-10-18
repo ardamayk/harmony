@@ -1,0 +1,21 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT EXISTS(SELECT 1 FROM track_sources WHERE content_sha256 = ?) AS \"hash_exists!: bool\"",
+  "describe": {
+    "columns": [
+      {
+        "name": "hash_exists!: bool",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "86492b7a731db9db05736cf2e5247771401620cbce595c3c2257ba7ced66a082"
+}

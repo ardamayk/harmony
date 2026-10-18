@@ -7,8 +7,16 @@ import {
 	screen,
 	waitFor,
 } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { matchesLocalStationFilter, RadioPage } from "./-radio-page";
+import {
+	afterEach,
+	beforeEach,
+	describe,
+	expect,
+	it,
+	vi,
+} from "vite-plus/test";
+import { matchesLocalStationFilter } from "#/lib/radio-station-filter";
+import { RadioPage } from "./-radio-page";
 
 const mocks = vi.hoisted(() => ({
 	listRadioStations: vi.fn(),
@@ -176,15 +184,30 @@ describe("radio routes", () => {
 		expect(screen.queryByLabelText("List view")).toBeNull();
 		expect(shell.className).toContain("overflow-hidden");
 		expect(screen.getByTestId("radio-page-content").className).toContain(
-			"[scrollbar-width:none]",
+			"scrollbar-hidden",
 		);
 		expect(header?.className).toContain("sticky");
 		expect(header?.className).toContain("top-0");
 		expect(searchInput.className).toContain("h-11");
-		expect(searchInput.className).toContain("pl-10");
+		expect(searchInput.className).toContain("pl-8");
 		expect(addButton.className).toContain("size-10");
 		expect(await screen.findByText("Jazz FM")).toBeTruthy();
 		expect(screen.getByText("Rock Hits")).toBeTruthy();
+	});
+
+	it("aligns its header and content with the other collection pages", async () => {
+		renderWithQuery(<RadioPage />);
+
+		await screen.findByRole("heading", { name: "Radio Stations" });
+		const headerInner = screen
+			.getByRole("heading", { name: "Radio Stations" })
+			.closest("header")
+			?.querySelector(".page-content-column");
+		const content = screen
+			.getByTestId("radio-page-content")
+			.querySelector(".page-content-column");
+		expect(headerInner).toBeTruthy();
+		expect(content).toBeTruthy();
 	});
 
 	it("filters saved stations locally", async () => {

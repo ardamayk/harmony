@@ -1,0 +1,11 @@
+#!/bin/sh
+set -eu
+
+vp staged
+
+if ! git diff --cached --quiet -- \
+	packages/contracts/openapi.yaml \
+	scripts/generate-openapi.sh \
+	scripts/check-openapi-generation.sh; then
+	bash scripts/check-staged-generation.sh
+fi

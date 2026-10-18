@@ -15,9 +15,9 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical } from "lucide-react";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { cn } from "../lib/utils";
-import { getWidgetComponent, widgetRegistry } from "../widgets/registry";
+import { renderWidget, widgetRegistry } from "../widgets/registry";
 import { useLayout } from "./LayoutProvider";
 
 type PanelSide = "left" | "right";
@@ -30,22 +30,25 @@ function SortableWidget({ id, panel }: { id: string; panel: PanelSide }) {
 		transform,
 		transition,
 		isDragging,
-	} = useSortable({ id, data: { panel } });
+	} = useSortable({
+		id,
+		data: { panel },
+	});
 
-	const Widget = getWidgetComponent(id);
+	const widget = renderWidget(id);
 	const title = widgetRegistry.find((w) => w.id === id)?.title ?? id;
 
 	const style = {
-		transform: CSS.Transform.toString(transform),
-		transition,
-	};
+		"--sortable-transform": CSS.Transform.toString(transform),
+		"--sortable-transition": transition,
+	} as CSSProperties;
 
-	if (!Widget) {
+	if (!widget) {
 		return (
 			<div
 				ref={setNodeRef}
 				style={style}
-				className="rounded border border-destructive/50 p-2 text-destructive text-xs"
+				className="sortable-widget rounded-sm border border-destructive/50 p-2 text-destructive text-xs"
 			>
 				Unknown widget: {id}
 			</div>
@@ -57,7 +60,7 @@ function SortableWidget({ id, panel }: { id: string; panel: PanelSide }) {
 			ref={setNodeRef}
 			style={style}
 			className={cn(
-				"min-w-0 overflow-hidden rounded-lg border border-border bg-card",
+				"sortable-widget min-w-0 overflow-hidden rounded-md border border-border bg-card",
 				isDragging && "opacity-60 shadow-md",
 			)}
 		>
@@ -73,9 +76,7 @@ function SortableWidget({ id, panel }: { id: string; panel: PanelSide }) {
 				</button>
 				<span className="min-w-0 truncate font-medium text-xs">{title}</span>
 			</div>
-			<div className="min-w-0 p-2">
-				<Widget />
-			</div>
+			<div className="min-w-0 p-2">{widget}</div>
 		</div>
 	);
 }
@@ -91,7 +92,7 @@ export function WidgetDock({ panel }: { panel: PanelSide }) {
 	return (
 		<SortableContext items={widgetIds} strategy={verticalListSortingStrategy}>
 			<div
-				className="flex min-w-0 flex-col gap-3 p-2 [contain:inline-size]"
+				className="flex min-w-0 flex-col gap-3 p-2 contain-inline-size"
 				data-widget-dock
 			>
 				{widgetIds.map((id) => (

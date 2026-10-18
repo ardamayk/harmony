@@ -56,40 +56,6 @@ export interface paths {
         patch: operations["patchPreferences"];
         trace?: never;
     };
-    "/api/v1/library/scan": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Trigger library scan */
-        post: operations["triggerLibraryScan"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/library/scan/status": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get current or latest scan status */
-        get: operations["getLibraryScanStatus"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/library/artists": {
         parameters: {
             query?: never;
@@ -99,6 +65,106 @@ export interface paths {
         };
         /** List artists */
         get: operations["listArtists"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/library/artists/{artistId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get an artist
+         * @description Any credited Artist. Album counts include active Album Artist credits only.
+         */
+        get: operations["getArtist"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/library/artists/{artistId}/photo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get an artist photo
+         * @description Looked up on Deezer on first request and stored on the Music Server (ADR 0027), so clients never contact Deezer. Not found when Deezer has no photo, the lookup failed, or online lookups are switched off.
+         */
+        get: operations["getArtistPhoto"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/library/artists/{artistId}/biography": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get an artist biography
+         * @description The Artist's Wikipedia summary, found through MusicBrainz and Wikidata on first request and stored (ADR 0027). Show `sourceUrl` with it, as Wikipedia's CC BY-SA licence requires. Not found when there is none, the lookup failed, or online lookups are switched off.
+         */
+        get: operations["getArtistBiography"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/library/artists/{artistId}/popular-tracks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List an artist's popular tracks
+         * @description The Artist's Tracks in the library that are among their 50 most popular on Deezer, best first. The Deezer list is looked up on first request and refreshed weekly (ADR 0027); titles are matched without case or bracketed versions. Empty when there is no list, the lookup failed, or online lookups are switched off.
+         */
+        get: operations["listArtistPopularTracks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/library/tracks/play-counts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Last.fm play counts for tracks
+         * @description Last.fm play counts for the named Tracks, read from their first credited Artist's 1000 most played Tracks on Last.fm, matched without case or bracketed versions and refreshed weekly (ADR 0030). Only when the operator set LASTFM_API_KEY; Tracks without a count are left out, so the list is empty without a key.
+         */
+        get: operations["listTrackPlayCounts"];
         put?: never;
         post?: never;
         delete?: never;
@@ -124,6 +190,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/library/albums/{albumId}/online-genres": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Deezer's genres for an album whose tags name none
+         * @description Deezer's genres for the Album, looked up on first request and stored (ADR 0027). Shown on the Album page only; Genre pages, filters and radio still read the tags. Empty when the Album's tags name a genre, when Deezer has none, or when online lookups are off.
+         */
+        get: operations["listAlbumOnlineGenres"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/library/albums/{albumId}": {
         parameters: {
             query?: never;
@@ -135,8 +221,28 @@ export interface paths {
         get: operations["getAlbum"];
         put?: never;
         post?: never;
-        /** Delete album, its tracks, and music files */
+        /**
+         * Permanently delete every Managed Track of an Album after reviewing the album deletion preview
+         * @description Runs one Permanent Track Deletion per Track in album order. Each Track commits on its own: a failure stops the run, Tracks already deleted stay deleted, and the result lists both outcomes. The Album and its artwork disappear with their last Track.
+         */
         delete: operations["deleteAlbum"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/library/albums/{albumId}/deletion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Review the irreversible deletion of every Managed Track of an Album and all affected references */
+        get: operations["previewAlbumDeletion"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -187,8 +293,105 @@ export interface paths {
         get: operations["getTrack"];
         put?: never;
         post?: never;
-        /** Delete track and its music file */
+        /** Permanently delete a Managed Track after reviewing its deletion preview */
         delete: operations["deleteTrack"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/library/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Library Search across Tracks, Albums, Artists, Genres, and Playlists
+         * @description Evaluates one coherent Library Search on the Music Server: every query word must match and at least one word must contribute to the result's own title/name. Related metadata may complete mixed queries but never adds unrelated Albums or Artists. Bounded typo correction applies only when no strong direct result exists. Groups hold at most five records each unless all=true returns every ranked result. Ranking and Best Match selection are unchanged; the Best Match also appears first in its group.
+         */
+        get: operations["searchLibrary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/library/tracks/{trackId}/lyrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a track's lyrics
+         * @description The lyrics read from the file tags at import; when the file carried none, LRCLIB's for the Track's title, Artist, Album and duration, looked up on first request and stored (ADR 0029). Synced lyrics come as LRC text. Empty when there are none, the lookup failed, or online lookups are switched off.
+         */
+        get: operations["getTrackLyrics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/library/tracks/{trackId}/waveform": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get normalized waveform peaks for a track
+         * @description Peaks are decoded from the managed file with ffmpeg on first request and cached; a replaced file is decoded again. Advertised through the track-waveform.v1 capability, which requires ffmpeg on the Music Server.
+         */
+        get: operations["getTrackWaveform"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/library/tracks/{trackId}/deletion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Review irreversible Managed Track deletion and all affected references */
+        get: operations["previewTrackDeletion"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/library/tracks/{trackId}/replacement": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start an explicit Track Replacement for one Managed Track
+         * @description Creates a Managed Import Job bound to the Track. Upload the replacement file with uploadManagedImportFile; the returned Import Preview carries a replacement section listing every difference and destructive consequence. Confirm with confirmTrackReplacement, never with confirmManagedImport.
+         */
+        post: operations["createTrackReplacement"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -211,6 +414,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/import-history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List up to 20 most recent terminal Managed Import results */
+        get: operations["listImportHistory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/import-batches/{batchId}": {
         parameters: {
             query?: never;
@@ -220,6 +440,64 @@ export interface paths {
         };
         /** Get per-file preview, progress, selection, and outcomes */
         get: operations["getManagedImportBatch"];
+        put?: never;
+        post?: never;
+        /** Cancel an uncommitted Managed Import Batch and remove its staging */
+        delete: operations["cancelManagedImportBatch"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/import-batches/{batchId}/heartbeat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Keep an unfinished import alive without changing its preview revision */
+        post: operations["heartbeatManagedImportBatch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/import-batches/{batchId}/albums/{albumKey}/artwork": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                batchId: components["parameters"]["batchId"];
+                albumKey: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** Stage a JPEG or PNG cover for an import Album */
+        put: operations["uploadManagedImportArtwork"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/import-batches/{batchId}/artwork/{artworkId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                batchId: components["parameters"]["batchId"];
+                artworkId: string;
+            };
+            cookie?: never;
+        };
+        /** Preview staged Album artwork */
+        get: operations["getManagedImportArtwork"];
         put?: never;
         post?: never;
         delete?: never;
@@ -273,7 +551,8 @@ export interface paths {
         get: operations["getManagedImportJob"];
         put?: never;
         post?: never;
-        delete?: never;
+        /** Cancel an uncommitted Managed Import Job and remove its staging */
+        delete: operations["cancelManagedImport"];
         options?: never;
         head?: never;
         patch?: never;
@@ -287,7 +566,10 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Stream one audio file into a Managed Import Job and detect its actual format */
+        /**
+         * Stream one audio file into a Managed Import Job and detect its actual format
+         * @description The request media type is advisory only. The Music Server detects the Source Audio Format from the uploaded bytes and never trusts the declared Content-Type or the client filename extension.
+         */
         put: operations["uploadManagedImportFile"];
         post?: never;
         delete?: never;
@@ -313,6 +595,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/imports/{importId}/replacement": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirm a reviewed Track Replacement and delete the previous managed file
+         * @description Keeps the Track ID and every Playlist and Queue reference, makes the validated replacement metadata authoritative, cleans emptied Albums and Artists, and deletes the previous managed file only after the replacement was placed, hashed, committed, and read back from its Canonical Library Path.
+         */
+        post: operations["confirmTrackReplacement"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/playback/queue": {
         parameters: {
             query?: never;
@@ -325,7 +627,11 @@ export interface paths {
         /** Replace playback queue */
         put: operations["replacePlaybackQueue"];
         post?: never;
-        delete?: never;
+        /**
+         * Clear playback queue
+         * @description Removes the queue items after `afterItemId`; that item and the ones before it stay unchanged. Without `afterItemId` the whole queue is removed.
+         */
+        delete: operations["clearPlaybackQueue"];
         options?: never;
         head?: never;
         /** Reorder playback queue items */
@@ -399,7 +705,8 @@ export interface paths {
         post?: never;
         delete?: never;
         options?: never;
-        head?: never;
+        /** Check track audio availability without downloading it */
+        head: operations["headTrackStream"];
         patch?: never;
         trace?: never;
     };
@@ -577,6 +884,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/radio/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Stream a Radio Browser search result before importing it */
+        post: operations["previewRadioStation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/radio/preview/{stationUuid}/stream": {
         parameters: {
             query?: never;
@@ -636,8 +960,20 @@ export interface components {
             /** @enum {string} */
             status: "ok";
             version: string;
-            /** @description Named server behaviors supported by this release. Queue event streaming is advertised as playback.queue-events.v1 and the first strict FLAC Managed Import tracer bullet as managed-import.v1. Multi-file Managed Import Batches are advertised as managed-import-batches.v1. */
+            /** @description Named server behaviors supported by this release. The versioned /api/v1 surface itself is advertised as api.v1. Queue event streaming is advertised as playback.queue-events.v1 and the first strict FLAC Managed Import tracer bullet as managed-import.v1. Multi-file Managed Import Batches are advertised as managed-import-batches.v1, Permanent Track Deletion as managed-track-deletion.v1, explicit Track Replacement as managed-track-replacement.v1, Album deletion (one Permanent Track Deletion per Track, previewed once) as managed-album-deletion.v1, and lazily generated waveform peaks as track-waveform.v1 (only when ffmpeg is installed). Clients gate optional behavior on the exact capability name and must ignore unknown entries so newer servers stay compatible with older clients. */
             capabilities: string[];
+            /** @description Server Dependencies probed once at startup, in a stable order (ffmpeg, ffprobe). They describe the deployment environment so an operator can see what the installation supports. */
+            dependencies: components["schemas"]["ServerDependency"][];
+        };
+        ServerDependency: {
+            /** @description Program name as invoked by the Music Server. */
+            name: string;
+            /** @description True when Managed Import cannot work without the program; false for an optional dependency whose absence only disables a feature. */
+            required: boolean;
+            /** @description True when the program was found on PATH at startup. */
+            available: boolean;
+            /** @description Version parsed from the program's own version output. Absent when the program is missing or its output could not be parsed. */
+            version?: string;
         };
         User: {
             /** Format: uuid */
@@ -665,15 +1001,57 @@ export interface components {
             /** @enum {string} */
             preset: "earthly" | "tokyo-night" | "vintage-harbor" | "night-ember" | "dusty-earth" | "coastal-mist" | "sage-hearth";
         };
+        /** @description Player Bar behaviour shared by the Web and Desktop Clients. */
+        PlaybackPreferences: {
+            /** @description Seconds moved by the arrow-key seek shortcut. */
+            seekStepSeconds: number;
+            /** @description Seconds moved by the Shift+arrow seek shortcut. */
+            seekStepLargeSeconds: number;
+            /** @description Default playback speed multiplier. */
+            playbackRate: number;
+            /** @description Volume ramp applied on user-initiated transitions; 0 disables it. */
+            transitionFadeMs: number;
+            showWaveform: boolean;
+            /** @description Tint the Player Bar from the current album cover. */
+            accentFromCover: boolean;
+            /** @description Show the next queued track beside the now-playing info. */
+            showUpNext: boolean;
+            /** @description Countdown before a failed track is skipped; 0 waits for the user. */
+            autoSkipOnErrorSeconds: number;
+            /** @description Show the hovered position as a timestamp over the seek bar. */
+            hoverTimestamp: boolean;
+        };
+        /** @description Sparse form of PlaybackPreferences; absent fields are left unchanged. */
+        PlaybackPreferencesPatch: {
+            seekStepSeconds?: number;
+            seekStepLargeSeconds?: number;
+            playbackRate?: number;
+            transitionFadeMs?: number;
+            showWaveform?: boolean;
+            accentFromCover?: boolean;
+            showUpNext?: boolean;
+            autoSkipOnErrorSeconds?: number;
+            hoverTimestamp?: boolean;
+        };
         UserPreferences: {
             theme: components["schemas"]["ThemePreferences"];
             layout: components["schemas"]["LayoutPreferences"];
+            playback: components["schemas"]["PlaybackPreferences"];
         };
         UserPreferencesPatch: {
             theme?: components["schemas"]["ThemePreferences"];
             layout?: components["schemas"]["LayoutPreferences"];
+            playback?: components["schemas"]["PlaybackPreferencesPatch"];
+        };
+        ValidationIssue: {
+            code: string;
+            field: string;
+            /** @description Safe, actionable description of one validation failure. */
+            reason: string;
         };
         ErrorResponse: {
+            /** @description All independently detectable validation failures, in check order. */
+            issues?: components["schemas"]["ValidationIssue"][];
             error: string;
             code: string;
             message: string;
@@ -693,9 +1071,14 @@ export interface components {
             errorCode?: string;
             /**
              * Format: uuid
-             * @description Created Track when status is committed.
+             * @description Created or replaced Track when status is committed.
              */
             trackId?: string;
+            /**
+             * Format: uuid
+             * @description Present when this job is an explicit Track Replacement of that Track.
+             */
+            replacesTrackId?: string;
         };
         ManagedImportJobCreate: {
             /**
@@ -709,7 +1092,9 @@ export interface components {
              */
             clientFileId: string;
         };
+        ManagedImportBatchCreate: Record<string, never>;
         ManagedImportBatch: {
+            albums?: components["schemas"]["ManagedImportAlbumPreview"][];
             /** Format: uuid */
             id: string;
             /** @enum {string} */
@@ -718,6 +1103,17 @@ export interface components {
             files: components["schemas"]["ManagedImportBatchFile"][];
         };
         ManagedImportBatchFile: {
+            /**
+             * @description Current server processing phase, separate from byte transfer progress.
+             * @enum {string}
+             */
+            phase?: "queued" | "uploading" | "validating" | "ready" | "failed" | "committing" | "completed";
+            /** Format: int64 */
+            transferredBytes?: number;
+            /** Format: int64 */
+            totalBytes?: number;
+            /** @description All independently detectable validation failures, in check order. */
+            issues?: components["schemas"]["ValidationIssue"][];
             /** Format: uuid */
             jobId: string;
             /** Format: uuid */
@@ -739,20 +1135,129 @@ export interface components {
             /** Format: uuid */
             trackId?: string;
         };
+        ManagedImportHistoryList: {
+            items: components["schemas"]["ManagedImportHistoryItem"][];
+        };
+        ManagedImportHistoryItem: {
+            /** Format: uuid */
+            importId: string;
+            /** Format: date-time */
+            startedAt: string;
+            /** Format: date-time */
+            completedAt: string;
+            /** @enum {string} */
+            resultCode: "completed" | "partially_completed" | "failed" | "canceled";
+            counts: components["schemas"]["ManagedImportHistoryCounts"];
+            files: components["schemas"]["ManagedImportHistoryFile"][];
+        };
+        ManagedImportHistoryCounts: {
+            total: number;
+            imported: number;
+            rejected: number;
+            failed: number;
+            replaced: number;
+            notAttempted: number;
+            canceled: number;
+        };
+        ManagedImportHistoryFile: {
+            /** @description All independently detectable validation failures, in check order. */
+            issues?: components["schemas"]["ValidationIssue"][];
+            /** Format: uuid */
+            fileId: string;
+            /** Format: uuid */
+            jobId: string;
+            safeFilename?: string;
+            /** Format: date-time */
+            startedAt: string;
+            /** Format: date-time */
+            completedAt: string;
+            contentSha256?: string;
+            resultCode: string;
+            /** Format: uuid */
+            createdTrackId?: string;
+            replacedTrackId?: string;
+        };
+        ManagedImportAlbumPreview: {
+            key: string;
+            title: string;
+            albumArtists: string[];
+            existingAlbums: components["schemas"]["ManagedImportAlbumMatch"][];
+            artworks: components["schemas"]["ManagedImportArtworkOption"][];
+        };
+        ManagedImportAlbumMatch: {
+            id: string;
+            year?: number;
+            hasArtwork: boolean;
+            tracks: components["schemas"]["ManagedImportDuplicateCandidate"][];
+        };
+        ManagedImportArtworkOption: {
+            id: string;
+            jobId?: string;
+            mediaType: string;
+            contentSha256: string;
+        };
+        ManagedImportAlbumDecision: {
+            albumKey: string;
+            albumId?: string;
+            createSeparate: boolean;
+            artworkId?: string;
+            /** @enum {string} */
+            artworkMode: "auto" | "none" | "selected";
+        };
         ManagedImportBatchConfirmation: {
+            albumDecisions?: components["schemas"]["ManagedImportAlbumDecision"][];
             revision: number;
             selectedFileIds: string[];
+            duplicateDecisions?: components["schemas"]["ManagedImportDuplicateDecision"][];
         };
-        ManagedImportPreview: {
+        ManagedImportDuplicateDecision: {
+            targetRevision?: number;
+            /** Format: uuid */
+            trackId?: string;
             /** Format: uuid */
             jobId: string;
             /** @enum {string} */
-            status: "awaiting_confirmation";
+            action: "import_separately" | "replace_existing" | "do_not_import";
+        };
+        ManagedImportPreview: {
+            matchingTracks?: components["schemas"]["ManagedImportDuplicateCandidate"][];
+            /** Format: uuid */
+            jobId: string;
+            /** @enum {string} */
+            status: "awaiting_confirmation" | "failed";
             revision: number;
             file: components["schemas"]["ManagedImportPreviewFile"];
+            /**
+             * @description Only identical full-file SHA-256 values are duplicates.
+             * @enum {string}
+             */
+            duplicateClassification: "none" | "exact_duplicate";
+            duplicateCandidates?: components["schemas"]["ManagedImportDuplicateCandidate"][];
+            replacement?: components["schemas"]["TrackReplacementPreview"];
         };
-        ManagedImportPreviewFile: components["schemas"]["ManagedImportFlacPreviewFile"] | components["schemas"]["ManagedImportM4aPreviewFile"] | components["schemas"]["ManagedImportMp3PreviewFile"] | components["schemas"]["ManagedImportOggPreviewFile"] | components["schemas"]["ManagedImportOpusPreviewFile"];
+        ManagedImportDuplicateCandidate: {
+            revision?: number;
+            titleKey?: string;
+            currentFile?: components["schemas"]["ManagedImportPreviewFile"];
+            /** Format: uuid */
+            trackId: string;
+            title: string;
+            artists: string[];
+            album: string;
+            discNo: number;
+            trackNo: number;
+            format: string;
+            durationMs: number;
+        };
+        ManagedImportPreviewFile: components["schemas"]["ManagedImportFlacPreviewFile"] | components["schemas"]["ManagedImportWavPreviewFile"] | components["schemas"]["ManagedImportM4aPreviewFile"] | components["schemas"]["ManagedImportMp3PreviewFile"] | components["schemas"]["ManagedImportOggPreviewFile"] | components["schemas"]["ManagedImportOpusPreviewFile"];
         ManagedImportPreviewFileCommon: {
+            hasDiscNumber?: boolean;
+            titleKey?: string;
+            albumKey?: string;
+            contentSha256?: string;
+            /** Format: int64 */
+            sizeBytes?: number;
+            artworkWarning?: string;
             originalFilename: string;
             title: string;
             artists: string[];
@@ -769,14 +1274,14 @@ export interface components {
             channelCount: number;
             bitrateKbps: number;
             /** @enum {string} */
-            artworkMediaType: "image/jpeg" | "image/png" | "image/webp";
+            artworkMediaType: "" | "image/jpeg" | "image/png" | "image/webp";
         };
         ManagedImportFlacPreviewFile: components["schemas"]["ManagedImportPreviewFileCommon"] & {
-            /** @constant */
+            /** @enum {string} */
             format: "flac";
-            /** @constant */
+            /** @enum {string} */
             container: "flac";
-            /** @constant */
+            /** @enum {string} */
             codec: "flac";
             bitDepth: number;
         } & {
@@ -786,15 +1291,31 @@ export interface components {
              */
             format: "flac";
         };
+        ManagedImportWavPreviewFile: components["schemas"]["ManagedImportPreviewFileCommon"] & {
+            /** @enum {string} */
+            format: "wav";
+            /** @enum {string} */
+            container: "wav";
+            /** @enum {string} */
+            codec: "pcm_u8" | "pcm_s16le" | "pcm_s24le" | "pcm_s32le";
+            /** @enum {integer} */
+            bitDepth: 8 | 16 | 24 | 32;
+        } & {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            format: "wav";
+        };
         ManagedImportM4aPreviewFile: components["schemas"]["ManagedImportPreviewFileCommon"] & {
-            /** @constant */
+            /** @enum {string} */
             format: "m4a";
-            /** @constant */
+            /** @enum {string} */
             container: "m4a";
             /** @enum {string} */
             codec: "aac" | "alac";
-            /** @description Source bit depth for ALAC; 0 for AAC. */
-            bitDepth: number;
+            /** @description Source bit depth, present only for lossless ALAC. Lossy AAC previews omit the field because no source bit depth exists. */
+            bitDepth?: number;
         } & {
             /**
              * @description discriminator enum property added by openapi-typescript
@@ -803,11 +1324,11 @@ export interface components {
             format: "m4a";
         };
         ManagedImportMp3PreviewFile: components["schemas"]["ManagedImportPreviewFileCommon"] & {
-            /** @constant */
+            /** @enum {string} */
             format: "mp3";
-            /** @constant */
+            /** @enum {string} */
             container: "mp3";
-            /** @constant */
+            /** @enum {string} */
             codec: "mp3";
         } & {
             /**
@@ -817,11 +1338,11 @@ export interface components {
             format: "mp3";
         };
         ManagedImportOggPreviewFile: components["schemas"]["ManagedImportPreviewFileCommon"] & {
-            /** @constant */
+            /** @enum {string} */
             format: "ogg";
-            /** @constant */
+            /** @enum {string} */
             container: "ogg";
-            /** @constant */
+            /** @enum {string} */
             codec: "vorbis";
         } & {
             /**
@@ -831,11 +1352,11 @@ export interface components {
             format: "ogg";
         };
         ManagedImportOpusPreviewFile: components["schemas"]["ManagedImportPreviewFileCommon"] & {
-            /** @constant */
+            /** @enum {string} */
             format: "opus";
-            /** @constant */
+            /** @enum {string} */
             container: "ogg";
-            /** @constant */
+            /** @enum {string} */
             codec: "opus";
         } & {
             /**
@@ -846,6 +1367,8 @@ export interface components {
         };
         ManagedImportConfirmation: {
             revision: number;
+            /** @enum {string} */
+            duplicateDecision?: "import_separately" | "replace_existing" | "do_not_import";
         };
         ManagedImportResult: {
             /** Format: uuid */
@@ -884,6 +1407,24 @@ export interface components {
             /** Format: int64 */
             sizeBytes: number;
         };
+        ArtistBiography: {
+            text: string;
+            /** Format: uri */
+            sourceUrl: string;
+        };
+        GenreNameList: {
+            items: string[];
+        };
+        PlayCountList: {
+            items: {
+                trackId: string;
+                /** Format: int64 */
+                playCount: number;
+            }[];
+        };
+        PopularTrackList: {
+            items: components["schemas"]["Track"][];
+        };
         ArtistList: {
             items: components["schemas"]["Artist"][];
             total: number;
@@ -918,6 +1459,24 @@ export interface components {
         AlbumDetail: components["schemas"]["Album"] & {
             tracks: components["schemas"]["Track"][];
         };
+        TrackWaveform: {
+            /** Format: uuid */
+            trackId: string;
+            peakCount: number;
+            /** @description Loudest sample per equal time slice, normalized to 0..255. */
+            peaks: number[];
+        };
+        TrackWaveformPending: {
+            /** @enum {string} */
+            status: "pending";
+            retryAfterSeconds: number;
+        };
+        TrackLyrics: {
+            /** Format: uuid */
+            trackId: string;
+            /** @description Plain lyrics, or LRC text (`[mm:ss.xx] words`) when synced, with newline-separated lines; empty when there are none. */
+            lyrics: string;
+        };
         Track: {
             /** Format: uuid */
             id: string;
@@ -929,6 +1488,8 @@ export interface components {
             artistName: string;
             /** @description Ordered normalized Track Artist credits. */
             artists?: components["schemas"]["ArtistCredit"][];
+            /** @description Ordered Album Artist credits, independent from Track Artists. */
+            albumArtists?: components["schemas"]["ArtistCredit"][];
             /** Format: uuid */
             albumId: string;
             albumTitle?: string;
@@ -956,6 +1517,25 @@ export interface components {
             bitrateKbps?: number;
             sizeBytes?: number;
             replayGain?: components["schemas"]["ReplayGainMetadata"];
+            /** @description Normalized title the library sorts and matches by. */
+            titleSort?: string;
+            /** @description Canonical Library Path of the authoritative audio file in Managed Storage. */
+            filePath?: string;
+            /**
+             * Format: int64
+             * @description Modification time of the managed file, seconds since the Unix epoch.
+             */
+            fileMtime?: number;
+            /** @description Full-file SHA-256 of the managed audio bytes. */
+            contentSha256?: string;
+            /** @description Strict position-and-title identity within the Album. */
+            identityKey?: string;
+            /** @description Increments on Track Replacement or Track credit repair. */
+            revision?: number;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
         };
         ReplayGainMetadata: {
             /** Format: double */
@@ -970,6 +1550,37 @@ export interface components {
         TrackList: {
             items: components["schemas"]["Track"][];
             total: number;
+        };
+        /** @enum {string} */
+        LibrarySearchResultType: "track" | "album" | "artist" | "genre" | "playlist";
+        /**
+         * @description `direct` records match without typo correction, with their own title/name contributing, and are the only Best Match candidates. `corrected` records match through bounded typo correction. `related` is retained for API v1 compatibility but is no longer emitted.
+         * @enum {string}
+         */
+        LibrarySearchMatch: "direct" | "related" | "corrected";
+        LibrarySearchAlbumReference: {
+            id: string;
+            name: string;
+        };
+        LibrarySearchResult: {
+            type: components["schemas"]["LibrarySearchResultType"];
+            id: string;
+            /** @description The original display title or name */
+            name: string;
+            match: components["schemas"]["LibrarySearchMatch"];
+            /** @description Track credits for a Track, Album Artist credits for an Album, in credit order */
+            artists?: components["schemas"]["ArtistCredit"][];
+            album?: components["schemas"]["LibrarySearchAlbumReference"];
+        };
+        LibrarySearchResponse: {
+            /** @description Unique ranked matches across all groups before the cap, counting the Best Match only once; optional for older servers */
+            total?: number;
+            bestMatch?: components["schemas"]["LibrarySearchResult"];
+            tracks: components["schemas"]["LibrarySearchResult"][];
+            albums: components["schemas"]["LibrarySearchResult"][];
+            artists: components["schemas"]["LibrarySearchResult"][];
+            genres: components["schemas"]["LibrarySearchResult"][];
+            playlists: components["schemas"]["LibrarySearchResult"][];
         };
         Playlist: {
             /** Format: uuid */
@@ -1100,20 +1711,167 @@ export interface components {
         DeleteResult: {
             deletedFiles: number;
         };
-        ScanStatus: {
+        AlbumDeletionPreview: {
+            /** Format: uuid */
+            albumId: string;
+            albumTitle: string;
+            trackCount: number;
+            totalSizeBytes: number;
+            tracks: components["schemas"]["AlbumDeletionTrack"][];
+            playlistReferences: components["schemas"]["TrackDeletionPlaylistReference"][];
+            queueReferences: components["schemas"]["TrackDeletionQueueReference"][];
+            /** @description Opaque token binding confirmation to the reviewed Album, its Tracks, managed files, and relationships */
+            confirmationToken: string;
+        };
+        AlbumDeletionTrack: {
+            /** Format: uuid */
+            trackId: string;
+            trackTitle: string;
+            sizeBytes: number;
+        };
+        AlbumDeletionFailed: {
+            /** Format: uuid */
+            trackId: string;
+            trackTitle: string;
+            reason: string;
+        };
+        AlbumDeletionResult: {
+            deleted: components["schemas"]["AlbumDeletionTrack"][];
+            /** @description Null when every Track was deleted; otherwise the Track whose failure stopped the run */
+            stoppedAt: components["schemas"]["AlbumDeletionFailed"] | null;
+            deletedFiles: number;
+        };
+        TrackDeletionPreview: {
+            /** Format: uuid */
+            trackId: string;
+            trackTitle: string;
+            managedFile: components["schemas"]["TrackDeletionManagedFile"];
+            playlistReferences: components["schemas"]["TrackDeletionPlaylistReference"][];
+            queueReferences: components["schemas"]["TrackDeletionQueueReference"][];
+            /** @description Opaque token binding confirmation to the reviewed Track, managed file, and relationships */
+            confirmationToken: string;
+        };
+        TrackDeletionManagedFile: {
+            /** @description Managed Storage-relative canonical audio path */
+            path: string;
+            sizeBytes: number;
+        };
+        TrackDeletionPlaylistReference: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+        };
+        TrackDeletionQueueReference: {
+            userId: string;
+            itemCount: number;
+        };
+        TrackDeletionConfirmation: {
+            confirmationToken: string;
+        };
+        /** @description Every visible consequence of replacing a Managed Track's audio file while keeping its identity. */
+        TrackReplacementPreview: {
+            /** Format: uuid */
+            trackId: string;
+            trackTitle: string;
+            sourceFormat: components["schemas"]["TrackReplacementFieldDiff"];
+            technicalProperties: components["schemas"]["TrackReplacementFieldDiff"][];
+            metadata: components["schemas"]["TrackReplacementFieldDiff"][];
+            library: components["schemas"]["TrackReplacementLibraryChange"];
+            artwork: components["schemas"]["TrackReplacementArtworkChange"];
+            canonicalPath: components["schemas"]["TrackReplacementFieldDiff"];
+            oldFile: components["schemas"]["TrackReplacementFileDeletion"];
+            /** @description Playlist references that stay attached to the unchanged Track ID. */
+            playlistReferences: components["schemas"]["TrackDeletionPlaylistReference"][];
+            /** @description Queue references that stay attached to the unchanged Track ID. */
+            queueReferences: components["schemas"]["TrackDeletionQueueReference"][];
+            /** @description Opaque token binding confirmation to the reviewed Track, managed file, references, and replacement bytes */
+            confirmationToken: string;
+        };
+        TrackReplacementFieldDiff: {
+            field: string;
+            current: string;
+            replacement: string;
+            isChanged: boolean;
+        };
+        TrackReplacementLibraryChange: {
+            /** Format: uuid */
+            currentAlbumId: string;
+            /** Format: uuid */
+            replacementAlbumId?: string;
+            movesAlbum: boolean;
+            createsAlbum: boolean;
+            removesEmptyAlbum: boolean;
+            removesEmptyArtists: string[];
+            createsArtists: string[];
+            createsGenres: string[];
+        };
+        TrackReplacementArtworkChange: {
+            currentMediaType: string;
+            currentSha256: string;
+            replacementMediaType: string;
+            replacementSha256: string;
+            isChanged: boolean;
+            /** @description True when the Album's display artwork file itself is replaced. */
+            replacesAlbumArtwork: boolean;
+        };
+        TrackReplacementFileDeletion: {
+            /** @description Managed Storage-relative path of the previous managed file that will be deleted */
+            path: string;
+            sizeBytes: number;
+        };
+        TrackReplacementConfirmation: {
+            revision: number;
+            confirmationToken: string;
+        };
+        TrackReplacementResult: {
+            /** Format: uuid */
+            jobId: string;
             /** @enum {string} */
-            status: "idle" | "running" | "completed" | "failed";
-            scanned: number;
-            added: number;
-            updated: number;
-            removed: number;
-            error?: string;
+            status: "committed";
+            revision: number;
+            /** Format: uuid */
+            trackId: string;
             /** Format: date-time */
-            startedAt?: string;
-            /** Format: date-time */
-            finishedAt?: string;
+            deletedFiles: number;
+        };
+        /** @description Origin captured when a track enters the queue. Omitted sources default to user. Source JSON is limited to 16384 bytes. */
+        QueueItemSource: components["schemas"]["QueueAlbumSource"] | components["schemas"]["QueuePlaylistSource"] | components["schemas"]["QueueUserSource"] | components["schemas"]["QueueSuggestionSource"];
+        QueueAlbumSource: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "album";
+            albumId: string;
+            albumTitle: string;
+            artistName: string;
+        };
+        QueuePlaylistSource: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "playlist";
+            playlistId: string;
+            name: string;
+        };
+        QueueUserSource: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "user";
+        };
+        QueueSuggestionSource: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "suggestion";
+            basedOn: string[];
         };
         QueueItem: {
+            source?: components["schemas"]["QueueItemSource"];
             /** Format: uuid */
             id: string;
             /** Format: uuid */
@@ -1134,15 +1892,20 @@ export interface components {
             /** @description Shared resources clients must refetch */
             invalidates: "queue"[];
         };
+        /** @description Queue mutation bodies are limited to 1048576 bytes; invalid or oversized requests return 400. Queues may contain at most 1000 items. */
         QueueReplace: {
+            source?: components["schemas"]["QueueItemSource"];
             trackIds: string[];
             revision: string;
         };
+        /** @description Queue mutation bodies are limited to 1048576 bytes; invalid or oversized requests return 400. Queues may contain at most 1000 items. */
         QueueItemAppend: {
+            source?: components["schemas"]["QueueItemSource"];
             /** Format: uuid */
             trackId: string;
             revision: string;
         };
+        /** @description Queue mutation bodies are limited to 1048576 bytes; invalid or oversized requests return 400. Queues may contain at most 1000 items. */
         QueueReorder: {
             itemIds: string[];
             revision: string;
@@ -1163,6 +1926,15 @@ export interface components {
         };
         /** @description Bad request */
         BadRequest: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description Forbidden */
+        Forbidden: {
             headers: {
                 [name: string]: unknown;
             };
@@ -1210,6 +1982,7 @@ export interface components {
     parameters: {
         limit: number;
         offset: number;
+        artistId: string;
         albumId: string;
         trackId: string;
         importId: string;
@@ -1312,54 +2085,12 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
         };
     };
-    triggerLibraryScan: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Scan started */
-            202: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ScanStatus"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            409: components["responses"]["Conflict"];
-        };
-    };
-    getLibraryScanStatus: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Scan status */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ScanStatus"];
-                };
-            };
-        };
-    };
     listArtists: {
         parameters: {
             query?: {
                 limit?: components["parameters"]["limit"];
                 offset?: components["parameters"]["offset"];
-                /** @description Search by name */
+                /** @description Substring filter over active Album Artists only. Exact names sort first. Album counts include active Album Artist credits only. */
                 q?: string;
             };
             header?: never;
@@ -1377,6 +2108,124 @@ export interface operations {
                     "application/json": components["schemas"]["ArtistList"];
                 };
             };
+        };
+    };
+    getArtist: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                artistId: components["parameters"]["artistId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Artist */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Artist"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getArtistPhoto: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                artistId: components["parameters"]["artistId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Artist photo */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": string;
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getArtistBiography: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                artistId: components["parameters"]["artistId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Artist biography */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtistBiography"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listArtistPopularTracks: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                artistId: components["parameters"]["artistId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Popular tracks, best first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PopularTrackList"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listTrackPlayCounts: {
+        parameters: {
+            query: {
+                /** @description Comma-separated Track ids, at most 200. */
+                ids: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Play counts for the Tracks that have one */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlayCountList"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
         };
     };
     listAlbums: {
@@ -1405,6 +2254,29 @@ export interface operations {
             };
         };
     };
+    listAlbumOnlineGenres: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                albumId: components["parameters"]["albumId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Genre names, Deezer's order */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenreNameList"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
     getAlbum: {
         parameters: {
             query?: never;
@@ -1431,6 +2303,39 @@ export interface operations {
     deleteAlbum: {
         parameters: {
             query?: never;
+            header: {
+                /** @description Explicit application confirmation required for irreversible deletion */
+                "X-Permanent-Delete": "1";
+            };
+            path: {
+                albumId: components["parameters"]["albumId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TrackDeletionConfirmation"];
+            };
+        };
+        responses: {
+            /** @description Per-Track outcome of the album deletion */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlbumDeletionResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    previewAlbumDeletion: {
+        parameters: {
+            query?: never;
             header?: never;
             path: {
                 albumId: components["parameters"]["albumId"];
@@ -1439,21 +2344,25 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Album deleted */
+            /** @description Current album deletion preview */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DeleteResult"];
+                    "application/json": components["schemas"]["AlbumDeletionPreview"];
                 };
             };
             404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
         };
     };
     getAlbumCover: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Longest edge in pixels. The cover is scaled down to fit (never up) and served as JPEG; a cover already within the size is served as is. Omit for the original image. */
+                size?: 64 | 128 | 256 | 512 | 1024;
+            };
             header?: never;
             path: {
                 albumId: components["parameters"]["albumId"];
@@ -1472,6 +2381,7 @@ export interface operations {
                     "image/png": string;
                 };
             };
+            400: components["responses"]["BadRequest"];
             404: components["responses"]["NotFound"];
         };
     };
@@ -1480,6 +2390,8 @@ export interface operations {
             query?: {
                 limit?: components["parameters"]["limit"];
                 offset?: components["parameters"]["offset"];
+                /** @description Exact Track or Album Artist credit filter, combined with q before counting and pagination. */
+                artistId?: string;
                 /** @description Search by title or artist */
                 q?: string;
             };
@@ -1526,15 +2438,22 @@ export interface operations {
     deleteTrack: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description Explicit application confirmation required for irreversible deletion */
+                "X-Permanent-Delete": "1";
+            };
             path: {
                 trackId: components["parameters"]["trackId"];
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TrackDeletionConfirmation"];
+            };
+        };
         responses: {
-            /** @description Track deleted */
+            /** @description Managed Track and its exact managed audio file permanently deleted */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -1543,7 +2462,149 @@ export interface operations {
                     "application/json": components["schemas"]["DeleteResult"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    searchLibrary: {
+        parameters: {
+            query: {
+                /** @description The query text; empty and punctuation-only input is rejected */
+                q: string;
+                /** @description Return all ranked results instead of five per group; must be true or false */
+                all?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Ranked Library Search groups */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibrarySearchResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+        };
+    };
+    getTrackLyrics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                trackId: components["parameters"]["trackId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Track lyrics */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrackLyrics"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getTrackWaveform: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                trackId: components["parameters"]["trackId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cached waveform peaks */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrackWaveform"];
+                };
+            };
+            /** @description Peaks are still being generated; retry after the given delay. */
+            202: {
+                headers: {
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrackWaveformPending"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            /** @description ffmpeg is not installed on the Music Server. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    previewTrackDeletion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                trackId: components["parameters"]["trackId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current Permanent Track Deletion preview */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrackDeletionPreview"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    createTrackReplacement: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                trackId: components["parameters"]["trackId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Track Replacement job created and awaiting the replacement upload */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagedImportJob"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
         };
     };
     createManagedImportBatch: {
@@ -1553,7 +2614,11 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ManagedImportBatchCreate"];
+            };
+        };
         responses: {
             /** @description Managed Import Batch created */
             201: {
@@ -1562,6 +2627,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ManagedImportBatch"];
+                };
+            };
+        };
+    };
+    listImportHistory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Recent terminal Import History without staged audio or raw metadata */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagedImportHistoryList"];
                 };
             };
         };
@@ -1584,6 +2669,103 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ManagedImportBatch"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    cancelManagedImportBatch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                batchId: components["parameters"]["batchId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Managed Import Batch canceled and staging removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    heartbeatManagedImportBatch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                batchId: components["parameters"]["batchId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Client liveness recorded */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    uploadManagedImportArtwork: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                batchId: components["parameters"]["batchId"];
+                albumKey: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            /** @description Validated artwork option */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ManagedImportArtworkOption"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+        };
+    };
+    getManagedImportArtwork: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                batchId: components["parameters"]["batchId"];
+                artworkId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Validated image bytes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/png": string;
+                    "image/jpeg": string;
+                    "image/webp": string;
                 };
             };
             404: components["responses"]["NotFound"];
@@ -1665,12 +2847,36 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
+    cancelManagedImport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                importId: components["parameters"]["importId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Managed Import Job canceled and staging removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
     uploadManagedImportFile: {
         parameters: {
             query?: never;
             header: {
                 /** @description Display-only client filename; never used as a storage path. */
                 "X-Import-Filename": string;
+                /** @description Set to url when X-Import-Filename is percent-encoded so non-ASCII filenames survive HTTP header transport. Absent means the header is sent verbatim. */
+                "X-Import-Filename-Encoding"?: "url";
             };
             path: {
                 importId: components["parameters"]["importId"];
@@ -1681,6 +2887,11 @@ export interface operations {
             content: {
                 "application/octet-stream": string;
                 "audio/flac": string;
+                "audio/wav": string;
+                "audio/mpeg": string;
+                "audio/mp4": string;
+                "audio/ogg": string;
+                "audio/opus": string;
             };
         };
         responses: {
@@ -1695,6 +2906,15 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             404: components["responses"]["NotFound"];
+            /** @description Upload stream was interrupted and this Import Job remains retryable */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             409: components["responses"]["Conflict"];
             /** @description File or batch exceeds the configured Managed Import byte limit */
             413: {
@@ -1747,6 +2967,49 @@ export interface operations {
             507: components["responses"]["InsufficientStorage"];
         };
     };
+    confirmTrackReplacement: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Explicit application confirmation required for the irreversible old-file deletion */
+                "X-Track-Replacement": "1";
+            };
+            path: {
+                importId: components["parameters"]["importId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TrackReplacementConfirmation"];
+            };
+        };
+        responses: {
+            /** @description Track Replacement committed, or the idempotent prior result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrackReplacementResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            /** @description Replacement file no longer passes the Strict Import Profile */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            507: components["responses"]["InsufficientStorage"];
+        };
+    };
     getPlaybackQueue: {
         parameters: {
             query?: never;
@@ -1792,6 +3055,44 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            /** @description Queue revision conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QueueConflictResponse"];
+                };
+            };
+        };
+    };
+    clearPlaybackQueue: {
+        parameters: {
+            query?: {
+                /** @description Queue item after which everything is removed, typically the one playing */
+                afterItemId?: string;
+            };
+            header: {
+                /** @description Queue Revision on which the clear intent is based */
+                "If-Match": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Updated queue */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Queue"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
             /** @description Queue revision conflict */
             409: {
                 headers: {
@@ -1963,6 +3264,33 @@ export interface operations {
             };
             404: components["responses"]["NotFound"];
             416: components["responses"]["RangeNotSatisfiable"];
+        };
+    };
+    headTrackStream: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                trackId: components["parameters"]["trackId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Track audio is available */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Track or its audio file was not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     listPlaylists: {
@@ -2295,6 +3623,59 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+        };
+    };
+    previewRadioStation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RadioImportRequest"];
+            };
+        };
+        responses: {
+            /** @description Radio preview stream */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "audio/mpeg": string;
+                    "audio/*": string;
+                    "application/vnd.apple.mpegurl": string;
+                    "application/x-mpegurl": string;
+                    "video/*": string;
+                    "application/octet-stream": string;
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description DRM-protected HLS is unsupported */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Upstream radio resource failed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Radio streaming is unavailable on this Music Server */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
     streamRadioPreview: {

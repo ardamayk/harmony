@@ -1,0 +1,266 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id AS \"id!\", job_id, track_id, phase, staged_file_path, pending_audio_path, audio_file_path,\n                previous_audio_path, retired_audio_path, audio_sha256, previous_audio_sha256, artwork_mode,\n                pending_artwork_path, artwork_file_path, previous_artwork_path, retired_artwork_path,\n                artwork_sha256, previous_artwork_sha256, artwork_created, previous_album_id, recovery_reason\n            FROM managed_track_replacements\n            WHERE (?1 IS NOT NULL AND id = ?1)\n                OR (?2 IS NOT NULL AND job_id = ?2 AND phase NOT IN ('completed', 'rolled_back'))\n                OR (?3 IS NOT NULL AND id = (\n                    SELECT id FROM managed_track_replacements WHERE job_id = ?3 ORDER BY created_at DESC, id DESC LIMIT 1\n                ))\n                OR (?4 AND phase NOT IN ('completed', 'rolled_back'))\n            ORDER BY created_at, id",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_track_replacements",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "job_id",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_track_replacements",
+            "name": "job_id"
+          }
+        }
+      },
+      {
+        "name": "track_id",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_track_replacements",
+            "name": "track_id"
+          }
+        }
+      },
+      {
+        "name": "phase",
+        "ordinal": 3,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_track_replacements",
+            "name": "phase"
+          }
+        }
+      },
+      {
+        "name": "staged_file_path",
+        "ordinal": 4,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_track_replacements",
+            "name": "staged_file_path"
+          }
+        }
+      },
+      {
+        "name": "pending_audio_path",
+        "ordinal": 5,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_track_replacements",
+            "name": "pending_audio_path"
+          }
+        }
+      },
+      {
+        "name": "audio_file_path",
+        "ordinal": 6,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_track_replacements",
+            "name": "audio_file_path"
+          }
+        }
+      },
+      {
+        "name": "previous_audio_path",
+        "ordinal": 7,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_track_replacements",
+            "name": "previous_audio_path"
+          }
+        }
+      },
+      {
+        "name": "retired_audio_path",
+        "ordinal": 8,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_track_replacements",
+            "name": "retired_audio_path"
+          }
+        }
+      },
+      {
+        "name": "audio_sha256",
+        "ordinal": 9,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_track_replacements",
+            "name": "audio_sha256"
+          }
+        }
+      },
+      {
+        "name": "previous_audio_sha256",
+        "ordinal": 10,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_track_replacements",
+            "name": "previous_audio_sha256"
+          }
+        }
+      },
+      {
+        "name": "artwork_mode",
+        "ordinal": 11,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_track_replacements",
+            "name": "artwork_mode"
+          }
+        }
+      },
+      {
+        "name": "pending_artwork_path",
+        "ordinal": 12,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_track_replacements",
+            "name": "pending_artwork_path"
+          }
+        }
+      },
+      {
+        "name": "artwork_file_path",
+        "ordinal": 13,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_track_replacements",
+            "name": "artwork_file_path"
+          }
+        }
+      },
+      {
+        "name": "previous_artwork_path",
+        "ordinal": 14,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_track_replacements",
+            "name": "previous_artwork_path"
+          }
+        }
+      },
+      {
+        "name": "retired_artwork_path",
+        "ordinal": 15,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_track_replacements",
+            "name": "retired_artwork_path"
+          }
+        }
+      },
+      {
+        "name": "artwork_sha256",
+        "ordinal": 16,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_track_replacements",
+            "name": "artwork_sha256"
+          }
+        }
+      },
+      {
+        "name": "previous_artwork_sha256",
+        "ordinal": 17,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_track_replacements",
+            "name": "previous_artwork_sha256"
+          }
+        }
+      },
+      {
+        "name": "artwork_created",
+        "ordinal": 18,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "managed_track_replacements",
+            "name": "artwork_created"
+          }
+        }
+      },
+      {
+        "name": "previous_album_id",
+        "ordinal": 19,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_track_replacements",
+            "name": "previous_album_id"
+          }
+        }
+      },
+      {
+        "name": "recovery_reason",
+        "ordinal": 20,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_track_replacements",
+            "name": "recovery_reason"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "1e804e67cfcf821dea07919a7828058245270be53d2ef00a4185c01e2bca6401"
+}

@@ -13,6 +13,14 @@ export interface BrowserPlaybackMedia extends EventTarget {
 	paused: boolean;
 	src: string;
 	volume: number;
+	/** Optional: TimeRanges-like buffered ranges, read on `progress` events. */
+	buffered?: {
+		length: number;
+		start(i: number): number;
+		end(i: number): number;
+	};
+	/** Optional: speed multiplier; browsers preserve pitch by default. */
+	playbackRate?: number;
 	canPlayType(type: string): string;
 	play(): Promise<void>;
 	pause(): void;
@@ -34,11 +42,36 @@ type BrowserHlsFactory = {
 
 type BrowserHlsFactoryLoader = () => Promise<BrowserHlsFactory>;
 
+/** The subset of navigator.mediaSession the engine drives; injectable for tests. */
+interface BrowserMediaSession {
+	metadata: MediaMetadata | null;
+	playbackState: MediaSessionPlaybackState;
+	setActionHandler(
+		action: MediaSessionAction,
+		handler: MediaSessionActionHandler | null,
+	): void;
+	setPositionState?(state?: MediaPositionState): void;
+}
+
 type BrowserPlaybackEngineOptions = {
 	createMedia?: () => BrowserPlaybackMedia;
 	hls?: BrowserHlsFactory;
 	loadHls?: BrowserHlsFactoryLoader;
+	/** Pass null to opt out; defaults to navigator.mediaSession when present. */
+	mediaSession?: BrowserMediaSession | null;
 };
+
+const MEDIA_SESSION_ACTIONS: MediaSessionAction[] = [
+	"play",
+	"pause",
+	"stop",
+	"previoustrack",
+	"nexttrack",
+	"seekto",
+	"seekbackward",
+	"seekforward",
+];
+const MEDIA_SESSION_SEEK_OFFSET_SECONDS = 10;
 
 const LIVE_RECONNECT_DELAYS_MS = [1000, 2000, 4000, 8000, 15000] as const;
 const LIVE_STALL_TIMEOUT_MS = 10000;
@@ -72,7 +105,11 @@ export class BrowserPlaybackEngine implements PlaybackEngine {
 	private readonly loadHlsFactory: BrowserHlsFactoryLoader;
 	private readonly listeners = new Set<PlaybackSessionListener>();
 	private readonly navigationListeners = new Set<PlaybackNavigationListener>();
-	private state: PlaybackSessionState = { ...DEFAULT_PLAYBACK_SESSION_STATE };
+	private state: PlaybackSessionState = {
+		...DEFAULT_PLAYBACK_SESSION_STATE,
+		// The audio element reloads between tracks, so there is always a gap.
+		isGapless: false,
+	};
 	private hls: BrowserHls | null = null;
 	private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 	private stallTimer: ReturnType<typeof setTimeout> | null = null;
@@ -81,13 +118,19 @@ export class BrowserPlaybackEngine implements PlaybackEngine {
 	private sourceRevision = 0;
 	private hasStartedLivePlayback = false;
 	private isReconnectAttemptRunning = false;
+	private readonly mediaSession: BrowserMediaSession | null;
 
 	constructor(options: BrowserPlaybackEngineOptions = {}) {
 		this.media = options.createMedia?.() ?? new Audio();
 		this.hlsFactory = options.hls ?? null;
 		this.loadHlsFactory = options.loadHls ?? loadDefaultHlsFactory;
+		this.mediaSession =
+			options.mediaSession === undefined
+				? defaultMediaSession()
+				: options.mediaSession;
 		this.media.volume = this.state.volume;
 		this.addMediaListeners();
+		this.registerMediaSessionHandlers();
 	}
 
 	getState() {
@@ -124,12 +167,14 @@ export class BrowserPlaybackEngine implements PlaybackEngine {
 				source,
 				status: "paused",
 				currentTime: 0,
+				bufferedEnd: null,
 				duration:
 					source.type === "track" && source.track.durationMs > 0
 						? source.track.durationMs / 1000
 						: 0,
 				error: null,
 			});
+			this.applyMediaSessionMetadata(source);
 		}
 
 		try {
@@ -197,6 +242,16 @@ export class BrowserPlaybackEngine implements PlaybackEngine {
 		this.update({ volume });
 	}
 
+	setPlaybackRate(rate: number) {
+		const playbackRate = Math.min(2, Math.max(0.5, rate));
+		if ("playbackRate" in this.media) this.media.playbackRate = playbackRate;
+		this.update({ playbackRate });
+	}
+
+	setStopAfterCurrent(enabled: boolean) {
+		this.update({ stopAfterCurrent: enabled });
+	}
+
 	toggleShuffle() {
 		this.update({ shuffleEnabled: !this.state.shuffleEnabled });
 	}
@@ -217,10 +272,100 @@ export class BrowserPlaybackEngine implements PlaybackEngine {
 		this.media.pause();
 		this.destroyHls();
 		this.removeMediaListeners();
+		this.unregisterMediaSessionHandlers();
 		this.media.removeAttribute("src");
 		this.media.load();
 		this.listeners.clear();
 		this.navigationListeners.clear();
+	}
+
+	private registerMediaSessionHandlers() {
+		const session = this.mediaSession;
+		if (!session) return;
+		const handlers: Partial<
+			Record<MediaSessionAction, MediaSessionActionHandler>
+		> = {
+			play: () => void this.play().catch(() => undefined),
+			pause: () => this.pause(),
+			stop: () => this.stop(),
+			previoustrack: () => this.previous(),
+			nexttrack: () => this.next(),
+			seekto: (details) => {
+				if (typeof details.seekTime === "number") this.seek(details.seekTime);
+			},
+			seekbackward: (details) =>
+				this.seek(
+					Math.max(
+						0,
+						this.state.currentTime -
+							(details.seekOffset ?? MEDIA_SESSION_SEEK_OFFSET_SECONDS),
+					),
+				),
+			seekforward: (details) =>
+				this.seek(
+					this.state.currentTime +
+						(details.seekOffset ?? MEDIA_SESSION_SEEK_OFFSET_SECONDS),
+				),
+		};
+		for (const action of MEDIA_SESSION_ACTIONS) {
+			const handler = handlers[action];
+			if (!handler) continue;
+			try {
+				session.setActionHandler(action, handler);
+			} catch {
+				// Browsers throw for actions they do not support; skip them.
+			}
+		}
+	}
+
+	private unregisterMediaSessionHandlers() {
+		const session = this.mediaSession;
+		if (!session) return;
+		for (const action of MEDIA_SESSION_ACTIONS) {
+			try {
+				session.setActionHandler(action, null);
+			} catch {
+				// Unsupported action; nothing was registered.
+			}
+		}
+		session.metadata = null;
+	}
+
+	private applyMediaSessionMetadata(source: PlaybackSource) {
+		const session = this.mediaSession;
+		if (!session) return;
+		session.metadata = createMediaMetadata(mediaMetadataFor(source));
+	}
+
+	private syncMediaSession() {
+		const session = this.mediaSession;
+		if (!session) return;
+		if (!this.state.source) session.metadata = null;
+		session.playbackState =
+			this.state.status === "playing" || this.state.status === "reconnecting"
+				? "playing"
+				: this.state.source
+					? "paused"
+					: "none";
+		if (!session.setPositionState) return;
+		const duration = this.state.duration;
+		if (!Number.isFinite(duration) || duration <= 0) {
+			try {
+				session.setPositionState();
+			} catch {
+				// Some browsers reject clearing; ignore.
+			}
+			return;
+		}
+		try {
+			session.setPositionState({
+				duration,
+				playbackRate: this.state.playbackRate ?? 1,
+				position: Math.min(duration, Math.max(0, this.state.currentTime)),
+			});
+		} catch {
+			// Position outside the duration during a source swap; ignore.
+		}
 	}
 
 	private publishNavigation(direction: "previous" | "next") {
@@ -230,6 +375,11 @@ export class BrowserPlaybackEngine implements PlaybackEngine {
 	private readonly handleTimeUpdate = () => {
 		if (isLiveSource(this.state.source)) this.clearStallTimer();
 		this.update({ currentTime: this.media.currentTime });
+	};
+
+	private readonly handleProgress = () => {
+		const bufferedEnd = bufferedEndFor(this.media, this.state.currentTime);
+		if (bufferedEnd !== this.state.bufferedEnd) this.update({ bufferedEnd });
 	};
 
 	private readonly handleDurationChange = () => {
@@ -262,6 +412,11 @@ export class BrowserPlaybackEngine implements PlaybackEngine {
 	private readonly handleEnded = () => {
 		if (isLiveSource(this.state.source) && this.hasStartedLivePlayback) {
 			this.scheduleLiveReconnect();
+			return;
+		}
+		if (this.state.stopAfterCurrent) {
+			// Consume the timer without publishing an end that advances the queue.
+			this.update({ status: "paused", stopAfterCurrent: false });
 			return;
 		}
 		if (this.state.repeatMode === "once" || this.state.repeatMode === "loop") {
@@ -313,6 +468,7 @@ export class BrowserPlaybackEngine implements PlaybackEngine {
 		this.media.addEventListener("error", this.handleMediaError);
 		this.media.addEventListener("stalled", this.handleStalled);
 		this.media.addEventListener("waiting", this.handleStalled);
+		this.media.addEventListener("progress", this.handleProgress);
 	}
 
 	private removeMediaListeners() {
@@ -326,12 +482,17 @@ export class BrowserPlaybackEngine implements PlaybackEngine {
 		this.media.removeEventListener("error", this.handleMediaError);
 		this.media.removeEventListener("stalled", this.handleStalled);
 		this.media.removeEventListener("waiting", this.handleStalled);
+		this.media.removeEventListener("progress", this.handleProgress);
 	}
 
 	private async setMediaSource(source: PlaybackSource) {
 		this.destroyHls();
 		this.media.removeAttribute("src");
 		this.media.load();
+		// load() resets the element's rate in some browsers; keep the setting.
+		if ("playbackRate" in this.media && this.state.playbackRate) {
+			this.media.playbackRate = this.state.playbackRate;
+		}
 		const sourceUrl =
 			source.type === "track" ? source.playbackUrl : source.sourceUrl;
 		const isHlsSource = isHlsStream(sourceUrl);
@@ -442,6 +603,62 @@ export class BrowserPlaybackEngine implements PlaybackEngine {
 	private update(next: Partial<PlaybackSessionState>) {
 		this.state = { ...this.state, ...next };
 		for (const listener of this.listeners) listener(this.state);
+		if (
+			"status" in next ||
+			"currentTime" in next ||
+			"duration" in next ||
+			"playbackRate" in next ||
+			"source" in next
+		) {
+			this.syncMediaSession();
+		}
+	}
+}
+
+function defaultMediaSession(): BrowserMediaSession | null {
+	if (typeof navigator === "undefined") return null;
+	const session = (navigator as Navigator & { mediaSession?: MediaSession })
+		.mediaSession;
+	return session ?? null;
+}
+
+type MediaMetadataFields = {
+	title: string;
+	artist: string;
+	album: string;
+	artwork: { src: string }[];
+};
+
+function mediaMetadataFor(source: PlaybackSource): MediaMetadataFields {
+	if (source.type === "track") {
+		return {
+			title: source.track.title,
+			artist: source.track.artistName,
+			album: source.track.albumTitle ?? "",
+			artwork: source.artworkUrl ? [{ src: source.artworkUrl }] : [],
+		};
+	}
+	const radio =
+		source.type === "radio-station" ? source.station : source.result;
+	return {
+		title: radio.name,
+		artist: "Live radio",
+		album: "",
+		artwork: radio.faviconUrl ? [{ src: radio.faviconUrl }] : [],
+	};
+}
+
+function createMediaMetadata(
+	fields: MediaMetadataFields,
+): MediaMetadata | null {
+	const MetadataConstructor = (
+		globalThis as { MediaMetadata?: typeof MediaMetadata }
+	).MediaMetadata;
+	if (!MetadataConstructor) return null;
+	try {
+		return new MetadataConstructor(fields);
+	} catch {
+		return null;
 	}
 }
 
@@ -467,7 +684,7 @@ function isHlsStream(url: string) {
 function canPlayNativeHls(media: BrowserPlaybackMedia) {
 	return Boolean(
 		media.canPlayType("application/vnd.apple.mpegurl") ||
-			media.canPlayType("application/x-mpegurl"),
+		media.canPlayType("application/x-mpegurl"),
 	);
 }
 
@@ -481,4 +698,24 @@ function sanitizeReconnectErrorMessage(error: unknown) {
 	const maxMessageLength = 240;
 	const message = error.message.replace(urlPattern, "[redacted-url]").trim();
 	return (message || error.name).slice(0, maxMessageLength);
+}
+
+/**
+ * End of the buffered range that contains the playhead, or the furthest
+ * range end when none does; null when the media exposes no ranges.
+ */
+function bufferedEndFor(
+	media: Pick<BrowserPlaybackMedia, "buffered">,
+	currentTime: number,
+): number | null {
+	const ranges = media.buffered;
+	if (!ranges || ranges.length === 0) return null;
+	let furthest = 0;
+	for (let index = 0; index < ranges.length; index += 1) {
+		const start = ranges.start(index);
+		const end = ranges.end(index);
+		if (start <= currentTime && currentTime <= end) return end;
+		furthest = Math.max(furthest, end);
+	}
+	return furthest;
 }

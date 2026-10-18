@@ -7,9 +7,16 @@ import {
 	waitFor,
 	within,
 } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+	afterEach,
+	beforeEach,
+	describe,
+	expect,
+	it,
+	vi,
+} from "vite-plus/test";
+import { PlaylistDetailContent } from "./-playlist-page";
 import { PlaylistsPage } from "./-playlists-page";
-import { PlaylistDetailContent } from "./$playlistId";
 
 const mocks = vi.hoisted(() => ({
 	listPlaylists: vi.fn(),
@@ -18,6 +25,7 @@ const mocks = vi.hoisted(() => ({
 	removePlaylistTrack: vi.fn(),
 	playTrack: vi.fn(),
 	queueTracks: vi.fn(),
+	toastError: vi.fn(),
 }));
 
 vi.mock("@tanstack/react-router", async () => {
@@ -51,12 +59,19 @@ vi.mock("#/lib/api", () => ({
 		listPlaylists: mocks.listPlaylists,
 		getPlaylist: mocks.getPlaylist,
 		getAlbumCoverUrl: (albumId: string) => `/cover/${albumId}`,
+		getAlbum: vi.fn(async (albumId: string) => ({
+			id: albumId,
+			title: `Album ${albumId}`,
+			artistName: "New Order",
+			artistId: "artist-1",
+		})),
 		addPlaylistTrack: mocks.addPlaylistTrack,
 		removePlaylistTrack: mocks.removePlaylistTrack,
 	},
 }));
 
 vi.mock("@repo/ui", () => ({
+	toast: { error: mocks.toastError },
 	AlbumArt: ({
 		coverUrl,
 		className,
@@ -125,6 +140,32 @@ function renderWithQuery(ui: React.ReactElement) {
 }
 
 describe("playlist routes", () => {
+	it("reports a failed bulk queue and stops before adding later album runs", async () => {
+		const error = new Error("Queue unavailable");
+		mocks.queueTracks.mockRejectedValueOnce(error);
+		const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+		try {
+			renderWithQuery(<PlaylistDetailContent playlistId="p1" />);
+			await screen.findByRole("heading", { name: "Favorites" });
+			fireEvent.click(screen.getByRole("button", { name: "Queue" }));
+			await waitFor(() =>
+				expect(mocks.toastError).toHaveBeenCalledWith(
+					"Failed to queue collection tracks",
+				),
+			);
+			expect(warning).toHaveBeenCalledWith(
+				"Failed to queue collection tracks",
+				{
+					trackIds: ["t1", "t2", "t3", "t4"],
+					error,
+				},
+			);
+			expect(mocks.queueTracks).toHaveBeenCalledTimes(1);
+		} finally {
+			warning.mockRestore();
+		}
+	});
+
 	beforeEach(() => {
 		mocks.listPlaylists.mockClear();
 		mocks.getPlaylist.mockClear();
@@ -153,7 +194,8 @@ describe("playlist routes", () => {
 			tracks: [tracks[0]],
 		});
 		mocks.playTrack.mockClear();
-		mocks.queueTracks.mockClear();
+		mocks.queueTracks.mockReset().mockResolvedValue(undefined);
+		mocks.toastError.mockClear();
 		mocks.removePlaylistTrack.mockClear();
 		mocks.addPlaylistTrack.mockClear();
 	});
@@ -166,27 +208,26 @@ describe("playlist routes", () => {
 		const { container } = renderWithQuery(<PlaylistsPage />);
 
 		const header = await screen.findByRole("heading", { name: "Playlists" });
-		expect(header.closest("header")?.className).toContain("sticky");
+		// The Top Nav names the open section; the page title is for screen readers.
+		expect(header.className).toContain("sr-only");
 		expect(screen.getByTestId("playlists-page-shell").className).toContain(
 			"overflow-hidden",
 		);
 		expect(screen.getByTestId("playlists-page-content").className).toContain(
-			"[scrollbar-width:none]",
+			"scrollbar-hidden",
 		);
 		expect(
-			header
-				.closest("header")
-				?.querySelector(".min-\\[1801px\\]\\:max-w-\\[1476px\\]"),
+			header.closest("header")?.querySelector(".page-content-column"),
 		).toBeTruthy();
 		expect(
 			screen
 				.getByTestId("playlists-page-content")
-				.querySelector(".min-\\[1801px\\]\\:max-w-\\[1476px\\]"),
+				.querySelector(".page-content-column"),
 		).toBeTruthy();
 		expect(
 			screen
 				.getByTestId("playlists-page-content")
-				.querySelector(".xl\\:grid-cols-5"),
+				.querySelector(".grid-cols-cards"),
 		).toBeTruthy();
 
 		const link = await screen.findByRole("link", {
@@ -197,10 +238,9 @@ describe("playlist routes", () => {
 		expect(link.className).toContain("aspect-square");
 		expect(link.className).toContain("overflow-hidden");
 		expect(link.className).toContain("rounded-md");
-		expect(link.className).toContain("hover:-translate-y-px");
-		expect(link.className).toContain("focus-visible:ring-2");
+		expect(link.className).toContain("hover:-translate-y-1");
+		expect(link.className).toContain("focus-visible:-translate-y-1");
 		expect(link.className).toContain("motion-reduce:transition-none");
-		expect(link.className).not.toContain("hover:-translate-y-1");
 		expect(screen.queryByRole("button", { name: "Play" })).toBeNull();
 		expect(screen.queryByRole("button", { name: "Shuffle" })).toBeNull();
 		await waitFor(() => {
@@ -220,7 +260,7 @@ describe("playlist routes", () => {
 		);
 		const overlay = container.querySelector("[data-playlist-card-overlay]");
 		expect(overlay?.className).toContain("px-3");
-		expect(overlay?.className).toContain("pt-14");
+		expect(overlay?.className).toContain("pt-12");
 		expect(overlay?.querySelector("p")?.className).toContain("font-semibold");
 		expect(overlay?.querySelector("p")?.className).not.toContain(
 			"group-hover:underline",
@@ -278,7 +318,7 @@ describe("playlist routes", () => {
 			screen.queryByRole("link", { name: /Back to playlists/ }),
 		).toBeNull();
 		expect(screen.getByTestId("playlist-detail-content").className).toContain(
-			"min-[1801px]:max-w-[1476px]",
+			"page-content-column",
 		);
 		const searchInput = screen.getByPlaceholderText("Search Favorites…");
 		expect(
@@ -291,15 +331,43 @@ describe("playlist routes", () => {
 		).toContain("w-full");
 
 		fireEvent.click(screen.getByRole("button", { name: "Play" }));
-		expect(mocks.playTrack).toHaveBeenCalledWith("t1", [
+		expect(mocks.playTrack).toHaveBeenCalledWith(
 			"t1",
-			"t2",
-			"t3",
-			"t4",
-		]);
+			["t1", "t2", "t3", "t4"],
+			{
+				kind: "playlist",
+				playlistId: "p1",
+				name: "Favorites",
+			},
+		);
+
+		fireEvent.click(screen.getByRole("button", { name: "Shuffle" }));
+		expect(mocks.playTrack).toHaveBeenLastCalledWith(
+			expect.any(String),
+			expect.arrayContaining(["t1", "t2", "t3", "t4"]),
+			{ kind: "playlist", playlistId: "p1", name: "Favorites" },
+		);
+		fireEvent.doubleClick(screen.getByText("Blue Monday"));
+		expect(mocks.playTrack).toHaveBeenLastCalledWith(
+			"t1",
+			["t1", "t2", "t3", "t4"],
+			{
+				kind: "playlist",
+				playlistId: "p1",
+				name: "Favorites",
+			},
+		);
 
 		fireEvent.click(screen.getByRole("button", { name: "Queue" }));
-		expect(mocks.queueTracks).toHaveBeenCalledWith(["t1", "t2", "t3", "t4"]);
+		await waitFor(() => expect(mocks.queueTracks).toHaveBeenCalledTimes(4));
+		tracks.forEach((track, index) => {
+			expect(mocks.queueTracks).toHaveBeenNthCalledWith(index + 1, [track.id], {
+				kind: "album",
+				albumId: track.albumId,
+				albumTitle: `Album ${track.albumId}`,
+				artistName: "New Order",
+			});
+		});
 
 		await waitFor(() => {
 			expect(
@@ -309,7 +377,7 @@ describe("playlist routes", () => {
 		expect(
 			screen.getByRole("row", { name: /Blue Monday/ }).querySelector("td")
 				?.className,
-		).toContain("py-1.5");
+		).toContain("py-2");
 		expect(screen.getByRole("row", { name: /1 Blue Monday/ })).toBeTruthy();
 		expect(
 			screen.getByRole("row", { name: /2 Bizarre Love Triangle/ }),
@@ -318,7 +386,7 @@ describe("playlist routes", () => {
 
 		fireEvent.contextMenu(screen.getByRole("row", { name: /Blue Monday/ }));
 		expect(screen.getByText("Details")).toBeTruthy();
-		expect(screen.getByText("Delete track")).toBeTruthy();
+		expect(screen.queryByText("Delete track")).toBeNull();
 		fireEvent.click(screen.getByText("Remove from playlist"));
 
 		await waitFor(() => {
@@ -358,9 +426,20 @@ describe("playlist routes", () => {
 		expect(screen.getByText("Temptation")).toBeTruthy();
 
 		fireEvent.click(screen.getByRole("button", { name: "Play" }));
-		expect(mocks.playTrack).toHaveBeenCalledWith("t4", ["t4"]);
+		expect(mocks.playTrack).toHaveBeenCalledWith("t4", ["t4"], {
+			kind: "playlist",
+			playlistId: "p1",
+			name: "Favorites",
+		});
 
 		fireEvent.click(screen.getByRole("button", { name: "Queue" }));
-		expect(mocks.queueTracks).toHaveBeenCalledWith(["t4"]);
+		await waitFor(() =>
+			expect(mocks.queueTracks).toHaveBeenCalledExactlyOnceWith(["t4"], {
+				kind: "album",
+				albumId: "a4",
+				albumTitle: "Album a4",
+				artistName: "New Order",
+			}),
+		);
 	});
 });

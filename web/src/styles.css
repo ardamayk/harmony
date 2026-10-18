@@ -1,311 +1,880 @@
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Manrope:wght@400;500;600;700;800&display=swap');
-@import 'tailwindcss';
+@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Manrope:wght@400;500;600;700;800&display=swap");
+@import "tailwindcss";
 @source '../../packages/ui/src';
 @plugin '@tailwindcss/typography';
 
-@import 'tw-animate-css';
-@import './themes/palettes.css';
-@import './themes/layers.css';
-@import './themes/semantic.css';
+@import "tw-animate-css";
+@import "./themes/palettes.css";
+@import "./themes/layers.css";
+@import "./themes/semantic.css";
 
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --radius: 0.625rem;
+	/* Horizontal inset of page content beside the 15rem Sidebar. Content
+     grows to --shell-max-content and only wider screens get side gutters;
+     narrower ones keep ordinary page padding. Mirrored by SHELL_INSET_CLASS
+     in packages/ui/src/layout/shell-metrics.ts. */
+	--shell-max-content: 1600px;
+	--shell-inset: clamp(
+		1.5rem,
+		(100vw - 15rem - var(--shell-max-content)) / 2,
+		17rem
+	);
 }
 
 html[data-theme-preset] {
-  --foam: color-mix(in srgb, var(--background) 88%, var(--theme-4) 12%);
-  --surface: color-mix(in srgb, var(--card) 78%, var(--theme-3) 22%);
-  --surface-strong: color-mix(in srgb, var(--card) 90%, var(--theme-4) 10%);
-  --line: color-mix(in srgb, var(--border) 88%, transparent);
-  --inset-glint: color-mix(in srgb, var(--heading) 8%, transparent);
-  --header-bg: color-mix(in srgb, var(--background) 86%, var(--theme-3) 14%);
-  --chip-bg: color-mix(in srgb, var(--card) 88%, var(--theme-4) 12%);
-  --chip-line: var(--border);
-  --link-bg-hover: color-mix(in srgb, var(--accent) 65%, transparent);
+	--foam: color-mix(in srgb, var(--background) 88%, var(--theme-4) 12%);
+	--surface: color-mix(in srgb, var(--card) 78%, var(--theme-3) 22%);
+	--surface-strong: color-mix(in srgb, var(--card) 90%, var(--theme-4) 10%);
+	--line: color-mix(in srgb, var(--border) 88%, transparent);
+	--inset-glint: color-mix(in srgb, var(--heading) 8%, transparent);
+	--header-bg: color-mix(in srgb, var(--background) 86%, var(--theme-3) 14%);
+	--chip-bg: color-mix(in srgb, var(--card) 88%, var(--theme-4) 12%);
+	--chip-line: var(--border);
+	--link-bg-hover: color-mix(in srgb, var(--accent) 65%, transparent);
 }
 
 @theme inline {
-  --font-sans: 'Manrope', ui-sans-serif, system-ui, sans-serif;
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-caption: var(--caption);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-destructive: var(--destructive);
-  --color-destructive-foreground: var(--destructive-foreground);
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-ring: var(--ring);
-  --color-chart-1: var(--chart-1);
-  --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-  --color-sidebar: var(--sidebar);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-sidebar-heading: var(--sidebar-heading);
-  --color-heading: var(--heading);
-  --color-queue: var(--queue);
-  --color-queue-foreground: var(--queue-foreground);
-  --color-player: var(--player);
-  --color-player-foreground: var(--player-foreground);
+	/* Layout geometry as spacing tokens, so widths and offsets stay on
+     theme classes (w-dialog-width) instead of arbitrary values. */
+	--spacing-dialog-width: calc(100vw - 2rem);
+	--spacing-dialog-height: 85dvh;
+	--spacing-dialog-body-height: 65dvh;
+	--spacing-search-card-height: min(85dvh, 56rem);
+	/* The cover leaves the window room for the title and transport under it
+     (about 24rem with the view header), so short windows shrink the cover. */
+	--spacing-artwork-stage: min(100%, 65vh, max(10rem, 100dvh - 24rem));
+	--spacing-queue-preview: clamp(18rem, 22vw, 26rem);
+	--spacing-queue-drawer-max: calc(100% - 2 * var(--shell-inset, 2rem));
+	/* Artist page photo banner: tall enough for a face, never the whole screen. */
+	--spacing-artist-banner: clamp(18rem, 42vh, 28rem);
+	/* Shadows: the lit pill, the lifted card, the shell surfaces and the
+     cover strip; everything else takes Tailwind's shadow scale. */
+	--shadow-lit:
+		inset 0 1px 0 color-mix(in srgb, var(--heading) 10%, transparent),
+		0 8px 20px -12px rgb(0 0 0 / 0.8);
+	--shadow-card-lift: 0 18px 40px -18px rgb(0 0 0 / 0.75);
+	/* Kept tight: a wide dark halo reads as a lifted card around the shell. */
+	--shadow-cover-strip: 10px 0 20px rgb(0 0 0 / 0.35);
+	--color-player-control-shadow: var(--player-control-shadow);
+	--color-warning: var(--warning);
+	--color-success: var(--success);
+	--font-display: "Fraunces", Georgia, serif;
+	/* Full-screen lyrics read from across the room: one display step above
+     the type scale that grows with the window. */
+	--text-lyrics: clamp(1.875rem, 1rem + 1.6vw, 3rem);
+	--text-lyrics--line-height: 1.2;
+	/* Detail page titles: text-3xl at narrow widths, growing with the window
+     so the album or artist name leads on wide screens. */
+	--text-page-title: clamp(1.875rem, 1rem + 1.6vw, 3rem);
+	--text-page-title--line-height: 1.1;
+	/* Enter animations; used behind motion-safe: so reduced motion gets an
+     instant swap. Keyframes live with the components layer below. */
+	--animate-lyrics-view: lyrics-view-enter 300ms
+		cubic-bezier(0.22, 0.8, 0.24, 1) both;
+	--animate-lyrics-view-exit: lyrics-view-exit 250ms cubic-bezier(0.4, 0, 1, 1)
+		both;
+	--animate-player-cover: player-cover-crossfade 250ms ease-out both;
+	--animate-player-title: player-title-slide 200ms
+		cubic-bezier(0.22, 0.8, 0.24, 1) both;
+	--animate-player-glyph: player-glyph-pop 150ms ease-out both;
+	--font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
+	--color-background: var(--background);
+	--color-foreground: var(--foreground);
+	--color-card: var(--card);
+	--color-card-foreground: var(--card-foreground);
+	--color-popover: var(--popover);
+	--color-popover-foreground: var(--popover-foreground);
+	--color-primary: var(--primary);
+	--color-primary-foreground: var(--primary-foreground);
+	--color-secondary: var(--secondary);
+	--color-secondary-foreground: var(--secondary-foreground);
+	--color-muted: var(--muted);
+	--color-muted-foreground: var(--muted-foreground);
+	--color-caption: var(--caption);
+	--color-accent: var(--accent);
+	--color-accent-foreground: var(--accent-foreground);
+	--color-destructive: var(--destructive);
+	--color-destructive-foreground: var(--destructive-foreground);
+	--color-border: var(--border);
+	--color-input: var(--input);
+	--color-ring: var(--ring);
+	--color-chart-1: var(--chart-1);
+	--color-chart-2: var(--chart-2);
+	--color-chart-3: var(--chart-3);
+	--color-chart-4: var(--chart-4);
+	--color-chart-5: var(--chart-5);
+	/* The only three corner radii (docs/design-rules.md): small controls,
+	   medium cards and menus, large shell surfaces. */
+	--radius-sm: 6px;
+	--radius-md: 10px;
+	--radius-lg: 16px;
+	--color-sidebar: var(--sidebar);
+	--color-sidebar-foreground: var(--sidebar-foreground);
+	--color-sidebar-primary: var(--sidebar-primary);
+	--color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+	--color-sidebar-accent: var(--sidebar-accent);
+	--color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+	--color-sidebar-border: var(--sidebar-border);
+	--color-sidebar-ring: var(--sidebar-ring);
+	--color-sidebar-heading: var(--sidebar-heading);
+	--color-heading: var(--heading);
+	--color-queue: var(--queue);
+	--color-queue-foreground: var(--queue-foreground);
+	--color-player: var(--player);
+	--color-player-foreground: var(--player-foreground);
+	--color-shell-brand: var(--shell-brand);
+	--color-shell-active: var(--shell-active);
+	--color-neutral-active: var(--neutral-active);
+	--color-neutral-active-foreground: var(--neutral-active-foreground);
+	--color-shell-active-foreground: var(--shell-active-foreground);
+	--color-shell-subtle-border: var(--shell-subtle-border);
+	--color-player-title: var(--player-title);
+	--color-player-artwork: var(--player-artwork);
+	--color-player-border: var(--player-border);
+	--color-player-control-primary: var(--player-control-primary);
+	--color-player-control-primary-foreground: var(
+		--player-control-primary-foreground
+	);
+	--color-player-live-progress: var(--player-live-progress);
+	--color-player-pill: var(--player-pill);
 }
 
 html,
 body,
 #root {
-  height: 100dvh;
-  min-height: 100dvh;
-  width: 100%;
+	height: 100dvh;
+	min-height: 100dvh;
+	width: 100%;
 }
 
 #root {
-  display: flex;
-  flex-direction: column;
+	display: flex;
+	flex-direction: column;
 }
 
 #app {
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
-  height: 100%;
-  min-height: 0;
-  width: 100%;
-  overflow: hidden;
+	display: flex;
+	flex: 1 1 auto;
+	flex-direction: column;
+	height: 100%;
+	min-height: 0;
+	width: 100%;
+	overflow: hidden;
 }
 
 #app > * {
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
-  min-height: 0;
-  min-width: 0;
+	display: flex;
+	flex: 1 1 auto;
+	flex-direction: column;
+	min-height: 0;
+	min-width: 0;
 }
 
 body {
-  margin: 0;
-  font-family: var(--font-sans);
-  overflow: hidden;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+	margin: 0;
+	font-family: var(--font-sans);
+	overflow: hidden;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
 }
 
 body::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: -1;
-  opacity: 0.22;
-  background:
-    radial-gradient(circle at 20% 15%, var(--hero-a), transparent 34%),
-    radial-gradient(circle at 78% 26%, var(--hero-b), transparent 42%),
-    radial-gradient(circle at 42% 82%, color-mix(in srgb, var(--primary) 16%, transparent), transparent 36%);
+	content: "";
+	position: fixed;
+	inset: 0;
+	pointer-events: none;
+	z-index: -1;
+	opacity: 0.22;
+	background:
+		radial-gradient(circle at 20% 15%, var(--hero-a), transparent 34%),
+		radial-gradient(circle at 78% 26%, var(--hero-b), transparent 42%),
+		radial-gradient(
+			circle at 42% 82%,
+			color-mix(in srgb, var(--primary) 16%, transparent),
+			transparent 36%
+		);
 }
 
 body::after {
-  content: '';
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: -1;
-  opacity: 0.1;
-  background-image:
-    linear-gradient(color-mix(in srgb, var(--foreground) 8%, transparent) 1px, transparent 1px),
-    linear-gradient(90deg, color-mix(in srgb, var(--foreground) 6%, transparent) 1px, transparent 1px);
-  background-size: 28px 28px;
-  mask-image: radial-gradient(circle at 50% 30%, black, transparent 78%);
+	content: "";
+	position: fixed;
+	inset: 0;
+	pointer-events: none;
+	z-index: -1;
+	opacity: 0.1;
+	background-image:
+		linear-gradient(
+			color-mix(in srgb, var(--foreground) 8%, transparent) 1px,
+			transparent 1px
+		),
+		linear-gradient(
+			90deg,
+			color-mix(in srgb, var(--foreground) 6%, transparent) 1px,
+			transparent 1px
+		);
+	background-size: 28px 28px;
+	mask-image: radial-gradient(circle at 50% 30%, black, transparent 78%);
+}
+
+/* Now Playing view: an always-dark, neutral surface so the artwork carries
+   the color. Its own values live here, not in the component. The primary
+   control stays neutral even when the Player Bar accent is passed in, hence
+   !important over the inline accent variables. */
+[data-now-playing-surface] {
+	--background: #000000;
+	--heading: #f5f5f5;
+	--foreground: #e5e5e5;
+	--caption: #a3a3a3;
+	--muted: #262626;
+	--muted-foreground: #a3a3a3;
+	--border: #262626;
+	--queue-foreground: #e5e5e5;
+	--primary: #f5f5f5;
+	--primary-foreground: #171717;
+	--player-foreground: #e5e5e5;
+	--player-control-primary: #f5f5f5 !important;
+	--player-control-primary-foreground: #171717 !important;
+}
+
+/* Desktop Client main window: no system frame (desktop/src/main/windows.ts), so the page
+   draws rounded corners itself on a transparent window. The body background
+   moves onto #root because a transparent root would otherwise propagate it
+   to the whole window canvas. Maximized windows go square. */
+html[data-desktop-window],
+html[data-desktop-window] body {
+	background: transparent;
+}
+
+html[data-desktop-window] #root {
+	overflow: hidden;
+	border: 1px solid color-mix(in srgb, var(--foreground) 12%, transparent);
+	border-radius: var(--radius-md);
+	background-color: var(--background);
+	background-image:
+		radial-gradient(900px 500px at -5% -5%, var(--hero-a), transparent 55%),
+		radial-gradient(800px 480px at 105% -5%, var(--hero-b), transparent 55%);
+}
+
+html[data-desktop-window] body::before,
+html[data-desktop-window] body::after {
+	border-radius: var(--radius-md);
+}
+
+/* Full-screen views portal to body, outside #root's clip, so they draw the
+   window corners and edge themselves. */
+html[data-desktop-window] :is(.z-fullscreen, .z-above-fullscreen) {
+	overflow: hidden;
+	border: 1px solid color-mix(in srgb, var(--foreground) 12%, transparent);
+	border-radius: var(--radius-md);
+}
+
+html[data-window-maximized] #root,
+html[data-window-maximized] :is(.z-fullscreen, .z-above-fullscreen),
+html[data-window-maximized] body::before,
+html[data-window-maximized] body::after {
+	border: 0;
+	border-radius: 0;
+}
+
+/* Desktop Client: undecorated windows move by dragging the regions marked
+   data-window-drag-region (Top Nav, mini player); double-clicking one
+   maximizes. Controls inside stay clickable. Browsers ignore app-region. */
+[data-window-drag-region] {
+	-webkit-app-region: drag;
+	app-region: drag;
+}
+
+[data-window-drag-region]
+	:is(a, button, input, select, textarea, [role="button"], [role="slider"]) {
+	-webkit-app-region: no-drag;
+	app-region: no-drag;
 }
 
 @layer utilities {
-  .text-caption {
-    color: var(--caption);
-  }
+	.text-caption {
+		color: var(--caption);
+	}
+}
+
+/* Named utilities for the few layout patterns Tailwind has no class for. */
+@utility scrollbar-hidden {
+	scrollbar-width: none;
+	-ms-overflow-style: none;
+	&::-webkit-scrollbar {
+		display: none;
+	}
+}
+@utility content-empty {
+	content: "";
+}
+@utility z-fullscreen {
+	z-index: 60;
+}
+@utility z-above-fullscreen {
+	z-index: 70;
+}
+@utility grid-cols-label {
+	grid-template-columns: 8rem minmax(0, 1fr);
+}
+@utility grid-cols-media {
+	grid-template-columns: auto minmax(0, 1fr);
+}
+@utility grid-cols-media-actions {
+	grid-template-columns: auto minmax(0, 1fr) auto;
+}
+@utility grid-cols-cards {
+	grid-template-columns: repeat(auto-fill, min(250px, 100%));
+}
+@utility grid-cols-panels {
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 560px), 1fr));
+}
+@utility transition-ring {
+	transition-property: color, box-shadow, border-color;
+	transition-timing-function: var(
+		--tw-ease,
+		var(--default-transition-timing-function)
+	);
+	transition-duration: var(--tw-duration, var(--default-transition-duration));
+}
+/* Detail page scroller: right padding = shell inset, plus the Queue
+   Drawer's clearance while it takes space; the scroller then reaches the
+   window edge so a full-bleed backdrop runs behind the drawer. */
+@utility page-edge-right {
+	--page-edge-right: var(--shell-inset);
+	padding-right: var(--page-edge-right);
+	:where([data-queue-open]) & {
+		--page-edge-right: calc(var(--shell-inset) + var(--queue-drawer-clearance));
+		margin-right: calc(var(--queue-drawer-clearance) * -1);
+	}
+}
+@utility transition-padding {
+	transition-property: padding;
+	transition-timing-function: var(
+		--tw-ease,
+		var(--default-transition-timing-function)
+	);
+	transition-duration: var(--tw-duration, var(--default-transition-duration));
+}
+@utility transition-slide {
+	transition-property: translate, visibility;
+	transition-timing-function: var(
+		--tw-ease,
+		var(--default-transition-timing-function)
+	);
+	transition-duration: var(--tw-duration, var(--default-transition-duration));
+}
+/* Runtime geometry read from custom properties set in style. */
+@utility clip-right {
+	clip-path: inset(0 var(--clip-right) 0 0);
+}
+@utility sortable-widget {
+	transform: var(--sortable-transform);
+	transition: var(--sortable-transition);
+}
+@utility contain-inline-size {
+	contain: inline-size;
+}
+/* Player Bar surfaces that keep the theme's neutral accent. */
+@utility player-neutral {
+	--player-control-primary: var(--primary);
+	--player-control-primary-foreground: var(--primary-foreground);
+	--player-foreground: var(--foreground);
+}
+/* Artist photo laid on its cover-colour band: sharp across most of its
+   width, a light eased fade (a linear one shows an edge where it starts)
+   over its right third into the band, never fully gone, and a thin strip
+   into the page. */
+@utility mask-artist-photo {
+	mask-image:
+		linear-gradient(
+			to left,
+			rgb(0 0 0 / 0.3) 0%,
+			rgb(0 0 0 / 0.5) 10%,
+			rgb(0 0 0 / 0.75) 21%,
+			black 35%
+		),
+		linear-gradient(to top, transparent 0%, rgb(0 0 0 / 0.5) 6%, black 14%);
+	mask-composite: intersect;
+}
+@utility translate-x-switch-on {
+	translate: calc(100% - 2px) 0;
+}
+
+@layer components {
+	/* Vertical volume slider: a horizontal range rotated -90deg (works in every
+     engine, unlike writing-mode on range inputs), thin track, line-shaped thumb. */
+	.player-volume-slider {
+		-webkit-appearance: none;
+		appearance: none;
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		/* Track length = popover inner height (h-32 minus py-3). */
+		width: 104px;
+		height: 16px;
+		margin: 0;
+		transform: translate(-50%, -50%) rotate(-90deg);
+		background: transparent;
+		cursor: pointer;
+		--_fill: var(--player-control-primary);
+		--_track: color-mix(in srgb, var(--player-foreground) 25%, transparent);
+		--_track-bg: linear-gradient(
+			to right,
+			var(--_fill) 0 var(--volume-level, 100%),
+			var(--_track) var(--volume-level, 100%) 100%
+		);
+	}
+	.player-volume-slider::-webkit-slider-runnable-track {
+		height: 4px;
+		border-radius: 9999px;
+		background: var(--_track-bg);
+	}
+	.player-volume-slider::-moz-range-track {
+		height: 4px;
+		border-radius: 9999px;
+		background: var(--_track-bg);
+	}
+	.player-volume-slider::-webkit-slider-thumb {
+		-webkit-appearance: none;
+		appearance: none;
+		width: 3px;
+		height: 16px;
+		margin-top: -6px;
+		border: 0;
+		border-radius: 9999px;
+		background: var(--player-control-primary);
+	}
+	.player-volume-slider::-moz-range-thumb {
+		width: 3px;
+		height: 16px;
+		border: 0;
+		border-radius: 9999px;
+		background: var(--player-control-primary);
+	}
+	.player-volume-slider:focus-visible {
+		outline: none;
+	}
+
+	/* Every Player Bar control shares one keyboard focus ring. */
+	[data-player-control]:focus-visible {
+		outline: none;
+		box-shadow: 0 0 0 2px
+			color-mix(in srgb, var(--player-control-primary) 40%, transparent);
+	}
+
+	/* Seek bar: thin filled track; the thumb only appears on hover / focus. */
+	.player-seek-slider {
+		-webkit-appearance: none;
+		appearance: none;
+		height: 16px;
+		margin: 0;
+		background: transparent;
+		cursor: pointer;
+		--_fill: var(--player-live-progress);
+		--_track: color-mix(in srgb, var(--player-foreground) 22%, transparent);
+		--_track-bg: linear-gradient(
+			to right,
+			var(--_fill) 0 var(--seek-level, 0%),
+			var(--_track) var(--seek-level, 0%) 100%
+		);
+	}
+	.player-seek-slider:disabled {
+		cursor: default;
+	}
+	.player-seek-slider::-webkit-slider-runnable-track {
+		height: 4px;
+		border-radius: 9999px;
+		background: var(--_track-bg);
+	}
+	.player-seek-slider::-moz-range-track {
+		height: 4px;
+		border-radius: 9999px;
+		background: var(--_track-bg);
+	}
+	.player-seek-slider::-webkit-slider-thumb {
+		-webkit-appearance: none;
+		appearance: none;
+		width: 12px;
+		height: 12px;
+		margin-top: -4px;
+		border: 0;
+		border-radius: 9999px;
+		background: var(--player-live-progress);
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--player) 85%, transparent);
+		opacity: 0;
+		transform: scale(0.6);
+		transition:
+			opacity 120ms ease,
+			transform 120ms ease;
+	}
+	.player-seek-slider::-moz-range-thumb {
+		width: 12px;
+		height: 12px;
+		border: 0;
+		border-radius: 9999px;
+		background: var(--player-live-progress);
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--player) 85%, transparent);
+		opacity: 0;
+		transform: scale(0.6);
+		transition:
+			opacity 120ms ease,
+			transform 120ms ease;
+	}
+	.player-seek-slider:not(:disabled):hover::-webkit-slider-thumb,
+	.player-seek-slider:not(:disabled):focus-visible::-webkit-slider-thumb,
+	.player-seek-slider:not(:disabled):active::-webkit-slider-thumb {
+		opacity: 1;
+		transform: scale(1);
+	}
+	.player-seek-slider:not(:disabled):hover::-moz-range-thumb,
+	.player-seek-slider:not(:disabled):focus-visible::-moz-range-thumb,
+	.player-seek-slider:not(:disabled):active::-moz-range-thumb {
+		opacity: 1;
+		transform: scale(1);
+	}
+	.player-seek-slider:focus-visible {
+		outline: none;
+	}
+	/* With waveform bars drawn behind it, the track itself stays invisible so
+     the bars carry the played/unplayed colouring. */
+	.player-seek-slider--waveform::-webkit-slider-runnable-track {
+		background: transparent;
+	}
+	.player-seek-slider--waveform::-moz-range-track {
+		background: transparent;
+	}
+
+	.library-search-card {
+		/* Drops down over the top bar's search field, as wide as it (the App
+		   Shell measures the field); its input row covers the field. */
+		top: var(--library-search-top, 0.5rem);
+		/* At most three album rows tall (250px cards, 0.75rem gaps); always
+		   clear of the Player Bar. */
+		max-height: min(
+			3 * (250px + 0.75rem),
+			calc(
+				100dvh - var(--library-search-top, 0.5rem) -
+					var(--player-dock-clearance, 1rem) - 1.5rem
+			)
+		);
+		left: var(--library-search-center, 50%);
+		width: var(--library-search-width, min(36rem, calc(100vw - 2rem)));
+		transform-origin: top center;
+	}
+	@keyframes library-search-enter {
+		from {
+			opacity: 0;
+			transform: translateX(var(--library-search-offset, 0)) translateY(-0.5rem)
+				scale(0.98);
+		}
+		to {
+			opacity: 1;
+			transform: translateX(var(--library-search-offset, 0)) translateY(0)
+				scale(1);
+		}
+	}
+	@media (prefers-reduced-motion: no-preference) {
+		.library-search-card[data-open] {
+			animation: library-search-enter 220ms cubic-bezier(0.22, 0.8, 0.24, 1);
+			/* ponytail: JS height measurement exists only to drive this transition; drop
+         both once `interpolate-size: allow-keywords` is supported everywhere. */
+			transition: height 220ms cubic-bezier(0.22, 0.8, 0.24, 1);
+		}
+		/* Height growth animates the card shell only; content inside stays pinned
+       (no text re-sliding) and the results viewport never shows a scrollbar
+       mid-animation. `overflow-anchor: none` stops Chrome's scroll anchoring
+       from nudging the rows while the viewport height animates. */
+		.library-search-card :where([role="listbox"]) {
+			scrollbar-width: none;
+			overflow-anchor: none;
+		}
+		.library-search-card :where([role="listbox"])::-webkit-scrollbar {
+			display: none;
+		}
+	}
+
+	/* Full-screen Lyrics view rising from the player bar. */
+	@keyframes lyrics-view-enter {
+		from {
+			transform: translate3d(0, 100%, 0);
+			opacity: 0.6;
+		}
+		to {
+			transform: translate3d(0, 0, 0);
+			opacity: 1;
+		}
+	}
+	@keyframes lyrics-view-exit {
+		from {
+			transform: translate3d(0, 0, 0);
+			opacity: 1;
+		}
+		to {
+			transform: translate3d(0, 100%, 0);
+			opacity: 0.6;
+		}
+	}
+
+	/* Player Bar track transitions: the new cover fades in over the old one,
+     the title slides up, and the play/pause glyph pops (--animate-* tokens
+     in @theme). */
+	@keyframes player-cover-crossfade {
+		from {
+			opacity: 0;
+		}
+		to {
+			opacity: 1;
+		}
+	}
+	@keyframes player-title-slide {
+		from {
+			opacity: 0;
+			transform: translate3d(0, 0.35rem, 0);
+		}
+		to {
+			opacity: 1;
+			transform: translate3d(0, 0, 0);
+		}
+	}
+	@keyframes player-glyph-pop {
+		from {
+			transform: scale(0.6);
+			opacity: 0.4;
+		}
+		to {
+			transform: scale(1);
+			opacity: 1;
+		}
+	}
 }
 
 @layer base {
-  a {
-    color: inherit;
-    text-decoration-color: color-mix(in srgb, currentColor 40%, transparent);
-    text-decoration-thickness: 1px;
-    text-underline-offset: 2px;
-    transition: background-color 180ms ease, color 180ms ease, border-color 180ms ease,
-      transform 180ms ease;
-  }
+	a {
+		color: inherit;
+		text-decoration-color: color-mix(in srgb, currentColor 40%, transparent);
+		text-decoration-thickness: 1px;
+		text-underline-offset: 2px;
+		transition:
+			background-color 180ms ease,
+			color 180ms ease,
+			border-color 180ms ease,
+			transform 180ms ease;
+	}
 
-  a:hover {
-    color: var(--heading);
-  }
+	a:hover {
+		color: var(--heading);
+	}
 
-  /* Readable text never uses mid-palette slots (theme-3/4). */
-  p,
-  span,
-  li,
-  td,
-  th,
-  label {
-    color: inherit;
-  }
+	/* Readable text never uses mid-palette slots (theme-3/4). */
+	p,
+	span,
+	li,
+	td,
+	th,
+	label {
+		color: inherit;
+	}
 
-  * {
-    @apply border-border outline-ring/50;
-  }
+	* {
+		@apply border-border outline-ring/50;
+	}
 
-  body {
-    background-color: var(--background);
-    color: var(--foreground);
-    background-image:
-      radial-gradient(900px 500px at -5% -5%, var(--hero-a), transparent 55%),
-      radial-gradient(800px 480px at 105% -5%, var(--hero-b), transparent 55%);
-  }
+	/* Tailwind v4 dropped the pointer from buttons; every clickable control
+	   gets it back, disabled ones keep the default. */
+	button:not(:disabled),
+	[role="button"]:not([aria-disabled="true"]) {
+		cursor: pointer;
+	}
 
-  h1,
-  h2,
-  h3,
-  h4,
-  h5,
-  h6 {
-    color: var(--heading);
-  }
+	body {
+		background-color: var(--background);
+		color: var(--foreground);
+		background-image:
+			radial-gradient(900px 500px at -5% -5%, var(--hero-a), transparent 55%),
+			radial-gradient(800px 480px at 105% -5%, var(--hero-b), transparent 55%);
+	}
+
+	h1,
+	h2,
+	h3,
+	h4,
+	h5,
+	h6 {
+		color: var(--heading);
+	}
 }
 
 code {
-  font-size: 0.9em;
-  border: 1px solid var(--line);
-  background: color-mix(in oklab, var(--surface-strong) 82%, white 18%);
-  border-radius: 7px;
-  padding: 2px 7px;
+	font-size: 0.9em;
+	border: 1px solid var(--line);
+	background: color-mix(in oklab, var(--surface-strong) 82%, white 18%);
+	border-radius: var(--radius-sm);
+	padding: 2px 7px;
 }
 
 pre code {
-  border: 0;
-  background: transparent;
-  padding: 0;
-  border-radius: 0;
-  font-size: inherit;
-  color: inherit;
+	border: 0;
+	background: transparent;
+	padding: 0;
+	border-radius: 0;
+	font-size: inherit;
+	color: inherit;
 }
 
 .prose pre {
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--card);
-  color: var(--card-foreground);
+	border: 1px solid var(--line);
+	border-radius: var(--radius-md);
+	background: var(--card);
+	color: var(--card-foreground);
 }
 
 .page-wrap {
-  width: min(1080px, calc(100% - 2rem));
-  margin-inline: auto;
-}
-
-.display-title {
-  font-family: 'Fraunces', Georgia, serif;
+	width: min(1080px, calc(100% - 2rem));
+	margin-inline: auto;
 }
 
 .island-shell {
-  border: 1px solid var(--line);
-  background: linear-gradient(165deg, var(--surface-strong), var(--surface));
-  box-shadow:
-    0 1px 0 var(--inset-glint) inset,
-    0 22px 44px rgba(30, 90, 72, 0.1),
-    0 6px 18px rgba(23, 58, 64, 0.08);
-  backdrop-filter: blur(4px);
+	border: 1px solid var(--line);
+	background: linear-gradient(165deg, var(--surface-strong), var(--surface));
+	box-shadow:
+		0 1px 0 var(--inset-glint) inset,
+		0 22px 44px rgba(30, 90, 72, 0.1),
+		0 6px 18px rgba(23, 58, 64, 0.08);
+	backdrop-filter: blur(4px);
 }
 
 .feature-card {
-  background: linear-gradient(165deg, color-mix(in oklab, var(--surface-strong) 93%, white 7%), var(--surface));
-  box-shadow:
-    0 1px 0 var(--inset-glint) inset,
-    0 18px 34px rgba(30, 90, 72, 0.1),
-    0 4px 14px rgba(23, 58, 64, 0.06);
+	background: linear-gradient(
+		165deg,
+		color-mix(in oklab, var(--surface-strong) 93%, white 7%),
+		var(--surface)
+	);
+	box-shadow:
+		0 1px 0 var(--inset-glint) inset,
+		0 18px 34px rgba(30, 90, 72, 0.1),
+		0 4px 14px rgba(23, 58, 64, 0.06);
 }
 
 .feature-card:hover {
-  transform: translateY(-2px);
-  border-color: color-mix(in oklab, var(--lagoon-deep) 35%, var(--line));
+	transform: translateY(-2px);
+	border-color: color-mix(in oklab, var(--lagoon-deep) 35%, var(--line));
 }
 
 button,
 .island-shell {
-  transition: background-color 180ms ease, color 180ms ease, border-color 180ms ease,
-    transform 180ms ease;
+	transition:
+		background-color 180ms ease,
+		color 180ms ease,
+		border-color 180ms ease,
+		transform 180ms ease;
 }
 
 .island-kicker {
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  font-weight: 700;
-  font-size: 0.69rem;
-  color: var(--kicker);
+	letter-spacing: 0.16em;
+	text-transform: uppercase;
+	font-weight: 700;
+	font-size: 0.69rem;
+	color: var(--kicker);
 }
 
 .nav-link {
-  position: relative;
-  text-decoration: none;
-  color: var(--sea-ink-soft);
+	position: relative;
+	text-decoration: none;
+	color: var(--sea-ink-soft);
 }
 
 .nav-link::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  bottom: -8px;
-  width: 100%;
-  height: 2px;
-  transform: scaleX(0);
-  transform-origin: left;
-  background: linear-gradient(90deg, var(--primary), var(--accent));
-  transition: transform 170ms ease;
+	content: "";
+	position: absolute;
+	left: 0;
+	bottom: -8px;
+	width: 100%;
+	height: 2px;
+	transform: scaleX(0);
+	transform-origin: left;
+	background: linear-gradient(90deg, var(--primary), var(--accent));
+	transition: transform 170ms ease;
 }
 
 .nav-link:hover,
 .nav-link.is-active {
-  color: var(--sea-ink);
+	color: var(--sea-ink);
 }
 
 .nav-link:hover::after,
 .nav-link.is-active::after {
-  transform: scaleX(1);
+	transform: scaleX(1);
 }
 
 .rise-in {
-  animation: rise-in 700ms cubic-bezier(0.16, 1, 0.3, 1) both;
+	animation: rise-in 700ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 @keyframes rise-in {
-  from {
-    opacity: 0;
-    transform: translateY(12px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+	from {
+		opacity: 0;
+		transform: translateY(12px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
 }
 
 .site-footer {
-  border-top: 1px solid var(--line);
-  background: color-mix(in oklab, var(--header-bg) 84%, transparent 16%);
+	border-top: 1px solid var(--line);
+	background: color-mix(in oklab, var(--header-bg) 84%, transparent 16%);
+}
+
+/* The bars run for as long as a Track plays, so they animate transform only:
+ * animating height relayouts and repaints the page on every display frame.
+ * Scales are relative to each bar's resting height (6px, 10px, 8px). */
+@keyframes queue-equalizer-first {
+	from {
+		transform: scaleY(0.667);
+	}
+	to {
+		transform: scaleY(2.333);
+	}
+}
+
+@keyframes queue-equalizer-second {
+	from {
+		transform: scaleY(1.2);
+	}
+	to {
+		transform: scaleY(0.5);
+	}
+}
+
+@keyframes queue-equalizer-third {
+	from {
+		transform: scaleY(0.875);
+	}
+	to {
+		transform: scaleY(1.875);
+	}
+}
+
+.queue-equalizer > * {
+	transform-origin: bottom;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.queue-equalizer[data-playing="true"] > :nth-child(1) {
+		animation: queue-equalizer-first 0.9s ease-in-out infinite alternate;
+	}
+	.queue-equalizer[data-playing="true"] > :nth-child(2) {
+		animation: queue-equalizer-second 0.8s ease-in-out infinite alternate;
+	}
+	.queue-equalizer[data-playing="true"] > :nth-child(3) {
+		animation: queue-equalizer-third 1s ease-in-out infinite alternate;
+	}
+	/* A closed Queue drawer is only visibility: hidden, which keeps CSS
+	 * animations ticking for the whole listening session. */
+	[data-queue-drawer][data-state="closed"] .queue-equalizer > * {
+		animation: none;
+	}
 }

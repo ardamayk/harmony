@@ -8,6 +8,7 @@ import {
 	EmptyMedia,
 	EmptyTitle,
 } from "#/components/ui/empty";
+import { PAGE_CONTENT_WIDTH_CLASS } from "#/lib/page-layout-classes";
 import { cn } from "#/lib/utils";
 
 const SKELETON_CARD_KEYS = [
@@ -22,8 +23,22 @@ const SKELETON_CARD_KEYS = [
 	"skeleton-9",
 	"skeleton-10",
 ] as const;
-export const COLLECTION_PAGE_CONTAINER_CLASS =
-	"w-full min-[1801px]:mx-auto min-[1801px]:max-w-[1476px]";
+export const COLLECTION_PAGE_CONTAINER_CLASS = PAGE_CONTENT_WIDTH_CLASS;
+// Cards are exactly 250px wide and never stretch: when the column narrows
+// (Queue Drawer opening, window shrinking) cards wrap to the next row instead
+// of resizing. `min(…,100%)` lets one column fit narrow phones. Below `lg`
+// an open Queue Drawer has a fixed width (see use-queue-drawer-width) and the
+// grid stretches two columns into what is left.
+export const COLLECTION_GRID_CLASS =
+	"grid grid-cols-cards gap-3 max-lg:in-data-[queue-open]:grid-cols-2";
+
+// Hover and keyboard focus for every collection and station card
+// (docs/design-rules.md, Interaction states): lift, neutral heading-tone border, soft shadow;
+// hover never takes the accent.
+// `transform-gpu backface-hidden` keeps the desktop webview from flickering
+// card edges while they move.
+export const CARD_INTERACTION_CLASS =
+	"transform-gpu backface-hidden outline-none transition duration-300 ease-out hover:-translate-y-1 hover:border-heading/35 hover:shadow-card-lift focus-visible:-translate-y-1 focus-visible:border-heading/60 focus-visible:shadow-card-lift motion-reduce:transform-none motion-reduce:transition-none";
 
 export function CollectionPageContainer({
 	className,
@@ -49,10 +64,7 @@ export function CollectionGrid({
 	return (
 		<div
 			aria-busy={isBusy || undefined}
-			className={cn(
-				"grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5",
-				className,
-			)}
+			className={cn(COLLECTION_GRID_CLASS, className)}
 		>
 			{children}
 		</div>
@@ -107,18 +119,11 @@ export function CollectionGridState({
 	return (
 		<Empty
 			role={isError ? "alert" : undefined}
-			className={cn(
-				"min-h-72 border",
-				isError ? "border-destructive/30" : "border-border/70 bg-card/30",
-			)}
+			variant={isError ? "error" : "card"}
+			className="min-h-72"
 		>
 			<EmptyHeader>
-				<EmptyMedia
-					variant="icon"
-					className={isError ? "text-destructive" : undefined}
-				>
-					{icon}
-				</EmptyMedia>
+				<EmptyMedia variant="icon">{icon}</EmptyMedia>
 				<EmptyTitle>{title}</EmptyTitle>
 				<EmptyDescription>{description}</EmptyDescription>
 			</EmptyHeader>

@@ -1,13 +1,33 @@
-import type { Queue, QueueEvent, QueueItem } from "@repo/api-client";
+import type {
+	Queue,
+	QueueEvent,
+	QueueItem,
+	QueueItemSource,
+} from "@repo/api-client";
 import { ApiError } from "@repo/api-client";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+	useCallback,
+	useEffect,
+	useLayoutEffect,
+	useRef,
+	useState,
+} from "react";
 
 export type PlaybackQueueApi = {
 	getQueue: () => Promise<Queue>;
-	replaceQueue: (trackIds: string[], revision: string) => Promise<Queue>;
+	replaceQueue: (
+		trackIds: string[],
+		revision: string,
+		source?: QueueItemSource,
+	) => Promise<Queue>;
 	reorderQueue: (itemIds: string[], revision: string) => Promise<Queue>;
-	appendQueueItem: (trackId: string, revision: string) => Promise<Queue>;
+	appendQueueItem: (
+		trackId: string,
+		revision: string,
+		source?: QueueItemSource,
+	) => Promise<Queue>;
 	removeQueueItem: (itemId: string, revision: string) => Promise<Queue>;
+	clearQueue: (afterItemId: string | null, revision: string) => Promise<Queue>;
 	subscribeQueueEvents?: (
 		onEvent: (event: QueueEvent) => void,
 		onError?: (error: Error) => void,
@@ -24,7 +44,9 @@ export function useSynchronizedQueue(api: PlaybackQueueApi) {
 	const latestAppliedRequestRef = useRef(0);
 	const [queue, setQueueState] = useState<QueueItem[]>([]);
 	const [queueConflict, setQueueConflict] = useState<string | null>(null);
-	apiRef.current = api;
+	useLayoutEffect(() => {
+		apiRef.current = api;
+	});
 
 	const applyQueue = useCallback((data: Queue, requestOrder: number) => {
 		if (requestOrder < latestAppliedRequestRef.current) return;
@@ -97,12 +119,11 @@ export function useSynchronizedQueue(api: PlaybackQueueApi) {
 		);
 	}, [refreshQueue]);
 
-	const retryAppend = useCallback(
-		async (trackId: string): Promise<Queue> => {
+	/** Refetch the Queue and re-issue one mutation against the fresh revision. */
+	const retryWithFreshRevision = useCallback(
+		async (mutate: (revision: string) => Promise<Queue>): Promise<Queue> => {
 			const current = await runQueueRequest(() => apiRef.current.getQueue());
-			const retried = await runQueueRequest(() =>
-				apiRef.current.appendQueueItem(trackId, current.revision),
-			);
+			const retried = await runQueueRequest(() => mutate(current.revision));
 			setQueueConflict(null);
 			return retried;
 		},
@@ -110,31 +131,63 @@ export function useSynchronizedQueue(api: PlaybackQueueApi) {
 	);
 
 	const appendQueueItem = useCallback(
-		async (trackId: string): Promise<Queue> => {
+		async (trackId: string, source?: QueueItemSource): Promise<Queue> => {
 			try {
 				const data = await runQueueRequest(() =>
-					apiRef.current.appendQueueItem(trackId, queueRevisionRef.current),
+					apiRef.current.appendQueueItem(
+						trackId,
+						queueRevisionRef.current,
+						...(source ? [source] : []),
+					),
 				);
 				setQueueConflict(null);
 				return data;
 			} catch (error) {
 				if (!isQueueConflict(error)) throw error;
-				return retryAppend(trackId);
+				return retryWithFreshRevision((revision) =>
+					apiRef.current.appendQueueItem(
+						trackId,
+						revision,
+						...(source ? [source] : []),
+					),
+				);
 			}
 		},
-		[retryAppend, runQueueRequest],
+		[retryWithFreshRevision, runQueueRequest],
 	);
 
+	/**
+	 * Replace the Queue. A replace whose content does not depend on the
+	 * previous Queue (playing a Track with its context) is an unambiguous
+	 * intent and may be retried once after a revision conflict; other
+	 * replacements surface the conflict for the user to resolve.
+	 */
 	const replaceQueue = useCallback(
-		async (trackIds: string[]): Promise<Queue | undefined> => {
+		async (
+			trackIds: string[],
+			options: { retryOnConflict?: boolean; source?: QueueItemSource } = {},
+		): Promise<Queue | undefined> => {
 			try {
 				const data = await runQueueRequest(() =>
-					apiRef.current.replaceQueue(trackIds, queueRevisionRef.current),
+					apiRef.current.replaceQueue(
+						trackIds,
+						queueRevisionRef.current,
+						...(options.source ? [options.source] : []),
+					),
 				);
 				setQueueConflict(null);
 				return data;
 			} catch (error) {
 				if (!isQueueConflict(error)) throw error;
+				if (options.retryOnConflict) {
+					return retryWithFreshRevision((revision) =>
+						apiRef.current.replaceQueue(
+							trackIds,
+							revision,
+							...(options.source ? [options.source] : []),
+						),
+					);
+				}
 				await runQueueRequest(() => apiRef.current.getQueue());
 				setQueueConflict(
 					"Queue changed in another Playback Client. Review replacement and try again.",
@@ -142,7 +195,7 @@ export function useSynchronizedQueue(api: PlaybackQueueApi) {
 				return undefined;
 			}
 		},
-		[runQueueRequest],
+		[retryWithFreshRevision, runQueueRequest],
 	);
 
 	const reconcileRemove = useCallback(
@@ -175,6 +228,25 @@ export function useSynchronizedQueue(api: PlaybackQueueApi) {
 		[reconcileRemove, runQueueRequest],
 	);
 
+	/** Removes the items after afterItemId (the playing item); null clears all. */
+	const clearQueue = useCallback(
+		async (afterItemId: string | null) => {
+			try {
+				await runQueueRequest(() =>
+					apiRef.current.clearQueue(afterItemId, queueRevisionRef.current),
+				);
+				setQueueConflict(null);
+			} catch (error) {
+				if (!isQueueConflict(error)) throw error;
+				await runQueueRequest(() => apiRef.current.getQueue());
+				setQueueConflict(
+					"Queue changed in another Playback Client. Review the queue and try again.",
+				);
+			}
+		},
+		[runQueueRequest],
+	);
+
 	const reorderQueue = useCallback(
 		async (itemIds: string[]) => {
 			try {
@@ -201,6 +273,7 @@ export function useSynchronizedQueue(api: PlaybackQueueApi) {
 		appendQueueItem,
 		replaceQueue,
 		removeFromQueue,
+		clearQueue,
 		reorderQueue,
 	};
 }

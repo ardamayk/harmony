@@ -1,0 +1,45 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT outcome, counts,\n                CAST((julianday('now') - julianday(checked_at)) * 86400 AS INTEGER) AS \"age_seconds!: i64\"\n            FROM artist_play_counts WHERE artist_id = ?1",
+  "describe": {
+    "columns": [
+      {
+        "name": "outcome",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artist_play_counts",
+            "name": "outcome"
+          }
+        }
+      },
+      {
+        "name": "counts",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artist_play_counts",
+            "name": "counts"
+          }
+        }
+      },
+      {
+        "name": "age_seconds!: i64",
+        "ordinal": 2,
+        "type_info": "Integer",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "fc5ca29ca7fa6a07ba45f0ff9c604c51119389095a73ebc93b2d56a068d95957"
+}

@@ -83,34 +83,6 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
-  /api/v1/library/scan:
-    post:
-      tags: [library]
-      operationId: triggerLibraryScan
-      summary: Trigger library scan
-      responses:
-        "202":
-          description: Scan started
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ScanStatus"
-        "409":
-          $ref: "#/components/responses/Conflict"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-  /api/v1/library/scan/status:
-    get:
-      tags: [library]
-      operationId: getLibraryScanStatus
-      summary: Get current or latest scan status
-      responses:
-        "200":
-          description: Scan status
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ScanStatus"
   /api/v1/library/artists:
     get:
       tags: [library]
@@ -123,7 +95,7 @@ paths:
           in: query
           schema:
             type: string
-          description: Search by name
+          description: Substring filter over active Album Artists only. Exact names sort first. Album counts include active Album Artist credits only.
       responses:
         "200":
           description: Artist list
@@ -131,6 +103,121 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ArtistList"
+  /api/v1/library/artists/{artistId}:
+    get:
+      tags: [library]
+      operationId: getArtist
+      summary: Get an artist
+      description: Any credited Artist. Album counts include active Album Artist credits only.
+      parameters:
+        - $ref: "#/components/parameters/artistId"
+      responses:
+        "200":
+          description: Artist
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Artist"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/library/artists/{artistId}/photo:
+    get:
+      tags: [library]
+      operationId: getArtistPhoto
+      summary: Get an artist photo
+      description: >-
+        Looked up on Deezer on first request and stored on the Music Server
+        (ADR 0027), so clients never contact Deezer. Not found when Deezer has
+        no photo, the lookup failed, or online lookups are switched off.
+      parameters:
+        - $ref: "#/components/parameters/artistId"
+      responses:
+        "200":
+          description: Artist photo
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/library/artists/{artistId}/biography:
+    get:
+      tags: [library]
+      operationId: getArtistBiography
+      summary: Get an artist biography
+      description: >-
+        The Artist's Wikipedia summary, found through MusicBrainz and Wikidata
+        on first request and stored (ADR 0027). Show `sourceUrl` with it, as
+        Wikipedia's CC BY-SA licence requires. Not found when there is none,
+        the lookup failed, or online lookups are switched off.
+      parameters:
+        - $ref: "#/components/parameters/artistId"
+      responses:
+        "200":
+          description: Artist biography
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArtistBiography"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/library/artists/{artistId}/popular-tracks:
+    get:
+      tags: [library]
+      operationId: listArtistPopularTracks
+      summary: List an artist's popular tracks
+      description: >-
+        The Artist's Tracks in the library that are among their 50 most
+        popular on Deezer, best first. The Deezer list is looked up on first
+        request and refreshed weekly (ADR 0027); titles are matched without
+        case or bracketed versions. Empty when there is no list, the lookup
+        failed, or online lookups are switched off.
+      parameters:
+        - $ref: "#/components/parameters/artistId"
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 10
+      responses:
+        "200":
+          description: Popular tracks, best first
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PopularTrackList"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/library/tracks/play-counts:
+    get:
+      tags: [library]
+      operationId: listTrackPlayCounts
+      summary: List Last.fm play counts for tracks
+      description: >-
+        Last.fm play counts for the named Tracks, read from their first
+        credited Artist's 1000 most played Tracks on Last.fm, matched without
+        case or bracketed versions and refreshed weekly (ADR 0030). Only when
+        the operator set LASTFM_API_KEY; Tracks without a count are left out,
+        so the list is empty without a key.
+      parameters:
+        - name: ids
+          in: query
+          required: true
+          description: Comma-separated Track ids, at most 200.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Play counts for the Tracks that have one
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlayCountList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
   /api/v1/library/albums:
     get:
       tags: [library]
@@ -156,6 +243,27 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AlbumList"
+  /api/v1/library/albums/{albumId}/online-genres:
+    get:
+      tags: [library]
+      operationId: listAlbumOnlineGenres
+      summary: List Deezer's genres for an album whose tags name none
+      description: >-
+        Deezer's genres for the Album, looked up on first request and stored
+        (ADR 0027). Shown on the Album page only; Genre pages, filters and
+        radio still read the tags. Empty when the Album's tags name a genre,
+        when Deezer has none, or when online lookups are off.
+      parameters:
+        - $ref: "#/components/parameters/albumId"
+      responses:
+        "200":
+          description: Genre names, Deezer's order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenreNameList"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /api/v1/library/albums/{albumId}:
     get:
       tags: [library]
@@ -175,16 +283,58 @@ paths:
     delete:
       tags: [library]
       operationId: deleteAlbum
-      summary: Delete album, its tracks, and music files
+      summary: Permanently delete every Managed Track of an Album after reviewing the album deletion preview
+      description: >-
+        Runs one Permanent Track Deletion per Track in album order. Each Track
+        commits on its own: a failure stops the run, Tracks already deleted stay
+        deleted, and the result lists both outcomes. The Album and its artwork
+        disappear with their last Track.
+      parameters:
+        - $ref: "#/components/parameters/albumId"
+        - name: X-Permanent-Delete
+          in: header
+          required: true
+          description: Explicit application confirmation required for irreversible deletion
+          schema:
+            type: string
+            enum: ["1"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TrackDeletionConfirmation"
+      responses:
+        "200":
+          description: Per-Track outcome of the album deletion
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlbumDeletionResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/library/albums/{albumId}/deletion:
+    get:
+      tags: [library]
+      operationId: previewAlbumDeletion
+      summary: Review the irreversible deletion of every Managed Track of an Album and all affected references
       parameters:
         - $ref: "#/components/parameters/albumId"
       responses:
         "200":
-          description: Album deleted
+          description: Current album deletion preview
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/DeleteResult"
+                $ref: "#/components/schemas/AlbumDeletionPreview"
+        "409":
+          $ref: "#/components/responses/Conflict"
         "404":
           $ref: "#/components/responses/NotFound"
   /api/v1/library/albums/{albumId}/cover:
@@ -194,6 +344,16 @@ paths:
       summary: Get album cover image
       parameters:
         - $ref: "#/components/parameters/albumId"
+        - name: size
+          in: query
+          required: false
+          description: >-
+            Longest edge in pixels. The cover is scaled down to fit (never up)
+            and served as JPEG; a cover already within the size is served as
+            is. Omit for the original image.
+          schema:
+            type: integer
+            enum: [64, 128, 256, 512, 1024]
       responses:
         "200":
           description: Cover image
@@ -206,6 +366,8 @@ paths:
               schema:
                 type: string
                 format: binary
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "404":
           $ref: "#/components/responses/NotFound"
   /api/v1/library/tracks:
@@ -216,6 +378,12 @@ paths:
       parameters:
         - $ref: "#/components/parameters/limit"
         - $ref: "#/components/parameters/offset"
+        - name: artistId
+          in: query
+          description: Exact Track or Album Artist credit filter, combined with q before counting and pagination.
+          schema:
+            type: string
+            format: uuid
         - name: q
           in: query
           schema:
@@ -247,23 +415,185 @@ paths:
     delete:
       tags: [library]
       operationId: deleteTrack
-      summary: Delete track and its music file
+      summary: Permanently delete a Managed Track after reviewing its deletion preview
       parameters:
         - $ref: "#/components/parameters/trackId"
+        - name: X-Permanent-Delete
+          in: header
+          required: true
+          description: Explicit application confirmation required for irreversible deletion
+          schema:
+            type: string
+            enum: ["1"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TrackDeletionConfirmation"
       responses:
         "200":
-          description: Track deleted
+          description: Managed Track and its exact managed audio file permanently deleted
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/DeleteResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/library/search:
+    get:
+      tags: [library]
+      operationId: searchLibrary
+      summary: Library Search across Tracks, Albums, Artists, Genres, and Playlists
+      description: >-
+        Evaluates one coherent Library Search on the Music Server: every query
+        word must match and at least one word must contribute to the result's
+        own title/name. Related metadata may complete mixed queries but never
+        adds unrelated Albums or Artists. Bounded typo correction applies only
+        when no strong direct result exists. Groups hold at most five records
+        each unless all=true returns every ranked result. Ranking and Best Match
+        selection are unchanged; the Best Match also appears first in its group.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: The query text; empty and punctuation-only input is rejected
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 200
+        - name: all
+          in: query
+          required: false
+          description: Return all ranked results instead of five per group; must be true or false
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: Ranked Library Search groups
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LibrarySearchResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /api/v1/library/tracks/{trackId}/lyrics:
+    get:
+      tags: [library]
+      operationId: getTrackLyrics
+      summary: Get a track's lyrics
+      description: >-
+        The lyrics read from the file tags at import; when the file carried
+        none, LRCLIB's for the Track's title, Artist, Album and duration,
+        looked up on first request and stored (ADR 0029). Synced lyrics come
+        as LRC text. Empty when there are none, the lookup failed, or online
+        lookups are switched off.
+      parameters:
+        - $ref: "#/components/parameters/trackId"
+      responses:
+        "200":
+          description: Track lyrics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrackLyrics"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/library/tracks/{trackId}/waveform:
+    get:
+      tags: [library]
+      operationId: getTrackWaveform
+      summary: Get normalized waveform peaks for a track
+      description: >-
+        Peaks are decoded from the managed file with ffmpeg on first request
+        and cached; a replaced file is decoded again. Advertised through the
+        track-waveform.v1 capability, which requires ffmpeg on the Music Server.
+      parameters:
+        - $ref: "#/components/parameters/trackId"
+      responses:
+        "200":
+          description: Cached waveform peaks
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrackWaveform"
+        "202":
+          description: Peaks are still being generated; retry after the given delay.
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrackWaveformPending"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          description: ffmpeg is not installed on the Music Server.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/library/tracks/{trackId}/deletion:
+    get:
+      tags: [library]
+      operationId: previewTrackDeletion
+      summary: Review irreversible Managed Track deletion and all affected references
+      parameters:
+        - $ref: "#/components/parameters/trackId"
+      responses:
+        "200":
+          description: Current Permanent Track Deletion preview
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrackDeletionPreview"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/library/tracks/{trackId}/replacement:
+    post:
+      tags: [library]
+      operationId: createTrackReplacement
+      summary: Start an explicit Track Replacement for one Managed Track
+      description: >-
+        Creates a Managed Import Job bound to the Track. Upload the replacement file
+        with uploadManagedImportFile; the returned Import Preview carries a
+        replacement section listing every difference and destructive consequence.
+        Confirm with confirmTrackReplacement, never with confirmManagedImport.
+      parameters:
+        - $ref: "#/components/parameters/trackId"
+      responses:
+        "201":
+          description: Track Replacement job created and awaiting the replacement upload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ManagedImportJob"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
   /api/v1/import-batches:
     post:
       tags: [imports]
       operationId: createManagedImportBatch
       summary: Create one multi-file Managed Import Batch
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ManagedImportBatchCreate"
       responses:
         "201":
           description: Managed Import Batch created
@@ -271,6 +601,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ManagedImportBatch"
+  /api/v1/import-history:
+    get:
+      tags: [imports]
+      operationId: listImportHistory
+      summary: List up to 20 most recent terminal Managed Import results
+      responses:
+        "200":
+          description: Recent terminal Import History without staged audio or raw metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ManagedImportHistoryList"
   /api/v1/import-batches/{batchId}:
     get:
       tags: [imports]
@@ -285,6 +627,87 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ManagedImportBatch"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [imports]
+      operationId: cancelManagedImportBatch
+      summary: Cancel an uncommitted Managed Import Batch and remove its staging
+      parameters:
+        - $ref: "#/components/parameters/batchId"
+      responses:
+        "204":
+          description: Managed Import Batch canceled and staging removed
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /api/v1/import-batches/{batchId}/heartbeat:
+    post:
+      tags: [imports]
+      operationId: heartbeatManagedImportBatch
+      summary: Keep an unfinished import alive without changing its preview revision
+      parameters:
+        - $ref: "#/components/parameters/batchId"
+      responses:
+        "204":
+          description: Client liveness recorded
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/import-batches/{batchId}/albums/{albumKey}/artwork:
+    parameters:
+      - $ref: "#/components/parameters/batchId"
+      - name: albumKey
+        in: path
+        required: true
+        schema:
+          type: string
+    put:
+      operationId: uploadManagedImportArtwork
+      summary: Stage a JPEG or PNG cover for an import Album
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        "200":
+          description: Validated artwork option
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ManagedImportArtworkOption"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+  /api/v1/import-batches/{batchId}/artwork/{artworkId}:
+    parameters:
+      - $ref: "#/components/parameters/batchId"
+      - name: artworkId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: getManagedImportArtwork
+      summary: Preview staged Album artwork
+      responses:
+        "200":
+          description: Validated image bytes
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/webp:
+              schema:
+                type: string
+                format: binary
         "404":
           $ref: "#/components/responses/NotFound"
   /api/v1/import-batches/{batchId}/confirm:
@@ -347,6 +770,19 @@ paths:
                 $ref: "#/components/schemas/ManagedImportJob"
         "404":
           $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [imports]
+      operationId: cancelManagedImport
+      summary: Cancel an uncommitted Managed Import Job and remove its staging
+      parameters:
+        - $ref: "#/components/parameters/importId"
+      responses:
+        "204":
+          description: Managed Import Job canceled and staging removed
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
   /api/v1/imports/{importId}/file:
     put:
       tags: [imports]
@@ -360,6 +796,20 @@ paths:
           schema:
             type: string
           description: Display-only client filename; never used as a storage path.
+        - name: X-Import-Filename-Encoding
+          in: header
+          required: false
+          schema:
+            type: string
+            enum: [url]
+          description: >-
+            Set to url when X-Import-Filename is percent-encoded so non-ASCII
+            filenames survive HTTP header transport. Absent means the header is
+            sent verbatim.
+      description: >-
+        The request media type is advisory only. The Music Server detects the
+        Source Audio Format from the uploaded bytes and never trusts the
+        declared Content-Type or the client filename extension.
       requestBody:
         required: true
         content:
@@ -368,6 +818,26 @@ paths:
               type: string
               format: binary
           audio/flac:
+            schema:
+              type: string
+              format: binary
+          audio/wav:
+            schema:
+              type: string
+              format: binary
+          audio/mpeg:
+            schema:
+              type: string
+              format: binary
+          audio/mp4:
+            schema:
+              type: string
+              format: binary
+          audio/ogg:
+            schema:
+              type: string
+              format: binary
+          audio/opus:
             schema:
               type: string
               format: binary
@@ -382,6 +852,12 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "404":
           $ref: "#/components/responses/NotFound"
+        "408":
+          description: Upload stream was interrupted and this Import Job remains retryable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "409":
           $ref: "#/components/responses/Conflict"
         "413":
@@ -424,6 +900,54 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           $ref: "#/components/responses/Conflict"
+        "507":
+          $ref: "#/components/responses/InsufficientStorage"
+  /api/v1/imports/{importId}/replacement:
+    post:
+      tags: [imports]
+      operationId: confirmTrackReplacement
+      summary: Confirm a reviewed Track Replacement and delete the previous managed file
+      description: >-
+        Keeps the Track ID and every Playlist and Queue reference, makes the validated
+        replacement metadata authoritative, cleans emptied Albums and Artists, and
+        deletes the previous managed file only after the replacement was placed,
+        hashed, committed, and read back from its Canonical Library Path.
+      parameters:
+        - $ref: "#/components/parameters/importId"
+        - name: X-Track-Replacement
+          in: header
+          required: true
+          description: Explicit application confirmation required for the irreversible old-file deletion
+          schema:
+            type: string
+            enum: ["1"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TrackReplacementConfirmation"
+      responses:
+        "200":
+          description: Track Replacement committed, or the idempotent prior result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrackReplacementResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          description: Replacement file no longer passes the Strict Import Profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "507":
           $ref: "#/components/responses/InsufficientStorage"
   /api/v1/playback/queue:
@@ -494,6 +1018,45 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: Queue revision conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QueueConflictResponse"
+    delete:
+      tags: [playback]
+      operationId: clearPlaybackQueue
+      summary: Clear playback queue
+      description: Removes the queue items after `afterItemId`; that item and the ones before it stay unchanged. Without `afterItemId` the whole queue is removed.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: afterItemId
+          in: query
+          required: false
+          description: Queue item after which everything is removed, typically the one playing
+          schema:
+            type: string
+        - name: If-Match
+          in: header
+          required: true
+          description: Queue Revision on which the clear intent is based
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Updated queue
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Queue"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
         "409":
           description: Queue revision conflict
           content:
@@ -588,6 +1151,17 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
   /api/v1/tracks/{trackId}/stream:
+    head:
+      tags: [playback]
+      operationId: headTrackStream
+      summary: Check track audio availability without downloading it
+      parameters:
+        - $ref: "#/components/parameters/trackId"
+      responses:
+        "200":
+          description: Track audio is available
+        "404":
+          description: Track or its audio file was not found
     get:
       tags: [playback]
       operationId: streamTrack
@@ -879,6 +1453,57 @@ paths:
                 $ref: "#/components/schemas/RadioStation"
         "400":
           $ref: "#/components/responses/BadRequest"
+  /api/v1/radio/preview:
+    post:
+      tags: [radio]
+      operationId: previewRadioStation
+      summary: Stream a Radio Browser search result before importing it
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RadioImportRequest"
+      responses:
+        "200":
+          description: Radio preview stream
+          content:
+            audio/mpeg:
+              schema:
+                type: string
+                format: binary
+            audio/*:
+              schema:
+                type: string
+                format: binary
+            application/vnd.apple.mpegurl:
+              schema:
+                type: string
+                format: binary
+            application/x-mpegurl:
+              schema:
+                type: string
+                format: binary
+            video/*:
+              schema:
+                type: string
+                format: binary
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "415":
+          description: DRM-protected HLS is unsupported
+        "502":
+          description: Upstream radio resource failed
+        "503":
+          description: Radio streaming is unavailable on this Music Server
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /api/v1/radio/preview/{stationUuid}/stream:
     get:
       tags: [radio]
@@ -1038,6 +1663,12 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
+    Forbidden:
+      description: Forbidden
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
     NotFound:
       description: Not found
       content:
@@ -1078,6 +1709,13 @@ components:
         type: integer
         minimum: 0
         default: 0
+    artistId:
+      name: artistId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
     albumId:
       name: albumId
       in: path
@@ -1130,7 +1768,7 @@ components:
   schemas:
     HealthResponse:
       type: object
-      required: [status, version, capabilities]
+      required: [status, version, capabilities, dependencies]
       properties:
         status:
           type: string
@@ -1142,10 +1780,46 @@ components:
           items:
             type: string
           description: >-
-            Named server behaviors supported by this release. Queue event streaming
+            Named server behaviors supported by this release. The versioned
+            /api/v1 surface itself is advertised as api.v1. Queue event streaming
             is advertised as playback.queue-events.v1 and the first strict FLAC
             Managed Import tracer bullet as managed-import.v1. Multi-file Managed
-            Import Batches are advertised as managed-import-batches.v1.
+            Import Batches are advertised as managed-import-batches.v1, Permanent
+            Track Deletion as managed-track-deletion.v1, explicit Track
+            Replacement as managed-track-replacement.v1, Album deletion
+            (one Permanent Track Deletion per Track, previewed once) as
+            managed-album-deletion.v1, and lazily generated waveform peaks as
+            track-waveform.v1 (only when ffmpeg is installed). Clients gate optional
+            behavior on the exact capability name and must ignore unknown
+            entries so newer servers stay compatible with older clients.
+        dependencies:
+          type: array
+          items:
+            $ref: "#/components/schemas/ServerDependency"
+          description: >-
+            Server Dependencies probed once at startup, in a stable order
+            (ffmpeg, ffprobe). They describe the deployment environment
+            so an operator can see what the installation supports.
+    ServerDependency:
+      type: object
+      required: [name, required, available]
+      properties:
+        name:
+          type: string
+          description: Program name as invoked by the Music Server.
+        required:
+          type: boolean
+          description: >-
+            True when Managed Import cannot work without the program; false for
+            an optional dependency whose absence only disables a feature.
+        available:
+          type: boolean
+          description: True when the program was found on PATH at startup.
+        version:
+          type: string
+          description: >-
+            Version parsed from the program's own version output. Absent when
+            the program is missing or its output could not be parsed.
     User:
       type: object
       required: [id, username]
@@ -1208,14 +1882,98 @@ components:
             - dusty-earth
             - coastal-mist
             - sage-hearth
+    PlaybackPreferences:
+      type: object
+      description: Player Bar behaviour shared by the Web and Desktop Clients.
+      required:
+        - seekStepSeconds
+        - seekStepLargeSeconds
+        - playbackRate
+        - transitionFadeMs
+        - showWaveform
+        - accentFromCover
+        - showUpNext
+        - autoSkipOnErrorSeconds
+        - hoverTimestamp
+      properties:
+        seekStepSeconds:
+          type: integer
+          minimum: 1
+          maximum: 120
+          description: Seconds moved by the arrow-key seek shortcut.
+        seekStepLargeSeconds:
+          type: integer
+          minimum: 1
+          maximum: 120
+          description: Seconds moved by the Shift+arrow seek shortcut.
+        playbackRate:
+          type: number
+          minimum: 0.5
+          maximum: 2
+          description: Default playback speed multiplier.
+        transitionFadeMs:
+          type: integer
+          minimum: 0
+          maximum: 2000
+          description: Volume ramp applied on user-initiated transitions; 0 disables it.
+        showWaveform:
+          type: boolean
+        accentFromCover:
+          type: boolean
+          description: Tint the Player Bar from the current album cover.
+        showUpNext:
+          type: boolean
+          description: Show the next queued track beside the now-playing info.
+        autoSkipOnErrorSeconds:
+          type: integer
+          minimum: 0
+          maximum: 60
+          description: Countdown before a failed track is skipped; 0 waits for the user.
+        hoverTimestamp:
+          type: boolean
+          description: Show the hovered position as a timestamp over the seek bar.
+    PlaybackPreferencesPatch:
+      type: object
+      description: Sparse form of PlaybackPreferences; absent fields are left unchanged.
+      properties:
+        seekStepSeconds:
+          type: integer
+          minimum: 1
+          maximum: 120
+        seekStepLargeSeconds:
+          type: integer
+          minimum: 1
+          maximum: 120
+        playbackRate:
+          type: number
+          minimum: 0.5
+          maximum: 2
+        transitionFadeMs:
+          type: integer
+          minimum: 0
+          maximum: 2000
+        showWaveform:
+          type: boolean
+        accentFromCover:
+          type: boolean
+        showUpNext:
+          type: boolean
+        autoSkipOnErrorSeconds:
+          type: integer
+          minimum: 0
+          maximum: 60
+        hoverTimestamp:
+          type: boolean
     UserPreferences:
       type: object
-      required: [theme, layout]
+      required: [theme, layout, playback]
       properties:
         theme:
           $ref: "#/components/schemas/ThemePreferences"
         layout:
           $ref: "#/components/schemas/LayoutPreferences"
+        playback:
+          $ref: "#/components/schemas/PlaybackPreferences"
     UserPreferencesPatch:
       type: object
       properties:
@@ -1223,10 +1981,28 @@ components:
           $ref: "#/components/schemas/ThemePreferences"
         layout:
           $ref: "#/components/schemas/LayoutPreferences"
+        playback:
+          $ref: "#/components/schemas/PlaybackPreferencesPatch"
+    ValidationIssue:
+      type: object
+      required: [code, field, reason]
+      properties:
+        code:
+          type: string
+        field:
+          type: string
+        reason:
+          type: string
+          description: Safe, actionable description of one validation failure.
     ErrorResponse:
       type: object
       required: [error, code, message]
       properties:
+        issues:
+          type: array
+          description: All independently detectable validation failures, in check order.
+          items:
+            $ref: "#/components/schemas/ValidationIssue"
         error:
           type: string
         code:
@@ -1262,7 +2038,11 @@ components:
         trackId:
           type: string
           format: uuid
-          description: Created Track when status is committed.
+          description: Created or replaced Track when status is committed.
+        replacesTrackId:
+          type: string
+          format: uuid
+          description: Present when this job is an explicit Track Replacement of that Track.
     ManagedImportJobCreate:
       type: object
       required: [batchId, clientFileId]
@@ -1275,10 +2055,17 @@ components:
           type: string
           format: uuid
           description: Client-generated identifier used to correlate a Batch file when the create response is lost.
+    ManagedImportBatchCreate:
+      type: object
+      properties:
     ManagedImportBatch:
       type: object
       required: [id, status, revision, files]
       properties:
+        albums:
+          type: array
+          items:
+            $ref: "#/components/schemas/ManagedImportAlbumPreview"
         id:
           type: string
           format: uuid
@@ -1296,6 +2083,24 @@ components:
       type: object
       required: [jobId, state, status, revision, validationProgress, selected]
       properties:
+        phase:
+          type: string
+          enum: [queued, uploading, validating, ready, failed, committing, completed]
+          description: Current server processing phase, separate from byte transfer progress.
+        transferredBytes:
+          type: integer
+          format: int64
+          minimum: 0
+        totalBytes:
+          type: integer
+          format: int64
+          minimum: 0
+
+        issues:
+          type: array
+          description: All independently detectable validation failures, in check order.
+          items:
+            $ref: "#/components/schemas/ValidationIssue"
         jobId:
           type: string
           format: uuid
@@ -1333,10 +2138,166 @@ components:
         trackId:
           type: string
           format: uuid
+    ManagedImportHistoryList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 20
+          items:
+            $ref: "#/components/schemas/ManagedImportHistoryItem"
+    ManagedImportHistoryItem:
+      type: object
+      required: [importId, startedAt, completedAt, resultCode, counts, files]
+      properties:
+        importId:
+          type: string
+          format: uuid
+        startedAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+        resultCode:
+          type: string
+          enum: [completed, partially_completed, failed, canceled]
+        counts:
+          $ref: "#/components/schemas/ManagedImportHistoryCounts"
+        files:
+          type: array
+          items:
+            $ref: "#/components/schemas/ManagedImportHistoryFile"
+    ManagedImportHistoryCounts:
+      type: object
+      required: [total, imported, rejected, failed, replaced, notAttempted, canceled]
+      properties:
+        total:
+          type: integer
+          minimum: 0
+        imported:
+          type: integer
+          minimum: 0
+        rejected:
+          type: integer
+          minimum: 0
+        failed:
+          type: integer
+          minimum: 0
+        replaced:
+          type: integer
+          minimum: 0
+        notAttempted:
+          type: integer
+          minimum: 0
+        canceled:
+          type: integer
+          minimum: 0
+    ManagedImportHistoryFile:
+      type: object
+      required: [fileId, jobId, startedAt, completedAt, resultCode]
+      properties:
+        issues:
+          type: array
+          description: All independently detectable validation failures, in check order.
+          items:
+            $ref: "#/components/schemas/ValidationIssue"
+        fileId:
+          type: string
+          format: uuid
+        jobId:
+          type: string
+          format: uuid
+        safeFilename:
+          type: string
+          maxLength: 255
+        startedAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+        contentSha256:
+          type: string
+          pattern: "^[0-9a-f]{64}$"
+        resultCode:
+          type: string
+          minLength: 1
+        createdTrackId:
+          type: string
+          format: uuid
+        replacedTrackId:
+          type: string
+    ManagedImportAlbumPreview:
+      type: object
+      required: [key, title, albumArtists, existingAlbums, artworks]
+      properties:
+        key:
+          type: string
+        title:
+          type: string
+        albumArtists:
+          type: array
+          items:
+            type: string
+        existingAlbums:
+          type: array
+          items:
+            $ref: "#/components/schemas/ManagedImportAlbumMatch"
+        artworks:
+          type: array
+          items:
+            $ref: "#/components/schemas/ManagedImportArtworkOption"
+    ManagedImportAlbumMatch:
+      type: object
+      required: [id, hasArtwork, tracks]
+      properties:
+        id:
+          type: string
+        year:
+          type: integer
+        hasArtwork:
+          type: boolean
+        tracks:
+          type: array
+          items:
+            $ref: "#/components/schemas/ManagedImportDuplicateCandidate"
+    ManagedImportArtworkOption:
+      type: object
+      required: [id, mediaType, contentSha256]
+      properties:
+        id:
+          type: string
+        jobId:
+          type: string
+        mediaType:
+          type: string
+        contentSha256:
+          type: string
+    ManagedImportAlbumDecision:
+      type: object
+      required: [albumKey, createSeparate, artworkMode]
+      properties:
+        albumKey:
+          type: string
+        albumId:
+          type: string
+        createSeparate:
+          type: boolean
+        artworkId:
+          type: string
+        artworkMode:
+          type: string
+          enum: [auto, none, selected]
     ManagedImportBatchConfirmation:
       type: object
       required: [revision, selectedFileIds]
       properties:
+        albumDecisions:
+          type: array
+          items:
+            $ref: "#/components/schemas/ManagedImportAlbumDecision"
         revision:
           type: integer
           minimum: 1
@@ -1346,24 +2307,94 @@ components:
           items:
             type: string
             format: uuid
+        duplicateDecisions:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: "#/components/schemas/ManagedImportDuplicateDecision"
+    ManagedImportDuplicateDecision:
+      type: object
+      required: [jobId, action]
+      properties:
+        targetRevision:
+          type: integer
+          minimum: 1
+        trackId:
+          type: string
+          format: uuid
+        jobId:
+          type: string
+          format: uuid
+        action:
+          type: string
+          enum: [import_separately, replace_existing, do_not_import]
     ManagedImportPreview:
       type: object
-      required: [jobId, status, revision, file]
+      required: [jobId, status, revision, file, duplicateClassification]
       properties:
+        matchingTracks:
+          type: array
+          items:
+            $ref: "#/components/schemas/ManagedImportDuplicateCandidate"
         jobId:
           type: string
           format: uuid
         status:
           type: string
-          enum: [awaiting_confirmation]
+          enum: [awaiting_confirmation, failed]
         revision:
           type: integer
           minimum: 1
         file:
           $ref: "#/components/schemas/ManagedImportPreviewFile"
+        duplicateClassification:
+          type: string
+          enum: [none, exact_duplicate]
+          description: Only identical full-file SHA-256 values are duplicates.
+        duplicateCandidates:
+          type: array
+          items:
+            $ref: "#/components/schemas/ManagedImportDuplicateCandidate"
+        replacement:
+          $ref: "#/components/schemas/TrackReplacementPreview"
+    ManagedImportDuplicateCandidate:
+      type: object
+      required: [trackId, title, artists, album, discNo, trackNo, format, durationMs]
+      properties:
+        revision:
+          type: integer
+          minimum: 1
+        titleKey:
+          type: string
+        currentFile:
+          $ref: "#/components/schemas/ManagedImportPreviewFile"
+        trackId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        artists:
+          type: array
+          minItems: 1
+          items:
+            type: string
+        album:
+          type: string
+        discNo:
+          type: integer
+          minimum: 1
+        trackNo:
+          type: integer
+          minimum: 1
+        format:
+          type: string
+        durationMs:
+          type: integer
+          minimum: 1
     ManagedImportPreviewFile:
       oneOf:
         - $ref: "#/components/schemas/ManagedImportFlacPreviewFile"
+        - $ref: "#/components/schemas/ManagedImportWavPreviewFile"
         - $ref: "#/components/schemas/ManagedImportM4aPreviewFile"
         - $ref: "#/components/schemas/ManagedImportMp3PreviewFile"
         - $ref: "#/components/schemas/ManagedImportOggPreviewFile"
@@ -1372,6 +2403,7 @@ components:
         propertyName: format
         mapping:
           flac: "#/components/schemas/ManagedImportFlacPreviewFile"
+          wav: "#/components/schemas/ManagedImportWavPreviewFile"
           m4a: "#/components/schemas/ManagedImportM4aPreviewFile"
           mp3: "#/components/schemas/ManagedImportMp3PreviewFile"
           ogg: "#/components/schemas/ManagedImportOggPreviewFile"
@@ -1393,6 +2425,19 @@ components:
         - bitrateKbps
         - artworkMediaType
       properties:
+        hasDiscNumber:
+          type: boolean
+        titleKey:
+          type: string
+        albumKey:
+          type: string
+        contentSha256:
+          type: string
+        sizeBytes:
+          type: integer
+          format: int64
+        artworkWarning:
+          type: string
         originalFilename:
           type: string
         title:
@@ -1411,7 +2456,6 @@ components:
           type: string
         genres:
           type: array
-          minItems: 1
           items:
             type: string
         trackNo:
@@ -1442,7 +2486,7 @@ components:
           minimum: 1
         artworkMediaType:
           type: string
-          enum: [image/jpeg, image/png, image/webp]
+          enum: ["", image/jpeg, image/png, image/webp]
     ManagedImportFlacPreviewFile:
       allOf:
         - $ref: "#/components/schemas/ManagedImportPreviewFileCommon"
@@ -1451,17 +2495,17 @@ components:
           properties:
             format:
               type: string
-              const: flac
+              enum: [flac]
             container:
               type: string
-              const: flac
+              enum: [flac]
             codec:
               type: string
-              const: flac
+              enum: [flac]
             bitDepth:
               type: integer
               minimum: 1
-    ManagedImportM4aPreviewFile:
+    ManagedImportWavPreviewFile:
       allOf:
         - $ref: "#/components/schemas/ManagedImportPreviewFileCommon"
         - type: object
@@ -1469,17 +2513,37 @@ components:
           properties:
             format:
               type: string
-              const: m4a
+              enum: [wav]
             container:
               type: string
-              const: m4a
+              enum: [wav]
+            codec:
+              type: string
+              enum: ["pcm_u8", "pcm_s16le", "pcm_s24le", "pcm_s32le"]
+            bitDepth:
+              type: integer
+              enum: [8, 16, 24, 32]
+    ManagedImportM4aPreviewFile:
+      allOf:
+        - $ref: "#/components/schemas/ManagedImportPreviewFileCommon"
+        - type: object
+          required: [format, container, codec]
+          properties:
+            format:
+              type: string
+              enum: [m4a]
+            container:
+              type: string
+              enum: [m4a]
             codec:
               type: string
               enum: [aac, alac]
             bitDepth:
               type: integer
-              minimum: 0
-              description: Source bit depth for ALAC; 0 for AAC.
+              minimum: 1
+              description: >-
+                Source bit depth, present only for lossless ALAC. Lossy AAC
+                previews omit the field because no source bit depth exists.
     ManagedImportMp3PreviewFile:
       allOf:
         - $ref: "#/components/schemas/ManagedImportPreviewFileCommon"
@@ -1488,13 +2552,13 @@ components:
           properties:
             format:
               type: string
-              const: mp3
+              enum: [mp3]
             container:
               type: string
-              const: mp3
+              enum: [mp3]
             codec:
               type: string
-              const: mp3
+              enum: [mp3]
     ManagedImportOggPreviewFile:
       allOf:
         - $ref: "#/components/schemas/ManagedImportPreviewFileCommon"
@@ -1503,13 +2567,13 @@ components:
           properties:
             format:
               type: string
-              const: ogg
+              enum: [ogg]
             container:
               type: string
-              const: ogg
+              enum: [ogg]
             codec:
               type: string
-              const: vorbis
+              enum: [vorbis]
     ManagedImportOpusPreviewFile:
       allOf:
         - $ref: "#/components/schemas/ManagedImportPreviewFileCommon"
@@ -1518,13 +2582,13 @@ components:
           properties:
             format:
               type: string
-              const: opus
+              enum: [opus]
             container:
               type: string
-              const: ogg
+              enum: [ogg]
             codec:
               type: string
-              const: opus
+              enum: [opus]
     ManagedImportConfirmation:
       type: object
       required: [revision]
@@ -1532,6 +2596,9 @@ components:
         revision:
           type: integer
           minimum: 1
+        duplicateDecision:
+          type: string
+          enum: [import_separately, replace_existing, do_not_import]
     ManagedImportResult:
       type: object
       required: [jobId, status, revision, trackId]
@@ -1605,6 +2672,46 @@ components:
           type: integer
           format: int64
           minimum: 1
+    ArtistBiography:
+      type: object
+      required: [text, sourceUrl]
+      properties:
+        text:
+          type: string
+        sourceUrl:
+          type: string
+          format: uri
+    GenreNameList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            type: string
+    PlayCountList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required: [trackId, playCount]
+            properties:
+              trackId:
+                type: string
+              playCount:
+                type: integer
+                format: int64
+    PopularTrackList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Track"
     ArtistList:
       type: object
       required: [items, total]
@@ -1678,6 +2785,42 @@ components:
               type: array
               items:
                 $ref: "#/components/schemas/Track"
+    TrackWaveform:
+      type: object
+      required: [trackId, peakCount, peaks]
+      properties:
+        trackId:
+          type: string
+          format: uuid
+        peakCount:
+          type: integer
+        peaks:
+          type: array
+          description: Loudest sample per equal time slice, normalized to 0..255.
+          items:
+            type: integer
+            minimum: 0
+            maximum: 255
+    TrackWaveformPending:
+      type: object
+      required: [status, retryAfterSeconds]
+      properties:
+        status:
+          type: string
+          enum: [pending]
+        retryAfterSeconds:
+          type: integer
+    TrackLyrics:
+      type: object
+      required: [trackId, lyrics]
+      properties:
+        trackId:
+          type: string
+          format: uuid
+        lyrics:
+          type: string
+          description: Plain lyrics, or LRC text (`[mm:ss.xx] words`) when synced, with newline-separated lines; empty when there are none.
+
     Track:
       type: object
       required: [id, title, artistName, albumId, durationMs, format]
@@ -1694,6 +2837,11 @@ components:
         artists:
           type: array
           description: Ordered normalized Track Artist credits.
+          items:
+            $ref: "#/components/schemas/ArtistCredit"
+        albumArtists:
+          type: array
+          description: Ordered Album Artist credits, independent from Track Artists.
           items:
             $ref: "#/components/schemas/ArtistCredit"
         albumId:
@@ -1746,6 +2894,32 @@ components:
           type: integer
         replayGain:
           $ref: "#/components/schemas/ReplayGainMetadata"
+        titleSort:
+          type: string
+          description: Normalized title the library sorts and matches by.
+        filePath:
+          type: string
+          description: Canonical Library Path of the authoritative audio file in Managed Storage.
+        fileMtime:
+          type: integer
+          format: int64
+          description: Modification time of the managed file, seconds since the Unix epoch.
+        contentSha256:
+          type: string
+          description: Full-file SHA-256 of the managed audio bytes.
+        identityKey:
+          type: string
+          description: Strict position-and-title identity within the Album.
+        revision:
+          type: integer
+          minimum: 1
+          description: Increments on Track Replacement or Track credit repair.
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
     ReplayGainMetadata:
       type: object
       required: [trackGainDb, trackPeak, albumGainDb, albumPeak]
@@ -1776,6 +2950,75 @@ components:
             $ref: "#/components/schemas/Track"
         total:
           type: integer
+    LibrarySearchResultType:
+      type: string
+      enum: [track, album, artist, genre, playlist]
+    LibrarySearchMatch:
+      type: string
+      description: >-
+        `direct` records match without typo correction, with their own title/name
+        contributing, and are the only Best Match candidates. `corrected` records
+        match through bounded typo correction. `related` is retained for API v1
+        compatibility but is no longer emitted.
+      enum: [direct, related, corrected]
+    LibrarySearchAlbumReference:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+    LibrarySearchResult:
+      type: object
+      required: [type, id, name, match]
+      properties:
+        type:
+          $ref: "#/components/schemas/LibrarySearchResultType"
+        id:
+          type: string
+        name:
+          type: string
+          description: The original display title or name
+        match:
+          $ref: "#/components/schemas/LibrarySearchMatch"
+        artists:
+          type: array
+          description: Track credits for a Track, Album Artist credits for an Album, in credit order
+          items:
+            $ref: "#/components/schemas/ArtistCredit"
+        album:
+          $ref: "#/components/schemas/LibrarySearchAlbumReference"
+    LibrarySearchResponse:
+      type: object
+      required: [tracks, albums, artists, genres, playlists]
+      properties:
+        total:
+          type: integer
+          minimum: 0
+          description: Unique ranked matches across all groups before the cap, counting the Best Match only once; optional for older servers
+        bestMatch:
+          $ref: "#/components/schemas/LibrarySearchResult"
+        tracks:
+          type: array
+          items:
+            $ref: "#/components/schemas/LibrarySearchResult"
+        albums:
+          type: array
+          items:
+            $ref: "#/components/schemas/LibrarySearchResult"
+        artists:
+          type: array
+          items:
+            $ref: "#/components/schemas/LibrarySearchResult"
+        genres:
+          type: array
+          items:
+            $ref: "#/components/schemas/LibrarySearchResult"
+        playlists:
+          type: array
+          items:
+            $ref: "#/components/schemas/LibrarySearchResult"
     Playlist:
       type: object
       required: [id, name, isDefault, trackCount]
@@ -2032,33 +3275,365 @@ components:
       properties:
         deletedFiles:
           type: integer
-    ScanStatus:
+    AlbumDeletionPreview:
       type: object
-      required: [status, scanned, added, updated, removed]
+      required: [albumId, albumTitle, trackCount, totalSizeBytes, tracks, playlistReferences, queueReferences, confirmationToken]
       properties:
+        albumId:
+          type: string
+          format: uuid
+        albumTitle:
+          type: string
+        trackCount:
+          type: integer
+          minimum: 1
+        totalSizeBytes:
+          type: integer
+          minimum: 0
+        tracks:
+          type: array
+          items:
+            $ref: "#/components/schemas/AlbumDeletionTrack"
+        playlistReferences:
+          type: array
+          items:
+            $ref: "#/components/schemas/TrackDeletionPlaylistReference"
+        queueReferences:
+          type: array
+          items:
+            $ref: "#/components/schemas/TrackDeletionQueueReference"
+        confirmationToken:
+          type: string
+          description: Opaque token binding confirmation to the reviewed Album, its Tracks, managed files, and relationships
+    AlbumDeletionTrack:
+      type: object
+      required: [trackId, trackTitle, sizeBytes]
+      properties:
+        trackId:
+          type: string
+          format: uuid
+        trackTitle:
+          type: string
+        sizeBytes:
+          type: integer
+          minimum: 0
+    AlbumDeletionFailed:
+      type: object
+      required: [trackId, trackTitle, reason]
+      properties:
+        trackId:
+          type: string
+          format: uuid
+        trackTitle:
+          type: string
+        reason:
+          type: string
+    AlbumDeletionResult:
+      type: object
+      required: [deleted, stoppedAt, deletedFiles]
+      properties:
+        deleted:
+          type: array
+          items:
+            $ref: "#/components/schemas/AlbumDeletionTrack"
+        stoppedAt:
+          nullable: true
+          description: Null when every Track was deleted; otherwise the Track whose failure stopped the run
+          allOf:
+            - $ref: "#/components/schemas/AlbumDeletionFailed"
+        deletedFiles:
+          type: integer
+          minimum: 0
+    TrackDeletionPreview:
+      type: object
+      required: [trackId, trackTitle, managedFile, playlistReferences, queueReferences, confirmationToken]
+      properties:
+        trackId:
+          type: string
+          format: uuid
+        trackTitle:
+          type: string
+        managedFile:
+          $ref: "#/components/schemas/TrackDeletionManagedFile"
+        playlistReferences:
+          type: array
+          items:
+            $ref: "#/components/schemas/TrackDeletionPlaylistReference"
+        queueReferences:
+          type: array
+          items:
+            $ref: "#/components/schemas/TrackDeletionQueueReference"
+        confirmationToken:
+          type: string
+          description: Opaque token binding confirmation to the reviewed Track, managed file, and relationships
+    TrackDeletionManagedFile:
+      type: object
+      required: [path, sizeBytes]
+      properties:
+        path:
+          type: string
+          description: Managed Storage-relative canonical audio path
+        sizeBytes:
+          type: integer
+          minimum: 0
+    TrackDeletionPlaylistReference:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+    TrackDeletionQueueReference:
+      type: object
+      required: [userId, itemCount]
+      properties:
+        userId:
+          type: string
+        itemCount:
+          type: integer
+          minimum: 1
+    TrackDeletionConfirmation:
+      type: object
+      required: [confirmationToken]
+      properties:
+        confirmationToken:
+          type: string
+    TrackReplacementPreview:
+      type: object
+      description: Every visible consequence of replacing a Managed Track's audio file while keeping its identity.
+      required:
+        - trackId
+        - trackTitle
+        - sourceFormat
+        - technicalProperties
+        - metadata
+        - library
+        - artwork
+        - canonicalPath
+        - oldFile
+        - playlistReferences
+        - queueReferences
+        - confirmationToken
+      properties:
+        trackId:
+          type: string
+          format: uuid
+        trackTitle:
+          type: string
+        sourceFormat:
+          $ref: "#/components/schemas/TrackReplacementFieldDiff"
+        technicalProperties:
+          type: array
+          items:
+            $ref: "#/components/schemas/TrackReplacementFieldDiff"
+        metadata:
+          type: array
+          items:
+            $ref: "#/components/schemas/TrackReplacementFieldDiff"
+        library:
+          $ref: "#/components/schemas/TrackReplacementLibraryChange"
+        artwork:
+          $ref: "#/components/schemas/TrackReplacementArtworkChange"
+        canonicalPath:
+          $ref: "#/components/schemas/TrackReplacementFieldDiff"
+        oldFile:
+          $ref: "#/components/schemas/TrackReplacementFileDeletion"
+        playlistReferences:
+          type: array
+          description: Playlist references that stay attached to the unchanged Track ID.
+          items:
+            $ref: "#/components/schemas/TrackDeletionPlaylistReference"
+        queueReferences:
+          type: array
+          description: Queue references that stay attached to the unchanged Track ID.
+          items:
+            $ref: "#/components/schemas/TrackDeletionQueueReference"
+        confirmationToken:
+          type: string
+          description: Opaque token binding confirmation to the reviewed Track, managed file, references, and replacement bytes
+    TrackReplacementFieldDiff:
+      type: object
+      required: [field, current, replacement, isChanged]
+      properties:
+        field:
+          type: string
+        current:
+          type: string
+        replacement:
+          type: string
+        isChanged:
+          type: boolean
+    TrackReplacementLibraryChange:
+      type: object
+      required: [currentAlbumId, movesAlbum, createsAlbum, removesEmptyAlbum, removesEmptyArtists, createsArtists, createsGenres]
+      properties:
+        currentAlbumId:
+          type: string
+          format: uuid
+        replacementAlbumId:
+          type: string
+          format: uuid
+        movesAlbum:
+          type: boolean
+        createsAlbum:
+          type: boolean
+        removesEmptyAlbum:
+          type: boolean
+        removesEmptyArtists:
+          type: array
+          items:
+            type: string
+        createsArtists:
+          type: array
+          items:
+            type: string
+        createsGenres:
+          type: array
+          items:
+            type: string
+    TrackReplacementArtworkChange:
+      type: object
+      required: [currentMediaType, currentSha256, replacementMediaType, replacementSha256, isChanged, replacesAlbumArtwork]
+      properties:
+        currentMediaType:
+          type: string
+        currentSha256:
+          type: string
+        replacementMediaType:
+          type: string
+        replacementSha256:
+          type: string
+        isChanged:
+          type: boolean
+        replacesAlbumArtwork:
+          type: boolean
+          description: True when the Album's display artwork file itself is replaced.
+    TrackReplacementFileDeletion:
+      type: object
+      required: [path, sizeBytes]
+      properties:
+        path:
+          type: string
+          description: Managed Storage-relative path of the previous managed file that will be deleted
+        sizeBytes:
+          type: integer
+          minimum: 0
+    TrackReplacementConfirmation:
+      type: object
+      required: [revision, confirmationToken]
+      properties:
+        revision:
+          type: integer
+          minimum: 1
+        confirmationToken:
+          type: string
+    TrackReplacementResult:
+      type: object
+      required: [jobId, status, revision, trackId, deletedFiles]
+      properties:
+        jobId:
+          type: string
+          format: uuid
         status:
           type: string
-          enum: [idle, running, completed, failed]
-        scanned:
+          enum: [committed]
+        revision:
           type: integer
-        added:
-          type: integer
-        updated:
-          type: integer
-        removed:
-          type: integer
-        error:
+          minimum: 1
+        trackId:
           type: string
-        startedAt:
-          type: string
+          format: uuid
+        deletedFiles:
+          type: integer
+          minimum: 0
           format: date-time
-        finishedAt:
+    QueueItemSource:
+      description: Origin captured when a track enters the queue. Omitted sources default to user. Source JSON is limited to 16384 bytes.
+      oneOf:
+        - $ref: "#/components/schemas/QueueAlbumSource"
+        - $ref: "#/components/schemas/QueuePlaylistSource"
+        - $ref: "#/components/schemas/QueueUserSource"
+        - $ref: "#/components/schemas/QueueSuggestionSource"
+      discriminator:
+        propertyName: kind
+        mapping:
+          album: "#/components/schemas/QueueAlbumSource"
+          playlist: "#/components/schemas/QueuePlaylistSource"
+          user: "#/components/schemas/QueueUserSource"
+          suggestion: "#/components/schemas/QueueSuggestionSource"
+    QueueAlbumSource:
+      type: object
+      additionalProperties: false
+      required: [kind, albumId, albumTitle, artistName]
+      properties:
+        kind:
           type: string
-          format: date-time
+          enum: [album]
+        albumId:
+          type: string
+          minLength: 1
+          maxLength: 1024
+          pattern: "\\S"
+        albumTitle:
+          type: string
+          minLength: 1
+          maxLength: 1024
+          pattern: "\\S"
+        artistName:
+          type: string
+          minLength: 1
+          maxLength: 1024
+          pattern: "\\S"
+    QueuePlaylistSource:
+      type: object
+      additionalProperties: false
+      required: [kind, playlistId, name]
+      properties:
+        kind:
+          type: string
+          enum: [playlist]
+        playlistId:
+          type: string
+          minLength: 1
+          maxLength: 1024
+          pattern: "\\S"
+        name:
+          type: string
+          minLength: 1
+          maxLength: 1024
+          pattern: "\\S"
+    QueueUserSource:
+      type: object
+      additionalProperties: false
+      required: [kind]
+      properties:
+        kind:
+          type: string
+          enum: [user]
+    QueueSuggestionSource:
+      type: object
+      additionalProperties: false
+      required: [kind, basedOn]
+      properties:
+        kind:
+          type: string
+          enum: [suggestion]
+        basedOn:
+          type: array
+          maxItems: 20
+          items:
+            type: string
+            minLength: 1
+            maxLength: 1024
+            pattern: "\\S"
     QueueItem:
       type: object
       required: [id, trackId, position, track]
       properties:
+        source:
+          $ref: "#/components/schemas/QueueItemSource"
         id:
           type: string
           format: uuid
@@ -2098,26 +3673,34 @@ components:
             type: string
             enum: [queue]
     QueueReplace:
+      description: Queue mutation bodies are limited to 1048576 bytes; invalid or oversized requests return 400. Queues may contain at most 1000 items.
       type: object
       required: [trackIds, revision]
       properties:
+        source:
+          $ref: "#/components/schemas/QueueItemSource"
         trackIds:
           type: array
+          maxItems: 1000
           items:
             type: string
             format: uuid
         revision:
           type: string
     QueueItemAppend:
+      description: Queue mutation bodies are limited to 1048576 bytes; invalid or oversized requests return 400. Queues may contain at most 1000 items.
       type: object
       required: [trackId, revision]
       properties:
+        source:
+          $ref: "#/components/schemas/QueueItemSource"
         trackId:
           type: string
           format: uuid
         revision:
           type: string
     QueueReorder:
+      description: Queue mutation bodies are limited to 1048576 bytes; invalid or oversized requests return 400. Queues may contain at most 1000 items.
       type: object
       required: [itemIds, revision]
       properties:

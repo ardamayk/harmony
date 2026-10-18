@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT albums.id AS \"id!\", album_artwork.file_path AS \"file_path?\",\n                album_artwork.content_sha256 AS \"content_sha256?\"\n            FROM albums\n            LEFT JOIN album_artwork ON album_artwork.album_id = albums.id\n            WHERE albums.identity_key = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "albums",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "file_path?",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "album_artwork",
+            "name": "file_path"
+          }
+        }
+      },
+      {
+        "name": "content_sha256?",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "album_artwork",
+            "name": "content_sha256"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "2ec9824e4697131a2eb2846aefcece60db11712112a57717b2027a6b1138579d"
+}

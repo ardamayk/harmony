@@ -1,6 +1,6 @@
 import type { AlbumDetail, AlbumList } from "@repo/api-client";
 import { QueryClient } from "@tanstack/react-query";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vite-plus/test";
 import { invalidateLibraryCache } from "./invalidate-library-cache";
 
 describe("invalidateLibraryCache", () => {
@@ -50,7 +50,11 @@ describe("invalidateLibraryCache", () => {
 		).toBeUndefined();
 		expect(invalidateSpy).toHaveBeenCalledWith({
 			queryKey: ["library"],
-			refetchType: "all",
+		});
+		// Inactive search entries only go stale; they must not be refetched.
+		expect(invalidateSpy).toHaveBeenCalledWith({
+			queryKey: ["library", "search"],
+			refetchType: "none",
 		});
 	});
 

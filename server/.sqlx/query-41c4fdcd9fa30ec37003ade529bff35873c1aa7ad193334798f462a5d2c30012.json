@@ -1,0 +1,21 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT EXISTS(SELECT 1 FROM albums WHERE artist_id = ?) AS \"primary!: bool\"",
+  "describe": {
+    "columns": [
+      {
+        "name": "primary!: bool",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "41c4fdcd9fa30ec37003ade529bff35873c1aa7ad193334798f462a5d2c30012"
+}

@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT playlists.id AS \"id!\", playlists.name\n        FROM playlist_tracks JOIN playlists ON playlists.id = playlist_tracks.playlist_id\n        WHERE playlist_tracks.track_id = ?\n        ORDER BY playlists.name, playlists.id",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "playlists",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "name",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "playlists",
+            "name": "name"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      false
+    ]
+  },
+  "hash": "faffc945f3528c9d114a7b5c5224ac0744907b36592b87a9254e7f942c01341c"
+}

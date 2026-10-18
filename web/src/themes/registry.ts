@@ -18,7 +18,7 @@ export type ThemePresetMeta = {
 	swatches: ThemePalette;
 };
 
-export type ThemePresetDefinition = {
+type ThemePresetDefinition = {
 	id: ThemePresetId;
 	label: string;
 	/** Six hex colors, darkest (theme-1) → lightest (theme-6). Must match `{id}.css`. */

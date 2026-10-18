@@ -1,0 +1,21 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT (EXISTS(SELECT 1 FROM managed_import_commit_journal WHERE phase NOT IN ('completed', 'rolled_back'))\n            OR EXISTS(SELECT 1 FROM managed_track_replacements WHERE phase NOT IN ('completed', 'rolled_back'))\n            OR EXISTS(SELECT 1 FROM permanent_track_deletions)) AS \"pending!: bool\"",
+  "describe": {
+    "columns": [
+      {
+        "name": "pending!: bool",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "2a178ec4750a4081bbbe3c6666f5ec393a00bf8b3088740e0cbbf41fffb4db2d"
+}

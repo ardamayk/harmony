@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO track_waveforms (track_id, peak_count, peaks, source_size_bytes, source_modified_at, generated_at)\n            VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)\n            ON CONFLICT(track_id) DO UPDATE SET\n                peak_count = excluded.peak_count,\n                peaks = excluded.peaks,\n                source_size_bytes = excluded.source_size_bytes,\n                source_modified_at = excluded.source_modified_at,\n                generated_at = CURRENT_TIMESTAMP",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "c4996117e657bf6ebbd5e53df84428161a8a5b88f8115166d16ed93fdfed683a"
+}

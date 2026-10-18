@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
 	cleanup,
 	fireEvent,
@@ -5,7 +6,14 @@ import {
 	screen,
 	waitFor,
 } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+	afterEach,
+	beforeEach,
+	describe,
+	expect,
+	it,
+	vi,
+} from "vite-plus/test";
 
 const bridge = vi.hoisted(() => ({
 	isDesktopClient: vi.fn(),
@@ -18,6 +26,14 @@ const bridge = vi.hoisted(() => ({
 vi.mock("./bridge", () => bridge);
 
 import { DesktopConnectionGate } from "./DesktopConnectionGate";
+
+function renderGate(queryClient = new QueryClient()) {
+	return render(
+		<QueryClientProvider client={queryClient}>
+			<DesktopConnectionGate>application</DesktopConnectionGate>
+		</QueryClientProvider>,
+	);
+}
 
 describe("DesktopConnectionGate", () => {
 	afterEach(cleanup);
@@ -43,7 +59,7 @@ describe("DesktopConnectionGate", () => {
 			capabilities: ["api.v1"],
 		});
 
-		render(<DesktopConnectionGate>application</DesktopConnectionGate>);
+		renderGate();
 
 		expect(screen.getByText("Checking Music Server…")).toBeTruthy();
 		expect(await screen.findByText("application")).toBeTruthy();
@@ -62,7 +78,7 @@ describe("DesktopConnectionGate", () => {
 			capabilities: ["api.v1"],
 		});
 
-		render(<DesktopConnectionGate>application</DesktopConnectionGate>);
+		renderGate();
 		const input = await screen.findByLabelText("Music Server URL");
 		fireEvent.change(input, { target: { value: "http://127.0.0.1:8090" } });
 
@@ -81,10 +97,58 @@ describe("DesktopConnectionGate", () => {
 		);
 	});
 
+	it("opens on the saved lists when the saved server does not answer, and tries again", async () => {
+		bridge.getServerConnection.mockResolvedValue({
+			origin: "http://192.168.1.5:8090",
+		});
+		bridge.testServerConnection.mockRejectedValueOnce({
+			code: "unreachable",
+			message: "Music Server is unreachable.",
+		});
+		const queryClient = new QueryClient();
+		const invalidate = vi.spyOn(queryClient, "invalidateQueries");
+
+		renderGate(queryClient);
+
+		expect(await screen.findByText("application")).toBeTruthy();
+		expect(screen.getByRole("status").textContent).toContain(
+			"Showing saved lists from http://192.168.1.5:8090",
+		);
+		expect(bridge.initializeMediaProxy).toHaveBeenCalled();
+
+		bridge.testServerConnection.mockResolvedValueOnce({
+			origin: "http://192.168.1.5:8090",
+			version: "0.1.0",
+			capabilities: ["api.v1"],
+		});
+		fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+
+		await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
+		expect(invalidate).toHaveBeenCalled();
+		expect(screen.getByText("application")).toBeTruthy();
+	});
+
+	it("keeps the connection form for a server that answers but does not fit", async () => {
+		bridge.getServerConnection.mockResolvedValue({
+			origin: "http://127.0.0.1:8090",
+		});
+		bridge.testServerConnection.mockRejectedValueOnce({
+			code: "capability_mismatch",
+			message: "Music Server lacks required capabilities.",
+		});
+
+		renderGate();
+
+		expect(
+			await screen.findByText("Music Server lacks required capabilities."),
+		).toBeTruthy();
+		expect(screen.queryByText("application")).toBeNull();
+	});
+
 	it("does not gate the Web Client", () => {
 		bridge.isDesktopClient.mockReturnValue(false);
 
-		render(<DesktopConnectionGate>application</DesktopConnectionGate>);
+		renderGate();
 
 		expect(screen.getByText("application")).toBeTruthy();
 		expect(bridge.getServerConnection).not.toHaveBeenCalled();
@@ -98,7 +162,7 @@ describe("DesktopConnectionGate", () => {
 			capabilities: ["api.v1"],
 		});
 
-		render(<DesktopConnectionGate>application</DesktopConnectionGate>);
+		renderGate();
 		const input = await screen.findByLabelText("Music Server URL");
 		fireEvent.change(input, { target: { value: "http://localhost:8090" } });
 		fireEvent.click(screen.getByRole("button", { name: "Test connection" }));

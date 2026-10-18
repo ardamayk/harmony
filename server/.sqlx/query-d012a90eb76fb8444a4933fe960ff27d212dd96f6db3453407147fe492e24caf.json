@@ -1,0 +1,45 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT outcome, genres,\n                CAST((julianday('now') - julianday(checked_at)) * 86400 AS INTEGER) AS \"age_seconds!: i64\"\n            FROM album_online_genres WHERE album_id = ?1",
+  "describe": {
+    "columns": [
+      {
+        "name": "outcome",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "album_online_genres",
+            "name": "outcome"
+          }
+        }
+      },
+      {
+        "name": "genres",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "album_online_genres",
+            "name": "genres"
+          }
+        }
+      },
+      {
+        "name": "age_seconds!: i64",
+        "ordinal": 2,
+        "type_info": "Integer",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "d012a90eb76fb8444a4933fe960ff27d212dd96f6db3453407147fe492e24caf"
+}

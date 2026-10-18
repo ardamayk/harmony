@@ -1,0 +1,21 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT COUNT(*) AS \"total!: i64\" FROM library_track_reads t\n            WHERE (CAST(?1 AS TEXT) = '' OR EXISTS (\n                    SELECT 1 FROM track_artists credit WHERE credit.track_id = t.id AND credit.artist_id = CAST(?1 AS TEXT)\n                ) OR EXISTS (\n                    SELECT 1 FROM album_artists credit WHERE credit.album_id = t.album_id AND credit.artist_id = CAST(?1 AS TEXT)))\n              AND (CAST(?2 AS TEXT) = '' OR t.title LIKE '%' || CAST(?2 AS TEXT) || '%' OR t.album_title LIKE '%' || CAST(?2 AS TEXT) || '%' OR EXISTS (\n                    SELECT 1 FROM track_artists credit\n                    INNER JOIN artists credited ON credited.id = credit.artist_id\n                    WHERE credit.track_id = t.id AND credited.name LIKE '%' || CAST(?2 AS TEXT) || '%'\n                ) OR EXISTS (\n                    SELECT 1 FROM track_genres relation\n                    INNER JOIN genres genre ON genre.id = relation.genre_id\n                    WHERE relation.track_id = t.id AND genre.name LIKE '%' || CAST(?2 AS TEXT) || '%'))",
+  "describe": {
+    "columns": [
+      {
+        "name": "total!: i64",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "9f52663817835fd3e9d2460f3c891591b9aff23057a663076eea56e405daea55"
+}

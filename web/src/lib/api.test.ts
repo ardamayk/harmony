@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 const { desktopFetchMock, listenForQueueEventsMock, unlistenQueueEventsMock } =
 	vi.hoisted(() => ({
@@ -9,7 +9,6 @@ const { desktopFetchMock, listenForQueueEventsMock, unlistenQueueEventsMock } =
 
 vi.mock("#/desktop/bridge", () => ({
 	desktopFetch: desktopFetchMock,
-	getCoverBaseUrl: () => "http://earthly-media.localhost",
 	getMediaProxyBaseUrl: () => "http://127.0.0.1:41000/token-1",
 	isDesktopClient: () => true,
 	listenForQueueEvents: listenForQueueEventsMock,
@@ -50,9 +49,9 @@ describe("desktop API client", () => {
 		expect(listenForQueueEventsMock).not.toHaveBeenCalled();
 	});
 
-	it("routes covers through the bounded protocol and streams through the proxy", () => {
+	it("routes covers and streams through the media proxy", () => {
 		expect(apiClient.getAlbumCoverUrl("album-1")).toBe(
-			"http://earthly-media.localhost/api/v1/library/albums/album-1/cover",
+			"http://127.0.0.1:41000/token-1/api/v1/library/albums/album-1/cover",
 		);
 		expect(apiClient.getTrackStreamUrl("track-1")).toBe(
 			"http://127.0.0.1:41000/token-1/api/v1/tracks/track-1/stream",
@@ -69,6 +68,9 @@ describe("desktop API client", () => {
 function serverHealthResponse(capabilities: string[]) {
 	return new Response(
 		JSON.stringify({ status: "ok", version: "0.1.0", capabilities }),
-		{ status: 200, headers: { "Content-Type": "application/json" } },
+		{
+			status: 200,
+			headers: { "Content-Type": "application/json" },
+		},
 	);
 }

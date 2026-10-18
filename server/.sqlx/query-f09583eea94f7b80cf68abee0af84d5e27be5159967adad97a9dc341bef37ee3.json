@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE managed_import_jobs\n            SET status = 'awaiting_confirmation', revision = revision + 1, original_filename = ?1,\n                staged_file_path = ?2, content_sha256 = ?3, preview_json = ?4, upload_size_bytes = ?5,\n                error_code = NULL, error_field = NULL, error_reason = NULL, validation_issues = '[]',\n                outcome = NULL, selected = 1, validation_progress = 100, updated_at = CURRENT_TIMESTAMP\n            WHERE managed_import_jobs.id = ?6 AND managed_import_jobs.status = 'uploading' AND (\n                managed_import_jobs.batch_id IS NULL OR ?5 + COALESCE((\n                    SELECT SUM(sibling.upload_size_bytes) FROM managed_import_jobs AS sibling\n                    WHERE sibling.batch_id = managed_import_jobs.batch_id AND sibling.id != managed_import_jobs.id\n                ), 0) <= ?7\n            )",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 7
+    },
+    "nullable": []
+  },
+  "hash": "f09583eea94f7b80cf68abee0af84d5e27be5159967adad97a9dc341bef37ee3"
+}

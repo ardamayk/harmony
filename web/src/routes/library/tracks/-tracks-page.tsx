@@ -1,116 +1,127 @@
-import type { Track } from "@repo/api-client";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { MANAGED_IMPORT_CAPABILITY } from "@repo/api-client";
+import { useQuery } from "@tanstack/react-query";
+import { Plus } from "lucide-react";
 import {
 	COLLECTION_PAGE_CONTAINER_CLASS,
 	CollectionPageContainer,
 } from "#/components/collection-grid-layout";
+import { useManagedImport } from "#/components/import-session-context";
 import { PageHeader, PageShell } from "#/components/page-layout";
 import { TrackList } from "#/components/track-list";
 import { Button } from "#/components/ui/button";
-import { Input } from "#/components/ui/input";
+import {
+	type ServerCapabilityState,
+	useServerCapabilityState,
+} from "#/hooks/use-server-capability";
 import { apiClient } from "#/lib/api";
-import { filterTracksByText } from "#/lib/filter-tracks";
-import { ImportMusicDialog } from "./-import-music-dialog";
+import { libraryQueryKeys } from "#/lib/library-query-keys";
 
-function useDebouncedValue<T>(value: T, delayMs: number): T {
-	const [debounced, setDebounced] = useState(value);
-
-	useEffect(() => {
-		const timeout = window.setTimeout(() => setDebounced(value), delayMs);
-		return () => window.clearTimeout(timeout);
-	}, [value, delayMs]);
-
-	return debounced;
-}
-
-export function TracksPage() {
-	const [search, setSearch] = useState("");
-	const [lastTracks, setLastTracks] = useState<Track[]>([]);
-	const [isImportOpen, setIsImportOpen] = useState(false);
-	const queryClient = useQueryClient();
-	const debouncedSearch = useDebouncedValue(search.trim(), 250);
-	const tracks = useQuery({
-		queryKey: ["library", "tracks", debouncedSearch],
-		queryFn: () =>
-			apiClient.listTracks({ limit: 200, q: debouncedSearch || undefined }),
-		placeholderData: (previous) => previous,
-	});
-	const sourceTracks = tracks.data?.items ?? lastTracks;
-	const visibleTracks = useMemo(
-		() => filterTracksByText(sourceTracks, search),
-		[sourceTracks, search],
-	);
-
-	useEffect(() => {
-		if (tracks.data?.items) {
-			setLastTracks(tracks.data.items);
-		}
-	}, [tracks.data?.items]);
-
-	async function refreshTracks() {
-		await queryClient.invalidateQueries({ queryKey: ["library", "tracks"] });
-	}
+export function TracksPage({
+	artistId = "",
+	search = "",
+	onClearFilters,
+}: {
+	artistId?: string;
+	search?: string;
+	onClearFilters?: () => void;
+} = {}) {
+	const tracks = useTrackLibrary(search, artistId);
+	const managedImport = useManagedImport();
+	const importCapability = useServerCapabilityState(MANAGED_IMPORT_CAPABILITY);
 
 	return (
 		<PageShell
 			testId="tracks-page-shell"
 			contentTestId="tracks-page-content"
 			header={
-				<PageHeader
-					title="Tracks"
-					description="All tracks in your library"
-					innerClassName={COLLECTION_PAGE_CONTAINER_CLASS}
-					actions={
-						<>
-							<div className="relative w-full sm:max-w-md">
-								<Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-caption" />
-								<Input
-									className="h-11 rounded-xl bg-[var(--player)] pl-10 text-sm"
-									placeholder="Search tracks…"
-									value={search}
-									onChange={(e) => setSearch(e.target.value)}
-								/>
-							</div>
-							<Button
-								type="button"
-								aria-label="Import Music"
-								size="icon"
-								className="size-10 rounded-xl"
-								onClick={() => setIsImportOpen(true)}
-							>
-								<Plus className="size-5" />
-							</Button>
-						</>
-					}
+				<TracksHeader
+					onImport={managedImport.open}
+					importCapability={importCapability}
 				/>
 			}
 		>
-			<CollectionPageContainer>
-				{tracks.isLoading && sourceTracks.length === 0 ? (
-					<p className="text-foreground text-sm">Loading tracks…</p>
-				) : tracks.isError && sourceTracks.length === 0 ? (
-					<p className="text-destructive text-sm">Failed to load tracks</p>
-				) : visibleTracks.length === 0 ? (
-					<p className="text-foreground text-sm">
-						No tracks match this search.
-					</p>
-				) : (
-					<TrackList
-						tracks={visibleTracks}
-						showFavorite
-						showMeta
-						compact
-						numbering="list"
-					/>
-				)}
+			<CollectionPageContainer className="space-y-6">
+				{artistId || search ? (
+					<div className="flex items-center justify-between gap-3">
+						<p className="text-caption text-sm">
+							{tracks.tracks.data
+								? `Showing ${tracks.items.length} of ${tracks.tracks.data.total} tracks`
+								: "Filtered tracks"}
+						</p>
+						<Button variant="outline" onClick={onClearFilters}>
+							Clear filters
+						</Button>
+					</div>
+				) : null}
+				<TrackResults {...tracks} filtered={Boolean(artistId || search)} />
 			</CollectionPageContainer>
-			<ImportMusicDialog
-				isOpen={isImportOpen}
-				onOpenChange={setIsImportOpen}
-				onCommitted={refreshTracks}
-			/>
 		</PageShell>
+	);
+}
+
+function useTrackLibrary(search: string, artistId: string) {
+	const tracks = useQuery({
+		queryKey: libraryQueryKeys.tracks(search, artistId),
+		queryFn: () =>
+			apiClient.listTracks({
+				limit: 200,
+				q: search || undefined,
+				artistId: artistId || undefined,
+			}),
+	});
+	return { tracks, items: tracks.data?.items ?? [] };
+}
+
+const IMPORT_UNSUPPORTED_TITLE =
+	"This Music Server does not support Managed Import. Update the Music Server to import music.";
+
+function TracksHeader({
+	onImport,
+	importCapability,
+}: {
+	onImport: () => void;
+	importCapability: ServerCapabilityState;
+}) {
+	// Gate on the advertised Server Capability (ADR 0006). The control stays
+	// usable while the health response is unknown so a slow answer never hides
+	// the Import Music action from a compatible Music Server.
+	const importUnsupported = importCapability === "missing";
+	return (
+		<PageHeader
+			title="Tracks"
+			innerClassName={COLLECTION_PAGE_CONTAINER_CLASS}
+			actions={
+				<Button
+					type="button"
+					aria-label="Import Music"
+					size="icon-lg"
+					onClick={onImport}
+					disabled={importUnsupported}
+					title={importUnsupported ? IMPORT_UNSUPPORTED_TITLE : undefined}
+				>
+					<Plus className="size-5" />
+				</Button>
+			}
+		/>
+	);
+}
+
+function TrackResults({
+	tracks,
+	items,
+	filtered,
+}: ReturnType<typeof useTrackLibrary> & { filtered: boolean }) {
+	if (tracks.isLoading && items.length === 0)
+		return <p className="text-foreground text-sm">Loading tracks…</p>;
+	if (tracks.isError && items.length === 0)
+		return <p className="text-destructive text-sm">Failed to load tracks</p>;
+	if (items.length === 0)
+		return (
+			<p className="text-foreground text-sm">
+				{filtered ? "No tracks match these filters." : "No tracks yet."}
+			</p>
+		);
+	return (
+		<TrackList tracks={items} showFavorite showMeta compact numbering="list" />
 	);
 }

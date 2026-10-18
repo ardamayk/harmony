@@ -1,0 +1,5 @@
+# Rust workspace: the Desktop Client's core and the Music Server share one
+# lockfile and one target directory.
+[workspace]
+resolver = "3"
+members = ["desktop/core", "server"]

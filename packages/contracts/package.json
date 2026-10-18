@@ -4,7 +4,6 @@
   "private": true,
   "scripts": {
     "generate": "bash ../../scripts/generate-openapi.sh",
-    "build": "echo 'contracts package has no build'",
     "generate:check": "bash ../../scripts/check-openapi-generation.sh"
   },
   "devDependencies": {

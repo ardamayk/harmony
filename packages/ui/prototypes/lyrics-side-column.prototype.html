@@ -1,0 +1,663 @@
+<!doctype html>
+<!--
+  PROTOTYPE — kept for later review, do not delete.
+  Variants A and B are the picks; see docs/sonradan-bakilacaklar.md.
+  Question: does a Lyrics view with one side column
+  (cover, small playback, queue) and large lyrics work, and which shape?
+  Three variants, switchable via ?variant=A|B|C, the bottom bar, or ← →.
+  Space plays/pauses the fake clock; lyrics follow it.
+-->
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Lyrics side column prototype</title>
+		<style>
+			:root {
+				/* Approximates the dark navy theme from the screenshots. */
+				--background: #12223a;
+				--surface: #1a2c46;
+				--pill: #24395a;
+				--border: #2b4061;
+				--heading: #f3e7d3;
+				--foreground: #d9dde4;
+				--caption: #9aa7b8;
+				--dim: #4a5a71;
+				--primary: #e9b48c;
+				--radius-sm: 6px;
+				--radius-md: 10px;
+				--radius-lg: 16px;
+			}
+			* {
+				box-sizing: border-box;
+			}
+			html,
+			body {
+				margin: 0;
+				height: 100%;
+			}
+			body {
+				background: #0b1626;
+				color: var(--foreground);
+				font:
+					14px/1.5 "Manrope",
+					system-ui,
+					sans-serif;
+				overflow: hidden;
+			}
+			button {
+				font: inherit;
+				color: inherit;
+				background: none;
+				border: 0;
+				cursor: pointer;
+				padding: 0;
+			}
+			svg {
+				width: 16px;
+				height: 16px;
+				stroke: currentColor;
+				fill: none;
+				stroke-width: 2;
+				stroke-linecap: round;
+				stroke-linejoin: round;
+			}
+
+			/* ---------- shell ---------- */
+			.view {
+				position: fixed;
+				inset: 16px;
+				border-radius: var(--radius-lg);
+				background: var(--background);
+				border: 1px solid var(--border);
+				display: grid;
+				grid-template-rows: auto 1fr;
+				overflow: hidden;
+			}
+			.topbar {
+				display: flex;
+				align-items: center;
+				gap: 8px;
+				padding: 12px 16px;
+			}
+			.topbar .label {
+				font-size: 12px;
+				letter-spacing: 0.1em;
+				text-transform: uppercase;
+				color: var(--caption);
+				margin-right: auto;
+			}
+			.icon-btn {
+				display: inline-grid;
+				place-items: center;
+				width: 32px;
+				height: 32px;
+				border-radius: var(--radius-full, 999px);
+				color: var(--caption);
+				transition:
+					background 150ms,
+					color 150ms;
+			}
+			.icon-btn:hover {
+				background: var(--pill);
+				color: var(--heading);
+			}
+			.sep {
+				width: 1px;
+				height: 16px;
+				background: var(--border);
+				margin: 0 4px;
+			}
+			.body {
+				min-height: 0;
+				display: grid;
+				gap: 24px;
+				padding: 0 24px 24px;
+			}
+
+			/* ---------- shared bits ---------- */
+			.cover {
+				aspect-ratio: 1;
+				border-radius: var(--radius-md);
+				background:
+					radial-gradient(circle at 62% 40%, #6b8bb0 0 9%, transparent 10%),
+					linear-gradient(160deg, #f1ece2 0%, #d8d1c4 55%, #b9b1a3 100%);
+				box-shadow: 0 12px 32px -12px #000a;
+				display: grid;
+				place-items: end start;
+				padding: 12px;
+				color: #1c1c1c;
+				font-weight: 800;
+				font-size: 22px;
+				letter-spacing: -0.02em;
+			}
+			.title {
+				color: var(--heading);
+				font-weight: 600;
+				font-size: 18px;
+				line-height: 1.25;
+			}
+			.artist {
+				color: var(--caption);
+				font-size: 14px;
+			}
+			.truncate {
+				white-space: nowrap;
+				overflow: hidden;
+				text-overflow: ellipsis;
+			}
+			.seek {
+				display: grid;
+				grid-template-columns: auto 1fr auto;
+				align-items: center;
+				gap: 8px;
+				font-size: 12px;
+				color: var(--caption);
+				font-variant-numeric: tabular-nums;
+			}
+			.track {
+				height: 4px;
+				border-radius: 999px;
+				background: var(--pill);
+				overflow: hidden;
+			}
+			.track > i {
+				display: block;
+				height: 100%;
+				background: var(--primary);
+				width: var(--p, 0%);
+			}
+			.transport {
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				gap: 8px;
+			}
+			.transport .play {
+				width: 40px;
+				height: 40px;
+				background: var(--heading);
+				color: var(--background);
+			}
+			.transport .play:hover {
+				background: var(--heading);
+				color: var(--background);
+				transform: scale(1.04);
+			}
+			.queue-head {
+				display: flex;
+				align-items: baseline;
+				gap: 8px;
+				font-size: 12px;
+				color: var(--caption);
+				padding: 8px 0;
+				border-bottom: 1px solid var(--border);
+			}
+			.queue-head b {
+				color: var(--heading);
+				font-weight: 600;
+				letter-spacing: 0.08em;
+				text-transform: uppercase;
+			}
+			.queue {
+				list-style: none;
+				margin: 0;
+				padding: 4px 0 0;
+				overflow-y: auto;
+				min-height: 0;
+				scrollbar-width: none;
+			}
+			.queue li {
+				display: grid;
+				grid-template-columns: 32px 1fr auto;
+				align-items: center;
+				gap: 12px;
+				padding: 6px 8px;
+				border-radius: var(--radius-sm);
+				transition: background 150ms;
+			}
+			.queue li:hover {
+				background: var(--surface);
+			}
+			.thumb {
+				width: 32px;
+				height: 32px;
+				border-radius: var(--radius-sm);
+				background: var(--pill);
+				display: grid;
+				place-items: center;
+				color: var(--heading);
+				font-size: 12px;
+			}
+			.queue .t {
+				color: var(--foreground);
+				font-size: 14px;
+			}
+			.queue .a {
+				color: var(--caption);
+				font-size: 12px;
+			}
+			.queue .d {
+				color: var(--caption);
+				font-size: 12px;
+				font-variant-numeric: tabular-nums;
+			}
+
+			/* ---------- lyrics (Spotify-like: past dim, active bright, next mid) ---------- */
+			.lyrics {
+				position: relative;
+				min-height: 0;
+				overflow-y: auto;
+				scrollbar-width: none;
+				scroll-behavior: smooth;
+				mask-image: linear-gradient(
+					transparent,
+					#000 12%,
+					#000 80%,
+					transparent
+				);
+				padding: 40vh 0;
+			}
+			.line {
+				font-weight: 700;
+				letter-spacing: -0.02em;
+				line-height: 1.2;
+				margin: 0 0 0.6em;
+				color: var(--caption);
+				opacity: 0.75;
+				transition:
+					color 400ms ease,
+					opacity 400ms ease,
+					transform 400ms ease;
+				transform-origin: left center;
+				cursor: pointer;
+			}
+			.line.past {
+				color: var(--dim);
+				opacity: 0.6;
+			}
+			.line.active {
+				color: var(--heading);
+				opacity: 1;
+			}
+			.line:hover {
+				opacity: 1;
+			}
+
+			/* ---------- variant A: stacked column (cover → small playback → queue) ---------- */
+			.A .body {
+				grid-template-columns: minmax(280px, 340px) 1fr;
+			}
+			.A .col {
+				min-height: 0;
+				display: flex;
+				flex-direction: column;
+				gap: 12px;
+			}
+			.A .cover {
+				width: 100%;
+				max-height: 38vh;
+				max-width: 38vh;
+				align-self: center;
+			}
+			.A .meta-row {
+				display: grid;
+				grid-template-columns: 1fr auto;
+				align-items: center;
+				gap: 8px;
+			}
+			.A .queue-wrap {
+				min-height: 0;
+				flex: 1;
+				display: flex;
+				flex-direction: column;
+				border-top: 1px solid var(--border);
+			}
+			.A .lyrics {
+				padding-left: 24px;
+			}
+			.A .line {
+				font-size: clamp(28px, 3.2vw, 48px);
+			}
+
+			/* ---------- variant B: queue-first column, small cover inline ---------- */
+			.B .body {
+				grid-template-columns: minmax(260px, 300px) 1fr;
+			}
+			.B .col {
+				min-height: 0;
+				display: flex;
+				flex-direction: column;
+				gap: 12px;
+				background: var(--surface);
+				border-radius: var(--radius-lg);
+				padding: 16px;
+			}
+			.B .now {
+				display: grid;
+				grid-template-columns: 72px 1fr;
+				gap: 12px;
+				align-items: center;
+			}
+			.B .cover {
+				font-size: 0;
+				padding: 0;
+				border-radius: var(--radius-sm);
+			}
+			.B .transport {
+				justify-content: space-between;
+			}
+			.B .queue-wrap {
+				min-height: 0;
+				flex: 1;
+				display: flex;
+				flex-direction: column;
+			}
+			.B .lyrics {
+				padding-left: 32px;
+				padding-right: 32px;
+			}
+			.B .line {
+				font-size: clamp(32px, 3.8vw, 56px);
+			}
+
+			/* ---------- variant C: mirrored, lyrics left, cover-tinted backdrop ---------- */
+			.C {
+				background:
+					radial-gradient(120% 90% at 85% 10%, #6b7f9c66 0%, transparent 55%),
+					linear-gradient(180deg, #3a4a63 0%, var(--background) 55%);
+			}
+			.C .body {
+				grid-template-columns: 1fr minmax(260px, 320px);
+			}
+			.C .lyrics {
+				order: -1;
+				padding-left: 32px;
+			}
+			.C .line {
+				font-size: clamp(30px, 3.4vw, 52px);
+			}
+			.C .line.active {
+				transform: scale(1.02);
+			}
+			.C .col {
+				min-height: 0;
+				display: flex;
+				flex-direction: column;
+				gap: 12px;
+			}
+			.C .cover {
+				width: 100%;
+				max-height: 30vh;
+				max-width: 30vh;
+				align-self: center;
+			}
+			.C .center {
+				text-align: center;
+			}
+			.C .queue-wrap {
+				min-height: 0;
+				flex: 1;
+				display: flex;
+				flex-direction: column;
+				background: #0b16264d;
+				border-radius: var(--radius-md);
+				padding: 0 8px 8px;
+			}
+
+			/* ---------- prototype switcher (not part of the design) ---------- */
+			.switcher {
+				position: fixed;
+				left: 50%;
+				bottom: 24px;
+				transform: translateX(-50%);
+				z-index: 100;
+				display: flex;
+				align-items: center;
+				gap: 4px;
+				padding: 4px;
+				border-radius: 999px;
+				background: #fff;
+				color: #111;
+				box-shadow: 0 8px 24px #0008;
+				font-size: 13px;
+			}
+			.switcher button {
+				width: 32px;
+				height: 32px;
+				border-radius: 999px;
+			}
+			.switcher button:hover {
+				background: #eee;
+			}
+			.switcher span {
+				min-width: 260px;
+				text-align: center;
+				font-weight: 600;
+			}
+			.switcher small {
+				font-weight: 400;
+				color: #666;
+			}
+		</style>
+	</head>
+	<body>
+		<div class="view" id="view"></div>
+		<div class="switcher">
+			<button id="prev" aria-label="Previous variant">←</button>
+			<span id="label"></span>
+			<button id="next" aria-label="Next variant">→</button>
+		</div>
+
+		<script>
+			const VARIANTS = {
+				A: "Stacked column: cover → small playback → queue",
+				B: "Queue-first: small cover inline, queue fills the column",
+				C: "Mirrored: lyrics left, column right, cover-tinted backdrop",
+			};
+			const track = {
+				title: "Never Surrender",
+				artist: "Skillet",
+				album: "Awake",
+				duration: 210,
+			};
+			// Placeholder lines (not the real song) with fake timestamps.
+			const lyrics = [
+				"The night is long and the road is wide",
+				"Every light goes out on the other side",
+				"I hear your name in the falling rain",
+				"Calling me back to the start again",
+				"Hold on, hold on to the sound",
+				"Feet on the wire, never touching the ground",
+				"We were young and we were loud",
+				"Writing our names on a passing cloud",
+				"Hold on, hold on to the sound",
+				"Don't let the silence pull you down",
+				"And when the morning finally breaks",
+				"We'll still be standing, wide awake",
+			].map((text, i) => ({ text, at: 4 + i * 6 }));
+			const queue = [
+				["Lucy", "Skillet", "3:42"],
+				["Dead Inside", "Skillet", "2:56"],
+				["Would It Matter", "Skillet", "4:12"],
+				["Monster", "Skillet", "2:57"],
+				["Hero", "Skillet", "3:07"],
+				["Awake and Alive", "Skillet", "3:29"],
+				["Forgiven", "Skillet", "3:31"],
+				["Sometimes", "Skillet", "3:17"],
+			];
+
+			const icons = {
+				prev: '<svg viewBox="0 0 24 24"><path d="M19 20 9 12l10-8zM5 19V5"/></svg>',
+				next: '<svg viewBox="0 0 24 24"><path d="m5 4 10 8-10 8zM19 5v14"/></svg>',
+				play: '<svg viewBox="0 0 24 24"><path d="m7 4 13 8-13 8z"/></svg>',
+				pause:
+					'<svg viewBox="0 0 24 24"><path d="M7 4h3v16H7zM14 4h3v16h-3z"/></svg>',
+				shuffle:
+					'<svg viewBox="0 0 24 24"><path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg>',
+				repeat:
+					'<svg viewBox="0 0 24 24"><path d="m17 2 4 4-4 4M3 11v-1a4 4 0 0 1 4-4h14M7 22l-4-4 4-4M21 13v1a4 4 0 0 1-4 4H3"/></svg>',
+				heart:
+					'<svg viewBox="0 0 24 24"><path d="M19 14c1.5-1.5 3-3.2 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.8 0-3 .5-4.5 2-1.5-1.5-2.7-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4 3 5.5l7 7z"/></svg>',
+				more: '<svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>',
+				chevron: '<svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>',
+				queue:
+					'<svg viewBox="0 0 24 24"><path d="M3 6h18M3 12h12M3 18h9M17 15v6l5-3z"/></svg>',
+				full: '<svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>',
+				mini: '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><rect x="12" y="12" width="7" height="7" rx="1"/></svg>',
+			};
+
+			let variant = new URLSearchParams(location.search).get("variant") ?? "A";
+			if (!(variant in VARIANTS)) variant = "A";
+			let time = 30;
+			let playing = true;
+
+			const fmt = (s) =>
+				`${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+			const btn = (name, label, cls = "icon-btn") =>
+				`<button class="${cls}" aria-label="${label}" data-act="${name}">${icons[name]}</button>`;
+
+			function topbar() {
+				// Collapse plus the same page/window controls as the main view (feedback item).
+				return `<header class="topbar">
+					<span class="label">Lyrics</span>
+					${btn("queue", "Toggle queue")}
+					${btn("mini", "Mini player")}
+					${btn("full", "Full screen")}
+					<span class="sep"></span>
+					${btn("chevron", "Close lyrics")}
+				</header>`;
+			}
+			function seek() {
+				return `<div class="seek"><span id="cur">${fmt(time)}</span>
+					<div class="track"><i id="bar"></i></div><span>${fmt(track.duration)}</span></div>`;
+			}
+			function transport(withSecondary = true) {
+				return `<div class="transport">
+					${withSecondary ? btn("shuffle", "Shuffle") : ""}
+					${btn("prev", "Previous")}
+					<button class="icon-btn play" aria-label="Play or pause" data-act="toggle">${playing ? icons.pause : icons.play}</button>
+					${btn("next", "Next")}
+					${withSecondary ? btn("repeat", "Repeat") : ""}
+				</div>`;
+			}
+			function queueList() {
+				return `<div class="queue-wrap">
+					<div class="queue-head"><b>Next up</b><span>${queue.length} · 27 min</span></div>
+					<ul class="queue">${queue
+						.map(
+							([t, a, d]) => `<li><span class="thumb">${t[0]}</span>
+							<span><div class="t truncate">${t}</div><div class="a truncate">${a}</div></span>
+							<span class="d">${d}</span></li>`,
+						)
+						.join("")}</ul></div>`;
+			}
+			function lyricLines() {
+				return `<div class="lyrics" id="lyrics">${lyrics
+					.map((l, i) => `<p class="line" data-i="${i}">${l.text}</p>`)
+					.join("")}</div>`;
+			}
+
+			const layouts = {
+				A: () => `<aside class="col">
+						<div class="cover">AWAKE</div>
+						<div class="meta-row"><div style="min-width:0">
+							<div class="title truncate">${track.title}</div>
+							<div class="artist truncate">${track.artist} · ${track.album}</div></div>
+							<div>${btn("heart", "Favorite")}${btn("more", "More")}</div></div>
+						${seek()}${transport()}
+						${queueList()}
+					</aside>${lyricLines()}`,
+				B: () => `<aside class="col">
+						<div class="now"><div class="cover"></div><div style="min-width:0">
+							<div class="title truncate">${track.title}</div>
+							<div class="artist truncate">${track.artist} · ${track.album}</div></div></div>
+						${seek()}${transport()}
+						${queueList()}
+					</aside>${lyricLines()}`,
+				C: () => `${lyricLines()}<aside class="col">
+						<div class="cover">AWAKE</div>
+						<div class="center"><div class="title truncate">${track.title}</div>
+							<div class="artist truncate">${track.artist} · ${track.album}</div></div>
+						${seek()}${transport(false)}
+						${queueList()}
+					</aside>`,
+			};
+
+			let lastActive = -2;
+			function render() {
+				const view = document.getElementById("view");
+				view.className = `view ${variant}`;
+				view.innerHTML = `${topbar()}<div class="body">${layouts[variant]()}</div>`;
+				document.getElementById("label").innerHTML =
+					`${variant} <small>(${VARIANTS[variant]})</small>`;
+				lastActive = -2;
+				tick(true);
+			}
+			function tick(force = false) {
+				document.getElementById("cur").textContent = fmt(time);
+				document
+					.getElementById("bar")
+					.style.setProperty("--p", `${(time / track.duration) * 100}%`);
+				const active = lyrics.findLastIndex((l) => l.at <= time);
+				if (active === lastActive && !force) return;
+				lastActive = active;
+				document.querySelectorAll(".line").forEach((el, i) => {
+					el.classList.toggle("past", i < active);
+					el.classList.toggle("active", i === active);
+				});
+				const el = document.querySelector(
+					`.line[data-i="${Math.max(active, 0)}"]`,
+				);
+				const box = document.getElementById("lyrics");
+				// Keep the active line around 40% from the top, like Spotify.
+				box.scrollTo({
+					top: el.offsetTop - box.clientHeight * 0.4,
+					behavior: force ? "instant" : "smooth",
+				});
+			}
+
+			setInterval(() => {
+				if (!playing) return;
+				time = (time + 0.25) % track.duration;
+				tick();
+			}, 250);
+
+			function setVariant(dir) {
+				const keys = Object.keys(VARIANTS);
+				variant =
+					keys[(keys.indexOf(variant) + dir + keys.length) % keys.length];
+				const url = new URL(location.href);
+				url.searchParams.set("variant", variant);
+				history.replaceState(null, "", url);
+				render();
+			}
+			document.getElementById("prev").onclick = () => setVariant(-1);
+			document.getElementById("next").onclick = () => setVariant(1);
+			document.addEventListener("keydown", (e) => {
+				if (e.target.closest("input, textarea, [contenteditable]")) return;
+				if (e.key === "ArrowLeft") setVariant(-1);
+				if (e.key === "ArrowRight") setVariant(1);
+				if (e.key === " ") {
+					e.preventDefault();
+					playing = !playing;
+					render();
+				}
+			});
+			document.getElementById("view").addEventListener("click", (e) => {
+				const line = e.target.closest(".line");
+				if (line) {
+					time = lyrics[line.dataset.i].at;
+					tick();
+					return;
+				}
+				const act = e.target.closest("[data-act]")?.dataset.act;
+				if (act === "toggle") {
+					playing = !playing;
+					render();
+				}
+			});
+			render();
+		</script>
+	</body>
+</html>

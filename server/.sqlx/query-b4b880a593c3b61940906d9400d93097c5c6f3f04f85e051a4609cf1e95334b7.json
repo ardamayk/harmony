@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE radio_stations\n            SET name = ?, stream_url = ?, homepage_url = ?, favicon_url = ?, country = ?, language = ?,\n                tags = ?, codec = ?, bitrate = ?, is_favorite = ?, position = ?, updated_at = CURRENT_TIMESTAMP\n            WHERE user_id = ? AND id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 13
+    },
+    "nullable": []
+  },
+  "hash": "b4b880a593c3b61940906d9400d93097c5c6f3f04f85e051a4609cf1e95334b7"
+}

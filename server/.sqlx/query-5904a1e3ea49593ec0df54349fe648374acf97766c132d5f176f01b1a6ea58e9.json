@@ -1,0 +1,28 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO playback_queue_state (user_id, revision, event_sequence) VALUES (?, 1, 1)\n            ON CONFLICT(user_id) DO UPDATE SET revision = revision + 1, event_sequence = event_sequence + 1\n            RETURNING CAST(revision AS TEXT) AS \"revision!: String\", CAST(event_sequence AS TEXT) AS \"event_sequence!: String\"",
+  "describe": {
+    "columns": [
+      {
+        "name": "revision!: String",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "name": "event_sequence!: String",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "5904a1e3ea49593ec0df54349fe648374acf97766c132d5f176f01b1a6ea58e9"
+}

@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIRECTORY="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 DESKTOP_DIRECTORY="$(cd -- "${SCRIPT_DIRECTORY}/.." && pwd)"
-PINNED_MPV_VERSION="$(tr -d '\r\n' < "${DESKTOP_DIRECTORY}/src-tauri/mpv-version.txt")"
+PINNED_MPV_VERSION="$(tr -d '\r\n' < "${DESKTOP_DIRECTORY}/core/mpv-version.txt")"
 SOURCE_BINARY="${EARTHLY_AUDIO_MPV_PATH:-/usr/bin/mpv}"
 
 if [[ ! -x "${SOURCE_BINARY}" ]]; then
@@ -24,7 +24,7 @@ if [[ "${TARGET_TRIPLE}" != *-unknown-linux-gnu ]]; then
   exit 1
 fi
 
-BINARY_DIRECTORY="${DESKTOP_DIRECTORY}/src-tauri/binaries"
+BINARY_DIRECTORY="${DESKTOP_DIRECTORY}/core/binaries"
 TARGET_BINARY="${BINARY_DIRECTORY}/mpv-${TARGET_TRIPLE}"
 install -d -m 0755 "${BINARY_DIRECTORY}"
 install -m 0755 "${SOURCE_BINARY}" "${TARGET_BINARY}"

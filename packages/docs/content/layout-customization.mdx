@@ -1,6 +1,6 @@
 # Layout Customization
 
-The web UI uses a modular **widget shell** from `@repo/ui`.
+The web UI uses a modular **widget shell** from `@repo/ui`: a top navigation bar, the page, a floating Player Bar and the Queue as a drawer that slides up on the right (see ADR 0021).
 
 ## Layout model
 
@@ -19,6 +19,8 @@ Preferences are stored on the server and synced across devices:
 ```
 
 Update via `PATCH /api/v1/preferences`.
+
+`collapsed.right` (or `collapsed.left` when `sidebarPosition` is `right`) is the Queue Drawer's open state; the Player Bar's queue button and the drawer's close button both toggle it. `sidebarPosition` and the left panel are kept for compatibility; the shell renders no sidebar and only shows widgets from the Queue's panel.
 
 ## Adding widgets
 

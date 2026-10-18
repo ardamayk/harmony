@@ -8,10 +8,8 @@ import type {
 	ReplayGainMode,
 } from "@repo/ui";
 import { DEFAULT_PLAYBACK_SESSION_STATE } from "@repo/ui";
-import { invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-
-const PLAYBACK_STATE_EVENT = "desktop-playback-state";
+import { DESKTOP_EVENTS } from "@repo/desktop-bridge";
+import { invoke, listen, type Unlisten } from "#/desktop/desktop-api";
 
 type DesktopPlaybackBridge = {
 	rendererReady(): Promise<PlaybackSessionState>;
@@ -27,6 +25,9 @@ type DesktopPlaybackBridge = {
 	togglePlay(): Promise<PlaybackSessionState>;
 	seek(seconds: number): Promise<PlaybackSessionState>;
 	setVolume(value: number): Promise<PlaybackSessionState>;
+	setPlaybackRate(rate: number): Promise<PlaybackSessionState>;
+	setStopAfterCurrent(enabled: boolean): Promise<PlaybackSessionState>;
+	setTransitionFade(milliseconds: number): Promise<PlaybackSessionState>;
 	setProcessingProfile(
 		profile: ProcessingProfile,
 	): Promise<PlaybackSessionState>;
@@ -42,10 +43,10 @@ type DesktopPlaybackBridge = {
 	enableAdaptiveSystemRate(): Promise<PlaybackSessionState>;
 	toggleShuffle(): Promise<PlaybackSessionState>;
 	cycleRepeatMode(): Promise<PlaybackSessionState>;
-	listen(listener: PlaybackSessionListener): Promise<UnlistenFn>;
+	listen(listener: PlaybackSessionListener): Promise<Unlisten>;
 };
 
-const tauriPlaybackBridge: DesktopPlaybackBridge = {
+const desktopPlaybackBridge: DesktopPlaybackBridge = {
 	rendererReady: () => invoke("desktop_playback_renderer_ready"),
 	play: (source) => invoke("desktop_playback_play", { source }),
 	syncQueueContext: (sources, currentIndex) =>
@@ -57,6 +58,12 @@ const tauriPlaybackBridge: DesktopPlaybackBridge = {
 	togglePlay: () => invoke("desktop_playback_toggle_play"),
 	seek: (seconds) => invoke("desktop_playback_seek", { seconds }),
 	setVolume: (value) => invoke("desktop_playback_set_volume", { value }),
+	setPlaybackRate: (rate) =>
+		invoke("desktop_playback_set_playback_rate", { rate }),
+	setStopAfterCurrent: (enabled) =>
+		invoke("desktop_playback_set_stop_after_current", { enabled }),
+	setTransitionFade: (milliseconds) =>
+		invoke("desktop_playback_set_transition_fade", { milliseconds }),
 	setProcessingProfile: (profile) =>
 		invoke("desktop_playback_set_processing_profile", { profile }),
 	setReplayGainMode: (mode) =>
@@ -76,23 +83,29 @@ const tauriPlaybackBridge: DesktopPlaybackBridge = {
 		invoke("desktop_playback_enable_adaptive_system_rate"),
 	toggleShuffle: () => invoke("desktop_playback_toggle_shuffle"),
 	cycleRepeatMode: () => invoke("desktop_playback_cycle_repeat_mode"),
-	listen: (listener) =>
-		listen<PlaybackSessionState>(PLAYBACK_STATE_EVENT, (event) => {
-			listener(event.payload);
-		}),
+	listen: async (listener) =>
+		listen<PlaybackSessionState>(DESKTOP_EVENTS.playbackState, listener),
 };
 
 export class DesktopPlaybackEngine implements PlaybackEngine {
 	private state: PlaybackSessionState = { ...DEFAULT_PLAYBACK_SESSION_STATE };
 	private readonly listeners = new Set<PlaybackSessionListener>();
-	private unlisten: UnlistenFn | null = null;
+	private unlisten: Unlisten | null = null;
 	private isDestroyed = false;
 	private commandRevision = 0;
+	private stateRevision = 0;
+	private isRefreshing = false;
+	private readonly handleFocus = () => {
+		void this.refreshSession();
+	};
+	private readonly handleVisibilityChange = () => {
+		if (document.visibilityState === "visible") void this.refreshSession();
+	};
 
 	constructor(
-		private readonly bridge: DesktopPlaybackBridge = tauriPlaybackBridge,
+		private readonly bridge: DesktopPlaybackBridge = desktopPlaybackBridge,
 	) {
-		void this.initialize(this.commandRevision);
+		void this.initialize();
 	}
 
 	getState() {
@@ -155,6 +168,18 @@ export class DesktopPlaybackEngine implements PlaybackEngine {
 		this.runCommand(() => this.bridge.setVolume(value));
 	}
 
+	setPlaybackRate(rate: number) {
+		this.runCommand(() => this.bridge.setPlaybackRate(rate));
+	}
+
+	setStopAfterCurrent(enabled: boolean) {
+		this.runCommand(() => this.bridge.setStopAfterCurrent(enabled));
+	}
+
+	setTransitionFade(milliseconds: number) {
+		this.runCommand(() => this.bridge.setTransitionFade(milliseconds));
+	}
+
 	setProcessingProfile(profile: ProcessingProfile) {
 		this.runCommand(() => this.bridge.setProcessingProfile(profile));
 	}
@@ -201,12 +226,17 @@ export class DesktopPlaybackEngine implements PlaybackEngine {
 
 	destroy() {
 		this.isDestroyed = true;
+		window.removeEventListener("focus", this.handleFocus);
+		document.removeEventListener(
+			"visibilitychange",
+			this.handleVisibilityChange,
+		);
 		this.unlisten?.();
 		this.unlisten = null;
 		this.listeners.clear();
 	}
 
-	private async initialize(initializationRevision: number) {
+	private async initialize() {
 		try {
 			const unlisten = await this.bridge.listen((state) => this.update(state));
 			if (this.isDestroyed) {
@@ -214,10 +244,35 @@ export class DesktopPlaybackEngine implements PlaybackEngine {
 				return;
 			}
 			this.unlisten = unlisten;
-			const state = await this.bridge.rendererReady();
-			if (this.commandRevision === initializationRevision) this.update(state);
+			window.addEventListener("focus", this.handleFocus);
+			document.addEventListener(
+				"visibilitychange",
+				this.handleVisibilityChange,
+			);
+			await this.refreshSession();
 		} catch (error) {
 			this.updateError(error);
+		}
+	}
+
+	private async refreshSession() {
+		if (this.isDestroyed || this.isRefreshing) return;
+		this.isRefreshing = true;
+		const commandRevision = this.commandRevision;
+		const stateRevision = this.stateRevision;
+		try {
+			const state = await this.bridge.rendererReady();
+			if (
+				this.commandRevision === commandRevision &&
+				this.stateRevision === stateRevision
+			) {
+				this.update(state);
+			}
+		} catch (error) {
+			console.warn("Failed to refresh native playback session", { error });
+			if (this.stateRevision === stateRevision) this.updateError(error);
+		} finally {
+			this.isRefreshing = false;
 		}
 	}
 
@@ -236,6 +291,7 @@ export class DesktopPlaybackEngine implements PlaybackEngine {
 
 	private update(state: PlaybackSessionState) {
 		if (this.isDestroyed) return;
+		this.stateRevision += 1;
 		this.state = state;
 		for (const listener of this.listeners) listener(state);
 	}

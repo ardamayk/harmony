@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE playback_queue_state\n            SET revision = revision + 1, event_sequence = event_sequence + 1\n            WHERE user_id = ? AND CAST(revision AS TEXT) = CAST(? AS TEXT)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "918a7bb06b08d00e83bf662abfe4d6338eb9fef4604d7160aba750be7397a86e"
+}

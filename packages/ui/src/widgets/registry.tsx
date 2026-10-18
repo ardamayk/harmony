@@ -1,4 +1,4 @@
-import type { ComponentType } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { usePlayback } from "../playback/PlaybackProvider";
 import type { WidgetDefinition } from "./types";
 
@@ -16,7 +16,7 @@ function NowPlayingWidget() {
 
 	if (!currentTrack) {
 		return (
-			<div className="min-w-0 rounded-lg border border-border p-4 text-foreground text-sm">
+			<div className="min-w-0 rounded-md border border-border p-4 text-foreground text-sm">
 				Nothing playing
 			</div>
 		);
@@ -26,7 +26,7 @@ function NowPlayingWidget() {
 		duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0;
 
 	return (
-		<div className="min-w-0 space-y-2 rounded-lg border border-border p-4">
+		<div className="min-w-0 space-y-2 rounded-md border border-border p-4">
 			<p
 				className="truncate font-medium text-heading text-sm"
 				title={currentTrack.title}
@@ -41,15 +41,15 @@ function NowPlayingWidget() {
 			</p>
 			<div className="h-1 overflow-hidden rounded-full bg-muted">
 				<div
-					className="h-full bg-primary transition-all"
-					style={{ width: `${progress}%` }}
+					className="h-full w-(--progress) bg-primary transition-all"
+					style={{ "--progress": `${progress}%` } as CSSProperties}
 				/>
 			</div>
 			<div className="flex min-w-0 items-center justify-between gap-2 text-caption text-xs">
 				<span className="shrink-0">{formatDuration(currentTime * 1000)}</span>
 				<button
 					type="button"
-					className="min-w-0 truncate rounded px-2 py-1 hover:bg-muted"
+					className="min-w-0 truncate rounded-sm px-2 py-1 hover:bg-muted"
 					onClick={togglePlay}
 				>
 					{isPlaying ? "Pause" : "Play"}
@@ -66,18 +66,18 @@ function QueueWidget() {
 
 	if (queue.length === 0) {
 		return (
-			<div className="min-w-0 rounded-lg border border-border p-4 text-foreground text-sm">
+			<div className="min-w-0 rounded-md border border-border p-4 text-foreground text-sm">
 				Queue is empty
 			</div>
 		);
 	}
 
 	return (
-		<ul className="min-w-0 max-h-64 space-y-1 overflow-y-auto rounded-lg border border-border p-2 text-sm">
+		<ul className="min-w-0 max-h-64 space-y-1 overflow-y-auto rounded-md border border-border p-2 text-sm">
 			{queue.map((item, index) => (
 				<li
 					key={item.id}
-					className="flex min-w-0 items-center gap-2 rounded px-2 py-1 hover:bg-muted"
+					className="flex min-w-0 items-center gap-2 rounded-sm px-2 py-1 hover:bg-muted"
 				>
 					<button
 						type="button"
@@ -113,17 +113,11 @@ function QueueWidget() {
 
 function DiscoverWidget() {
 	return (
-		<div className="min-w-0 rounded-lg border border-dashed border-border p-4 text-caption text-sm">
+		<div className="min-w-0 rounded-md border border-dashed border-border p-4 text-caption text-sm">
 			Discover (coming soon)
 		</div>
 	);
 }
-
-const widgetComponents: Record<string, ComponentType> = {
-	"now-playing": NowPlayingWidget,
-	queue: QueueWidget,
-	discover: DiscoverWidget,
-};
 
 export const widgetRegistry: WidgetDefinition[] = [
 	{ id: "now-playing", title: "Now Playing", component: NowPlayingWidget },
@@ -131,6 +125,8 @@ export const widgetRegistry: WidgetDefinition[] = [
 	{ id: "discover", title: "Discover", component: DiscoverWidget },
 ];
 
-export function getWidgetComponent(id: string): ComponentType | undefined {
-	return widgetComponents[id];
+/** The registered widget for an id, or null when the id is unknown. */
+export function renderWidget(id: string): ReactNode {
+	const Widget = widgetRegistry.find((widget) => widget.id === id)?.component;
+	return Widget ? <Widget /> : null;
 }

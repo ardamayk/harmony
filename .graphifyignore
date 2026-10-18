@@ -4,8 +4,8 @@
 AGENTS.md
 contracts.md
 graphify-out/
-server/internal/staticassets/web/assets/**
-server/internal/staticassets/docs/assets/**
+server/static/web/**
+server/static/docs/**
 web/dist/**
 packages/docs/dist/**
 node_modules/**

@@ -1,8 +1,8 @@
 import type { Album, Artist } from "@repo/api-client";
-import { Search, X } from "lucide-react";
+import { SearchField } from "#/components/search-field";
+import { X } from "lucide-react";
 import { useDeferredValue, useMemo } from "react";
 import { Button } from "#/components/ui/button";
-import { Input } from "#/components/ui/input";
 import {
 	Select,
 	SelectContent,
@@ -89,6 +89,24 @@ export function AlbumFilters({
 			),
 		[artists],
 	);
+	// Base UI's SelectValue shows an item's label only when it knows the items.
+	const artistItems = useMemo(
+		() => [
+			{ value: ALL_ARTISTS, label: "All artists" },
+			...sortedArtists.map((artist) => ({
+				value: artist.id,
+				label: artist.name,
+			})),
+		],
+		[sortedArtists],
+	);
+	const genreItems = useMemo(
+		() => [
+			{ value: ALL_GENRES, label: "All genres" },
+			...genreOptions.map((genre) => ({ value: genre, label: genre })),
+		],
+		[genreOptions],
+	);
 
 	const clearFilters = () => {
 		onFiltersChange({
@@ -102,36 +120,36 @@ export function AlbumFilters({
 		<div className="mb-6 space-y-3">
 			<div className="flex flex-col gap-3 lg:flex-row lg:items-center">
 				{showSearch ? (
-					<div className="relative min-w-0 flex-1">
-						<Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-caption" />
-						<Input
-							className="pl-9"
-							placeholder="Search albums…"
-							value={filters.albumQuery}
-							onChange={(e) =>
-								onFiltersChange({ ...filters, albumQuery: e.target.value })
-							}
-						/>
-					</div>
+					<SearchField
+						className="min-w-0 flex-1"
+						placeholder="Search albums…"
+						value={filters.albumQuery}
+						onChange={(e) =>
+							onFiltersChange({ ...filters, albumQuery: e.target.value })
+						}
+					/>
 				) : null}
 
 				<div className="flex flex-wrap items-center gap-2">
 					<div className="flex min-w-0 flex-col gap-1 text-caption text-xs">
 						<span>Artist</span>
 						<Select
+							items={artistItems}
 							value={artistValue}
 							onValueChange={(artistId) =>
-								onFiltersChange({ ...filters, artistId })
+								onFiltersChange({
+									...filters,
+									artistId: artistId ?? ALL_ARTISTS,
+								})
 							}
 						>
-							<SelectTrigger className="w-[180px] max-w-full">
-								<SelectValue placeholder="All artists" />
+							<SelectTrigger className="w-45 max-w-full">
+								<SelectValue />
 							</SelectTrigger>
 							<SelectContent>
-								<SelectItem value={ALL_ARTISTS}>All artists</SelectItem>
-								{sortedArtists.map((artist) => (
-									<SelectItem key={artist.id} value={artist.id}>
-										{artist.name}
+								{artistItems.map((item) => (
+									<SelectItem key={item.value} value={item.value}>
+										{item.label}
 									</SelectItem>
 								))}
 							</SelectContent>
@@ -141,17 +159,19 @@ export function AlbumFilters({
 					<div className="flex min-w-0 flex-col gap-1 text-caption text-xs">
 						<span>Genre</span>
 						<Select
+							items={genreItems}
 							value={genreValue}
-							onValueChange={(genre) => onFiltersChange({ ...filters, genre })}
+							onValueChange={(genre) =>
+								onFiltersChange({ ...filters, genre: genre ?? ALL_GENRES })
+							}
 						>
-							<SelectTrigger className="w-[180px] max-w-full">
-								<SelectValue placeholder="All genres" />
+							<SelectTrigger className="w-45 max-w-full">
+								<SelectValue />
 							</SelectTrigger>
 							<SelectContent>
-								<SelectItem value={ALL_GENRES}>All genres</SelectItem>
-								{genreOptions.map((genre) => (
-									<SelectItem key={genre} value={genre}>
-										{genre}
+								{genreItems.map((item) => (
+									<SelectItem key={item.value} value={item.value}>
+										{item.label}
 									</SelectItem>
 								))}
 							</SelectContent>
@@ -161,9 +181,8 @@ export function AlbumFilters({
 					{hasActiveFilters ? (
 						<Button
 							type="button"
-							variant="ghost"
+							variant="muted"
 							size="sm"
-							className="text-caption"
 							onClick={clearFilters}
 						>
 							<X className="size-4" />

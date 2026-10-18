@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT theme, layout_json, playback_json FROM user_preferences WHERE user_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "theme",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "user_preferences",
+            "name": "theme"
+          }
+        }
+      },
+      {
+        "name": "layout_json",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "user_preferences",
+            "name": "layout_json"
+          }
+        }
+      },
+      {
+        "name": "playback_json",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "user_preferences",
+            "name": "playback_json"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "73bb137d91f76a77324029cbc2e0a71c95245a5fadaa6404c22dd19dc2695c97"
+}

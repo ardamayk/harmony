@@ -1,16 +1,20 @@
-import { ContextMenu as ContextMenuPrimitive } from "radix-ui";
-import type * as React from "react";
-import { cn } from "#/lib/utils";
+import { ContextMenu as ContextMenuPrimitive } from "@base-ui/react/context-menu";
 
-function ContextMenu({
-	...props
-}: React.ComponentProps<typeof ContextMenuPrimitive.Root>) {
+import {
+	DropdownMenuItem,
+	DropdownMenuSeparator,
+	DropdownMenuSub,
+	DropdownMenuSubContent,
+	DropdownMenuSubTrigger,
+	menuContentClass,
+} from "#/components/ui/dropdown-menu.tsx";
+import { cn } from "#/lib/utils.ts";
+
+function ContextMenu({ ...props }: ContextMenuPrimitive.Root.Props) {
 	return <ContextMenuPrimitive.Root data-slot="context-menu" {...props} />;
 }
 
-function ContextMenuTrigger({
-	...props
-}: React.ComponentProps<typeof ContextMenuPrimitive.Trigger>) {
+function ContextMenuTrigger({ ...props }: ContextMenuPrimitive.Trigger.Props) {
 	return (
 		<ContextMenuPrimitive.Trigger data-slot="context-menu-trigger" {...props} />
 	);
@@ -18,62 +22,49 @@ function ContextMenuTrigger({
 
 function ContextMenuContent({
 	className,
+	align = "start",
+	alignOffset = 0,
+	side = "right",
+	sideOffset = 0,
 	...props
-}: React.ComponentProps<typeof ContextMenuPrimitive.Content>) {
+}: ContextMenuPrimitive.Popup.Props &
+	Pick<
+		ContextMenuPrimitive.Positioner.Props,
+		"align" | "alignOffset" | "side" | "sideOffset"
+	>) {
 	return (
 		<ContextMenuPrimitive.Portal>
-			<ContextMenuPrimitive.Content
-				data-slot="context-menu-content"
-				className={cn(
-					"z-50 min-w-40 overflow-hidden rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md",
-					className,
-				)}
-				{...props}
-			/>
+			<ContextMenuPrimitive.Positioner
+				className="isolate z-50 outline-none"
+				align={align}
+				alignOffset={alignOffset}
+				side={side}
+				sideOffset={sideOffset}
+			>
+				<ContextMenuPrimitive.Popup
+					data-slot="context-menu-content"
+					className={cn(menuContentClass, className)}
+					{...props}
+				/>
+			</ContextMenuPrimitive.Positioner>
 		</ContextMenuPrimitive.Portal>
 	);
 }
 
-function ContextMenuItem({
-	className,
-	inset,
-	variant = "default",
-	...props
-}: React.ComponentProps<typeof ContextMenuPrimitive.Item> & {
-	inset?: boolean;
-	variant?: "default" | "destructive";
-}) {
-	return (
-		<ContextMenuPrimitive.Item
-			data-slot="context-menu-item"
-			data-inset={inset}
-			data-variant={variant}
-			className={cn(
-				"relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[inset]:pl-8 data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-destructive/10",
-				className,
-			)}
-			{...props}
-		/>
-	);
-}
-
-function ContextMenuSeparator({
-	className,
-	...props
-}: React.ComponentProps<typeof ContextMenuPrimitive.Separator>) {
-	return (
-		<ContextMenuPrimitive.Separator
-			data-slot="context-menu-separator"
-			className={cn("-mx-1 my-1 h-px bg-border", className)}
-			{...props}
-		/>
-	);
-}
+// Base UI's ContextMenu reuses the Menu parts below its root and trigger.
+const ContextMenuItem = DropdownMenuItem;
+const ContextMenuSeparator = DropdownMenuSeparator;
+const ContextMenuSub = DropdownMenuSub;
+const ContextMenuSubTrigger = DropdownMenuSubTrigger;
+const ContextMenuSubContent = DropdownMenuSubContent;
 
 export {
 	ContextMenu,
 	ContextMenuContent,
 	ContextMenuItem,
 	ContextMenuSeparator,
+	ContextMenuSub,
+	ContextMenuSubContent,
+	ContextMenuSubTrigger,
 	ContextMenuTrigger,
 };

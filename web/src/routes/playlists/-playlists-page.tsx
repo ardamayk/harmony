@@ -9,6 +9,7 @@ import {
 	CollectionGridSkeleton,
 	CollectionGridState,
 	CollectionPageContainer,
+	CARD_INTERACTION_CLASS,
 } from "#/components/collection-grid-layout";
 import { PageHeader, PageShell } from "#/components/page-layout";
 import { apiClient } from "#/lib/api";
@@ -16,6 +17,7 @@ import {
 	PLAYLIST_PREVIEW_STALE_TIME_MS,
 	playlistQueryKeys,
 } from "#/lib/playlist-query-cache";
+import { cn } from "#/lib/utils";
 
 export function PlaylistsPage() {
 	const playlists = useQuery({
@@ -33,7 +35,6 @@ export function PlaylistsPage() {
 			header={
 				<PageHeader
 					title="Playlists"
-					description="Favorites is your default playlist."
 					innerClassName={COLLECTION_PAGE_CONTAINER_CLASS}
 				/>
 			}
@@ -82,7 +83,10 @@ function PlaylistCard({ playlist }: { playlist: Playlist }) {
 		<Link
 			to="/playlists/$playlistId"
 			params={{ playlistId: playlist.id }}
-			className="group relative aspect-square overflow-hidden rounded-md border border-border bg-card transition duration-300 ease-out hover:-translate-y-px hover:border-ring/60 hover:bg-muted/50 hover:shadow-lg focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2 focus-visible:ring-offset-background motion-reduce:transform-none motion-reduce:transition-none"
+			className={cn(
+				"group relative aspect-square overflow-hidden rounded-md border border-border bg-card",
+				CARD_INTERACTION_CLASS,
+			)}
 		>
 			{tracks.length > 0 ? (
 				<CollectionCoverCardStack
@@ -92,12 +96,12 @@ function PlaylistCard({ playlist }: { playlist: Playlist }) {
 			) : null}
 			<div
 				data-playlist-card-overlay
-				className="absolute inset-x-0 bottom-0 z-50 bg-gradient-to-t from-background/95 via-background/70 to-transparent px-3 pt-14 pb-2.5 text-foreground"
+				className="absolute inset-x-0 bottom-0 z-50 bg-gradient-to-t from-background/97 via-background/86 via-45% to-transparent px-3 pt-12 pb-3 text-foreground"
 			>
-				<p className="truncate font-semibold text-heading text-sm leading-tight tracking-[-0.012em]">
+				<p className="truncate font-semibold text-heading text-sm leading-tight tracking-tight">
 					{playlist.name}
 				</p>
-				<p className="mt-0.5 truncate text-[11px] text-caption leading-tight tracking-[0.01em]">
+				<p className="mt-0.5 truncate text-xs text-caption leading-tight">
 					{playlist.trackCount} track{playlist.trackCount === 1 ? "" : "s"}
 				</p>
 			</div>

@@ -1,10 +1,17 @@
-import type { Track } from "@repo/api-client";
+import type { QueueItemSource, Track } from "@repo/api-client";
+import { toast } from "@repo/ui";
 import { useMemo, useState } from "react";
+import { apiClient } from "#/lib/api";
 import { filterTracksByText } from "#/lib/filter-tracks";
+import { queueTracksByAlbum } from "#/lib/queue-tracks-by-album";
 
 type TrackCollectionPlayback = {
-	playTrack: (trackId: string, queueTrackIds?: string[]) => Promise<void>;
-	queueTracks: (trackIds: string[]) => Promise<void>;
+	playTrack: (
+		trackId: string,
+		queueTrackIds?: string[],
+		source?: QueueItemSource,
+	) => Promise<void>;
+	queueTracks: (trackIds: string[], source?: QueueItemSource) => Promise<void>;
 };
 
 export function formatTrackCollectionDuration(ms: number): string {
@@ -16,7 +23,7 @@ export function formatTrackCollectionDuration(ms: number): string {
 	return `${minutes}m`;
 }
 
-export function shuffleTrackCollection(tracks: Track[]): Track[] {
+function shuffleTrackCollection(tracks: Track[]): Track[] {
 	const next = [...tracks];
 	for (let i = next.length - 1; i > 0; i -= 1) {
 		const j = Math.floor(Math.random() * (i + 1));
@@ -28,6 +35,7 @@ export function shuffleTrackCollection(tracks: Track[]): Track[] {
 export function useTrackCollectionViewState(
 	tracks: Track[],
 	playback: TrackCollectionPlayback,
+	source?: QueueItemSource,
 ) {
 	const [search, setSearch] = useState("");
 	const visibleTracks = useMemo(
@@ -46,7 +54,11 @@ export function useTrackCollectionViewState(
 	const handlePlay = () => {
 		const first = visibleTracks[0];
 		if (!first) return;
-		void playback.playTrack(first.id, visibleTrackIds);
+		void playback.playTrack(
+			first.id,
+			visibleTrackIds,
+			...(source ? [source] : []),
+		);
 	};
 
 	const handleShuffle = () => {
@@ -56,11 +68,20 @@ export function useTrackCollectionViewState(
 		void playback.playTrack(
 			first.id,
 			shuffled.map((track) => track.id),
+			...(source ? [source] : []),
 		);
 	};
 
 	const handleQueue = () => {
-		void playback.queueTracks(visibleTrackIds);
+		void queueTracksByAlbum(visibleTracks, playback.queueTracks, (albumId) =>
+			apiClient.getAlbum(albumId),
+		).catch((error) => {
+			console.warn("Failed to queue collection tracks", {
+				trackIds: visibleTrackIds,
+				error,
+			});
+			toast.error("Failed to queue collection tracks");
+		});
 	};
 
 	return {

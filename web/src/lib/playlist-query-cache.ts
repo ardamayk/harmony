@@ -1,4 +1,5 @@
 import type { QueryClient } from "@tanstack/react-query";
+import { libraryQueryKeys } from "#/lib/library-query-keys";
 
 export const PLAYLIST_PREVIEW_STALE_TIME_MS = 60_000;
 
@@ -14,6 +15,7 @@ export async function invalidatePlaylistCache(
 	playlistId?: string,
 ) {
 	const invalidations = [
+		queryClient.invalidateQueries({ queryKey: libraryQueryKeys.searches }),
 		queryClient.invalidateQueries({ queryKey: playlistQueryKeys.list }),
 	];
 	if (playlistId) {

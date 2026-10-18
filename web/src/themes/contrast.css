@@ -1,0 +1,147 @@
+/*
+ * WCAG AA contrast fixes, measured per preset (docs/design-rules.md,
+ * Accessibility): text on a filled control at least 4.5:1, the Player Bar's
+ * primary control against the bar and the playing Queue row's equalizer
+ * against the active step at least 3:1. Imported last so these win
+ * over layers.css and the semantic overrides. Each value stays derived from
+ * the preset's own palette where it can.
+ */
+
+/* Text on the red: the light themes' near-white palette end misses 4.5:1. */
+[data-theme-preset]:not(.dark) {
+	--destructive-foreground: #ffffff;
+}
+
+/* Caption fade (layers.css default 85%): as faint as each preset allows while
+   keeping 4.5:1 on page, card, Player Bar and its pill. */
+[data-theme-preset="night-ember"].dark {
+	--caption: color-mix(in oklab, var(--text) 75%, var(--background));
+}
+
+[data-theme-preset="earthly"]:not(.dark),
+[data-theme-preset="night-ember"]:not(.dark),
+[data-theme-preset="coastal-mist"].dark {
+	--caption: color-mix(in oklab, var(--text) 80%, var(--background));
+}
+
+[data-theme-preset="tokyo-night"].dark,
+[data-theme-preset="coastal-mist"]:not(.dark),
+[data-theme-preset="sage-hearth"]:not(.dark) {
+	--caption: color-mix(in oklab, var(--text) 90%, var(--background));
+}
+
+[data-theme-preset="sage-hearth"].dark {
+	--caption: color-mix(in oklab, var(--text) 95%, var(--background));
+}
+
+/* Body text here already sits near 4.5:1 on the pill, leaving no room below
+   it, so text moves halfway to the heading and the caption takes the slot. */
+[data-theme-preset="dusty-earth"].dark {
+	--text: color-mix(in oklab, var(--theme-5) 50%, var(--theme-6));
+	--caption: color-mix(in oklab, var(--theme-5) 90%, var(--theme-6));
+}
+
+[data-theme-preset="tokyo-night"]:not(.dark),
+[data-theme-preset="dusty-earth"]:not(.dark) {
+	--text: color-mix(in oklab, var(--theme-2) 50%, var(--theme-1));
+	--caption: color-mix(in oklab, var(--theme-2) 90%, var(--theme-1));
+}
+
+/* Body text on the active step (the playing Queue row) missed 4.5:1; the step
+   lightens toward the hover step (theme-5 72%) without reaching it. */
+[data-theme-preset="tokyo-night"]:not(.dark) {
+	--sidebar-accent: color-mix(in srgb, var(--theme-5) 55%, var(--theme-4) 45%);
+	--player-control-primary: color-mix(in srgb, var(--primary) 85%, black);
+}
+
+[data-theme-preset="tokyo-night"].dark {
+	--primary-foreground: var(--theme-6);
+	/* A light glyph cannot clear both 3:1 against the bar and 4.5:1 on the
+	   button here, so the button lightens and its glyph goes dark. */
+	--player-control-primary: color-mix(in srgb, var(--primary) 70%, white);
+	--player-control-primary-foreground: color-mix(
+		in srgb,
+		var(--theme-1) 30%,
+		black
+	);
+}
+
+[data-theme-preset="dusty-earth"].dark {
+	--primary-foreground: #ffffff;
+	--player-control-primary: color-mix(in srgb, var(--primary) 60%, white);
+	--player-control-primary-foreground: color-mix(
+		in srgb,
+		var(--theme-1) 40%,
+		black
+	);
+}
+
+[data-theme-preset="dusty-earth"]:not(.dark) {
+	--player-control-primary: color-mix(in srgb, var(--primary) 60%, black);
+}
+
+[data-theme-preset="coastal-mist"].dark {
+	--primary-foreground: color-mix(in srgb, var(--theme-1) 50%, black);
+	--player-control-primary: color-mix(in srgb, var(--primary) 60%, white);
+}
+
+[data-theme-preset="coastal-mist"]:not(.dark) {
+	--primary-foreground: color-mix(in srgb, var(--theme-1) 50%, black);
+	--player-control-primary: color-mix(in srgb, var(--primary) 70%, black);
+	--player-control-primary-foreground: #ffffff;
+}
+
+[data-theme-preset="sage-hearth"]:not(.dark) {
+	--player-control-primary: color-mix(in srgb, var(--primary) 80%, black);
+}
+
+[data-theme-preset="vintage-harbor"].dark {
+	/* Ink on the peach takes its hue, as on the play button. */
+	--primary-foreground: oklch(
+		24% calc(0.04 * var(--accent-chroma)) var(--accent-hue)
+	);
+}
+
+[data-theme-preset="vintage-harbor"]:not(.dark) {
+	/* The light page's accent: the palette's brown (#8b5e3c) at the accent hue. */
+	--primary: oklch(52.2% calc(0.076 * var(--accent-chroma)) var(--accent-hue));
+	--primary-foreground: #ffffff;
+	/* The page's active step is the light family's; the dark shell keeps its
+	   own below. */
+	--shell-active: color-mix(in srgb, var(--theme-5) 45%, var(--theme-4) 55%);
+	/* The peach is the dark shell's accent: 1.5:1 on the light page. */
+	--neutral-active-foreground: var(--heading);
+}
+
+/* Vintage Harbor keeps the Top Nav, Player Bar and Queue Drawer dark in
+   light mode (semantic/vintage-harbor.css), so text inside these shell
+   surfaces takes the bar's light tones; popovers inside them are light again. */
+[data-theme-preset="vintage-harbor"]:not(.dark) [data-shell-surface] {
+	--heading: var(--player-title);
+	--text: var(--player-foreground);
+	--foreground: var(--player-foreground);
+	--queue-foreground: var(--player-foreground);
+	--caption: color-mix(in srgb, var(--player-foreground) 78%, #1e2b3b);
+	--muted-foreground: var(--caption);
+	--border: var(--sidebar-border);
+	/* Hover and active steps on the dark shell: opacity steps of its title
+	   tone, hover half the active tint. */
+	--shell-active: color-mix(in srgb, var(--player-title) 16%, transparent);
+	/* Re-resolved here: the root's value is the light page's step. */
+	--neutral-active: var(--shell-active);
+	--muted: color-mix(in srgb, var(--player-title) 8%, transparent);
+}
+
+[data-theme-preset="vintage-harbor"]:not(.dark)
+	[data-shell-surface]
+	:is(.bg-popover) {
+	--heading: var(--theme-1);
+	--text: var(--theme-2);
+	--foreground: var(--theme-2);
+	--caption: color-mix(in oklab, var(--theme-2) 85%, var(--theme-6));
+	--muted-foreground: var(--caption);
+	--border: color-mix(in srgb, var(--theme-4) 70%, var(--theme-3) 30%);
+	--muted: color-mix(in srgb, var(--theme-5) 72%, var(--theme-4) 28%);
+	--shell-active: color-mix(in srgb, var(--theme-5) 45%, var(--theme-4) 55%);
+	--neutral-active: var(--shell-active);
+}

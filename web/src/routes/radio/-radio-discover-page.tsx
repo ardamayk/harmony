@@ -8,27 +8,32 @@ import {
 import {
 	AudioLines,
 	BadgeCheck,
-	Check,
-	ChevronDown,
 	Grid2X2,
 	Headphones,
 	Info,
 	List,
 	MapPin,
 	Radio,
-	Search,
 	ShieldAlert,
 	ShieldQuestion,
 	SlidersHorizontal,
 	X,
 } from "lucide-react";
-import { Dialog as DialogPrimitive } from "radix-ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-	HEADER_SEARCH_CONTAINER_CLASS,
-	HEADER_SEARCH_INPUT_CLASS,
-} from "#/components/page-layout";
+	COLLECTION_PAGE_CONTAINER_CLASS,
+	CollectionPageContainer,
+	CARD_INTERACTION_CLASS,
+} from "#/components/collection-grid-layout";
+import { SearchField } from "#/components/search-field";
 import { Button } from "#/components/ui/button";
+import {
+	Dialog,
+	DialogClose,
+	DialogContent,
+	DialogDescription,
+	DialogTitle,
+} from "#/components/ui/dialog";
 import {
 	ContextMenu,
 	ContextMenuContent,
@@ -36,8 +41,25 @@ import {
 	ContextMenuSeparator,
 	ContextMenuTrigger,
 } from "#/components/ui/context-menu";
-import { Input } from "#/components/ui/input";
+import {
+	Combobox,
+	ComboboxContent,
+	ComboboxInput,
+	ComboboxItem,
+	ComboboxList,
+	ComboboxTrigger,
+} from "#/components/ui/combobox";
+import { Label } from "#/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "#/components/ui/radio-group";
+import {
+	Sheet,
+	SheetClose,
+	SheetContent,
+	SheetDescription,
+	SheetTitle,
+} from "#/components/ui/sheet";
 import { apiClient } from "#/lib/api";
+import { HEADER_SEARCH_CONTAINER_CLASS } from "#/lib/page-layout-classes";
 import { cn } from "#/lib/utils";
 
 const PAGE_SIZE = 40;
@@ -46,7 +68,7 @@ const ALL_FILTER_VALUE = "all";
 const MIN_ARTWORK_IMAGE_SIZE = 48;
 const MAX_ARTWORK_ASPECT_RATIO = 3;
 const FILTER_TRIGGER_CLASS =
-	"h-11 rounded-xl border border-input bg-[var(--player)] text-player-foreground shadow-xs";
+	"h-11 rounded-lg border border-input bg-player text-player-foreground shadow-xs";
 const DEFAULT_CATALOG_FILTERS: CatalogFilters = {
 	q: "",
 	country: ALL_FILTER_VALUE,
@@ -454,26 +476,25 @@ export function RadioDiscoverPage() {
 		[playRadioCatalogPreview],
 	);
 
+	const { hasNextPage, isFetchingNextPage, fetchNextPage } = catalog;
 	useEffect(() => {
 		const node = loadMoreRef.current;
 		if (!node || typeof IntersectionObserver === "undefined") return;
 		const observer = new IntersectionObserver(([record]) => {
-			if (
-				record.isIntersecting &&
-				catalog.hasNextPage &&
-				!catalog.isFetchingNextPage
-			) {
-				void catalog.fetchNextPage();
+			if (record.isIntersecting && hasNextPage && !isFetchingNextPage) {
+				void fetchNextPage();
 			}
 		});
 		observer.observe(node);
 		return () => observer.disconnect();
-	}, [catalog.hasNextPage, catalog.isFetchingNextPage, catalog.fetchNextPage]);
+	}, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
 	return (
 		<div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-			<header className="sticky top-0 z-40 shrink-0 border-border border-b bg-background/80 px-6 py-3 backdrop-blur md:px-8">
-				<div className="flex flex-col gap-2">
+			<header className="sticky top-0 z-40 shrink-0 bg-background/80 px-(--shell-inset) py-3 backdrop-blur">
+				<div
+					className={`flex flex-col gap-2 ${COLLECTION_PAGE_CONTAINER_CLASS}`}
+				>
 					<div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
 						<div className="min-w-0">
 							<h1 className="font-semibold text-2xl text-heading tracking-normal">
@@ -486,10 +507,9 @@ export function RadioDiscoverPage() {
 								className={HEADER_SEARCH_CONTAINER_CLASS}
 								htmlFor="radio-discover-search"
 							>
-								<Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-caption" />
-								<Input
+								<SearchField
 									id="radio-discover-search"
-									className={`${HEADER_SEARCH_INPUT_CLASS} text-player-foreground placeholder:text-player-foreground/55`}
+									variant="shell"
 									value={filters.q}
 									onChange={(event) =>
 										setFilters((current) => ({
@@ -503,10 +523,9 @@ export function RadioDiscoverPage() {
 							</label>
 							<Button
 								type="button"
-								variant="ghost"
-								size="icon"
+								variant="muted"
+								size="icon-lg"
 								aria-label="Filters"
-								className="size-10 text-caption hover:text-heading"
 								onClick={() => setAreFiltersOpen(true)}
 							>
 								<SlidersHorizontal className="size-5" />
@@ -522,66 +541,71 @@ export function RadioDiscoverPage() {
 				</div>
 			</header>
 
-			<div className="min-h-0 flex-1 overflow-y-auto px-6 py-5 [scrollbar-width:none] md:px-8 [&::-webkit-scrollbar]:hidden">
-				{catalog.isLoading ? (
-					<div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,620px),1fr))] gap-4">
-						{SKELETON_CARD_KEYS.map((key) => (
-							<SkeletonCard key={key} />
-						))}
-					</div>
-				) : null}
+			<div className="min-h-0 flex-1 overflow-y-auto px-(--shell-inset) py-6 scrollbar-hidden">
+				<CollectionPageContainer>
+					{catalog.isLoading ? (
+						<div className="grid grid-cols-panels gap-4">
+							{SKELETON_CARD_KEYS.map((key) => (
+								<SkeletonCard key={key} />
+							))}
+						</div>
+					) : null}
 
-				{catalog.isError ? (
-					<div className="rounded-lg border border-destructive/40 p-6 text-destructive text-sm">
-						Failed to load Radio Browser catalog.
-					</div>
-				) : null}
+					{catalog.isError ? (
+						<div className="rounded-md border border-destructive/40 p-6 text-destructive text-sm">
+							Failed to load Radio Browser catalog.
+						</div>
+					) : null}
 
-				{!catalog.isLoading && entries.length === 0 ? (
-					<div className="rounded-lg border border-dashed border-border p-6 text-caption text-sm">
-						No catalog entries match these filters.
-					</div>
-				) : null}
+					{!catalog.isLoading && entries.length === 0 ? (
+						<div className="rounded-md border border-dashed border-border p-6 text-caption text-sm">
+							No catalog entries match these filters.
+						</div>
+					) : null}
 
-				{viewMode === "grid" ? (
-					<div
-						data-testid="radio-catalog-grid"
-						className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,560px),1fr))] gap-3"
-					>
-						{entries.map((entry) => (
-							<CatalogCard
-								key={entry.stationUuid}
-								entry={entry}
-								isImporting={importStation.isPending}
-								hasPreviewError={previewErrorUuid === entry.stationUuid}
-								onImport={() => importStation.mutate(entry)}
-								onPreview={() => void handlePreview(entry)}
-								onDetails={() => setSelectedEntry(entry)}
-								onVisibilityChange={handleVisibilityChange}
-							/>
-						))}
-					</div>
-				) : (
-					<div data-testid="radio-catalog-list" className="flex flex-col gap-2">
-						{entries.map((entry) => (
-							<CatalogRow
-								key={entry.stationUuid}
-								entry={entry}
-								isImporting={importStation.isPending}
-								hasPreviewError={previewErrorUuid === entry.stationUuid}
-								onImport={() => importStation.mutate(entry)}
-								onPreview={() => void handlePreview(entry)}
-								onDetails={() => setSelectedEntry(entry)}
-								onVisibilityChange={handleVisibilityChange}
-							/>
-						))}
-					</div>
-				)}
+					{viewMode === "grid" ? (
+						<div
+							data-testid="radio-catalog-grid"
+							className="grid grid-cols-panels gap-3"
+						>
+							{entries.map((entry) => (
+								<CatalogCard
+									key={entry.stationUuid}
+									entry={entry}
+									isImporting={importStation.isPending}
+									hasPreviewError={previewErrorUuid === entry.stationUuid}
+									onImport={() => importStation.mutate(entry)}
+									onPreview={() => void handlePreview(entry)}
+									onDetails={() => setSelectedEntry(entry)}
+									onVisibilityChange={handleVisibilityChange}
+								/>
+							))}
+						</div>
+					) : (
+						<div
+							data-testid="radio-catalog-list"
+							className="flex flex-col gap-2"
+						>
+							{entries.map((entry) => (
+								<CatalogRow
+									key={entry.stationUuid}
+									entry={entry}
+									isImporting={importStation.isPending}
+									hasPreviewError={previewErrorUuid === entry.stationUuid}
+									onImport={() => importStation.mutate(entry)}
+									onPreview={() => void handlePreview(entry)}
+									onDetails={() => setSelectedEntry(entry)}
+									onVisibilityChange={handleVisibilityChange}
+								/>
+							))}
+						</div>
+					)}
 
-				<div ref={loadMoreRef} className="h-10" />
-				{catalog.isFetchingNextPage ? (
-					<p className="py-4 text-center text-caption text-sm">Loading...</p>
-				) : null}
+					<div ref={loadMoreRef} className="h-10" />
+					{catalog.isFetchingNextPage ? (
+						<p className="py-4 text-center text-caption text-sm">Loading...</p>
+					) : null}
+				</CollectionPageContainer>
 			</div>
 
 			<StationDetailsDialog
@@ -624,107 +648,96 @@ function FilterDrawer({
 	onViewModeChange: (viewMode: ViewMode) => void;
 }) {
 	return (
-		<DialogPrimitive.Root open={isOpen} onOpenChange={onOpenChange}>
-			<DialogPrimitive.Portal>
-				<DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-background/50 backdrop-blur-sm" />
-				<DialogPrimitive.Content
-					aria-describedby="radio-filter-description"
-					className="fixed top-0 right-0 z-50 flex h-dvh w-[min(390px,100vw)] flex-col gap-5 border-border border-l bg-background p-6 shadow-xl outline-none"
-				>
-					<div className="flex items-start justify-between gap-4">
-						<div className="min-w-0">
-							<DialogPrimitive.Title className="font-semibold text-heading text-xl">
-								Radio catalog filters
-							</DialogPrimitive.Title>
-							<DialogPrimitive.Description
-								id="radio-filter-description"
-								className="mt-1 text-caption text-sm"
-							>
-								Selections apply immediately.
-							</DialogPrimitive.Description>
-						</div>
-						<DialogPrimitive.Close asChild>
-							<Button type="button" variant="ghost" size="icon">
-								<X className="size-4" />
-								<span className="sr-only">Close</span>
-							</Button>
-						</DialogPrimitive.Close>
+		<Sheet open={isOpen} onOpenChange={onOpenChange}>
+			<SheetContent>
+				<div className="flex items-start justify-between gap-4">
+					<div className="min-w-0">
+						<SheetTitle>Radio catalog filters</SheetTitle>
+						<SheetDescription className="mt-1">
+							Selections apply immediately.
+						</SheetDescription>
 					</div>
+					<SheetClose
+						render={<Button type="button" variant="ghost" size="icon" />}
+					>
+						<X className="size-4" />
+						<span className="sr-only">Close</span>
+					</SheetClose>
+				</div>
 
-					<div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-						<fieldset className="grid gap-2">
-							<legend className="font-medium text-caption text-xs">
-								Catalog layout
-							</legend>
-							<div className="flex w-fit items-center gap-1 rounded-lg border border-border bg-[var(--player)] p-0.5">
-								<ViewButton
-									label="Grid view"
-									isActive={viewMode === "grid"}
-									onClick={() => onViewModeChange("grid")}
-								>
-									<Grid2X2 className="size-4" />
-								</ViewButton>
-								<ViewButton
-									label="List view"
-									isActive={viewMode === "list"}
-									onClick={() => onViewModeChange("list")}
-								>
-									<List className="size-4" />
-								</ViewButton>
-							</div>
-						</fieldset>
-						<NativeOptionSelect
-							label="Country"
-							value={filters.country}
-							options={countryOptions}
-							isCountry
-							onChange={(country) =>
-								onFiltersChange((current) => ({ ...current, country }))
-							}
-						/>
-						<NativeOptionSelect
-							label="Genre"
-							value={filters.tag}
-							options={tagOptions}
-							onChange={(tag) =>
-								onFiltersChange((current) => ({ ...current, tag }))
-							}
-						/>
-						<FormatRadioGroup
-							value={filters.codec}
-							onChange={(codec) =>
-								onFiltersChange((current) => ({ ...current, codec }))
-							}
-						/>
-						<QualityRadioGroup
-							value={filters.minBitrate}
-							onChange={(minBitrate) =>
-								onFiltersChange((current) => ({ ...current, minBitrate }))
-							}
-						/>
-					</div>
-					<div className="border-border border-t pt-4">
-						<Button
-							type="button"
-							variant="outline"
-							className="w-full justify-center"
-							onClick={() =>
-								onFiltersChange((current) => ({
-									...DEFAULT_CATALOG_FILTERS,
-									q: current.q,
-								}))
-							}
-						>
-							Reset filters
-						</Button>
-					</div>
-				</DialogPrimitive.Content>
-			</DialogPrimitive.Portal>
-		</DialogPrimitive.Root>
+				<div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto scrollbar-hidden">
+					<fieldset className="grid gap-2">
+						<legend className="font-medium text-caption text-xs">
+							Catalog layout
+						</legend>
+						<div className="flex w-fit items-center gap-1 rounded-md border border-border bg-player p-0.5">
+							<ViewButton
+								label="Grid view"
+								isActive={viewMode === "grid"}
+								onClick={() => onViewModeChange("grid")}
+							>
+								<Grid2X2 className="size-4" />
+							</ViewButton>
+							<ViewButton
+								label="List view"
+								isActive={viewMode === "list"}
+								onClick={() => onViewModeChange("list")}
+							>
+								<List className="size-4" />
+							</ViewButton>
+						</div>
+					</fieldset>
+					<OptionCombobox
+						label="Country"
+						value={filters.country}
+						options={countryOptions}
+						isCountry
+						onChange={(country) =>
+							onFiltersChange((current) => ({ ...current, country }))
+						}
+					/>
+					<OptionCombobox
+						label="Genre"
+						value={filters.tag}
+						options={tagOptions}
+						onChange={(tag) =>
+							onFiltersChange((current) => ({ ...current, tag }))
+						}
+					/>
+					<FormatRadioGroup
+						value={filters.codec}
+						onChange={(codec) =>
+							onFiltersChange((current) => ({ ...current, codec }))
+						}
+					/>
+					<QualityRadioGroup
+						value={filters.minBitrate}
+						onChange={(minBitrate) =>
+							onFiltersChange((current) => ({ ...current, minBitrate }))
+						}
+					/>
+				</div>
+				<div className="border-border border-t pt-4">
+					<Button
+						type="button"
+						variant="outline"
+						className="w-full justify-center"
+						onClick={() =>
+							onFiltersChange((current) => ({
+								...DEFAULT_CATALOG_FILTERS,
+								q: current.q,
+							}))
+						}
+					>
+						Reset filters
+					</Button>
+				</div>
+			</SheetContent>
+		</Sheet>
 	);
 }
 
-function NativeOptionSelect({
+function OptionCombobox({
 	label,
 	value,
 	options,
@@ -737,140 +750,65 @@ function NativeOptionSelect({
 	isCountry?: boolean;
 	onChange: (value: string) => void;
 }) {
-	const [isOpen, setIsOpen] = useState(false);
-	const [query, setQuery] = useState("");
-	const ref = useRef<HTMLDivElement | null>(null);
 	const allLabel = label === "Country" ? "All countries" : "All genres";
 	const searchPlaceholder =
 		label === "Country" ? "Search countries..." : "Search genres...";
-	const searchInputId = `${label.toLowerCase()}-filter-search`;
-	const selected =
-		value === ALL_FILTER_VALUE
-			? null
-			: options.find((option) => option.name === value);
-	const filteredOptions = useMemo(() => {
-		const normalizedQuery = query.trim().toLowerCase();
-		const uniqueOptions = dedupeOptions(options);
-		if (!normalizedQuery) return uniqueOptions;
-		return uniqueOptions.filter((option) =>
-			option.name.toLowerCase().includes(normalizedQuery),
-		);
-	}, [options, query]);
-
-	useEffect(() => {
-		if (!isOpen) return;
-		function handlePointerDown(event: PointerEvent) {
-			if (!ref.current?.contains(event.target as Node)) {
-				setIsOpen(false);
-			}
-		}
-		document.addEventListener("pointerdown", handlePointerDown);
-		return () => document.removeEventListener("pointerdown", handlePointerDown);
-	}, [isOpen]);
-
-	useEffect(() => {
-		if (!isOpen) setQuery("");
-	}, [isOpen]);
-
-	return (
-		<div
-			ref={ref}
-			className="relative flex min-w-[210px] flex-col gap-1 text-caption text-xs"
-		>
-			<span>{label}</span>
-			<button
-				type="button"
-				aria-label={label}
-				aria-expanded={isOpen}
-				className={cn(
-					FILTER_TRIGGER_CLASS,
-					"flex w-[230px] max-w-full items-center justify-between gap-3 px-3 text-left text-sm outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50",
-				)}
-				onClick={() => setIsOpen((current) => !current)}
-			>
-				<span className="inline-flex min-w-0 items-center gap-2">
-					{isCountry && selected ? (
-						<span className="w-5 shrink-0 text-center">
-							{countryFlag(selected.code)}
-						</span>
-					) : null}
-					<span className="truncate">{selected?.name ?? allLabel}</span>
-				</span>
-				<ChevronDown className="size-4 shrink-0 text-caption" />
-			</button>
-			{isOpen ? (
-				<div className="absolute top-full left-0 z-[80] mt-2 flex max-h-80 w-[320px] flex-col overflow-hidden rounded-xl border border-border bg-popover p-1 text-popover-foreground shadow-xl">
-					<label className="relative m-1 mb-2 block" htmlFor={searchInputId}>
-						<Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-caption" />
-						<Input
-							id={searchInputId}
-							className="h-10 rounded-lg bg-[var(--player)] pl-9 text-sm"
-							placeholder={searchPlaceholder}
-							type="search"
-							value={query}
-							onChange={(event) => setQuery(event.target.value)}
-						/>
-					</label>
-					<div className="overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-						<FilterOptionButton
-							label={allLabel}
-							isSelected={value === ALL_FILTER_VALUE}
-							onSelect={() => {
-								onChange(ALL_FILTER_VALUE);
-								setIsOpen(false);
-							}}
-						/>
-						{filteredOptions.map((option) => (
-							<FilterOptionButton
-								key={`${option.code}-${option.name}`}
-								label={option.name}
-								prefix={isCountry ? countryFlag(option.code) : undefined}
-								isSelected={option.name === value}
-								onSelect={() => {
-									onChange(option.name);
-									setIsOpen(false);
-								}}
-							/>
-						))}
-					</div>
-				</div>
-			) : null}
-		</div>
+	const uniqueOptions = useMemo(() => dedupeOptions(options), [options]);
+	const items = useMemo(
+		() => [ALL_FILTER_VALUE, ...uniqueOptions.map((option) => option.name)],
+		[uniqueOptions],
 	);
-}
+	const flagFor = (name: string) =>
+		isCountry
+			? countryFlag(uniqueOptions.find((option) => option.name === name)?.code)
+			: undefined;
+	const optionLabel = (name: string) =>
+		name === ALL_FILTER_VALUE ? allLabel : name;
+	const selectedFlag = value === ALL_FILTER_VALUE ? undefined : flagFor(value);
 
-function FilterOptionButton({
-	label,
-	prefix,
-	isSelected,
-	onSelect,
-}: {
-	label: string;
-	prefix?: string;
-	isSelected: boolean;
-	onSelect: () => void;
-}) {
 	return (
-		<button
-			type="button"
-			role="option"
-			aria-selected={isSelected}
-			className={cn(
-				"relative flex w-full items-center gap-2 rounded-sm py-2 pr-8 pl-3 text-left text-sm outline-none hover:bg-accent hover:text-accent-foreground",
-				isSelected && "bg-accent text-accent-foreground",
-			)}
-			onClick={onSelect}
-		>
-			{prefix ? (
-				<span className="w-5 shrink-0 text-center">{prefix}</span>
-			) : null}
-			<span className="min-w-0 truncate">{label}</span>
-			{isSelected ? (
-				<span className="absolute right-2 flex size-3.5 items-center justify-center">
-					<Check className="size-4" />
-				</span>
-			) : null}
-		</button>
+		<div className="flex min-w-52.5 flex-col gap-1 text-caption text-xs">
+			<span>{label}</span>
+			<Combobox
+				items={items}
+				value={value}
+				itemToStringLabel={optionLabel}
+				onValueChange={(next) => {
+					if (next != null) onChange(next);
+				}}
+			>
+				<ComboboxTrigger
+					aria-label={label}
+					className={cn(FILTER_TRIGGER_CLASS, "w-57.5 max-w-full")}
+				>
+					<span className="inline-flex min-w-0 items-center gap-2">
+						{selectedFlag ? (
+							<span className="w-5 shrink-0 text-center">{selectedFlag}</span>
+						) : null}
+						<span className="truncate">{optionLabel(value)}</span>
+					</span>
+				</ComboboxTrigger>
+				<ComboboxContent>
+					<ComboboxInput
+						variant="shell"
+						placeholder={searchPlaceholder}
+						aria-label={searchPlaceholder}
+					/>
+					<ComboboxList>
+						{(name: string) => (
+							<ComboboxItem key={name} value={name}>
+								{flagFor(name) ? (
+									<span className="w-5 shrink-0 text-center">
+										{flagFor(name)}
+									</span>
+								) : null}
+								<span className="min-w-0 truncate">{optionLabel(name)}</span>
+							</ComboboxItem>
+						)}
+					</ComboboxList>
+				</ComboboxContent>
+			</Combobox>
+		</div>
 	);
 }
 
@@ -957,48 +895,31 @@ function FilterRadioGroup({
 	options: { value: string; label: string }[];
 	onChange: (value: string) => void;
 }) {
-	const radioGroupName = `radio-filter-${label.toLowerCase()}`;
-
 	return (
 		<div className="flex flex-col gap-2">
 			<span className="text-caption text-xs">{label}</span>
-			<div role="radiogroup" aria-label={label} className="grid gap-2">
+			<RadioGroup
+				aria-label={label}
+				value={value}
+				onValueChange={(next) => onChange(next as string)}
+			>
 				{options.map((option) => (
-					<label
+					<Label
 						key={option.value}
 						className={cn(
-							"flex h-11 items-center gap-3 rounded-xl border border-border bg-[var(--player)] px-3 text-left text-player-foreground text-sm outline-none transition-[color,box-shadow,border-color] hover:border-[var(--player-control-primary)] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50",
+							"h-11 gap-3 rounded-lg border border-border bg-player px-3 font-normal text-player-foreground transition-ring hover:border-heading/35 has-focus-visible:border-ring has-focus-visible:ring-3 has-focus-visible:ring-ring/50",
 							option.value === value &&
-								"border-[var(--player-control-primary)] bg-[var(--player-pill)]",
+								"border-player-control-primary bg-player-pill",
 						)}
 					>
-						<input
-							type="radio"
-							name={radioGroupName}
+						<RadioGroupItem
 							value={option.value}
-							checked={option.value === value}
-							className="sr-only"
-							onChange={() => onChange(option.value)}
+							className="border-caption focus-visible:ring-0 data-checked:border-player-control-primary [&>[data-slot=radio-group-indicator]]:bg-player-control-primary"
 						/>
-						<span
-							className={cn(
-								"flex size-4 shrink-0 items-center justify-center rounded-full border border-caption",
-								option.value === value &&
-									"border-[var(--player-control-primary)]",
-							)}
-						>
-							<span
-								className={cn(
-									"size-2 rounded-full bg-transparent",
-									option.value === value &&
-										"bg-[var(--player-control-primary)]",
-								)}
-							/>
-						</span>
-						<span>{option.label}</span>
-					</label>
+						{option.label}
+					</Label>
 				))}
-			</div>
+			</RadioGroup>
 		</div>
 	);
 }
@@ -1017,11 +938,10 @@ function ViewButton({
 	return (
 		<Button
 			type="button"
-			size="icon"
+			size="icon-sm"
 			variant={isActive ? "default" : "ghost"}
 			aria-label={label}
 			aria-pressed={isActive}
-			className="size-8 rounded-md"
 			onClick={onClick}
 		>
 			{children}
@@ -1043,47 +963,53 @@ function CatalogCard({
 
 	return (
 		<ContextMenu>
-			<ContextMenuTrigger asChild>
-				<button
-					type="button"
-					ref={ref}
-					data-testid={`radio-catalog-card-${entry.stationUuid}`}
-					onClick={onPreview}
-					className="group relative flex min-w-0 cursor-pointer items-start gap-4 rounded-xl border border-border bg-card/45 p-4 text-left shadow-sm outline-none transition duration-300 ease-out hover:-translate-y-1 hover:border-[var(--player-control-primary)]/60 hover:bg-card/65 hover:shadow-lg focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-				>
-					<CatalogArtwork faviconUrl={entry.faviconUrl} name={entry.name} />
-					<CardHealthStatus status={entry.healthStatus} />
-					<div className="flex min-w-0 flex-1 flex-col gap-3 pr-12">
-						<div className="min-w-0 space-y-2">
-							<h2
-								className="truncate font-semibold text-base text-heading"
-								title={entry.name}
-							>
-								{entry.name}
-							</h2>
-							<div className="flex min-w-0 flex-col gap-1 text-foreground text-xs">
-								<p className="inline-flex min-w-0 items-center gap-1.5">
-									<MapPin className="size-3.5 shrink-0 text-caption" />
-									<span className="truncate">{formatCardLocation(entry)}</span>
-								</p>
-								<p className="inline-flex min-w-0 items-center gap-1.5">
-									<AudioLines className="size-3.5 shrink-0 text-caption" />
-									<span className="truncate">{formatQuality(entry)}</span>
-								</p>
-							</div>
-						</div>
-						<div className="flex flex-wrap gap-1.5">
-							{tags.map((tag) => (
-								<MetaChip key={tag}>{tag}</MetaChip>
-							))}
-						</div>
-						{hasPreviewError ? (
-							<p className="mt-auto text-destructive text-xs">
-								Live playback unavailable.
+			<ContextMenuTrigger
+				render={
+					// oxlint-disable-next-line jsx-a11y/control-has-associated-label -- ContextMenuTrigger passes the card content as children
+					<button
+						type="button"
+						ref={ref}
+						data-testid={`radio-catalog-card-${entry.stationUuid}`}
+						onClick={onPreview}
+						className={cn(
+							"group relative flex min-w-0 cursor-pointer items-start gap-4 rounded-md border border-border bg-card/45 p-4 text-left hover:bg-card/65",
+							CARD_INTERACTION_CLASS,
+						)}
+					/>
+				}
+			>
+				<CatalogArtwork faviconUrl={entry.faviconUrl} name={entry.name} />
+				<CardHealthStatus status={entry.healthStatus} />
+				<div className="flex min-w-0 flex-1 flex-col gap-3 pr-12">
+					<div className="min-w-0 space-y-2">
+						<h2
+							className="truncate font-semibold text-base text-heading"
+							title={entry.name}
+						>
+							{entry.name}
+						</h2>
+						<div className="flex min-w-0 flex-col gap-1 text-foreground text-xs">
+							<p className="inline-flex min-w-0 items-center gap-2">
+								<MapPin className="size-3.5 shrink-0 text-caption" />
+								<span className="truncate">{formatCardLocation(entry)}</span>
 							</p>
-						) : null}
+							<p className="inline-flex min-w-0 items-center gap-2">
+								<AudioLines className="size-3.5 shrink-0 text-caption" />
+								<span className="truncate">{formatQuality(entry)}</span>
+							</p>
+						</div>
 					</div>
-				</button>
+					<div className="flex flex-wrap gap-2">
+						{tags.map((tag) => (
+							<MetaChip key={tag}>{tag}</MetaChip>
+						))}
+					</div>
+					{hasPreviewError ? (
+						<p className="mt-auto text-destructive text-xs">
+							Live playback unavailable.
+						</p>
+					) : null}
+				</div>
 			</ContextMenuTrigger>
 			<CatalogContextMenu
 				isImporting={isImporting}
@@ -1108,44 +1034,43 @@ function CatalogRow({
 
 	return (
 		<ContextMenu>
-			<ContextMenuTrigger asChild>
-				<button
-					type="button"
-					ref={ref}
-					data-testid={`radio-catalog-card-${entry.stationUuid}`}
-					onClick={onPreview}
-					className="group grid min-w-0 cursor-pointer grid-cols-[auto_minmax(0,1fr)] gap-3 rounded-xl border border-border bg-card/45 p-3 text-left shadow-sm outline-none transition duration-300 ease-out hover:-translate-y-1 hover:border-[var(--player-control-primary)]/60 hover:bg-card/65 hover:shadow-lg focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 md:grid-cols-[auto_minmax(0,1fr)_auto]"
-				>
-					<CatalogArtwork
-						faviconUrl={entry.faviconUrl}
-						name={entry.name}
-						small
+			<ContextMenuTrigger
+				render={
+					// oxlint-disable-next-line jsx-a11y/control-has-associated-label -- ContextMenuTrigger passes the card content as children
+					<button
+						type="button"
+						ref={ref}
+						data-testid={`radio-catalog-card-${entry.stationUuid}`}
+						onClick={onPreview}
+						className="group grid min-w-0 cursor-pointer grid-cols-media gap-3 rounded-lg border border-border bg-card/45 p-3 text-left shadow-sm outline-none transition duration-300 ease-out hover:-translate-y-1 hover:border-heading/35 hover:bg-card/65 hover:shadow-lg focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:grid-cols-media-actions"
 					/>
-					<div className="min-w-0">
-						<h2 className="truncate font-semibold text-heading text-sm">
-							{entry.name}
-						</h2>
-						<p className="mt-1 flex min-w-0 items-center gap-1 truncate text-foreground text-xs">
-							<MapPin className="size-3.5 shrink-0 text-caption" />
-							<span className="truncate">{formatLocation(entry)}</span>
+				}
+			>
+				<CatalogArtwork faviconUrl={entry.faviconUrl} name={entry.name} small />
+				<div className="min-w-0">
+					<h2 className="truncate font-semibold text-heading text-sm">
+						{entry.name}
+					</h2>
+					<p className="mt-1 flex min-w-0 items-center gap-1 truncate text-foreground text-xs">
+						<MapPin className="size-3.5 shrink-0 text-caption" />
+						<span className="truncate">{formatLocation(entry)}</span>
+					</p>
+					{hasPreviewError ? (
+						<p className="mt-1 text-destructive text-xs">
+							Live playback unavailable.
 						</p>
-						{hasPreviewError ? (
-							<p className="mt-1 text-destructive text-xs">
-								Live playback unavailable.
-							</p>
-						) : null}
-					</div>
-					<div className="col-span-2 flex flex-wrap items-center gap-2 md:col-span-1 md:justify-end">
-						<MetaChip>{formatQuality(entry)}</MetaChip>
-						<HealthChip status={entry.healthStatus} />
-						{tags.map((tag) => (
-							<MetaChip key={tag}>{tag}</MetaChip>
-						))}
-						{extraTagCount(entry) > 0 ? (
-							<MetaChip>+{extraTagCount(entry)}</MetaChip>
-						) : null}
-					</div>
-				</button>
+					) : null}
+				</div>
+				<div className="col-span-2 flex flex-wrap items-center gap-2 md:col-span-1 md:justify-end">
+					<MetaChip>{formatQuality(entry)}</MetaChip>
+					<HealthChip status={entry.healthStatus} />
+					{tags.map((tag) => (
+						<MetaChip key={tag}>{tag}</MetaChip>
+					))}
+					{extraTagCount(entry) > 0 ? (
+						<MetaChip>+{extraTagCount(entry)}</MetaChip>
+					) : null}
+				</div>
 			</ContextMenuTrigger>
 			<CatalogContextMenu
 				isImporting={isImporting}
@@ -1177,12 +1102,12 @@ function CatalogContextMenu({
 }) {
 	return (
 		<ContextMenuContent>
-			<ContextMenuItem disabled={isImporting} onSelect={onImport}>
+			<ContextMenuItem disabled={isImporting} onClick={onImport}>
 				<Radio className="size-4" />
 				Import / Add to radio stations
 			</ContextMenuItem>
 			<ContextMenuSeparator />
-			<ContextMenuItem onSelect={onDetails}>
+			<ContextMenuItem onClick={onDetails}>
 				<Info className="size-4" />
 				Details
 			</ContextMenuItem>
@@ -1200,12 +1125,12 @@ function CatalogArtwork({
 	small?: boolean;
 }) {
 	const [hasImageError, setHasImageError] = useState(false);
-	const sizeClass = small ? "size-14 rounded-lg" : "h-24 w-24 rounded-xl";
+	const sizeClass = small ? "size-14 rounded-md" : "h-24 w-24 rounded-lg";
 	if (!faviconUrl || hasImageError) {
 		return (
 			<div
 				className={cn(
-					"flex shrink-0 items-center justify-center border border-border bg-[var(--player-artwork)] text-[var(--player-control-primary)]",
+					"flex shrink-0 items-center justify-center border border-border bg-player-artwork text-player-control-primary",
 					sizeClass,
 				)}
 			>
@@ -1261,7 +1186,7 @@ function HealthChip({ status }: { status?: string }) {
 	return (
 		<MetaChip
 			className={cn(
-				normalized === "healthy" && "text-emerald-300",
+				normalized === "healthy" && "text-success",
 				normalized === "broken" && "text-destructive",
 			)}
 		>
@@ -1280,11 +1205,11 @@ function CardHealthStatus({ status }: { status?: string }) {
 				? "Broken"
 				: "Unknown";
 	return (
-		<span className="absolute top-4 right-4 inline-flex items-center gap-1.5 text-caption text-xs">
+		<span className="absolute top-4 right-4 inline-flex items-center gap-2 text-caption text-xs">
 			<span
 				className={cn(
-					"size-2 rounded-full shadow-[0_0_12px_currentColor]",
-					normalized === "healthy" && "bg-emerald-400 text-emerald-400",
+					"size-2 rounded-full",
+					normalized === "healthy" && "bg-success text-success",
 					normalized === "broken" && "bg-destructive text-destructive",
 					normalized !== "healthy" &&
 						normalized !== "broken" &&
@@ -1306,7 +1231,7 @@ function MetaChip({
 	return (
 		<span
 			className={cn(
-				"inline-flex h-6 max-w-full items-center gap-1 truncate rounded-full border border-border bg-[var(--player-pill)] px-2 text-caption text-xs",
+				"inline-flex h-6 max-w-full items-center gap-1 truncate rounded-full border border-border bg-player-pill px-2 text-caption text-xs",
 				className,
 			)}
 		>
@@ -1323,76 +1248,65 @@ function StationDetailsDialog({
 	onOpenChange: (isOpen: boolean) => void;
 }) {
 	return (
-		<DialogPrimitive.Root open={entry != null} onOpenChange={onOpenChange}>
-			<DialogPrimitive.Portal>
-				<DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm" />
-				<DialogPrimitive.Content
-					aria-describedby="radio-details-description"
-					className="-translate-x-1/2 -translate-y-1/2 fixed top-1/2 left-1/2 z-50 flex max-h-[85vh] w-[min(680px,calc(100vw-2rem))] flex-col gap-5 overflow-y-auto rounded-2xl border border-border bg-background p-6 shadow-xl outline-none"
-				>
-					{entry ? (
-						<>
-							<div className="flex items-start gap-4">
-								<CatalogArtwork
-									faviconUrl={entry.faviconUrl}
-									name={entry.name}
-								/>
-								<div className="min-w-0 flex-1">
-									<DialogPrimitive.Title className="truncate font-semibold text-2xl text-heading">
-										{entry.name}
-									</DialogPrimitive.Title>
-									<DialogPrimitive.Description
-										id="radio-details-description"
-										className="mt-2 text-foreground text-sm"
-									>
-										{formatLocation(entry)}
-									</DialogPrimitive.Description>
-									<div className="mt-3 flex flex-wrap gap-2">
-										<MetaChip>{formatQuality(entry)}</MetaChip>
-										<HealthChip status={entry.healthStatus} />
-									</div>
-								</div>
-								<DialogPrimitive.Close asChild>
-									<Button type="button" variant="ghost" size="icon">
-										<X className="size-4" />
-										<span className="sr-only">Close</span>
-									</Button>
-								</DialogPrimitive.Close>
-							</div>
-							<dl className="grid gap-3 text-sm sm:grid-cols-2">
-								<DetailItem label="Country" value={entry.country} />
-								<DetailItem label="Language" value={entry.language} />
-								<DetailItem label="Votes" value={String(entry.votes ?? "")} />
-								<DetailItem label="Last checked" value={entry.lastCheckedAt} />
-								<DetailItem
-									label="Last successful"
-									value={entry.lastSuccessfulAt}
-								/>
-								<DetailItem label="Homepage" value={entry.homepageUrl} />
-							</dl>
-							<div>
-								<h3 className="mb-2 font-medium text-heading text-sm">Tags</h3>
-								<div className="flex flex-wrap gap-2">
-									{entry.tags.length > 0 ? (
-										entry.tags.map((tag) => (
-											<MetaChip key={tag}>{tag}</MetaChip>
-										))
-									) : (
-										<p className="text-caption text-sm">No tags.</p>
-									)}
+		<Dialog open={entry != null} onOpenChange={onOpenChange}>
+			<DialogContent
+				overlayClassName="bg-background/80 backdrop-blur-sm"
+				className="flex max-h-dialog-height max-w-2xl flex-col gap-6 overflow-y-auto bg-background text-foreground"
+			>
+				{entry ? (
+					<>
+						<div className="flex items-start gap-4">
+							<CatalogArtwork faviconUrl={entry.faviconUrl} name={entry.name} />
+							<div className="min-w-0 flex-1">
+								<DialogTitle className="truncate text-2xl">
+									{entry.name}
+								</DialogTitle>
+								<DialogDescription className="mt-2 text-foreground">
+									{formatLocation(entry)}
+								</DialogDescription>
+								<div className="mt-3 flex flex-wrap gap-2">
+									<MetaChip>{formatQuality(entry)}</MetaChip>
+									<HealthChip status={entry.healthStatus} />
 								</div>
 							</div>
-						</>
-					) : null}
-				</DialogPrimitive.Content>
-			</DialogPrimitive.Portal>
-		</DialogPrimitive.Root>
+							<DialogClose
+								render={<Button type="button" variant="ghost" size="icon" />}
+							>
+								<X className="size-4" />
+								<span className="sr-only">Close</span>
+							</DialogClose>
+						</div>
+						<dl className="grid gap-3 text-sm sm:grid-cols-2">
+							<DetailItem label="Country" value={entry.country} />
+							<DetailItem label="Language" value={entry.language} />
+							<DetailItem label="Votes" value={String(entry.votes ?? "")} />
+							<DetailItem label="Last checked" value={entry.lastCheckedAt} />
+							<DetailItem
+								label="Last successful"
+								value={entry.lastSuccessfulAt}
+							/>
+							<DetailItem label="Homepage" value={entry.homepageUrl} />
+						</dl>
+						<div>
+							<h3 className="mb-2 font-medium text-heading text-sm">Tags</h3>
+							<div className="flex flex-wrap gap-2">
+								{entry.tags.length > 0 ? (
+									entry.tags.map((tag) => <MetaChip key={tag}>{tag}</MetaChip>)
+								) : (
+									<p className="text-caption text-sm">No tags.</p>
+								)}
+							</div>
+						</div>
+					</>
+				) : null}
+			</DialogContent>
+		</Dialog>
 	);
 }
 
 function DetailItem({ label, value }: { label: string; value?: string }) {
 	return (
-		<div className="min-w-0 rounded-lg border border-border bg-card/35 p-3">
+		<div className="min-w-0 rounded-md border border-border bg-card/35 p-3">
 			<dt className="text-caption text-xs">{label}</dt>
 			<dd className="mt-1 truncate text-foreground text-sm">
 				{value || "Unknown"}
@@ -1403,11 +1317,11 @@ function DetailItem({ label, value }: { label: string; value?: string }) {
 
 function SkeletonCard() {
 	return (
-		<div className="flex min-h-44 gap-4 rounded-xl border border-border bg-card/35 p-4">
-			<div className="size-24 shrink-0 animate-pulse rounded-xl bg-muted" />
+		<div className="flex min-h-44 gap-4 rounded-lg border border-border bg-card/35 p-4">
+			<div className="size-24 shrink-0 animate-pulse rounded-lg bg-muted" />
 			<div className="flex flex-1 flex-col gap-3">
-				<div className="h-5 w-2/3 animate-pulse rounded bg-muted" />
-				<div className="h-4 w-1/2 animate-pulse rounded bg-muted" />
+				<div className="h-5 w-2/3 animate-pulse rounded-sm bg-muted" />
+				<div className="h-4 w-1/2 animate-pulse rounded-sm bg-muted" />
 				<div className="flex flex-wrap gap-2">
 					<div className="h-7 w-20 animate-pulse rounded-full bg-muted" />
 					<div className="h-7 w-24 animate-pulse rounded-full bg-muted" />

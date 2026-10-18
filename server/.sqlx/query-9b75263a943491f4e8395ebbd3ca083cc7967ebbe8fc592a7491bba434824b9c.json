@@ -1,0 +1,21 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT (EXISTS (\n                        SELECT 1 FROM track_artists\n                        WHERE track_artists.artist_id = ?1 AND track_artists.track_id != ?2\n                    ) OR EXISTS (\n                        SELECT 1 FROM album_artists\n                        WHERE album_artists.artist_id = ?1\n                            AND NOT (CAST(?3 AS INTEGER) AND album_artists.album_id = ?4)\n                    )) AS \"is_referenced: bool\"",
+  "describe": {
+    "columns": [
+      {
+        "name": "is_referenced: bool",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "9b75263a943491f4e8395ebbd3ca083cc7967ebbe8fc592a7491bba434824b9c"
+}

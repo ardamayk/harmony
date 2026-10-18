@@ -1,0 +1,230 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id AS \"id!\", name, stream_url, homepage_url, favicon_url, country, language, tags,\n                codec, bitrate, source, external_id, is_favorite, position,\n                last_now_playing_title, last_now_playing_artist, last_now_playing_raw,\n                last_now_playing_updated_at AS \"last_now_playing_updated_at?: String\"\n            FROM radio_stations WHERE user_id = ? ORDER BY is_favorite DESC, position ASC, name COLLATE NOCASE",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "radio_stations",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "name",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "radio_stations",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "name": "stream_url",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "radio_stations",
+            "name": "stream_url"
+          }
+        }
+      },
+      {
+        "name": "homepage_url",
+        "ordinal": 3,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "radio_stations",
+            "name": "homepage_url"
+          }
+        }
+      },
+      {
+        "name": "favicon_url",
+        "ordinal": 4,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "radio_stations",
+            "name": "favicon_url"
+          }
+        }
+      },
+      {
+        "name": "country",
+        "ordinal": 5,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "radio_stations",
+            "name": "country"
+          }
+        }
+      },
+      {
+        "name": "language",
+        "ordinal": 6,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "radio_stations",
+            "name": "language"
+          }
+        }
+      },
+      {
+        "name": "tags",
+        "ordinal": 7,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "radio_stations",
+            "name": "tags"
+          }
+        }
+      },
+      {
+        "name": "codec",
+        "ordinal": 8,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "radio_stations",
+            "name": "codec"
+          }
+        }
+      },
+      {
+        "name": "bitrate",
+        "ordinal": 9,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "radio_stations",
+            "name": "bitrate"
+          }
+        }
+      },
+      {
+        "name": "source",
+        "ordinal": 10,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "radio_stations",
+            "name": "source"
+          }
+        }
+      },
+      {
+        "name": "external_id",
+        "ordinal": 11,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "radio_stations",
+            "name": "external_id"
+          }
+        }
+      },
+      {
+        "name": "is_favorite",
+        "ordinal": 12,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "radio_stations",
+            "name": "is_favorite"
+          }
+        }
+      },
+      {
+        "name": "position",
+        "ordinal": 13,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "radio_stations",
+            "name": "position"
+          }
+        }
+      },
+      {
+        "name": "last_now_playing_title",
+        "ordinal": 14,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "radio_stations",
+            "name": "last_now_playing_title"
+          }
+        }
+      },
+      {
+        "name": "last_now_playing_artist",
+        "ordinal": 15,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "radio_stations",
+            "name": "last_now_playing_artist"
+          }
+        }
+      },
+      {
+        "name": "last_now_playing_raw",
+        "ordinal": 16,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "radio_stations",
+            "name": "last_now_playing_raw"
+          }
+        }
+      },
+      {
+        "name": "last_now_playing_updated_at?: String",
+        "ordinal": 17,
+        "type_info": "Datetime",
+        "origin": {
+          "Table": {
+            "table": "radio_stations",
+            "name": "last_now_playing_updated_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "2d6ac97375b903e4280eed366a8bd7de8130df7d9fc9986c32ef46f5c4bb51b7"
+}

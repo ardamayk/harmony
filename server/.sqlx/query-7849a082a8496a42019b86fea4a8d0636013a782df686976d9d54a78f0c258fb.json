@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO managed_import_history_files (\n                import_id, file_id, job_id, safe_filename, started_at, completed_at, content_sha256,\n                result_code, created_track_id, replaced_track_id, position, validation_issues\n            ) VALUES (\n                ?1, ?2, ?3, NULLIF(CAST(?4 AS TEXT), ''), ?5, ?6, NULLIF(CAST(?7 AS TEXT), ''),\n                ?8, NULLIF(CAST(?9 AS TEXT), ''), NULLIF(CAST(?10 AS TEXT), ''), ?11, ?12\n            )",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 12
+    },
+    "nullable": []
+  },
+  "hash": "7849a082a8496a42019b86fea4a8d0636013a782df686976d9d54a78f0c258fb"
+}

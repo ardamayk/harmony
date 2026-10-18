@@ -1,6 +1,3 @@
-# Agent Guide — Navidrome Replacement
-
-Read this file before making changes. It describes stack, layout, packages, and automation rules.
 
 ## Architecture
 
@@ -8,127 +5,34 @@ Read this file before making changes. It describes stack, layout, packages, and 
 packages/contracts/openapi.yaml   ← source of truth
         ↓ generate
 packages/api-client               ← TypeScript client
-server/                           ← Go API + static embed
-web/                              ← React SPA (dev proxy → Go)
+server/                           ← Rust Music Server (axum + sqlx) + embedded Web Client and docs
+web/                              ← React SPA (dev proxy → Music Server)
 packages/ui                       ← shared layout/widget shell
 packages/docs                     ← MDX product docs → /docs
+server/migrations                 ← goose-format SQL migrations; also the sqlx query schema
+desktop/                          ← Electron shell (main + preload, `vp pack`) around web/
+desktop/core                      ← Rust core sidecar: mpv playback, media proxy, Managed Import
+packages/desktop-bridge           ← renderer ↔ shell contract (window.earthlyDesktop, command allowlist)
 ```
 
-Production: Go binary embeds `web/dist` and `packages/docs/dist` (via `scripts/sync-static.sh`).
+Run everything through `mise run <task>` (`mise tasks` lists them). TypeScript tooling is Node + pnpm + Vite+ (`vp`: Oxlint, Oxfmt, Vitest); run it as `vp check`, `vp test` inside mise, which puts `node_modules/.bin` on `PATH`. Bun is not used; see ADR 0026.
 
-## Stack
+## Music Server modules
 
+`server/src/modules/<module>/` is one Rust module per domain, layered:
 
-| Area      | Technologies                                                                         |
-| --------- | ------------------------------------------------------------------------------------ |
-| Server    | Go 1.23+, chi, SQLite (modernc), goose, slog, go:embed                               |
-| Web       | React 19, TanStack Router, TanStack Query, Vite 8, Tailwind 4, shadcn, Biome, Vitest |
-| Monorepo  | pnpm workspaces, Turborepo, mise                                                     |
-| Contracts | OpenAPI 3.1 spec-first                                                               |
-| E2E       | Playwright (`@playwright/test`, `playwright-cli` skill)                              |
-| Docs      | MDX (`@mdx-js/rollup`) + Swagger UI at `/api/docs`                                   |
-
-
-
-
-## Web dependencies (`web/package.json`)
-
-
-
-### Runtime
-
-
-| Package                                    | Purpose                                       |
-| ------------------------------------------ | --------------------------------------------- |
-| `@repo/api-client`                         | Generated OpenAPI TypeScript client           |
-| `@repo/ui`                                 | AppShell, widget registry, layout preferences |
-| `@sentry/react`                            | Client error monitoring                       |
-| `@t3-oss/env-core` + `zod`                 | Typed env vars                                |
-| `@tanstack/react-router`                   | File-based routing                            |
-| `@tanstack/react-query`                    | Server state / API cache                      |
-| `@tanstack/react-form`                     | Forms                                         |
-| `radix-ui` + shadcn components             | UI primitives                                 |
-| `tailwindcss` + `class-variance-authority` | Styling                                       |
-| `lucide-react`                             | Icons                                         |
-
-
-
-
-### Dev
-
-
-| Package                                              | Purpose       |
-| ---------------------------------------------------- | ------------- |
-| `@biomejs/biome`                                     | Lint + format |
-| `@playwright/test`                                   | E2E tests     |
-| `vitest` + `@testing-library/react`                  | Unit tests    |
-| `@vitejs/plugin-react` + React Compiler babel plugin | Build         |
-| `@tanstack/router-plugin`                            | Route codegen |
-
-
-
-
-## Directory rules
-
-
-| Change type         | Location                                            |
-| ------------------- | --------------------------------------------------- |
-| API contract        | `packages/contracts/openapi.yaml` → `pnpm generate` |
-| Go handlers         | `server/internal/api/`                              |
-| Domain logic        | `server/internal/modules/<name>/`                   |
-| DB migrations       | `server/migrations/`                                |
-| Web routes          | `web/src/routes/`                                   |
-| Shared UI / layout  | `packages/ui/src/`                                  |
-| Widget registration | `packages/ui/src/widgets/registry.tsx`              |
-| Product docs (MDX)  | `packages/docs/content/`                            |
-
-
-
-
-## Modular monolith (future)
-
-`server/internal/modules/` holds domain modules. Each implements:
-
-```go
-type Module interface {
-    Name() string
-    RegisterRoutes(r chi.Router)
-}
+```text
+mod.rs         wiring: submodules, what other modules may use, `routes`
+handlers.rs    HTTP: parse request → call service → respond
+service.rs     domain rules; no SQL, no HTTP types
+repository.rs  the module's only database access; maps rows to domain types
 ```
 
-v1 modules: `preferences`, `library`, `playback` implemented; future modules follow the same pattern.
-
-
-
-## Graphify
-
-Knowledge graph output: `graphify-out/`. After code changes:
-
-```bash
-graphify update .
-# or full rebuild (requires GEMINI_API_KEY or GOOGLE_API_KEY when markdown docs are in corpus):
-graphify . --wiki
-```
-
-
-
-## API changes checklist
-
-1. Edit `packages/contracts/openapi.yaml`
-2. Run `pnpm generate`
-3. Implement Go handler in appropriate module
-4. Use `@repo/api-client` in web
-5. Add/update tests
-6. `graphify update .`
-
-
-
-## Testing pyramid
-
-- Go handler logic → `*_test.go` in `server/`
-- React / UI → Vitest in `web/` and `packages/ui/`
-- API client → Vitest in `packages/api-client/`
-- Critical flows → Playwright in `web/e2e/`
+- A schema change is a new migration in `server/migrations` (goose's `-- +goose Up` / `Down` format; the server's own migrator applies the Up sections). Write queries with `sqlx::query!`, which checks them against a schema built from the migrations; then `mise run generate` refreshes the offline query data in `server/.sqlx`, which CI checks.
+- Multi-statement writes run in one transaction from `db::begin_write`, which begins IMMEDIATE.
+- Modules reach each other only through public service APIs, never another module's repository.
+- sqlx infers SQLite column nullability conservatively; override with `AS "name!"` / `AS "name?"` / `AS "name!: Type"` instead of unwrapping.
+- Responses keep the JSON the Web and Desktop Clients expect: `gojson` holds the encoding rules (HTML-escaped JSON written to the database, whole floats without `.0`, RFC 3339 times) inherited from the original Go server (ADR 0025).
 
 ## Agent skills
 

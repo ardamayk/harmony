@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT album_id, scheme, value FROM album_release_identifiers\n            WHERE album_id IN (SELECT value FROM json_each(?))\n            ORDER BY album_id, scheme",
+  "describe": {
+    "columns": [
+      {
+        "name": "album_id",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "album_release_identifiers",
+            "name": "album_id"
+          }
+        }
+      },
+      {
+        "name": "scheme",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "album_release_identifiers",
+            "name": "scheme"
+          }
+        }
+      },
+      {
+        "name": "value",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "album_release_identifiers",
+            "name": "value"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "2568f7bdb753ba183c3a8d8bc22b08a83ed1c354e4824977bca6e10ac57c06cf"
+}

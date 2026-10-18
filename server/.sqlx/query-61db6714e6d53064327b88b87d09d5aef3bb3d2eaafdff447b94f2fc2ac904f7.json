@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO playlists (id, user_id, name, is_default) VALUES (?, ?, ?, 0)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "61db6714e6d53064327b88b87d09d5aef3bb3d2eaafdff447b94f2fc2ac904f7"
+}

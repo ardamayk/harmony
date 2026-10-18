@@ -8,7 +8,8 @@ export default defineConfig({
 	// CI diagnostics for the Integration Gate: one retry, and on failure an
 	// HTML report plus traces, screenshots, and retry data (issue #79).
 	retries: process.env.CI ? 1 : 0,
-	workers: process.env.CI ? 1 : undefined,
+	// Import journeys inspect the same server staging directory.
+	workers: 1,
 	reporter: process.env.CI ? [["list"], ["html", { open: "never" }]] : "list",
 	use: {
 		baseURL: process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000",
@@ -16,18 +17,30 @@ export default defineConfig({
 		screenshot: "only-on-failure",
 	},
 	projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+	// Always start fresh servers on the isolated E2E database and storage: a
+	// running development server would receive the test imports instead.
 	webServer: [
 		{
-			command: "go run ./cmd/server",
+			// The first run compiles the Music Server.
+			command: "cargo run --quiet -p earthly-music-server",
+			timeout: 600_000,
 			url: "http://localhost:8090/api/v1/health",
-			reuseExistingServer: !process.env.CI,
+			reuseExistingServer: false,
 			cwd: "../server",
-			env: { SERVER_ADDR: "127.0.0.1:8090", DATABASE_PATH: "./data/e2e.db" },
+			// Pass the same isolated path to the server and staging assertions.
+			env: {
+				SERVER_ADDR: "127.0.0.1:8090",
+				DATABASE_PATH: "./data/e2e.db",
+				MANAGED_STORAGE_PATH: "./data/e2e-managed",
+			},
 		},
 		{
-			command: "pnpm dev",
+			command: "pnpm run dev",
+			timeout: 120_000,
 			url: "http://localhost:3000",
-			reuseExistingServer: !process.env.CI,
+			reuseExistingServer: false,
+			// The devtools' floating button covers the Player Bar's Queue toggle.
+			env: { VITE_QUERY_DEVTOOLS: "off" },
 		},
 	],
 });

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO managed_import_canceled_files (\n                    batch_id, file_id, job_id, safe_filename, started_at, completed_at, content_sha256, position\n                )\n                SELECT batch_id, COALESCE(NULLIF(client_file_id, ''), id), id, original_filename,\n                    created_at, ?1, content_sha256, batch_position\n                FROM managed_import_jobs WHERE managed_import_jobs.id = ?2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "d8de298685d30e056d9b1934b1a8c38d7d372e77e03a7658716fd3f94552342a"
+}

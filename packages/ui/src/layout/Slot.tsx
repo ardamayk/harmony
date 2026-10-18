@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { cn } from "../lib/utils";
-import { getWidgetComponent } from "../widgets/registry";
+import { renderWidget } from "../widgets/registry";
 
 export function Slot({
 	widgetIds,
@@ -12,22 +12,18 @@ export function Slot({
 	return (
 		<div className={cn("flex flex-col gap-3", className)}>
 			{widgetIds.map((id) => {
-				const Widget = getWidgetComponent(id);
-				if (!Widget) {
+				const widget = renderWidget(id);
+				if (!widget) {
 					return (
 						<div
 							key={id}
-							className="rounded border border-destructive/50 p-2 text-xs text-destructive"
+							className="rounded-sm border border-destructive/50 p-2 text-xs text-destructive"
 						>
 							Unknown widget: {id}
 						</div>
 					);
 				}
-				return (
-					<div key={id}>
-						<Widget />
-					</div>
-				);
+				return <div key={id}>{widget}</div>;
 			})}
 		</div>
 	);
@@ -50,7 +46,7 @@ export function Panel({
 				<button
 					type="button"
 					onClick={onToggle}
-					className="rounded px-1 text-xs hover:bg-muted"
+					className="rounded-sm px-1 text-xs hover:bg-muted"
 					aria-label={`Expand ${side} panel`}
 				>
 					{side === "left" ? "›" : "‹"}

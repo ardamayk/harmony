@@ -280,8 +280,8 @@ function hasResamplingEvidence(telemetry: PlaybackTelemetry) {
 		const next = formats[index + 1];
 		return Boolean(
 			format.sampleRateHz &&
-				next?.sampleRateHz &&
-				format.sampleRateHz !== next.sampleRateHz,
+			next?.sampleRateHz &&
+			format.sampleRateHz !== next.sampleRateHz,
 		);
 	});
 }

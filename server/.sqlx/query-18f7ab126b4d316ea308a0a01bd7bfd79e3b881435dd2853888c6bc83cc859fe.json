@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE managed_import_jobs\n            SET status = 'failed',\n                original_filename = COALESCE(NULLIF(CAST(?1 AS TEXT), ''), original_filename),\n                error_code = ?2, error_field = ?3, error_reason = ?4, validation_issues = ?5,\n                outcome = CASE WHEN batch_id IS NULL THEN NULL ELSE 'rejected' END,\n                selected = 0, staged_file_path = NULL, updated_at = CURRENT_TIMESTAMP\n            WHERE id = ?6 AND status IN ('uploading', 'awaiting_confirmation')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": []
+  },
+  "hash": "18f7ab126b4d316ea308a0a01bd7bfd79e3b881435dd2853888c6bc83cc859fe"
+}

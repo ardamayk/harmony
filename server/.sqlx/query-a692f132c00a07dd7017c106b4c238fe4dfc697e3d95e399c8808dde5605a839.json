@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM album_artwork WHERE album_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "a692f132c00a07dd7017c106b4c238fe4dfc697e3d95e399c8808dde5605a839"
+}

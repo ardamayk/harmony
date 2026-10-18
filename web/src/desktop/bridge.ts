@@ -1,11 +1,7 @@
 import type { QueueEvent } from "@repo/api-client";
-import { convertFileSrc, invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { DESKTOP_EVENTS, type ImportProgressEvent } from "@repo/desktop-bridge";
+import { hasDesktopBridge, invoke, listen, type Unlisten } from "./desktop-api";
 
-const CONNECTION_CHANGED_EVENT = "server-connection-changed";
-const QUEUE_EVENTS_ERROR_EVENT = "desktop-queue-events-error";
-const QUEUE_INVALIDATED_EVENT = "desktop-queue-invalidated";
-const COVER_PROTOCOL = "earthly-media";
 let mediaProxyBaseUrl: string | null = null;
 
 export type ServerConnection = {
@@ -23,8 +19,34 @@ type BridgeHttpResponse = {
 	body: number[];
 };
 
+export type DesktopImportSelection = {
+	id: string;
+	name: string;
+	size: number;
+};
+
 export function isDesktopClient(): boolean {
-	return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+	return hasDesktopBridge();
+}
+
+export type DesktopMpvStatus = {
+	/** The mpv executable starts and answers --version. */
+	available: boolean;
+	/** The found version equals the pinned version the Desktop Client requires. */
+	pinned: boolean;
+	pinnedVersion: string;
+	version?: string | null;
+	detail?: string | null;
+};
+
+/** Pinned mpv sidecar status for the Settings page; Desktop Client only. */
+export function getDesktopMpvStatus(): Promise<DesktopMpvStatus> {
+	return invoke("get_desktop_mpv_status");
+}
+
+/** Open a web URL in the system browser; Desktop Client only. */
+export function openExternalUrl(url: string): Promise<void> {
+	return invoke("desktop_open_external_url", { url });
 }
 
 export function getServerConnection(): Promise<ServerConnection | null> {
@@ -37,6 +59,71 @@ export function testServerConnection(origin: string): Promise<ConnectionCheck> {
 
 export function saveServerConnection(origin: string): Promise<ConnectionCheck> {
 	return invoke("save_server_connection", { origin });
+}
+
+export function selectDesktopImportFiles(): Promise<DesktopImportSelection[]> {
+	return invoke("desktop_select_import_files");
+}
+
+export function selectDesktopImportFolder(): Promise<DesktopImportSelection[]> {
+	return invoke("desktop_select_import_folder");
+}
+
+export function cancelDesktopImportUpload(uploadId: string): Promise<void> {
+	return invoke("desktop_cancel_import_upload", { uploadId });
+}
+
+export function releaseDesktopImportSelections(
+	selectionIds: string[],
+): Promise<void> {
+	return invoke("desktop_release_import_selections", { selectionIds });
+}
+
+export async function desktopUploadImportFile(
+	selectionId: string,
+	jobId: string,
+	onProgress?: (progress: number, transferredBytes?: number) => void,
+	signal?: AbortSignal,
+): Promise<Response> {
+	if (signal?.aborted) {
+		throw new DOMException("Managed Import upload canceled", "AbortError");
+	}
+	const uploadId = crypto.randomUUID();
+	const stopProgress = listen<ImportProgressEvent>(
+		DESKTOP_EVENTS.importProgress,
+		(progress) => {
+			if (progress.uploadId !== uploadId || progress.totalBytes <= 0) return;
+			onProgress?.(
+				Math.round((progress.sentBytes / progress.totalBytes) * 100),
+				progress.sentBytes,
+			);
+		},
+	);
+	const handleAbort = () => {
+		cancelDesktopImportUpload(uploadId).catch((error) => {
+			console.error("Desktop Managed Import cancellation failed", error);
+		});
+	};
+	signal?.addEventListener("abort", handleAbort, { once: true });
+	onProgress?.(0);
+	try {
+		const response = await invoke<BridgeHttpResponse>(
+			"desktop_upload_import_file",
+			{
+				selectionId,
+				uploadId,
+				jobId,
+			},
+		);
+		if (signal?.aborted) {
+			throw new DOMException("Managed Import upload canceled", "AbortError");
+		}
+		onProgress?.(100);
+		return bridgeResponse(response);
+	} finally {
+		stopProgress();
+		signal?.removeEventListener("abort", handleAbort);
+	}
 }
 
 export async function initializeMediaProxy(): Promise<string> {
@@ -63,31 +150,28 @@ export function getMediaProxyBaseUrl(): string {
 	return mediaProxyBaseUrl;
 }
 
-export function getCoverBaseUrl(): string {
-	return convertFileSrc("", COVER_PROTOCOL).replace(/\/$/, "");
-}
-
-export function listenForServerConnectionChanges(
+export async function listenForServerConnectionChanges(
 	callback: (connection: ConnectionCheck) => void,
-): Promise<UnlistenFn> {
-	return listen<ConnectionCheck>(CONNECTION_CHANGED_EVENT, (event) => {
-		callback(event.payload);
-	});
+): Promise<Unlisten> {
+	return listen<ConnectionCheck>(DESKTOP_EVENTS.connectionChanged, callback);
 }
 
 export async function listenForQueueEvents(
 	onEvent: (event: QueueEvent) => void,
 	onError: (error: Error) => void,
-): Promise<UnlistenFn> {
-	const unlistenQueue = await listen<QueueEvent>(
-		QUEUE_INVALIDATED_EVENT,
-		(event) => onEvent(event.payload),
+): Promise<Unlisten> {
+	const unlistenQueue = listen<QueueEvent>(
+		DESKTOP_EVENTS.queueInvalidated,
+		onEvent,
 	);
-	let unlistenError: UnlistenFn | undefined;
+	let unlistenError: Unlisten | undefined;
 	try {
-		unlistenError = await listen<string>(QUEUE_EVENTS_ERROR_EVENT, (event) => {
-			onError(new Error(`Desktop Queue event stream: ${event.payload}`));
-		});
+		unlistenError = listen<string>(
+			DESKTOP_EVENTS.queueEventsError,
+			(message) => {
+				onError(new Error(`Desktop Queue event stream: ${message}`));
+			},
+		);
 		await invoke("desktop_reconnect_queue_events");
 		return () => {
 			unlistenQueue();
@@ -114,7 +198,13 @@ export async function desktopFetch(
 			value,
 		]),
 	);
-	const body = await encodeBody(init?.body);
+	const body = await encodeBody(
+		init?.body !== undefined
+			? init.body
+			: input instanceof Request && input.body
+				? new Uint8Array(await input.arrayBuffer())
+				: null,
+	);
 	const response = await invoke<BridgeHttpResponse>("desktop_http_request", {
 		request: {
 			method: init?.method ?? (input instanceof Request ? input.method : "GET"),
@@ -124,6 +214,10 @@ export async function desktopFetch(
 		},
 	});
 
+	return bridgeResponse(response);
+}
+
+function bridgeResponse(response: BridgeHttpResponse): Response {
 	const isBodyless = [204, 205, 304].includes(response.status);
 	return new Response(isBodyless ? null : new Uint8Array(response.body), {
 		status: response.status,

@@ -1,0 +1,45 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT a.id AS \"id!\", a.name AS \"name!\",\n                (SELECT COUNT(*) FROM album_artists credits\n                 WHERE credits.artist_id = a.id\n                   AND EXISTS (SELECT 1 FROM visible_tracks WHERE visible_tracks.album_id = credits.album_id)\n                ) AS \"album_count!: i64\"\n            FROM artists a WHERE a.id = ?1",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artists",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "name!",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artists",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "name": "album_count!: i64",
+        "ordinal": 2,
+        "type_info": "Integer",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "684f90720f89c0e6e393b8d97f33db27ea87a033907b5e80fae018d61d3786bf"
+}

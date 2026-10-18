@@ -92,6 +92,20 @@ export class InMemoryPlaybackEngine implements PlaybackEngine {
 		this.update({ volume: Math.min(1, Math.max(0, value)) });
 	}
 
+	setPlaybackRate(rate: number) {
+		this.update({ playbackRate: rate });
+	}
+
+	setStopAfterCurrent(enabled: boolean) {
+		this.update({ stopAfterCurrent: enabled });
+	}
+
+	transitionFadeMs = 0;
+
+	setTransitionFade(milliseconds: number) {
+		this.transitionFadeMs = milliseconds;
+	}
+
 	selectExclusiveOutput() {
 		this.update({ outputMode: "direct-alsa", outputDeviceIssue: null });
 	}

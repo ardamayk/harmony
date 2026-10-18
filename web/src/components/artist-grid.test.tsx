@@ -1,33 +1,55 @@
 import type { Artist } from "@repo/api-client";
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vite-plus/test";
 import { ArtistGrid } from "./artist-grid";
 
+vi.mock("@tanstack/react-router", () => ({
+	Link: ({
+		children,
+		to,
+		params,
+		...props
+	}: {
+		children: React.ReactNode;
+		to: string;
+		params: { artistId: string };
+	}) => (
+		<a href={to.replace("$artistId", params.artistId)} {...props}>
+			{children}
+		</a>
+	),
+}));
+
+vi.mock("#/lib/api", () => ({
+	apiClient: {
+		getArtistPhotoUrl: (artistId: string) => `/photo/${artistId}`,
+	},
+}));
+
 describe("ArtistGrid", () => {
-	it("uses square cards in the shared collection grid without changing card behavior", () => {
+	it("links square photo cards to the Artist page, with the initial when there is no photo", () => {
 		const artists = [
-			{
-				id: "artist-1",
-				name: "Nina Simone",
-				albumCount: 7,
-			},
+			{ id: "artist-1", name: "Nina Simone", albumCount: 7 },
+			{ id: "artist-2", name: "Solo", albumCount: 1 },
 		] as Artist[];
 
 		const { container } = render(<ArtistGrid artists={artists} />);
 
 		const grid = container.firstElementChild;
-		expect(grid?.className).toContain("grid-cols-2");
-		expect(grid?.className).toContain("sm:grid-cols-3");
-		expect(grid?.className).toContain("md:grid-cols-4");
-		expect(grid?.className).toContain("lg:grid-cols-4");
-		expect(grid?.className).toContain("xl:grid-cols-5");
-		expect(grid?.className).toContain("gap-3");
-
-		const card = screen.getByText("Nina Simone").closest("div");
-		expect(card?.className).toContain("aspect-square");
-		expect(card?.className).toContain("hover:bg-muted/50");
-		expect(screen.getByText("N")).toBeTruthy();
+		expect(grid?.className).toContain("grid-cols-cards");
+		const card = screen.getByRole("link", { name: /Nina Simone/ });
+		expect(card.getAttribute("href")).toBe("/library/artists/artist-1");
+		expect(card.className).toContain("aspect-square");
+		expect(card.className).toContain("hover:-translate-y-1");
 		expect(screen.getByText("7 albums")).toBeTruthy();
-		expect(screen.queryByRole("link")).toBeNull();
+		expect(screen.getByText("1 album")).toBeTruthy();
+
+		const photo = card.querySelector("img") as HTMLImageElement;
+		expect(photo.getAttribute("src")).toBe("/photo/artist-1");
+		expect(photo.getAttribute("loading")).toBe("lazy");
+		// The Music Server answers 404 while the Artist has no photo.
+		fireEvent.error(photo);
+		expect(card.querySelector("img")).toBeNull();
+		expect(screen.getByText("N")).toBeTruthy();
 	});
 });

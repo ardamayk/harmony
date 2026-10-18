@@ -98,7 +98,7 @@ Arayüz sabit tek sayfa değil; **üç bölge + alt player** mantığı:
 │  Nav +   │                            │ Widget’lar│
 │ Widget’lar│                           │ (opsiyonel)│
 ├──────────┴────────────────────────────┴──────────┤
-│              Player bar (sabit alt)               │
+│   ╭── Player bar (floating, orta kolon içinde) ──╮  │
 └───────────────────────────────────────────────────┘
 ```
 
@@ -183,15 +183,15 @@ Aktif route vurgusu net olmalı.
 
 ---
 
-### 6.5 Global: Player bar (sabit alt)
+### 6.5 Global: Player bar (floating alt)
 
-Her sayfada görünür; Spotify / Apple Music benzeri ama kopya değil.
+Her sayfada görünür; Spotify / Apple Music benzeri ama kopya değil. Yan panellerin arasında, orta kolonun altında yüzen (floating) yuvarlatılmış bir kart: sağdan/soldan ve alttan 16px içeride durur, içerik altında kaymaya devam eder.
 
 **Sol:** Küçük kapak placeholder + track title + artist (truncate)
 
 **Orta:** Play/Pause, Next, seek slider, current time / duration
 
-**Sağ:** Volume slider + ikon
+**Sağ:** Quality pill (tıklayınca çıkış modu menüsü), volume ikonu (hover/focus ile yukarı açılan dikey slider, tıklama mute), Lyrics (alttan yukarı açılan tam ekran görünüm: solda sözler, sağda kuyruk), en sağda queue toggle
 
 **Durumlar:**
 

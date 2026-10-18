@@ -1,0 +1,242 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id AS \"id!\", status, revision, validation_progress, batch_id, client_file_id,\n            original_filename, staged_file_path, content_sha256, error_code, track_id, preview_json,\n            error_field, error_reason, outcome, selected, replace_track_id, validation_issues,\n            import_plan_json\n        FROM managed_import_jobs WHERE id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_import_jobs",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "status",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_import_jobs",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "name": "revision",
+        "ordinal": 2,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "managed_import_jobs",
+            "name": "revision"
+          }
+        }
+      },
+      {
+        "name": "validation_progress",
+        "ordinal": 3,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "managed_import_jobs",
+            "name": "validation_progress"
+          }
+        }
+      },
+      {
+        "name": "batch_id",
+        "ordinal": 4,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_import_jobs",
+            "name": "batch_id"
+          }
+        }
+      },
+      {
+        "name": "client_file_id",
+        "ordinal": 5,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_import_jobs",
+            "name": "client_file_id"
+          }
+        }
+      },
+      {
+        "name": "original_filename",
+        "ordinal": 6,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_import_jobs",
+            "name": "original_filename"
+          }
+        }
+      },
+      {
+        "name": "staged_file_path",
+        "ordinal": 7,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_import_jobs",
+            "name": "staged_file_path"
+          }
+        }
+      },
+      {
+        "name": "content_sha256",
+        "ordinal": 8,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_import_jobs",
+            "name": "content_sha256"
+          }
+        }
+      },
+      {
+        "name": "error_code",
+        "ordinal": 9,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_import_jobs",
+            "name": "error_code"
+          }
+        }
+      },
+      {
+        "name": "track_id",
+        "ordinal": 10,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_import_jobs",
+            "name": "track_id"
+          }
+        }
+      },
+      {
+        "name": "preview_json",
+        "ordinal": 11,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_import_jobs",
+            "name": "preview_json"
+          }
+        }
+      },
+      {
+        "name": "error_field",
+        "ordinal": 12,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_import_jobs",
+            "name": "error_field"
+          }
+        }
+      },
+      {
+        "name": "error_reason",
+        "ordinal": 13,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_import_jobs",
+            "name": "error_reason"
+          }
+        }
+      },
+      {
+        "name": "outcome",
+        "ordinal": 14,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_import_jobs",
+            "name": "outcome"
+          }
+        }
+      },
+      {
+        "name": "selected",
+        "ordinal": 15,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "managed_import_jobs",
+            "name": "selected"
+          }
+        }
+      },
+      {
+        "name": "replace_track_id",
+        "ordinal": 16,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_import_jobs",
+            "name": "replace_track_id"
+          }
+        }
+      },
+      {
+        "name": "validation_issues",
+        "ordinal": 17,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_import_jobs",
+            "name": "validation_issues"
+          }
+        }
+      },
+      {
+        "name": "import_plan_json",
+        "ordinal": 18,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "managed_import_jobs",
+            "name": "import_plan_json"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "9f1dae644107204286b4e379d472dbd639d1db027e9e1663f88b1d4f093a2be6"
+}
