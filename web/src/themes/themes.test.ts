@@ -329,6 +329,26 @@ describe("text tiers", () => {
 						contrastRatio(token("--text"), token("--shell-active")),
 						"text on --shell-active",
 					).toBeGreaterThanOrEqual(4.5);
+					// Its equalizer is a graphic in the accent on the same step.
+					expect(
+						contrastRatio(
+							token("--player-control-primary"),
+							token("--shell-active"),
+						),
+						"equalizer on --shell-active",
+					).toBeGreaterThanOrEqual(3);
+					// The same accent fills the Player Bar's primary button.
+					expect(
+						contrastRatio(token("--player-control-primary"), token("--player")),
+						"primary control on --player",
+					).toBeGreaterThanOrEqual(3);
+					expect(
+						contrastRatio(
+							token("--player-control-primary-foreground"),
+							token("--player-control-primary"),
+						),
+						"glyph on the primary control",
+					).toBeGreaterThanOrEqual(4.5);
 				}
 			});
 		}

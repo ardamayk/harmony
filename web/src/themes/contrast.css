@@ -1,7 +1,8 @@
 /*
  * WCAG AA contrast fixes, measured per preset (docs/design-rules.md,
  * Accessibility): text on a filled control at least 4.5:1, the Player Bar's
- * primary control against the bar at least 3:1. Imported last so these win
+ * primary control against the bar and the playing Queue row's equalizer
+ * against the active step at least 3:1. Imported last so these win
  * over layers.css and the semantic overrides. Each value stays derived from
  * the preset's own palette where it can.
  */
@@ -50,6 +51,7 @@
    lightens toward the hover step (theme-5 72%) without reaching it. */
 [data-theme-preset="tokyo-night"]:not(.dark) {
 	--sidebar-accent: color-mix(in srgb, var(--theme-5) 55%, var(--theme-4) 45%);
+	--player-control-primary: color-mix(in srgb, var(--primary) 85%, black);
 }
 
 [data-theme-preset="tokyo-night"].dark {
@@ -66,7 +68,7 @@
 
 [data-theme-preset="dusty-earth"].dark {
 	--primary-foreground: #ffffff;
-	--player-control-primary: color-mix(in srgb, var(--primary) 85%, white);
+	--player-control-primary: color-mix(in srgb, var(--primary) 60%, white);
 	--player-control-primary-foreground: color-mix(
 		in srgb,
 		var(--theme-1) 40%,
@@ -75,22 +77,22 @@
 }
 
 [data-theme-preset="dusty-earth"]:not(.dark) {
-	--player-control-primary: color-mix(in srgb, var(--primary) 80%, black);
+	--player-control-primary: color-mix(in srgb, var(--primary) 60%, black);
 }
 
 [data-theme-preset="coastal-mist"].dark {
 	--primary-foreground: color-mix(in srgb, var(--theme-1) 50%, black);
-	--player-control-primary: color-mix(in srgb, var(--primary) 90%, white);
+	--player-control-primary: color-mix(in srgb, var(--primary) 60%, white);
 }
 
 [data-theme-preset="coastal-mist"]:not(.dark) {
 	--primary-foreground: color-mix(in srgb, var(--theme-1) 50%, black);
-	--player-control-primary: color-mix(in srgb, var(--primary) 85%, black);
+	--player-control-primary: color-mix(in srgb, var(--primary) 70%, black);
 	--player-control-primary-foreground: #ffffff;
 }
 
 [data-theme-preset="sage-hearth"]:not(.dark) {
-	--player-control-primary: color-mix(in srgb, var(--primary) 90%, black);
+	--player-control-primary: color-mix(in srgb, var(--primary) 80%, black);
 }
 
 [data-theme-preset="vintage-harbor"].dark {
