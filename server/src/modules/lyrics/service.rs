@@ -116,9 +116,14 @@ impl Lyrics {
             Ok(Some(Found::Lyrics(text))) => (Outcome::Found, text),
             Ok(Some(Found::Instrumental)) => (Outcome::Found, String::new()),
             Ok(None) => (Outcome::Missing, String::new()),
+            // Keep what was stored (plain lyrics due for a synced refresh):
+            // the failed lookup brought nothing to replace it.
             Err(error) => {
                 tracing::warn!(track_id, %error, "lyrics lookup failed");
-                (Outcome::Failed, String::new())
+                (
+                    Outcome::Failed,
+                    stored.map(|stored| stored.lyrics).unwrap_or_default(),
+                )
             }
         };
         self.repo.put(track_id, outcome, &lyrics).await?;
@@ -266,6 +271,26 @@ mod tests {
             "[00:12.00] I'm just a step away"
         );
         assert_eq!(requests.load(Ordering::SeqCst), 3);
+    }
+
+    #[tokio::test]
+    async fn keeps_stored_lyrics_when_a_refresh_fails() {
+        // Nothing listens on port 1, so the lookup fails.
+        let (dir, lyrics) = service("http://127.0.0.1:1", true).await;
+        let pool =
+            sqlx::SqlitePool::connect(&format!("sqlite://{}", dir.path().join("app.db").display()))
+                .await
+                .unwrap();
+        sqlx::query(
+            "INSERT INTO track_online_lyrics (track_id, outcome, lyrics, checked_at)
+             VALUES ('gone', 'found', 'Plain words', datetime('now', '-4 days'))",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        assert_eq!(lyrics.lyrics("gone").await.unwrap(), "Plain words");
+        // Stored as a failed attempt: the next read waits out the backoff.
+        assert_eq!(lyrics.lyrics("gone").await.unwrap(), "Plain words");
     }
 
     #[tokio::test]

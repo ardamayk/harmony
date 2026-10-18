@@ -38,6 +38,9 @@ function isSingleOrEp(album: Album) {
 	);
 }
 
+/** The Music Server's largest Album page. */
+const ALBUM_PAGE = 500;
+
 // Route components live outside the route file (see -album-page.tsx).
 export function ArtistDetailPage() {
 	const { artistId } = useParams({ from: "/library/artists/$artistId" });
@@ -51,7 +54,21 @@ export function ArtistDetailContent({ artistId }: { artistId: string }) {
 	});
 	const albums = useQuery({
 		queryKey: ["library", "albums", "artist", artistId],
-		queryFn: () => apiClient.listAlbums({ artistId, limit: 100 }),
+		// Every page: a compilation Artist can have far more Albums than one.
+		queryFn: async () => {
+			const first = await apiClient.listAlbums({ artistId, limit: ALBUM_PAGE });
+			const items = [...first.items];
+			while (items.length < first.total) {
+				const page = await apiClient.listAlbums({
+					artistId,
+					limit: ALBUM_PAGE,
+					offset: items.length,
+				});
+				if (page.items.length === 0) break;
+				items.push(...page.items);
+			}
+			return { ...first, items };
+		},
 		staleTime: 60_000,
 	});
 	// The Music Server looks it up online once and stores it; asked again on

@@ -562,13 +562,17 @@ fn return_device_volume(state: &AppState, processing: &mut ProcessingController)
     else {
         return;
     };
+    let volume = returned_volume(
+        processing.state().software_volume,
+        attenuation.software_volume,
+    );
     if let Err(error) = update_processing_locked(state, processing, |processing| {
-        processing.set_software_volume(attenuation.software_volume)
+        processing.set_software_volume(volume)
     }) {
         eprintln!("mpv volume could not be restored: {}", error.message);
         // mpv is already gone at exit; the next start must still open at the
         // listener's level, not at full volume.
-        if let Err(error) = processing.set_software_volume(attenuation.software_volume) {
+        if let Err(error) = processing.set_software_volume(volume) {
             eprintln!("Software volume could not be saved: {error}");
         }
     }
@@ -579,6 +583,13 @@ fn return_device_volume(state: &AppState, processing: &mut ProcessingController)
     {
         eprintln!("System output volume could not be restored: {error}");
     }
+}
+
+/// The software volume that keeps the level heard while the device carried
+/// `entry`: the slider's current value on top of the device's attenuation,
+/// so a change made during the hand-off survives it (and nothing jumps).
+fn returned_volume(current: f64, entry: f64) -> f64 {
+    current * entry
 }
 
 /// After an output route switch, bring back the volume last used on that
@@ -1215,7 +1226,7 @@ fn release(mut state: Arc<AppState>) {
 
 #[cfg(test)]
 mod tests {
-    use super::{shell_action, validate_playback_source};
+    use super::{returned_volume, shell_action, validate_playback_source};
     use crate::playback_app_actions::DesktopPlaybackAction;
     use serde_json::json;
 
@@ -1227,6 +1238,14 @@ mod tests {
         });
 
         assert!(validate_playback_source(&source, "http://127.0.0.1:43129/private-token").is_err());
+    }
+
+    #[test]
+    fn returned_volume_keeps_the_level_heard_during_the_hand_off() {
+        // Untouched: mpv sat at full while the device carried 20%.
+        assert!((returned_volume(1.0, 0.2) - 0.2).abs() < 1e-9);
+        // 10% chosen during the hand-off on a 20% device: 2% is heard.
+        assert!((returned_volume(0.1, 0.2) - 0.02).abs() < 1e-9);
     }
 
     #[test]

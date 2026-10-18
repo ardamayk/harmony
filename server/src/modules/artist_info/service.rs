@@ -19,6 +19,9 @@ const FAILED_RETRY_SECONDS: i64 = 5 * 60;
 const TOP_TITLES_REFRESH_SECONDS: i64 = 7 * 24 * 60 * 60;
 /// Play counts move as slowly as popularity: refreshed weekly too.
 const PLAY_COUNTS_REFRESH_SECONDS: i64 = TOP_TITLES_REFRESH_SECONDS;
+/// Lookup time one play-count request may spend, well inside the 60s
+/// request timeout.
+const PLAY_COUNTS_LOOKUP_BUDGET: Duration = Duration::from_secs(30);
 /// The Artist's library Tracks that the top titles are matched against.
 const TRACKS_FOR_MATCHING: i64 = 2000;
 const DEEZER_LOOKUPS_AT_ONCE: usize = 3;
@@ -144,6 +147,9 @@ impl ArtistInfo {
         };
         let mut by_artist: HashMap<String, HashMap<String, i64>> = HashMap::new();
         let mut found = Vec::new();
+        // Lookups run one at a time (rate limit), so past the budget the
+        // rest come from what is stored: partial counts, not a timed-out request.
+        let deadline = tokio::time::Instant::now() + PLAY_COUNTS_LOOKUP_BUDGET;
         for track_id in track_ids {
             let track = match self.library.get_track(track_id).await {
                 Ok(track) => track,
@@ -160,9 +166,16 @@ impl ArtistInfo {
                 continue;
             };
             if !by_artist.contains_key(&artist.id) {
-                let counts = self
-                    .artist_play_counts(key, &artist.id, &artist.name)
-                    .await?;
+                let lookup = self.artist_play_counts(key, &artist.id, &artist.name);
+                let counts = match tokio::time::timeout_at(deadline, lookup).await {
+                    Ok(counts) => counts?,
+                    Err(_) => self
+                        .repo
+                        .play_counts(&artist.id)
+                        .await?
+                        .and_then(|stored| stored.value)
+                        .unwrap_or_default(),
+                };
                 by_artist.insert(artist.id.clone(), counts);
             }
             if let Some(play_count) = lastfm::count_for(&by_artist[&artist.id], &track.title) {
@@ -182,19 +195,27 @@ impl ArtistInfo {
         name: &str,
     ) -> Result<HashMap<String, i64>, ArtistInfoError> {
         let stored = self.repo.play_counts(artist_id).await?;
-        if !self.should_look_up(stored.as_ref(), Some(PLAY_COUNTS_REFRESH_SECONDS)) {
+        // The key is its own opt-in (ADR 0030): `enabled` covers only the
+        // keyless lookups.
+        let due = stored.as_ref().is_none_or(|stored| {
+            is_due(
+                stored.outcome,
+                stored.age_seconds,
+                Some(PLAY_COUNTS_REFRESH_SECONDS),
+            )
+        });
+        if !due {
             return Ok(stored.and_then(|stored| stored.value).unwrap_or_default());
         }
         let _slot = self.lastfm_slot.acquire().await.expect("semaphore open");
         let found = lastfm::play_counts(&self.client, &self.sources.lastfm, key, name)
             .await
             .map(|counts| (!counts.is_empty()).then_some(counts));
-        let (outcome, counts) = settle(artist_id, found);
-        // A failed refresh keeps last week's counts rather than showing none.
-        if outcome == Outcome::Failed
-            && let Some(previous) = stored.and_then(|stored| stored.value)
-        {
-            return Ok(previous);
+        let (outcome, mut counts) = settle(artist_id, found);
+        // A failed refresh keeps last week's counts rather than showing none,
+        // stored as failed so the retry waits out the failure backoff.
+        if outcome == Outcome::Failed {
+            counts = stored.and_then(|stored| stored.value).or(counts);
         }
         self.repo
             .put_play_counts(artist_id, outcome, counts.as_ref())
@@ -284,12 +305,11 @@ impl ArtistInfo {
         let found = deezer::find_top_titles(&self.client, &self.sources.deezer, &name, &albums)
             .await
             .map(|titles| (!titles.is_empty()).then_some(titles));
-        let (outcome, titles) = settle(artist_id, found);
-        // A failed refresh keeps last week's list rather than showing none.
-        if outcome == Outcome::Failed
-            && let Some(previous) = stored.and_then(|stored| stored.value)
-        {
-            return Ok(previous);
+        let (outcome, mut titles) = settle(artist_id, found);
+        // A failed refresh keeps last week's list rather than showing none,
+        // stored as failed so the retry waits out the failure backoff.
+        if outcome == Outcome::Failed {
+            titles = stored.and_then(|stored| stored.value).or(titles);
         }
         self.repo
             .put_top_titles(artist_id, outcome, titles.as_ref())
@@ -619,6 +639,65 @@ mod tests {
             info.photo("unknown").await,
             Err(ArtistInfoError::NotFound)
         ));
+    }
+
+    #[tokio::test]
+    async fn gives_play_counts_with_artist_lookups_switched_off() {
+        let (sources, _) = fake_sources().await;
+        let (dir, info) = service(sources, false).await;
+        let migrations = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations");
+        let pool =
+            crate::db::open_and_migrate(dir.path().join("app.db").to_str().unwrap(), &migrations)
+                .await
+                .unwrap();
+        seed_tracks(&pool, &["Hero"]).await;
+        let found = info.play_counts(&["t0".to_owned()]).await.unwrap();
+        assert_eq!(found.len(), 1, "the Last.fm key is its own opt-in");
+    }
+
+    #[tokio::test]
+    async fn keeps_stale_counts_and_backs_off_when_a_refresh_fails() {
+        // Nothing listens on port 1, so every lookup fails.
+        let down = "http://127.0.0.1:1".to_owned();
+        let sources = Sources {
+            deezer: down.clone(),
+            musicbrainz: down.clone(),
+            wikidata: down.clone(),
+            wikipedia: down.clone(),
+            lastfm: down,
+        };
+        let (dir, info) = service(sources, true).await;
+        let migrations = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations");
+        let pool =
+            crate::db::open_and_migrate(dir.path().join("app.db").to_str().unwrap(), &migrations)
+                .await
+                .unwrap();
+        seed_tracks(&pool, &["Hero"]).await;
+        for statement in [
+            "INSERT INTO artist_play_counts (artist_id, outcome, counts, checked_at)
+             VALUES ('ar', 'found', '{\"hero\": 5}', datetime('now', '-8 days'))",
+            "INSERT INTO artist_top_tracks (artist_id, outcome, titles, checked_at)
+             VALUES ('ar', 'found', '[\"Hero\"]', datetime('now', '-8 days'))",
+        ] {
+            sqlx::query(statement).execute(&pool).await.unwrap();
+        }
+        let found = info.play_counts(&["t0".to_owned()]).await.unwrap();
+        assert_eq!(found[0].play_count, 5, "last week's counts stay");
+        assert_eq!(info.top_titles("ar").await.unwrap(), ["Hero"]);
+        for query in [
+            "SELECT outcome, CAST((julianday('now') - julianday(checked_at)) * 86400 AS INTEGER)
+             FROM artist_play_counts WHERE artist_id = 'ar'",
+            "SELECT outcome, CAST((julianday('now') - julianday(checked_at)) * 86400 AS INTEGER)
+             FROM artist_top_tracks WHERE artist_id = 'ar'",
+        ] {
+            let (outcome, age): (String, i64) =
+                sqlx::query_as(query).fetch_one(&pool).await.unwrap();
+            assert_eq!(outcome, "failed", "{query}");
+            assert!(
+                age < 60,
+                "the failure is timestamped for the backoff: {query}"
+            );
+        }
     }
 
     #[tokio::test]
