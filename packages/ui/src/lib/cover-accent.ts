@@ -31,6 +31,16 @@ const ACCENT_LIGHTNESS_RANGE: Record<AccentThemeMode, [number, number]> = {
 	dark: [0.55, 0.7],
 	light: [0.3, 0.45],
 };
+// Dark mode lifts the accent only until it reads on the bar: 4.5:1, since
+// the current queue title is set in it. HSL lightness is not perceived
+// lightness (a saturated blue at 55% is darker than a teal at 45%), so the
+// lift is measured, not a fixed band.
+// 4.6, not 4.5: the browser rounds the colour to 8 bits per channel, which
+// can cost a few hundredths.
+const ACCENT_MIN_CONTRAST = 4.6;
+const DARK_ACCENT_CEILING = 0.7;
+// Vintage Harbor's dark Player Bar, for callers that cannot read the bar.
+const DEFAULT_DARK_SURFACE_LUMINANCE = 0.021;
 
 export function rgbToHsl(r: number, g: number, b: number): Accent {
 	const red = r / 255;
@@ -144,16 +154,40 @@ function mutedFromPixels(data: Uint8ClampedArray): Accent | null {
 	};
 }
 
-/** Clamps the accent into the theme's readable lightness band. */
-export function clampAccent(accent: Accent, mode: AccentThemeMode): Accent {
-	const [min, max] = ACCENT_LIGHTNESS_RANGE[mode];
-	return {
-		h: accent.h,
-		s: accent.soft
-			? Math.min(MAX_SOFT_SATURATION, accent.s * 2)
-			: Math.min(0.85, Math.max(0.35, accent.s)),
-		l: Math.min(max, Math.max(min, accent.l)),
-	};
+/**
+ * Clamps the accent so it reads on the theme's bar. Dark mode keeps the
+ * cover's own lightness (up to a ceiling) and lifts it just far enough for
+ * 4.5:1 against the bar; light mode keeps its fixed band.
+ */
+export function clampAccent(
+	accent: Accent,
+	mode: AccentThemeMode,
+	surfaceLuminance = DEFAULT_DARK_SURFACE_LUMINANCE,
+): Accent {
+	const s = accent.soft
+		? Math.min(MAX_SOFT_SATURATION, accent.s * 2)
+		: Math.min(0.85, Math.max(0.35, accent.s));
+	if (mode === "light") {
+		const [min, max] = ACCENT_LIGHTNESS_RANGE.light;
+		return { h: accent.h, s, l: Math.min(max, Math.max(min, accent.l)) };
+	}
+	let l = Math.min(DARK_ACCENT_CEILING, accent.l);
+	while (
+		accentContrast({ h: accent.h, s, l }, surfaceLuminance) <
+			ACCENT_MIN_CONTRAST &&
+		l < 0.95
+	) {
+		l = Math.round((l + 0.01) * 100) / 100;
+	}
+	return { h: accent.h, s, l };
+}
+
+/** WCAG contrast of the accent against a surface's relative luminance. */
+export function accentContrast(accent: Accent, surfaceLuminance: number) {
+	const [light, dark] = [relativeLuminance(accent), surfaceLuminance].sort(
+		(x, y) => y - x,
+	);
+	return (light + 0.05) / (dark + 0.05);
 }
 
 function hslToRgb({ h, s, l }: Accent): [number, number, number] {
@@ -200,14 +234,19 @@ function accentToCss(accent: Accent): string {
 export function accentCssVariables(
 	accent: Accent | null,
 	mode: AccentThemeMode,
+	surfaceLuminance?: number,
 ): Record<string, string> {
 	if (!accent) return {};
 	const [min, max] = ACCENT_LIGHTNESS_RANGE[mode];
 	// A colourless cover gets neutral controls, at the band's end farthest
 	// from the bar; its backdrop keeps the cover's own faint mean colour.
 	const clamped = accent.muted
-		? { h: 0, s: 0, l: mode === "dark" ? max : min }
-		: clampAccent(accent, mode);
+		? clampAccent(
+				{ h: 0, s: 0, l: mode === "dark" ? max : min, soft: true },
+				mode,
+				surfaceLuminance,
+			)
+		: clampAccent(accent, mode, surfaceLuminance);
 	const color = accentToCss(clamped);
 	const tint = accent.muted
 		? accentToCss({

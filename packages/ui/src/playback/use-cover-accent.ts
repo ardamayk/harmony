@@ -7,6 +7,34 @@ import {
 } from "../lib/cover-accent";
 
 const accentCache = new Map<string, Accent | null>();
+const luminanceCache = new Map<string, number>();
+
+/**
+ * Relative luminance of the theme's Player Bar (`--player`), so a dark-mode
+ * accent lifts only as far as this bar needs. Undefined without a DOM.
+ */
+function playerSurfaceLuminance(): number | undefined {
+	if (typeof document === "undefined") return undefined;
+	const value = getComputedStyle(document.documentElement)
+		.getPropertyValue("--player")
+		.trim();
+	if (!value) return undefined;
+	const cached = luminanceCache.get(value);
+	if (cached !== undefined) return cached;
+	const context = document.createElement("canvas").getContext("2d");
+	if (!context) return undefined;
+	context.fillStyle = value;
+	context.fillRect(0, 0, 1, 1);
+	const [r, g, b] = Array.from(context.getImageData(0, 0, 1, 1).data)
+		.slice(0, 3)
+		.map((channel) => {
+			const c = channel / 255;
+			return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+		});
+	const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+	luminanceCache.set(value, luminance);
+	return luminance;
+}
 
 /** Test hook: forget every cached accent. */
 export function clearCoverAccentCache() {
@@ -61,7 +89,7 @@ export function useCoverAccent({
 		};
 	}, [activeKey, coverUrl, loadImage]);
 
-	return accentCssVariables(accent, mode);
+	return accentCssVariables(accent, mode, playerSurfaceLuminance());
 }
 
 function defaultLoadImage(url: string): Promise<HTMLImageElement> {

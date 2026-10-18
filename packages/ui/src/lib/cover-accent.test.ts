@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
+	accentContrast,
 	accentCssVariables,
 	accentFromPixels,
 	clampAccent,
@@ -84,9 +85,26 @@ describe("cover accent", () => {
 		expect(light["--player-control-primary-foreground"]).toBe("hsl(0 0% 98%)");
 	});
 
-	it("clamps lightness into the theme band", () => {
-		expect(clampAccent({ h: 200, s: 0.9, l: 0.1 }, "dark").l).toBe(0.55);
+	it("lifts a dark accent only as far as the bar needs for 4.5:1", () => {
+		// Nightwish "Decades": a dark teal the old 55% floor washed out.
+		const teal = clampAccent({ h: 165, s: 0.36, l: 0.23 }, "dark", 0.021);
+		expect(accentContrast(teal, 0.021)).toBeGreaterThanOrEqual(4.5);
+		expect(teal.l).toBeLessThan(0.55);
+		expect(teal.h).toBe(165);
+		// A light cover keeps its own lightness, up to the ceiling.
+		expect(clampAccent({ h: 40, s: 0.5, l: 0.66 }, "dark", 0.021).l).toBe(0.66);
+		expect(clampAccent({ h: 40, s: 0.5, l: 0.95 }, "dark", 0.021).l).toBe(0.7);
+	});
+
+	it("lifts a saturated blue past the old band on a light bar", () => {
+		// HSL 55% blue gave 1.9:1 on Coastal Mist's bar; lightness is measured now.
+		const blue = clampAccent({ h: 240, s: 0.85, l: 0.55 }, "dark", 0.0588);
+		expect(accentContrast(blue, 0.0588)).toBeGreaterThanOrEqual(4.5);
+	});
+
+	it("keeps the light-mode band", () => {
 		expect(clampAccent({ h: 200, s: 0.9, l: 0.95 }, "light").l).toBe(0.45);
+		expect(clampAccent({ h: 200, s: 0.9, l: 0.1 }, "light").l).toBe(0.3);
 	});
 
 	it("emits the bar's control tokens with a readable foreground", () => {
