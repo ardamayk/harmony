@@ -51,6 +51,28 @@ Install FFmpeg from your distribution; the container image includes it. Settings
 
 Managed Import uses file tags locally. TITLE, ARTIST, ALBUMARTIST, ALBUM, and TRACKNUMBER are required. DISCNUMBER is required for multi-disc albums and defaults to one otherwise. GENRE, DATE, artwork, totals, and ReplayGain are optional. Album matching uses album artist and the full album title, preserving edition qualifiers. Only identical full-file SHA-256 values are duplicates. Different bytes at the same album/disc/track/title require explicit replacement approval. New albums may use an embedded cover, a JPEG/PNG upload, or no cover. See [ADR 0019](docs/adr/0019-tag-based-import-and-album-artwork.md).
 
+## External services
+
+The Music Server calls these services itself, so clients never contact them directly. Artist info, play counts and lyrics are looked up when a client first asks for them and then stored; a library is never crawled. Only Last.fm needs a key.
+
+| Service | Key | Used for | Switch |
+|---------|-----|----------|--------|
+| [Deezer](https://developers.deezer.com/api) | no | Artist photo, popular Tracks, genres for Albums whose tags name none | `ARTIST_INFO_ENABLED=false` |
+| [MusicBrainz](https://musicbrainz.org/doc/MusicBrainz_API) → [Wikidata](https://www.wikidata.org) → [Wikipedia](https://en.wikipedia.org/api/rest_v1/) | no | Artist biography, in `ARTIST_INFO_LANGUAGE` (default `en`) | `ARTIST_INFO_ENABLED=false` |
+| [Last.fm](https://www.last.fm/api) | `LASTFM_API_KEY` | Track play counts | off without a key |
+| [LRCLIB](https://lrclib.net) | no | Lyrics for Tracks whose files have none | `LYRICS_LOOKUP_ENABLED=false` |
+| [Radio Browser](https://www.radio-browser.info) | no | Radio station catalog | `RADIO_BROWSER_BASE_URL` |
+| Radio stations | no | Streams, through the Music Server's proxy | play no radio |
+
+Two more are reached by the clients rather than the server:
+
+- **Radio station icons** load in the Web Client straight from each station's own `faviconUrl`.
+- **Google Fonts** serves the Web Client's fonts (`web/src/styles.css`).
+
+The album and artist links to Spotify, Qobuz, Last.fm and ListenBrainz are plain links; nothing is sent to these services until you click one.
+
+ADRs: [0003](docs/adr/0003-radio-browser-catalog-and-health.md) (Radio Browser), [0027](docs/adr/0027-artist-photos-from-deezer-biographies-from-wikipedia.md) (Deezer, Wikipedia), [0029](docs/adr/0029-lyrics-from-lrclib.md) (LRCLIB), [0030](docs/adr/0030-play-counts-from-lastfm-with-an-operator-key.md) (Last.fm).
+
 ## Build
 
 ```bash
