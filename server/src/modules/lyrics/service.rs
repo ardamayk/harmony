@@ -10,9 +10,10 @@ use tokio::sync::Mutex;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 /// LRCLIB starts fetching a missing Track in the background on the first
 /// request, so nothing found, or plain lyrics only, is asked again after
-/// three days, when synced ones may exist; a failure after an hour.
+/// three days, when synced ones may exist. LRCLIB is often briefly
+/// overloaded, so a failure is retried after five minutes.
 const MISSING_RETRY_SECONDS: i64 = 3 * 24 * 60 * 60;
-const FAILED_RETRY_SECONDS: i64 = 60 * 60;
+const FAILED_RETRY_SECONDS: i64 = 5 * 60;
 /// LRCLIB asks clients to send requests one at a time with a short gap.
 const REQUEST_GAP: Duration = Duration::from_millis(300);
 

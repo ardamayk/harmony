@@ -325,8 +325,9 @@ function LyricsStatus({ state }: { state: LyricsState }): ReactNode {
 		<div className="max-w-md px-2 py-6">
 			<p className="font-semibold text-heading text-xl">No lyrics yet</p>
 			<p className="mt-2 text-caption text-sm">
-				This Track has no lyrics stored on your Music Server. Tag the file with
-				lyrics (Picard writes them) and import it again.
+				Neither the file nor LRCLIB has lyrics for this Track yet. The Music
+				Server asks LRCLIB again later; lyrics tagged in the file (Picard writes
+				them) show right after an import.
 			</p>
 		</div>
 	);

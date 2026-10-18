@@ -6,8 +6,10 @@
 use serde::Deserialize;
 use std::time::Duration;
 
-/// A longer Retry-After counts as a failure, retried an hour later.
+/// A longer Retry-After counts as a failure, retried a few minutes later.
 const MAX_RETRY_WAIT: Duration = Duration::from_secs(2);
+/// LRCLIB's usual Retry-After for a 503, used when the header is missing.
+const DEFAULT_RETRY_WAIT: Duration = Duration::from_secs(1);
 /// LRCLIB's own tolerance between a Track's and a record's duration.
 const DURATION_TOLERANCE_SECONDS: f64 = 2.0;
 
@@ -115,7 +117,8 @@ async fn request<T: serde::de::DeserializeOwned>(
         .map_err(|error| format!("lrclib url: {error}"))?;
     let mut response = get(client, &url).await?;
     if response.status() == reqwest::StatusCode::SERVICE_UNAVAILABLE
-        && let Some(wait) = retry_after(&response).filter(|wait| *wait <= MAX_RETRY_WAIT)
+        && let Some(wait) = Some(retry_after(&response).unwrap_or(DEFAULT_RETRY_WAIT))
+            .filter(|wait| *wait <= MAX_RETRY_WAIT)
     {
         tokio::time::sleep(wait).await;
         response = get(client, &url).await?;
