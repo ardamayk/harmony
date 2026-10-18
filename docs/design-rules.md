@@ -43,7 +43,8 @@ Build palette in this order; each step uses previous.
    - Project: Accent per preset (`--primary`, `--player-control-primary`); cover accent overrides in Player Bar. Neutrals tinted to preset base hue (Vintage Harbor h 252).
 2. Family ladders: L steps of neutral and accent families.
 3. Surface ladder (60/30): page, alt surface, card, dark band, footer. Light-dark rhythm set here; grayscale test shows it.
-   - Project: Vintage Harbor dark: one family, OKLCH h 252 C 0.05, L step 4. Page, Top Nav 23.5; card, popover, Player Bar, Queue Drawer 27.5; raised control, line 31.5; hover (`muted`, `accent`) 35.5; active 39.5.
+   - Project: Vintage Harbor dark: one family, OKLCH h 252 C 0.05, L step 4. Page, Top Nav 23.5; card, popover, Player Bar, Queue Drawer 27.5; raised control, line 31.5; hover (`muted`, `accent`) 35.5; active (`shell-active`) 39.5. Steps absolute, any surface; never per-component tint.
+   - Project: Vintage Harbor light: dark shell (`data-shell-surface`) hover / active = `player-title` 8% / 16%; page active = light family's.
 4. Text hierarchy: each surface gets primary, secondary, faint text. 4.5:1, 7:1 decide here. Dark surfaces own text set.
    - Project: Tokens `heading`, `text`, `caption`. Vintage Harbor dark L 93 / 82 / 73, C 0.02; caption 4.5:1 up to hover step, so caption never on active step.
    - Project: Text temperature = family of surface under it: on neutral surface neutral hue (h 252), on accent accent hue. L unchanged, so grayscale unchanged.
@@ -233,7 +234,7 @@ Ratios: decision tool in steps 4–7, check in step 8.
 
 - Hover and keyboard focus look same. Focus style never removed without visible replacement.
 - Current page, open section, pressed toggle share one active look across app.
-  - Project: Lit look: 12% `heading` tint background, `heading` text, inset top highlight, soft drop shadow.
+  - Project: Lit look: active step background (`shell-active`), `heading` text, inset top highlight, soft drop shadow. Hover `muted`; active never darkens on hover. Caption on lit row → `foreground`.
 - Cards that open something share one hover and focus look (small lift, tinted border, soft shadow, media scale). Titles never underlined.
   - Project: Card look: 4px lift, `shell-active-foreground` border 35% (60% focus), soft dark shadow, artwork scale 1.04.
 
