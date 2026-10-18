@@ -191,6 +191,33 @@ paths:
                 $ref: "#/components/schemas/PopularTrackList"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/library/tracks/play-counts:
+    get:
+      tags: [library]
+      operationId: listTrackPlayCounts
+      summary: List Last.fm play counts for tracks
+      description: >-
+        Last.fm play counts for the named Tracks, read from their first
+        credited Artist's 1000 most played Tracks on Last.fm, matched without
+        case or bracketed versions and refreshed weekly (ADR 0030). Only when
+        the operator set LASTFM_API_KEY; Tracks without a count are left out,
+        so the list is empty without a key.
+      parameters:
+        - name: ids
+          in: query
+          required: true
+          description: Comma-separated Track ids, at most 200.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Play counts for the Tracks that have one
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlayCountList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
   /api/v1/library/albums:
     get:
       tags: [library]
@@ -2633,6 +2660,21 @@ components:
         sourceUrl:
           type: string
           format: uri
+    PlayCountList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required: [trackId, playCount]
+            properties:
+              trackId:
+                type: string
+              playCount:
+                type: integer
+                format: int64
     PopularTrackList:
       type: object
       required: [items]

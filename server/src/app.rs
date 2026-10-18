@@ -46,6 +46,7 @@ impl AppState {
             config.artist_info_enabled,
             &config.artist_info_language,
             &config.version,
+            config.lastfm_api_key.clone(),
         );
         let lyrics = modules::lyrics::Lyrics::new(
             db.clone(),

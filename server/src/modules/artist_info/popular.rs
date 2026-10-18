@@ -40,7 +40,7 @@ pub fn rank<T>(
     ranked
 }
 
-fn base_title(title: &str) -> String {
+pub fn base_title(title: &str) -> String {
     let mut text = title.trim();
     loop {
         let trimmed = strip_suffix(text);
@@ -49,7 +49,12 @@ fn base_title(title: &str) -> String {
         }
         text = trimmed;
     }
-    let folded = caseless::default_case_fold_str(text);
+    folded(text)
+}
+
+/// The title without case or extra spaces, versions kept.
+pub fn folded(title: &str) -> String {
+    let folded = caseless::default_case_fold_str(title.trim());
     folded.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 

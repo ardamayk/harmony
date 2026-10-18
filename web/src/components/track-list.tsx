@@ -65,6 +65,7 @@ export function TrackList({
 	onDeleteTrackSuccess,
 	onReplaceTrackSuccess,
 	removeLabel = "Remove",
+	playCounts,
 }: {
 	tracks: Track[];
 	contextTracks?: Track[];
@@ -80,6 +81,8 @@ export function TrackList({
 	onDeleteTrackSuccess?: (track: Track) => void;
 	onReplaceTrackSuccess?: (track: Track) => void;
 	removeLabel?: string;
+	/** Last.fm play counts by Track id; the column shows only when there are any. */
+	playCounts?: Map<string, number>;
 }) {
 	const {
 		playTrack,
@@ -138,6 +141,7 @@ export function TrackList({
 	const shouldShowArtistLine = !albumId;
 	const shouldShowAlbumCover = !albumId;
 	const hasMultipleDiscs = tracks.some((track) => track.discNo > 1);
+	const showPlays = (playCounts?.size ?? 0) > 0;
 
 	return (
 		<>
@@ -150,6 +154,11 @@ export function TrackList({
 					<tr className="border-border border-b text-left text-caption text-xs">
 						<th className={cn("w-10 font-medium", rowPadding)}>#</th>
 						<th className={cn("font-medium", rowPadding)}>Title</th>
+						{showPlays ? (
+							<th className={cn("w-32 text-right font-medium", rowPadding)}>
+								Plays
+							</th>
+						) : null}
 						<th className={cn("w-16 text-right font-medium", rowPadding)}>
 							<span className="sr-only">Duration</span>
 							<Clock className="ml-auto size-3.5" />
@@ -255,6 +264,16 @@ export function TrackList({
 											</div>
 										</div>
 									</td>
+									{showPlays ? (
+										<td
+											className={cn(
+												"text-right text-caption tabular-nums",
+												rowPadding,
+											)}
+										>
+											{playCounts?.get(track.id)?.toLocaleString() ?? ""}
+										</td>
+									) : null}
 									<td
 										className={cn(
 											"text-right tabular-nums",

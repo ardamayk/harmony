@@ -6,8 +6,10 @@ import { AlbumDetailHeader } from "#/components/album-detail-header";
 import { MoreFromArtist } from "#/components/more-from-artist";
 import { DetailPageShell } from "#/components/page-layout";
 import { TrackList } from "#/components/track-list";
+import { useTrackPlayCounts } from "#/hooks/use-track-play-counts";
 import { apiClient } from "#/lib/api";
 import { getAlbumArtistName } from "#/lib/library-display";
+import { isGone } from "#/lib/query-persistence";
 
 // Route components live outside the route file: with automatic code
 // splitting, a component defined inside the route module can be rendered
@@ -25,12 +27,13 @@ export function AlbumDetailContent({ albumId }: { albumId: string }) {
 		queryFn: () => apiClient.getAlbum(albumId),
 		staleTime: 0,
 	});
+	const playCounts = useTrackPlayCounts(album.data?.tracks ?? []);
 
 	if (album.isLoading) {
 		return <div className="p-6 text-foreground text-sm">Loading album…</div>;
 	}
 
-	if (album.isError || !album.data) {
+	if (!album.data || isGone(album.error)) {
 		return <div className="p-6 text-destructive text-sm">Album not found</div>;
 	}
 
@@ -75,6 +78,7 @@ export function AlbumDetailContent({ albumId }: { albumId: string }) {
 					showFavorite
 					showMeta
 					compact
+					playCounts={playCounts}
 				/>
 			</section>
 

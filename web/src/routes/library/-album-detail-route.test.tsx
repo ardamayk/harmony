@@ -56,6 +56,7 @@ vi.mock("#/hooks/use-delete-library", () => {
 
 vi.mock("#/lib/api", () => ({
 	apiClient: {
+		listTrackPlayCounts: async () => new Map(),
 		getAlbum: mocks.getAlbum,
 		getAlbumCoverUrl: (albumId: string) => `/cover/${albumId}`,
 		listAlbums: vi.fn().mockResolvedValue({ items: [] }),

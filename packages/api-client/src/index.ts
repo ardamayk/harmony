@@ -426,6 +426,16 @@ export function createApiClient(config: ApiClientConfig) {
 				if (error instanceof ApiError && error.status === 404) return null;
 				throw error;
 			}),
+		/** Last.fm play counts by Track id; empty without a server key. */
+		listTrackPlayCounts: (trackIds: string[]) =>
+			trackIds.length === 0
+				? Promise.resolve(new Map<string, number>())
+				: request<Schemas["PlayCountList"]>(
+						`/api/v1/library/tracks/play-counts?ids=${encodeURIComponent(trackIds.join(","))}`,
+					).then(
+						(list) =>
+							new Map(list.items.map((item) => [item.trackId, item.playCount])),
+					),
 		listArtistPopularTracks: (artistId: string, limit?: number) =>
 			request<Schemas["PopularTrackList"]>(
 				`/api/v1/library/artists/${artistId}/popular-tracks${limit ? `?limit=${limit}` : ""}`,

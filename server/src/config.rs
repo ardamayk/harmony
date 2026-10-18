@@ -24,6 +24,8 @@ pub struct Config {
     pub artist_info_language: String,
     /// Online LRCLIB lookups for Tracks without lyrics (ADR 0029).
     pub lyrics_lookup_enabled: bool,
+    /// The operator's own Last.fm API key, for Track play counts (ADR 0030).
+    pub lastfm_api_key: Option<String>,
 }
 
 #[derive(Debug, thiserror::Error, PartialEq)]
@@ -116,6 +118,8 @@ impl Config {
                     .as_str(),
                 "false" | "0"
             ),
+            lastfm_api_key: Some(get("LASTFM_API_KEY", "").trim().to_owned())
+                .filter(|key| !key.is_empty()),
         })
     }
 }
@@ -181,6 +185,23 @@ mod tests {
         assert!(config.artist_info_enabled);
         assert_eq!(config.artist_info_language, "en");
         assert!(config.lyrics_lookup_enabled);
+        assert_eq!(config.lastfm_api_key, None);
+    }
+
+    #[test]
+    fn takes_a_lastfm_key_and_ignores_a_blank_one() {
+        assert_eq!(
+            config(&[("LASTFM_API_KEY", " abc ")])
+                .expect("config")
+                .lastfm_api_key,
+            Some("abc".to_owned())
+        );
+        assert_eq!(
+            config(&[("LASTFM_API_KEY", "  ")])
+                .expect("config")
+                .lastfm_api_key,
+            None
+        );
     }
 
     #[test]

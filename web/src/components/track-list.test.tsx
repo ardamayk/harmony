@@ -243,6 +243,22 @@ describe("TrackList", () => {
 		expect(screen.getByText("Taylor Swift")).toBeTruthy();
 	});
 
+	it("shows a Plays column only when there are play counts", () => {
+		const secondTrack = { ...sampleTrack, id: "t2", title: "Style" };
+		const { rerender } = render(
+			<TrackList tracks={[sampleTrack, secondTrack]} />,
+		);
+		expect(screen.queryByText("Plays")).toBeNull();
+		rerender(
+			<TrackList
+				tracks={[sampleTrack, secondTrack]}
+				playCounts={new Map([[sampleTrack.id, 11940672]])}
+			/>,
+		);
+		expect(screen.getByText("Plays")).toBeTruthy();
+		expect(screen.getByText((11940672).toLocaleString())).toBeTruthy();
+	});
+
 	it("renders ordered Track Artist relationships", () => {
 		render(
 			<TrackList

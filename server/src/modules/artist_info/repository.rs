@@ -1,7 +1,8 @@
-//! The module's only database access: stored Artist photos, biographies and
-//! top Track titles with the outcome of their last lookup.
+//! The module's only database access: stored Artist photos, biographies,
+//! top Track titles and play counts with the outcome of their last lookup.
 
 use sqlx::SqlitePool;
+use std::collections::HashMap;
 
 #[derive(Debug, thiserror::Error)]
 #[error("{0}: {1}")]
@@ -209,6 +210,52 @@ impl Repository {
         .execute(&self.pool)
         .await
         .context(|| format!("store Artist top Tracks {artist_id}"))?;
+        Ok(())
+    }
+
+    pub async fn play_counts(
+        &self,
+        artist_id: &str,
+    ) -> Result<Option<Stored<HashMap<String, i64>>>, RepositoryError> {
+        let row = sqlx::query!(
+            r#"SELECT outcome, counts,
+                CAST((julianday('now') - julianday(checked_at)) * 86400 AS INTEGER) AS "age_seconds!: i64"
+            FROM artist_play_counts WHERE artist_id = ?1"#,
+            artist_id
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .context(|| format!("get Artist play counts {artist_id}"))?;
+        Ok(row.map(|row| Stored {
+            outcome: Outcome::parse(&row.outcome),
+            // A map this module wrote; anything unreadable counts as none.
+            value: row
+                .counts
+                .and_then(|counts| serde_json::from_str(&counts).ok()),
+            age_seconds: row.age_seconds,
+        }))
+    }
+
+    pub async fn put_play_counts(
+        &self,
+        artist_id: &str,
+        outcome: Outcome,
+        counts: Option<&HashMap<String, i64>>,
+    ) -> Result<(), RepositoryError> {
+        let outcome = outcome.as_str();
+        let counts = counts.map(|counts| serde_json::to_string(counts).expect("counts encode"));
+        sqlx::query!(
+            "INSERT INTO artist_play_counts (artist_id, outcome, counts, checked_at)
+            VALUES (?1, ?2, ?3, CURRENT_TIMESTAMP)
+            ON CONFLICT (artist_id) DO UPDATE SET outcome = excluded.outcome,
+                counts = excluded.counts, checked_at = excluded.checked_at",
+            artist_id,
+            outcome,
+            counts
+        )
+        .execute(&self.pool)
+        .await
+        .context(|| format!("store Artist play counts {artist_id}"))?;
         Ok(())
     }
 }

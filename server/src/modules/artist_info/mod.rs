@@ -5,6 +5,7 @@
 mod deezer;
 mod fetch;
 mod handlers;
+mod lastfm;
 mod popular;
 mod repository;
 mod service;

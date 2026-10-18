@@ -153,6 +153,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/library/tracks/play-counts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Last.fm play counts for tracks
+         * @description Last.fm play counts for the named Tracks, read from their first credited Artist's 1000 most played Tracks on Last.fm, matched without case or bracketed versions and refreshed weekly (ADR 0030). Only when the operator set LASTFM_API_KEY; Tracks without a count are left out, so the list is empty without a key.
+         */
+        get: operations["listTrackPlayCounts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/library/albums": {
         parameters: {
             query?: never;
@@ -1372,6 +1392,13 @@ export interface components {
             /** Format: uri */
             sourceUrl: string;
         };
+        PlayCountList: {
+            items: {
+                trackId: string;
+                /** Format: int64 */
+                playCount: number;
+            }[];
+        };
         PopularTrackList: {
             items: components["schemas"]["Track"][];
         };
@@ -2152,6 +2179,30 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
+        };
+    };
+    listTrackPlayCounts: {
+        parameters: {
+            query: {
+                /** @description Comma-separated Track ids, at most 200. */
+                ids: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Play counts for the Tracks that have one */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlayCountList"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
         };
     };
     listAlbums: {

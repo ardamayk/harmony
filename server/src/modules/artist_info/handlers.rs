@@ -15,6 +15,8 @@ use serde::Serialize;
 /// Popular Tracks shown when the client names no limit, and the most it may.
 const DEFAULT_POPULAR_TRACKS: usize = 10;
 const MAX_POPULAR_TRACKS: usize = 50;
+/// Tracks one play-count request may name: a long Album or a page of them.
+const MAX_PLAY_COUNT_TRACKS: usize = 200;
 
 pub fn routes() -> Router<AppState> {
     Router::new()
@@ -27,6 +29,7 @@ pub fn routes() -> Router<AppState> {
             "/api/v1/library/artists/{artist_id}/popular-tracks",
             get(get_popular_tracks),
         )
+        .route("/api/v1/library/tracks/play-counts", get(get_play_counts))
 }
 
 #[derive(Serialize)]
@@ -101,4 +104,47 @@ async fn get_popular_tracks(
         .await
         .map_err(api_error)?;
     Ok(Json(PopularTracksBody { items }))
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PlayCountBody {
+    track_id: String,
+    play_count: i64,
+}
+
+#[derive(Serialize)]
+struct PlayCountsBody {
+    items: Vec<PlayCountBody>,
+}
+
+/// `ids`: comma-separated Track ids.
+async fn get_play_counts(
+    State(state): State<AppState>,
+    query: GoQuery,
+) -> ApiResult<Json<PlayCountsBody>> {
+    let ids: Vec<String> = query
+        .get("ids")
+        .split(',')
+        .map(str::trim)
+        .filter(|id| !id.is_empty())
+        .map(str::to_owned)
+        .collect();
+    if ids.len() > MAX_PLAY_COUNT_TRACKS {
+        return Err(ApiError::bad_request(format!(
+            "at most {MAX_PLAY_COUNT_TRACKS} track ids"
+        )));
+    }
+    let items = state
+        .artist_info
+        .play_counts(&ids)
+        .await
+        .map_err(api_error)?
+        .into_iter()
+        .map(|count| PlayCountBody {
+            track_id: count.track_id,
+            play_count: count.play_count,
+        })
+        .collect();
+    Ok(Json(PlayCountsBody { items }))
 }

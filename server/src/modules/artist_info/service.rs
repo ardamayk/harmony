@@ -2,8 +2,9 @@
 //! online lookup when there is none or it is due again (ADR 0027).
 
 use super::repository::{Biography, Outcome, Photo, Repository, RepositoryError, Stored};
-use super::{deezer, popular, wikipedia};
+use super::{deezer, lastfm, popular, wikipedia};
 use crate::modules::library::{LibraryError, LibraryService, Track};
+use std::collections::HashMap;
 use std::time::Duration;
 use tokio::sync::Semaphore;
 
@@ -14,6 +15,8 @@ const MISSING_RETRY_SECONDS: i64 = 30 * 24 * 60 * 60;
 const FAILED_RETRY_SECONDS: i64 = 60 * 60;
 /// Popularity moves, so a found top-Track list is refreshed weekly.
 const TOP_TITLES_REFRESH_SECONDS: i64 = 7 * 24 * 60 * 60;
+/// Play counts move as slowly as popularity: refreshed weekly too.
+const PLAY_COUNTS_REFRESH_SECONDS: i64 = TOP_TITLES_REFRESH_SECONDS;
 /// The Artist's library Tracks that the top titles are matched against.
 const TRACKS_FOR_MATCHING: i64 = 2000;
 const DEEZER_LOOKUPS_AT_ONCE: usize = 3;
@@ -47,6 +50,7 @@ pub struct Sources {
     pub wikidata: String,
     /// With `{lang}` where the language subdomain goes.
     pub wikipedia: String,
+    pub lastfm: String,
 }
 
 impl Sources {
@@ -56,6 +60,7 @@ impl Sources {
             musicbrainz: "https://musicbrainz.org".to_owned(),
             wikidata: "https://www.wikidata.org".to_owned(),
             wikipedia: "https://{lang}.wikipedia.org".to_owned(),
+            lastfm: "https://ws.audioscrobbler.com".to_owned(),
         }
     }
 }
@@ -70,6 +75,17 @@ pub struct ArtistInfo {
     language: String,
     deezer_slots: Semaphore,
     musicbrainz_pacer: wikipedia::Pacer,
+    /// The operator's Last.fm API key; without one no play counts.
+    lastfm_key: Option<String>,
+    /// One Last.fm lookup at a time, well inside its rate limit.
+    lastfm_slot: Semaphore,
+}
+
+/// A library Track's Last.fm play count.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PlayCount {
+    pub track_id: String,
+    pub play_count: i64,
 }
 
 /// `found_refresh`: seconds after which a found result is looked up again;
@@ -89,6 +105,7 @@ impl ArtistInfo {
         enabled: bool,
         language: &str,
         version: &str,
+        lastfm_key: Option<String>,
     ) -> Self {
         // MusicBrainz asks every client to name itself and how to reach it.
         let user_agent =
@@ -107,7 +124,79 @@ impl ArtistInfo {
             language: language.to_owned(),
             deezer_slots: Semaphore::new(DEEZER_LOOKUPS_AT_ONCE),
             musicbrainz_pacer: wikipedia::Pacer::default(),
+            lastfm_key,
+            lastfm_slot: Semaphore::new(1),
         }
+    }
+
+    /// Last.fm play counts for these library Tracks, by each Track's first
+    /// credited Artist; Tracks without a count (or unknown) are left out,
+    /// and there are none without a Last.fm key.
+    pub async fn play_counts(
+        &self,
+        track_ids: &[String],
+    ) -> Result<Vec<PlayCount>, ArtistInfoError> {
+        let Some(key) = self.lastfm_key.as_deref() else {
+            return Ok(Vec::new());
+        };
+        let mut by_artist: HashMap<String, HashMap<String, i64>> = HashMap::new();
+        let mut found = Vec::new();
+        for track_id in track_ids {
+            let track = match self.library.get_track(track_id).await {
+                Ok(track) => track,
+                Err(LibraryError::NotFound) => continue,
+                Err(error) => return Err(error.into()),
+            };
+            // A credit without an id is only a name, nothing to store counts under.
+            let Some(artist) = track
+                .artists
+                .iter()
+                .chain(&track.album_artists)
+                .find(|credit| !credit.id.is_empty())
+            else {
+                continue;
+            };
+            if !by_artist.contains_key(&artist.id) {
+                let counts = self
+                    .artist_play_counts(key, &artist.id, &artist.name)
+                    .await?;
+                by_artist.insert(artist.id.clone(), counts);
+            }
+            if let Some(play_count) = lastfm::count_for(&by_artist[&artist.id], &track.title) {
+                found.push(PlayCount {
+                    track_id: track.id,
+                    play_count,
+                });
+            }
+        }
+        Ok(found)
+    }
+
+    async fn artist_play_counts(
+        &self,
+        key: &str,
+        artist_id: &str,
+        name: &str,
+    ) -> Result<HashMap<String, i64>, ArtistInfoError> {
+        let stored = self.repo.play_counts(artist_id).await?;
+        if !self.should_look_up(stored.as_ref(), Some(PLAY_COUNTS_REFRESH_SECONDS)) {
+            return Ok(stored.and_then(|stored| stored.value).unwrap_or_default());
+        }
+        let _slot = self.lastfm_slot.acquire().await.expect("semaphore open");
+        let found = lastfm::play_counts(&self.client, &self.sources.lastfm, key, name)
+            .await
+            .map(|counts| (!counts.is_empty()).then_some(counts));
+        let (outcome, counts) = settle(artist_id, found);
+        // A failed refresh keeps last week's counts rather than showing none.
+        if outcome == Outcome::Failed
+            && let Some(previous) = stored.and_then(|stored| stored.value)
+        {
+            return Ok(previous);
+        }
+        self.repo
+            .put_play_counts(artist_id, outcome, counts.as_ref())
+            .await?;
+        Ok(counts.unwrap_or_default())
     }
 
     /// The Artist's photo, `None` when there is none (yet).
@@ -282,6 +371,13 @@ mod tests {
                         {"title": "Hero", "title_short": "Hero"}
                     ]}),
                     "/search/artist" | "/search/album" => json!({"data": []}),
+                    "/2.0/" if query.contains("artist=Skillet") && query.contains("api_key=test-key") => {
+                        json!({"toptracks": {"track": [
+                            {"name": "Monster", "playcount": "11940672"},
+                            {"name": "Hero (Live)", "playcount": "900"},
+                            {"name": "Hero", "playcount": "8000000"}
+                        ]}})
+                    }
                     "/img/skillet.jpg" => {
                         return ([(header::CONTENT_TYPE, "image/jpeg")], b"jpeg".to_vec()).into_response();
                     }
@@ -311,6 +407,7 @@ mod tests {
             musicbrainz: origin.clone(),
             wikidata: origin.clone(),
             wikipedia: format!("{origin}/{{lang}}"),
+            lastfm: origin.clone(),
         };
         (sources, requests)
     }
@@ -326,7 +423,11 @@ mod tests {
             .execute(&pool)
             .await
             .unwrap();
-        (dir, ArtistInfo::new(pool, sources, enabled, "en", "test"))
+        let key = Some("test-key".to_owned());
+        (
+            dir,
+            ArtistInfo::new(pool, sources, enabled, "en", "test", key),
+        )
     }
 
     #[tokio::test]
@@ -413,6 +514,34 @@ mod tests {
             info.popular_tracks("unknown", 5).await,
             Err(ArtistInfoError::NotFound)
         ));
+    }
+
+    #[tokio::test]
+    async fn gives_last_fm_play_counts_by_each_tracks_artist_and_stores_them() {
+        let (sources, requests) = fake_sources().await;
+        let (dir, info) = service(sources, true).await;
+        let migrations = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations");
+        let pool =
+            crate::db::open_and_migrate(dir.path().join("app.db").to_str().unwrap(), &migrations)
+                .await
+                .unwrap();
+        seed_tracks(&pool, &["Hero", "Monster", "Lucy"]).await;
+        let ids: Vec<String> = ["t0", "t1", "t2", "unknown"].map(str::to_owned).to_vec();
+        let counts = |found: Vec<PlayCount>| -> Vec<(String, i64)> {
+            found
+                .into_iter()
+                .map(|count| (count.track_id, count.play_count))
+                .collect()
+        };
+        let expected = vec![("t0".to_owned(), 8_000_000), ("t1".to_owned(), 11_940_672)];
+        assert_eq!(counts(info.play_counts(&ids).await.unwrap()), expected);
+        let made = requests.load(Ordering::SeqCst);
+        assert_eq!(counts(info.play_counts(&ids).await.unwrap()), expected);
+        assert_eq!(
+            requests.load(Ordering::SeqCst),
+            made,
+            "stored counts make no request"
+        );
     }
 
     #[tokio::test]
