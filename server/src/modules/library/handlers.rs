@@ -27,10 +27,6 @@ pub fn routes() -> Router<AppState> {
         .route("/api/v1/library/tracks", get(list_tracks))
         .route("/api/v1/library/tracks/{track_id}", get(get_track))
         .route(
-            "/api/v1/library/tracks/{track_id}/lyrics",
-            get(get_track_lyrics),
-        )
-        .route(
             "/api/v1/library/tracks/{track_id}/waveform",
             get(get_track_waveform),
         )
@@ -149,17 +145,6 @@ async fn get_track(
         .await
         .map_err(not_found("track not found"))?;
     Ok(Json(track))
-}
-
-async fn get_track_lyrics(
-    State(state): State<AppState>,
-    Path(track_id): Path<String>,
-) -> ApiResult<Json<types::TrackLyrics>> {
-    let lyrics = Service::new(state.db)
-        .get_track_lyrics(&track_id)
-        .await
-        .map_err(not_found("track not found"))?;
-    Ok(Json(types::TrackLyrics { track_id, lyrics }))
 }
 
 /// Cached peaks, 202 while they are generated, 404 for an unknown Track or

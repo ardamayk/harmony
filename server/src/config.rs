@@ -22,6 +22,8 @@ pub struct Config {
     pub artist_info_enabled: bool,
     /// Wikipedia language for Artist biographies, English as fallback.
     pub artist_info_language: String,
+    /// Online LRCLIB lookups for Tracks without lyrics (ADR 0029).
+    pub lyrics_lookup_enabled: bool,
 }
 
 #[derive(Debug, thiserror::Error, PartialEq)]
@@ -108,6 +110,12 @@ impl Config {
                 "false" | "0"
             ),
             artist_info_language,
+            lyrics_lookup_enabled: !matches!(
+                get("LYRICS_LOOKUP_ENABLED", "true")
+                    .to_ascii_lowercase()
+                    .as_str(),
+                "false" | "0"
+            ),
         })
     }
 }
@@ -172,6 +180,16 @@ mod tests {
         );
         assert!(config.artist_info_enabled);
         assert_eq!(config.artist_info_language, "en");
+        assert!(config.lyrics_lookup_enabled);
+    }
+
+    #[test]
+    fn lyrics_lookup_can_be_switched_off() {
+        assert!(
+            !config(&[("LYRICS_LOOKUP_ENABLED", "0")])
+                .expect("config")
+                .lyrics_lookup_enabled
+        );
     }
 
     #[test]

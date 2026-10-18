@@ -288,8 +288,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Get the lyrics text stored for a track
-         * @description Unsynchronised lyrics read from the file tags at import; empty when the file carried none.
+         * Get a track's lyrics
+         * @description The lyrics read from the file tags at import; when the file carried none, LRCLIB's for the Track's title, Artist, Album and duration, looked up on first request and stored (ADR 0029). Synced lyrics come as LRC text. Empty when there are none, the lookup failed, or online lookups are switched off.
          */
         get: operations["getTrackLyrics"];
         put?: never;
@@ -1424,7 +1424,7 @@ export interface components {
         TrackLyrics: {
             /** Format: uuid */
             trackId: string;
-            /** @description Plain lyrics text with newline-separated lines; empty when none are stored. */
+            /** @description Plain lyrics, or LRC text (`[mm:ss.xx] words`) when synced, with newline-separated lines; empty when there are none. */
             lyrics: string;
         };
         Track: {
