@@ -1,0 +1,142 @@
+name: Claude Review
+
+# Two passes on every PR: a bug review, then a security review once the bug
+# review is clean. Either one with open findings fails its job, so making
+# both required checks blocks the merge. REVIEW.md tells both what matters
+# and how to work.
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review, reopened]
+
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  id-token: write
+  actions: read
+
+env:
+  REVIEW_TOOLS: >-
+    mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments:*),Bash(gh api repos/${{ github.repository }}/compare/*),Read,Grep,Glob
+  # The reviewer returns how many findings are still open; a later step fails on more than zero.
+  FINDINGS_SCHEMA: '{"type":"object","properties":{"findings":{"type":"integer","description":"Verified problems still open on this PR"}},"required":["findings"]}'
+  SECURITY_LABEL: security-reviewed
+  ROUND_LIMIT: 3
+  ROUND_OVERRIDE: review-more-rounds
+
+jobs:
+  review:
+    name: Claude bug review
+    # Fork PRs cannot read the token secret.
+    if: github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PR: ${{ github.event.pull_request.number }}
+      HEAD_REF: ${{ github.event.pull_request.head.ref }}
+    steps:
+      # Rounds are earlier finished runs of this workflow on the PR's branch. After
+      # ROUND_LIMIT of them the review stops and asks a person to step in, so an
+      # agent author and the reviewer cannot loop; the ROUND_OVERRIDE label lifts it.
+      - id: rounds
+        name: Count earlier review rounds
+        run: |
+          runs=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow claude-review.yml --branch "$HEAD_REF" \
+            --event pull_request --status completed --limit 100 --json conclusion,headSha \
+            --jq '[.[] | select(.conclusion != "cancelled" and .conclusion != "skipped")]')
+          rounds=$(jq length <<<"$runs")
+          echo "since=$(jq -r '.[0].headSha // empty' <<<"$runs")" >> "$GITHUB_OUTPUT"
+          echo "round=$((rounds + 1))" >> "$GITHUB_OUTPUT"
+          if [ "$rounds" -lt "$ROUND_LIMIT" ]; then exit 0; fi
+          if gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json labels --jq '.labels[].name' | grep -qx "$ROUND_OVERRIDE"; then
+            echo "Round limit lifted by the $ROUND_OVERRIDE label."; exit 0
+          fi
+          if [ "$rounds" -eq "$ROUND_LIMIT" ]; then
+            gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body "**Claude bug review: round limit reached.** This PR has had $ROUND_LIMIT review rounds. Instead of another fix-and-review round, a person should step back and rethink the approach. To allow more rounds, add the \`$ROUND_OVERRIDE\` label and push again."
+          fi
+          echo "::error::Review round limit ($ROUND_LIMIT) reached; a person should rethink the approach, or add the $ROUND_OVERRIDE label."
+          exit 1
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 1
+      - id: claude
+        uses: anthropics/claude-code-action@v1
+        with:
+          # From `claude setup-token` (Max subscription), stored as a repo secret.
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+            HEAD SHA: ${{ github.event.pull_request.head.sha }}
+            ROUND: ${{ steps.rounds.outputs.round }}
+            REVIEWED UP TO: ${{ steps.rounds.outputs.since || 'none (first round)' }}
+
+            This is the bug pass. Read CLAUDE.md for the coding rules and REVIEW.md, then follow
+            REVIEW.md's "Process", "Skip" and "Bug review" sections. Security is reviewed in a
+            separate pass, so leave it out here.
+          claude_args: |
+            --allowedTools "${{ env.REVIEW_TOOLS }}"
+            --json-schema '${{ env.FINDINGS_SCHEMA }}'
+      - name: Fail on open findings
+        env:
+          RESULT: ${{ steps.claude.outputs.structured_output }}
+        run: |
+          n=$(jq -r '.findings // empty' <<<"$RESULT" 2>/dev/null)
+          if [ -z "$n" ]; then echo "::error::The bug review returned no result."; exit 1; fi
+          if [ "$n" -gt 0 ]; then echo "::error::$n open bug finding(s); fix them or reply with why they are not bugs."; exit 1; fi
+          echo "No open bug findings."
+
+  security:
+    name: Claude security review
+    # Runs only after a clean bug review, and only until it passes once on this PR.
+    needs: review
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PR: ${{ github.event.pull_request.number }}
+    steps:
+      - id: done
+        name: Check for an earlier pass
+        run: |
+          if gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json labels --jq '.labels[].name' | grep -qx "$SECURITY_LABEL"; then
+            echo "Security review already passed on this PR."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.done.outputs.skip != 'true'
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 1
+      - id: claude
+        if: steps.done.outputs.skip != 'true'
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+
+            This is the security pass: look for vulnerabilities only, since bugs were reviewed in
+            an earlier pass. Read REVIEW.md and follow its "Process", "Skip" and "Security review"
+            sections.
+          claude_args: |
+            --allowedTools "${{ env.REVIEW_TOOLS }}"
+            --json-schema '${{ env.FINDINGS_SCHEMA }}'
+      - name: Fail on open findings, or mark the PR reviewed
+        if: steps.done.outputs.skip != 'true'
+        env:
+          RESULT: ${{ steps.claude.outputs.structured_output }}
+        run: |
+          n=$(jq -r '.findings // empty' <<<"$RESULT" 2>/dev/null)
+          if [ -z "$n" ]; then echo "::error::The security review returned no result."; exit 1; fi
+          if [ "$n" -gt 0 ]; then echo "::error::$n open security finding(s); fix them or reply with why they are not exploitable."; exit 1; fi
+          gh label create "$SECURITY_LABEL" --repo "$GITHUB_REPOSITORY" --color 0e8a16 \
+            --description "Claude security review passed; later pushes skip it" --force
+          gh pr edit "$PR" --repo "$GITHUB_REPOSITORY" --add-label "$SECURITY_LABEL"
+          echo "No open security findings; later pushes skip this review."
