@@ -1,8 +1,16 @@
 import type { QueueItem } from "@repo/api-client";
-import type { Ref } from "react";
+import { Fragment, type Ref } from "react";
 import { cn } from "../lib/utils";
+import {
+	getTrackArtistCredits,
+	getTrackArtistName,
+} from "../playback/track-details";
 import { AlbumArt } from "./AlbumArt";
-import { useQueueRowMenu } from "./QueueRowMenuProvider";
+import {
+	queueArtistHref,
+	useQueueLinkClick,
+	useQueueRowMenu,
+} from "./QueueRowMenuProvider";
 import { formatQueueDuration } from "./queue-groups";
 
 type QueueTrackRowProps = {
@@ -28,6 +36,13 @@ export function QueueTrackRow({
 }: QueueTrackRowProps) {
 	const renderMenu = useQueueRowMenu();
 	const isCurrent = state === "current";
+	const linkClick = useQueueLinkClick();
+	// Every credited Artist, so a featured singer shows too; each one with a
+	// library identity links to their page.
+	const artistName = getTrackArtistName(item.track);
+	const credits = item.track.artists ?? [];
+	// Legacy string credits have no page, so they stay plain text.
+	const linked = new Set(getTrackArtistCredits(item.track));
 	const row = (
 		<li
 			ref={ref}
@@ -95,9 +110,26 @@ export function QueueTrackRow({
 							// Caption loses 4.5:1 on the active step.
 							isCurrent ? "text-foreground" : "text-caption",
 						)}
-						title={item.track.artistName}
+						title={artistName}
 					>
-						{item.track.artistName}
+						{credits.length > 0
+							? credits.map((credit, index) => (
+									<Fragment key={`${credit.id}-${index}`}>
+										{index > 0 ? ", " : null}
+										{linked.has(credit) ? (
+											<a
+												href={queueArtistHref(credit.id)}
+												onClick={linkClick(queueArtistHref(credit.id))}
+												className="rounded-sm hover:text-heading hover:underline"
+											>
+												{credit.name}
+											</a>
+										) : (
+											credit.name
+										)}
+									</Fragment>
+								))
+							: artistName}
 					</span>
 				)}
 			</span>

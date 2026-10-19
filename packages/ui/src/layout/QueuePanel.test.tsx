@@ -227,6 +227,48 @@ describe("QueuePanel", () => {
 		).toBe("/playlists/p1");
 	});
 
+	it("links an album group's artist apart from its album", async () => {
+		const item = makeItem("a1", albumSource);
+		item.track = {
+			...item.track,
+			albumArtists: [{ id: "artist-9", name: "Artist" }],
+		};
+		renderPanel(createApi([item]));
+		await screen.findByText("a1");
+		expect(
+			screen.getByRole("link", { name: "Artist" }).getAttribute("href"),
+		).toBe("/library/artists/artist-9");
+		expect(
+			screen
+				.getByRole("link", { name: "Album: From album · Artist · 1 track" })
+				.getAttribute("href"),
+		).toBe("/library/album-1");
+	});
+
+	it("links each credited artist of a row to their page", async () => {
+		const item = makeItem("t1", { kind: "user" });
+		item.track = {
+			...item.track,
+			artists: [
+				{ id: "artist-1", name: "Ariana Grande" },
+				{ id: "artist-2", name: "Zedd" },
+				{ id: "legacy-artist:x", name: "Legacy" },
+			],
+		};
+		renderPanel(createApi([item]));
+		await screen.findByText("t1");
+		expect(
+			screen.getByRole("link", { name: "Ariana Grande" }).getAttribute("href"),
+		).toBe("/library/artists/artist-1");
+		expect(
+			screen.getByRole("link", { name: "Zedd" }).getAttribute("href"),
+		).toBe("/library/artists/artist-2");
+		expect(screen.queryByRole("link", { name: "Legacy" })).toBeNull();
+		expect(screen.getByTitle("Ariana Grande, Zedd, Legacy").textContent).toBe(
+			"Ariana Grande, Zedd, Legacy",
+		);
+	});
+
 	it("shows played and current row states and counts only upcoming duration", async () => {
 		renderPanel(createApi(threeItems));
 		await screen.findByText("Track 2");

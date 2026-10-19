@@ -1,3 +1,4 @@
+import { queueArtistHref } from "./QueueRowMenuProvider";
 import type { QueueItem, QueueItemSource } from "@repo/api-client";
 
 export type QueueGroup = {
@@ -62,6 +63,14 @@ export function getQueueMinutes(items: QueueItem[]): number {
 			0,
 		) / 60000,
 	);
+}
+
+/** The Artist page of an Album group's first credited Album Artist, if any. */
+export function getQueueAlbumArtistHref(group: QueueGroup): string | undefined {
+	const artist = group.items[0]?.track.albumArtists?.find(
+		(credit) => credit.id && !credit.id.startsWith("legacy-artist:"),
+	);
+	return artist ? queueArtistHref(artist.id) : undefined;
 }
 
 export function getQueueGroupDetails(

@@ -2,9 +2,10 @@ import type { QueueItem } from "@repo/api-client";
 import { ListMusic, Plus, Sparkles } from "lucide-react";
 import { type CSSProperties, type RefObject, useEffect, useRef } from "react";
 import { AlbumArt } from "./AlbumArt";
-import { useQueueNavigation } from "./QueueRowMenuProvider";
+import { useQueueLinkClick } from "./QueueRowMenuProvider";
 import { QueueTrackRow } from "./QueueTrackRow";
 import {
+	getQueueAlbumArtistHref,
 	getQueueGroupDetails,
 	groupQueueItems,
 	type QueueGroup,
@@ -116,32 +117,84 @@ function QueueGroupHeader({
 	onDismiss: () => void;
 }) {
 	const details = getQueueGroupDetails(group, queue, sourceTitles);
-	const onNavigate = useQueueNavigation();
+	const navigate = useQueueLinkClick();
 	const Icon =
 		group.source.kind === "suggestion"
 			? Sparkles
 			: group.source.kind === "playlist"
 				? ListMusic
 				: Plus;
+	const title = (
+		<span
+			className="block truncate font-semibold text-heading text-sm leading-5"
+			title={details.title}
+		>
+			{details.title}
+		</span>
+	);
+
+	if (group.source.kind === "album" && details.href) {
+		// Album and Artist are separate links, so hovering one underlines only it.
+		const artistHref = getQueueAlbumArtistHref(group);
+		const artistName = group.source.artistName;
+		return (
+			<div
+				className="flex items-center gap-2 border-(--queue-group-color) border-l-2 bg-player-pill py-2 pr-3 pl-6"
+				title={details.meta}
+			>
+				<a
+					href={details.href}
+					onClick={navigate(details.href)}
+					aria-hidden
+					tabIndex={-1}
+					className="shrink-0"
+				>
+					<AlbumArt
+						coverUrl={coverUrl}
+						title={details.title}
+						className="size-7 shrink-0 rounded-sm text-xs"
+					/>
+				</a>
+				<span className="min-w-0 flex-1">
+					<a
+						href={details.href}
+						onClick={navigate(details.href)}
+						aria-label={`${details.title}: ${details.meta}`}
+						className="block rounded-sm outline-offset-2 hover:underline"
+					>
+						{title}
+					</a>
+					{artistName && artistHref ? (
+						<a
+							href={artistHref}
+							onClick={navigate(artistHref)}
+							className="block truncate rounded-sm text-caption text-xs leading-4 outline-offset-2 hover:text-heading hover:underline"
+							title={artistName}
+						>
+							{artistName}
+						</a>
+					) : artistName ? (
+						<span
+							className="block truncate text-caption text-xs leading-4"
+							title={artistName}
+						>
+							{artistName}
+						</span>
+					) : null}
+				</span>
+				<span className="text-xs text-caption tabular-nums">
+					{group.items.length}
+				</span>
+			</div>
+		);
+	}
+
 	const label = (
 		<>
-			{group.source.kind === "album" ? (
-				<AlbumArt
-					coverUrl={coverUrl}
-					title={details.title}
-					className="size-7 shrink-0 rounded-sm text-xs"
-				/>
-			) : (
-				<span className="flex size-7 shrink-0 items-center justify-center text-(--queue-group-color)">
-					<Icon className="size-3.5" />
-				</span>
-			)}
-			<span
-				className="min-w-0 flex-1 truncate font-semibold text-heading text-sm leading-5"
-				title={details.title}
-			>
-				{details.title}
+			<span className="flex size-7 shrink-0 items-center justify-center text-(--queue-group-color)">
+				<Icon className="size-3.5" />
 			</span>
+			<span className="min-w-0 flex-1">{title}</span>
 		</>
 	);
 	return (
@@ -152,20 +205,7 @@ function QueueGroupHeader({
 			{details.href ? (
 				<a
 					href={details.href}
-					onClick={(event) => {
-						if (
-							onNavigate &&
-							details.href &&
-							event.button === 0 &&
-							!event.metaKey &&
-							!event.ctrlKey &&
-							!event.shiftKey &&
-							!event.altKey
-						) {
-							event.preventDefault();
-							onNavigate(details.href);
-						}
-					}}
+					onClick={navigate(details.href)}
 					aria-label={`${details.title}: ${details.meta}`}
 					className="flex min-w-0 flex-1 items-center gap-2 rounded-sm outline-offset-2 hover:underline"
 				>
