@@ -40,14 +40,17 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       PR: ${{ github.event.pull_request.number }}
       HEAD_REF: ${{ github.event.pull_request.head.ref }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
     steps:
-      # A round is an earlier run of this workflow on the PR's branch in which
+      # A round is an earlier run of this workflow for this PR in which
       # Claude returned a result (its "Record review round" step ran); runs that
       # failed before that, returned nothing (for example while the workflow file
       # differs from main and the action skips itself) or stopped at the limit do
-      # not count and do not move the REVIEWED UP TO baseline. After ROUND_LIMIT rounds the review
-      # stops and asks a person to step in, so an agent author and the reviewer
-      # cannot loop; the ROUND_OVERRIDE label lifts it.
+      # not count and do not move the REVIEWED UP TO baseline. A baseline the head
+      # no longer descends from (after a force-push) is dropped, so the whole PR is
+      # reviewed. After ROUND_LIMIT rounds the review stops and asks a person to
+      # step in, so an agent author and the reviewer cannot loop; the
+      # ROUND_OVERRIDE label lifts it.
       - id: rounds
         name: Count earlier review rounds
         run: |
@@ -61,9 +64,16 @@ jobs:
               rounds=$((rounds + 1))
               [ -n "$since" ] || since=$sha
             fi
-          done < <(gh run list --repo "$GITHUB_REPOSITORY" --workflow claude-review.yml --branch "$HEAD_REF" \
-            --event pull_request --status completed --limit 100 --json databaseId,headSha \
-            --jq '.[] | "\(.databaseId) \(.headSha)"')
+          done < <(gh api -X GET "repos/$GITHUB_REPOSITORY/actions/workflows/claude-review.yml/runs" \
+            -f branch="$HEAD_REF" -f event=pull_request -f status=completed -f per_page=100 \
+            --jq ".workflow_runs[] | select(any(.pull_requests[]; .number == $PR)) | \"\\(.id) \\(.head_sha)\"")
+          if [ -n "$since" ] && [ "$since" != "$HEAD_SHA" ]; then
+            status=$(gh api "repos/$GITHUB_REPOSITORY/compare/$since...$HEAD_SHA" --jq .status 2>/dev/null || true)
+            if [ "$status" != ahead ]; then
+              echo "Baseline $since is not an ancestor of the head (${status:-unknown}); reviewing the whole PR."
+              since=
+            fi
+          fi
           echo "since=$since" >> "$GITHUB_OUTPUT"
           echo "round=$((rounds + 1))" >> "$GITHUB_OUTPUT"
           if [ "$rounds" -lt "$ROUND_LIMIT" ]; then exit 0; fi
@@ -124,8 +134,9 @@ jobs:
       HEAD_REF: ${{ github.event.pull_request.head.ref }}
       HEAD_SHA: ${{ github.event.pull_request.head.sha }}
     steps:
-      # The last clean pass is the newest earlier run on the PR's branch whose
-      # "Record clean security pass" step ran.
+      # The last clean pass is the newest earlier run for this PR whose "Record
+      # clean security pass" step ran. A baseline the head no longer descends from
+      # (after a force-push) is dropped, so the whole PR is reviewed.
       - id: since
         name: Find the last clean security pass
         run: |
@@ -138,9 +149,16 @@ jobs:
               since=$sha
               break
             fi
-          done < <(gh run list --repo "$GITHUB_REPOSITORY" --workflow claude-review.yml --branch "$HEAD_REF" \
-            --event pull_request --status completed --limit 100 --json databaseId,headSha \
-            --jq '.[] | "\(.databaseId) \(.headSha)"')
+          done < <(gh api -X GET "repos/$GITHUB_REPOSITORY/actions/workflows/claude-review.yml/runs" \
+            -f branch="$HEAD_REF" -f event=pull_request -f status=completed -f per_page=100 \
+            --jq ".workflow_runs[] | select(any(.pull_requests[]; .number == $PR)) | \"\\(.id) \\(.head_sha)\"")
+          if [ -n "$since" ] && [ "$since" != "$HEAD_SHA" ]; then
+            status=$(gh api "repos/$GITHUB_REPOSITORY/compare/$since...$HEAD_SHA" --jq .status 2>/dev/null || true)
+            if [ "$status" != ahead ]; then
+              echo "Baseline $since is not an ancestor of the head (${status:-unknown}); reviewing the whole PR."
+              since=
+            fi
+          fi
           echo "since=$since" >> "$GITHUB_OUTPUT"
           if [ "$since" = "$HEAD_SHA" ]; then
             echo "This head already passed the security review."
