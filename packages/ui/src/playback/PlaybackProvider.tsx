@@ -174,6 +174,9 @@ export type PlaybackErrorRecovery = {
 	cancelCountdown: () => void;
 };
 
+// Past this point Previous restarts the Track instead of going back one.
+const PREVIOUS_RESTARTS_AFTER_SECONDS = 30;
+
 const PlaybackContext = createContext<PlaybackContextValue | null>(null);
 const PlaylistLibraryContext = createContext<PlaylistLibraryApi | null>(null);
 
@@ -649,7 +652,10 @@ export function PlaybackProvider({
 			queueTracks,
 			playQueueIndex,
 			playNext,
-			navigatePrevious: () => engine.previous(),
+			navigatePrevious: () =>
+				session.currentTime > PREVIOUS_RESTARTS_AFTER_SECONDS
+					? engine.seek(0)
+					: engine.previous(),
 			navigateNext: () => engine.next(),
 			togglePlay: () => engine.togglePlay(),
 			toggleShuffle: () => engine.toggleShuffle(),

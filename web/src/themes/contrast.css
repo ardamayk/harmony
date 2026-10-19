@@ -52,6 +52,10 @@
 	--player-control-primary: color-mix(in srgb, var(--primary) 80%, black);
 }
 
+[data-theme-preset="charcoal-coral"]:not(.dark) {
+	--player-control-primary: color-mix(in srgb, var(--primary) 80%, black);
+}
+
 [data-theme-preset="vintage-harbor"]:not(.dark) {
 	/* The light page's accent: the palette's brown (#8b5e3c) at the accent hue. */
 	--primary: oklch(52.2% calc(0.076 * var(--accent-chroma)) var(--accent-hue));

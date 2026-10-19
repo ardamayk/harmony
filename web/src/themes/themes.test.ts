@@ -68,6 +68,20 @@ describe("theme registry", () => {
 			const css = readPaletteCss(preset.id);
 			expect(css).toContain(`--neutral-hue: ${preset.hues.neutral};`);
 			expect(css).toContain(`--accent-hue: ${preset.hues.accent};`);
+			expect(css.includes("--neutral-chroma:")).toBe(
+				preset.hues.neutralChroma !== undefined,
+			);
+			if (preset.hues.neutralChroma !== undefined)
+				expect(css).toContain(
+					`--neutral-chroma: ${preset.hues.neutralChroma};`,
+				);
+			expect(css.includes("--preset-accent-chroma:")).toBe(
+				preset.hues.accentChroma !== undefined,
+			);
+			if (preset.hues.accentChroma !== undefined)
+				expect(css).toContain(
+					`--preset-accent-chroma: ${preset.hues.accentChroma};`,
+				);
 		}
 	});
 
@@ -278,12 +292,17 @@ function resolvedTokens(
 	const hue = accentHue ?? Number(decls.get("--accent-hue"));
 	const evaluate = (raw: string): Rgb => {
 		const value = raw
-			.replace(
-				/calc\(([\d.]+) \* var\(--accent-chroma\)\)/g,
-				(_, chroma: string) => String(Number(chroma) * accentChroma),
-			)
 			.replaceAll("calc(var(--accent-lightness) * 1%)", `${accentLightness}%`)
 			.replaceAll("calc(var(--accent-chroma) * 100%)", `${accentChroma * 100}%`)
+			.replaceAll("var(--accent-chroma)", String(accentChroma))
+			// The preset's chroma scales (dark-ladder.css) default to 1.
+			.replace(
+				/var\(--(neutral-chroma|preset-accent-chroma)\)/g,
+				(_, name: string) => decls.get(`--${name}`) ?? "1",
+			)
+			.replace(/calc\(([\d.]+(?: \* [\d.]+)+)\)/g, (_, product: string) =>
+				String(product.split(" * ").reduce((a, b) => a * Number(b), 1)),
+			)
 			.replaceAll("var(--accent-hue)", String(hue))
 			// The preset's other hues (dark-ladder.css) are plain numbers.
 			.replace(/var\((--[\w-]+-hue)\)/g, (_, name: string) => {

@@ -25,6 +25,10 @@ export type ThemeHues = {
 	neutral: number;
 	/** The one accent, opposite the neutral on the wheel. */
 	accent: number;
+	/** Scales the neutral ladder's chroma (default 1); must match `--neutral-chroma`. */
+	neutralChroma?: number;
+	/** Scales the accent's chroma (default 1); must match `--preset-accent-chroma`. */
+	accentChroma?: number;
 };
 
 type ThemePresetDefinition = {
@@ -87,6 +91,12 @@ export const THEME_PRESET_REGISTRY: ThemePresetDefinition[] = [
 		label: "Sage Hearth",
 		colors: ["#241f1b", "#2e2824", "#5a6b58", "#7fa87e", "#c9b89e", "#faf4e8"],
 		hues: { neutral: 145, accent: 35 },
+	},
+	{
+		id: "charcoal-coral",
+		label: "Charcoal Coral",
+		colors: ["#111113", "#2d2d31", "#bc4a3c", "#8b8b93", "#e7e7ea", "#f8f8fa"],
+		hues: { neutral: 286, accent: 30, neutralChroma: 0.25, accentChroma: 1.45 },
 	},
 ];
 
