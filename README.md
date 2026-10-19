@@ -4,13 +4,16 @@ Self-hosted music server: own your library, stream anywhere on your network, cus
 
 Not a Navidrome fork — modern OpenAPI backend (Rust), React SPA, modular monolith architecture, and room for opt-in plugins/sidecars (discover, party mode, sharing) without legacy Subsonic API lock-in.
 
-## What it does today (v1)
+## What it does today
 
-- Import music through Managed Import (Web and Desktop Clients upload files or a local folder; the server validates strictly and keeps bit-preserving managed copies)
-- Browse albums and tracks
-- Play with queue, seek, and volume (HTTP Range streaming)
-- Customizable layout: left/right panels, widgets (now playing, queue)
-- Theme: light / dark / system
+- **Import:** Managed Import. The Web and Desktop Clients upload files or a local folder; the Music Server validates them strictly and keeps bit-preserving managed copies.
+- **Library:** albums, artists, genres, tracks, playlists and favorites, with one search across them from the top bar.
+- **Artist pages:** photo, biography, popular Tracks and discography; albums without genre tags get Deezer's genres (see [External services](#external-services)).
+- **Playback:** a server-side queue grouped by source (album, playlist, added by you), seek, volume, sleep timer, and Last.fm play counts when the operator sets a key.
+- **Lyrics:** synced or plain lyrics from the file, or from LRCLIB when the file has none, in a full-screen Lyrics view.
+- **Radio:** stations from the Radio Browser catalog, streamed through the Music Server's proxy.
+- **Clients:** the Web Client in a browser, and the Linux Desktop Client (Electron) with native mpv playback and a mini player.
+- **Themes:** seven presets in light, dark or system mode. In dark mode each preset is built from a neutral and an opposite accent. Vintage Harbor can take its accent from the playing cover.
 
 ## Product & design
 
@@ -73,6 +76,50 @@ The album and artist links to Spotify, Qobuz, Last.fm and ListenBrainz are plain
 
 ADRs: [0003](docs/adr/0003-radio-browser-catalog-and-health.md) (Radio Browser), [0027](docs/adr/0027-artist-photos-from-deezer-biographies-from-wikipedia.md) (Deezer, Wikipedia), [0029](docs/adr/0029-lyrics-from-lrclib.md) (LRCLIB), [0030](docs/adr/0030-play-counts-from-lastfm-with-an-operator-key.md) (Last.fm).
 
+## Configuration
+
+The Music Server reads its settings from environment variables only; it does not load a `.env` file.
+
+| Variable | Default | Meaning |
+|----------|---------|---------|
+| `SERVER_ADDR` | `127.0.0.1:8090` | Listen address. Must be a loopback address: the server has no authentication yet. |
+| `DATABASE_PATH` | `./data/app.db` | SQLite database. |
+| `MANAGED_STORAGE_PATH` | `./data/managed` | Where imported music is kept. |
+| `MANAGED_STORAGE_RESERVE_BYTES` | 2 GiB | Free space an import must leave on the storage disk. |
+| `MANAGED_IMPORT_FILE_LIMIT_BYTES` | 2 GiB | Largest single file an import accepts. |
+| `MANAGED_IMPORT_BATCH_LIMIT_BYTES` | 4 GiB | Largest import batch. |
+| `ARTIST_INFO_ENABLED` | `true` | `false` or `0` stops every Deezer, MusicBrainz, Wikidata and Wikipedia request. |
+| `ARTIST_INFO_LANGUAGE` | `en` | Wikipedia language for biographies (a language code such as `tr`); falls back to English. |
+| `LYRICS_LOOKUP_ENABLED` | `true` | `false` or `0` stops LRCLIB lookups. |
+| `LASTFM_API_KEY` | none | Your own Last.fm API key; turns on Track play counts. |
+| `RADIO_BROWSER_BASE_URL` | `https://de1.api.radio-browser.info` | Radio Browser mirror for the station catalog. |
+| `APP_VERSION` | `0.1.0` | Version shown in the health response and Settings. |
+
+Where to set them:
+
+- **Development** (`mise run dev`, `mise run desktop:dev`): put them in `mise.local.toml`, which is git-ignored and which mise applies to every task. Keep keys such as `LASTFM_API_KEY` there, never in a tracked file:
+
+  ```toml
+  [env]
+  LASTFM_API_KEY = "your-key"
+  ARTIST_INFO_LANGUAGE = "tr"
+  ```
+
+- **Docker:** under `environment:` in `docker-compose.yml` (see below).
+- **Anything else:** export them in the shell or service unit that starts `bin/server`.
+
+Appearance and playback preferences (theme, layout, seek steps, transition fade) are not environment variables; they are set on the Settings page and stored by the Music Server.
+
+## Docker
+
+`docker-compose.yml` builds the Music Server image (with FFmpeg) and serves the Web Client from it:
+
+```bash
+docker compose up -d --build
+```
+
+Open http://localhost:8090. The container uses the host's network and binds to `127.0.0.1:8090`, because the server accepts only loopback addresses. The database and imported music live in the `app-data` volume (`/data`); add any variable from [Configuration](#configuration) under `environment:`. Docker Compose runs only the Music Server; the Desktop Client runs on the host and connects to it.
+
 ## Build
 
 ```bash
@@ -96,7 +143,23 @@ mise run build
 mise run start
 ```
 
-See [desktop/README.md](desktop/README.md) for how the Electron shell and the Rust core fit together. Docker Compose runs only the Music Server and does not launch the Desktop Client.
+The Desktop Client connects to a running Music Server whose loopback origin (for example `http://127.0.0.1:8090`) you enter on its connection screen, and keeps its own settings in `~/.config/audio.earthly.desktop`.
+
+**mpv:** native playback needs mpv **0.41.0** exactly. The desktop scripts check `/usr/bin/mpv`, or the binary named by `EARTHLY_AUDIO_MPV_PATH`, and copy it next to the Rust core. mpv runs with `--no-config`, so your own mpv configuration is never loaded. Install it from your distribution (or build that version) before `mise run desktop:dev`.
+
+**Output modes** (the text button in the Player Bar):
+
+| Mode | What it does |
+|------|--------------|
+| Normal | Plays through PipeWire to the system's active output. |
+| Exclusive | Opens the active output's raw ALSA `hw:` device directly, with no PipeWire or ALSA conversion. Not available for Bluetooth or outputs without a raw ALSA device; the client then stays on Normal and says why. |
+| Adaptive | Switches the PipeWire graph to each Track's sample rate while playing, and restores it afterwards. Affects the whole system, so it asks for confirmation. |
+
+In Exclusive and Adaptive, mpv stays at full volume and the volume slider moves the device's own volume instead.
+
+**Processing profiles:** Direct plays the decoded audio untouched (no ReplayGain, EQ or software volume). Processed allows ReplayGain (album or track), a ten-band EQ with presets and software volume; turning any of these on while Direct is active switches to Processed with a short notice. Playback is gapless; a new sample rate between Tracks reopens the output device instead of resampling. See [ADR 0007](docs/adr/0007-native-playback-profiles-and-output-policy.md).
+
+See [desktop/README.md](desktop/README.md) for how the Electron shell and the Rust core fit together.
 
 ## Test
 
