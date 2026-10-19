@@ -25,13 +25,10 @@ env:
     libavformat-dev libavutil-dev libplacebo-dev libssl-dev libswresample-dev
     libswscale-dev meson ninja-build pkg-config
 
-# Heavy jobs run on the self-hosted earthly-ci runner (an Ubuntu container on
-# the Contabo VPS); PRs from forks stay on GitHub's ubuntu-latest so outside
-# code never runs there. The gates are tiny and stay on GitHub.
 jobs:
   web:
     name: Web (check, unit tests, generated drift)
-    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || 'earthly-ci' }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2
@@ -42,7 +39,7 @@ jobs:
 
   server:
     name: Music Server (check, tests)
-    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || 'earthly-ci' }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2
@@ -61,7 +58,7 @@ jobs:
 
   desktop:
     name: Desktop Client (check, tests)
-    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || 'earthly-ci' }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2
@@ -81,7 +78,7 @@ jobs:
 
   audit:
     name: Dependency audit (pnpm audit, cargo audit)
-    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || 'earthly-ci' }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2
@@ -90,7 +87,7 @@ jobs:
 
   e2e:
     name: Web E2E
-    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || 'earthly-ci' }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2
@@ -109,7 +106,7 @@ jobs:
   integration:
     name: Integration (HLS, pinned mpv, import parity, release build)
     if: github.event_name != 'pull_request'
-    runs-on: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && 'ubuntu-latest' || 'earthly-ci' }}
+    runs-on: ubuntu-latest
     steps:
       - run: echo "EARTHLY_AUDIO_MPV_PATH=$RUNNER_TEMP/earthly-audio-mpv/mpv" >> "$GITHUB_ENV"
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
