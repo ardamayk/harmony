@@ -257,3 +257,89 @@ fn documents_every_mounted_api_path() {
         "mounted but not documented: {undocumented:#?}"
     );
 }
+
+// A page on another domain rebound to 127.0.0.1 sends its own Host; only
+// loopback names reach the API (DNS rebinding).
+#[tokio::test(flavor = "multi_thread")]
+async fn only_loopback_hosts_are_answered() {
+    let directory = tempfile::tempdir().unwrap();
+    let router = router(directory.path()).await;
+    for (host, expected) in [
+        ("127.0.0.1:8090", StatusCode::OK),
+        ("localhost:5173", StatusCode::OK),
+        ("[::1]:8090", StatusCode::OK),
+        ("attacker.example:8090", StatusCode::FORBIDDEN),
+        ("127.0.0.1.attacker.example", StatusCode::FORBIDDEN),
+    ] {
+        let request = Request::get("/api/v1/health")
+            .header(header::HOST, host)
+            .body(Body::empty())
+            .unwrap();
+        let (status, _, _) = send(&router, request).await;
+        assert_eq!(status, expected, "{host}");
+    }
+}
+
+// A cross-site form can POST text/plain without a CORS preflight; such
+// bodies are refused before any handler reads them as JSON.
+#[tokio::test(flavor = "multi_thread")]
+async fn form_bodies_are_refused_on_writes() {
+    let directory = tempfile::tempdir().unwrap();
+    let router = router(directory.path()).await;
+    let body = r#"{"result":{"stationUuid":"x","streamUrl":"https://evil.example/p","pad":"="}}"#;
+    for content_type in [
+        Some("text/plain"),
+        Some("application/x-www-form-urlencoded"),
+        Some("multipart/form-data; boundary=x"),
+        None,
+    ] {
+        let mut request = Request::post("/api/v1/radio/preview");
+        if let Some(content_type) = content_type {
+            request = request.header(header::CONTENT_TYPE, content_type);
+        }
+        let request = request
+            .header(header::CONTENT_LENGTH, body.len())
+            .body(Body::from(body))
+            .unwrap();
+        let (status, _, _) = send(&router, request).await;
+        assert_eq!(
+            status,
+            StatusCode::UNSUPPORTED_MEDIA_TYPE,
+            "{content_type:?}"
+        );
+    }
+    let request = Request::patch("/api/v1/preferences")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from("{}"))
+        .unwrap();
+    let (status, _, _) = send(&router, request).await;
+    assert_ne!(status, StatusCode::UNSUPPORTED_MEDIA_TYPE);
+}
+
+// A body-less no-cors POST needs no preflight and carries no Content-Type,
+// but the browser still names the page's Origin; only this server's own
+// pages and the CORS allowlist may change state.
+#[tokio::test(flavor = "multi_thread")]
+async fn writes_from_other_origins_are_refused() {
+    let directory = tempfile::tempdir().unwrap();
+    let router = router(directory.path()).await;
+    for (origin, expected_forbidden) in [
+        (Some("https://evil.example"), true),
+        (Some("null"), true),
+        (Some(ORIGIN), false),
+        (Some("http://127.0.0.1:8090"), false),
+        (None, false),
+    ] {
+        let mut request =
+            Request::post("/api/v1/import-batches").header(header::HOST, "127.0.0.1:8090");
+        if let Some(origin) = origin {
+            request = request.header(header::ORIGIN, origin);
+        }
+        let (status, _, _) = send(&router, request.body(Body::empty()).unwrap()).await;
+        assert_eq!(
+            status == StatusCode::FORBIDDEN,
+            expected_forbidden,
+            "{origin:?}: {status}"
+        );
+    }
+}

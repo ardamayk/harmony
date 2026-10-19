@@ -517,10 +517,48 @@ pub struct StreamRequest<'a> {
     pub range: Option<HeaderValue>,
 }
 
+/// Upstream media types a stream may keep. Anything else, such as
+/// `text/html`, is served as `application/octet-stream`: the proxy answers
+/// on this server's origin, so a station must not hand the browser a page.
+fn is_stream_content_type(value: &HeaderValue) -> bool {
+    let Ok(value) = value.to_str() else {
+        return false;
+    };
+    let essence = value
+        .split(';')
+        .next()
+        .unwrap_or_default()
+        .trim()
+        .to_ascii_lowercase();
+    essence.starts_with("audio/")
+        || matches!(
+            essence.as_str(),
+            "video/mp2t"
+                | "application/ogg"
+                | "application/aac"
+                | "application/octet-stream"
+                | HLS_CONTENT_TYPE
+                | "application/x-mpegurl"
+        )
+}
+
 fn copy_stream_headers(from: &HeaderMap) -> HeaderMap {
     let mut headers = HeaderMap::new();
+    let content_type = from
+        .get(header::CONTENT_TYPE)
+        .filter(|value| is_stream_content_type(value))
+        .cloned()
+        .unwrap_or(HeaderValue::from_static("application/octet-stream"));
+    headers.insert(header::CONTENT_TYPE, content_type);
+    headers.insert(
+        header::X_CONTENT_TYPE_OPTIONS,
+        HeaderValue::from_static("nosniff"),
+    );
+    headers.insert(
+        header::CONTENT_SECURITY_POLICY,
+        HeaderValue::from_static("sandbox"),
+    );
     for name in [
-        "content-type",
         "cache-control",
         "content-range",
         "accept-ranges",
@@ -612,7 +650,13 @@ impl StreamProxy {
         proxy_path: &str,
         station_id: &str,
     ) -> Response {
-        let headers = copy_stream_headers(&response.headers);
+        let mut headers = copy_stream_headers(&response.headers);
+        // This server writes the rewritten playlist, so it names the type
+        // itself; a .m3u8 served as text/plain upstream still plays.
+        headers.insert(
+            header::CONTENT_TYPE,
+            HeaderValue::from_static(HLS_CONTENT_TYPE),
+        );
         let base = response.url.clone();
         let mut body = response.body;
         let mut playlist = Vec::new();
@@ -920,6 +964,69 @@ mod tests {
             error.to_string().contains("resolved to blocked IP"),
             "{error}"
         );
+    }
+
+    #[tokio::test]
+    async fn streams_keep_media_types_and_never_serve_a_page() {
+        for (upstream, served) in [
+            ("text/html; charset=utf-8", "application/octet-stream"),
+            ("audio/mpeg", "audio/mpeg"),
+        ] {
+            let fake = Arc::new(Fake {
+                responses: Mutex::new(vec![response(
+                    upstream,
+                    "https://radio.example/live",
+                    b"<script>alert(1)</script>",
+                )]),
+                fetched: Mutex::new(Vec::new()),
+            });
+            let proxy = StreamProxy::new(fake, Arc::new(Sink(Mutex::default())));
+            let query = crate::query::GoQuery::parse("");
+            let response = proxy
+                .stream(
+                    StreamRequest {
+                        path: "/p",
+                        query: &query,
+                        range: None,
+                    },
+                    &station("https://radio.example/live"),
+                )
+                .await;
+            assert_eq!(response.status(), StatusCode::OK, "{upstream}");
+            let headers = response.headers();
+            assert_eq!(headers[header::CONTENT_TYPE], served, "{upstream}");
+            assert_eq!(headers[header::X_CONTENT_TYPE_OPTIONS], "nosniff");
+            assert_eq!(headers[header::CONTENT_SECURITY_POLICY], "sandbox");
+        }
+    }
+
+    #[tokio::test]
+    async fn rewritten_playlists_are_served_as_hls_whatever_the_upstream_type() {
+        let fake = Arc::new(Fake {
+            responses: Mutex::new(vec![response(
+                "text/plain",
+                "https://radio.example/index.m3u8",
+                b"#EXTM3U\nseg.aac\n",
+            )]),
+            fetched: Mutex::new(Vec::new()),
+        });
+        let proxy = StreamProxy::new(fake, Arc::new(Sink(Mutex::default())));
+        let empty = crate::query::GoQuery::default();
+        let response = proxy
+            .stream(
+                StreamRequest {
+                    path: "/p",
+                    query: &empty,
+                    range: None,
+                },
+                &station("https://radio.example/index.m3u8"),
+            )
+            .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let headers = response.headers();
+        assert_eq!(headers[header::CONTENT_TYPE], HLS_CONTENT_TYPE);
+        assert_eq!(headers[header::X_CONTENT_TYPE_OPTIONS], "nosniff");
+        assert_eq!(headers[header::CONTENT_SECURITY_POLICY], "sandbox");
     }
 
     #[tokio::test]

@@ -80,9 +80,13 @@ impl Config {
         Ok(Self {
             addr: get("SERVER_ADDR", "127.0.0.1:8090"),
             database_path: get("DATABASE_PATH", "./data/app.db"),
+            // The Web Client's dev server (3000) and `vp preview` (4173)
+            // proxy the API but forward the browser's Origin.
             cors_origins: vec![
                 "http://localhost:3000".to_owned(),
                 "http://127.0.0.1:3000".to_owned(),
+                "http://localhost:4173".to_owned(),
+                "http://127.0.0.1:4173".to_owned(),
             ],
             version: get("APP_VERSION", "0.1.0"),
             managed_storage_path: get("MANAGED_STORAGE_PATH", "./data/managed"),
@@ -186,6 +190,11 @@ mod tests {
         assert_eq!(config.artist_info_language, "en");
         assert!(config.lyrics_lookup_enabled);
         assert_eq!(config.lastfm_api_key, None);
+        // Writes through the dev and preview proxies keep the browser's
+        // Origin, which the origin check accepts only from this list.
+        for origin in ["http://localhost:3000", "http://localhost:4173"] {
+            assert!(config.cors_origins.iter().any(|o| o == origin), "{origin}");
+        }
     }
 
     #[test]
