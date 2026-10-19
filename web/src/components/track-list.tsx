@@ -196,9 +196,9 @@ export function TrackList({
 											}}
 											className={cn(
 												"group cursor-pointer border-border/70 border-b transition",
-												// The playing row takes the lit step, above the hover step; flat, no
-												// shadow, so it stays part of the list. Body text; the equalizer
-												// carries the accent.
+												// The playing row takes the active step, above the hover step; flat,
+												// no shadow, so it stays part of the list. Its title and equalizer
+												// carry the accent.
 												isPlaying ? "bg-neutral-active" : "hover:bg-muted",
 											)}
 											tabIndex={0}
@@ -241,7 +241,15 @@ export function TrackList({
 												/>
 											) : null}
 											<div className="min-w-0">
-												<span className="block truncate font-medium text-base text-foreground leading-snug">
+												<span
+													className={cn(
+														"block truncate font-medium text-base leading-snug",
+														// The playing title takes the accent, as in the Queue.
+														isPlaying
+															? "text-neutral-active-foreground"
+															: "text-foreground",
+													)}
+												>
 													{track.title}
 												</span>
 												{shouldShowArtistLine ? (

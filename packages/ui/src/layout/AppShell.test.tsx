@@ -453,9 +453,11 @@ describe("AppShell", () => {
 			expect(screen.getByRole("link", { name: label })).toBeTruthy();
 		}
 		const radioLink = screen.getByRole("link", { name: "Radio" });
+		// The open section's icon carries the accent; its label stays neutral.
 		expect(radioLink.className).toContain(
-			"[&.active]:text-shell-active-foreground",
+			"[&.active_svg]:text-shell-active-foreground",
 		);
+		expect(radioLink.className).toContain("[&.active]:text-heading");
 		expect(screen.getByRole("link", { name: "Settings" })).toBeTruthy();
 		expect(screen.queryByText("Premium Account")).toBeNull();
 	});

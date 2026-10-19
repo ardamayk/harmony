@@ -439,10 +439,9 @@ export function LibrarySearchDialog({
 													<li
 														key={result.key}
 														className={cn(
-															"flex items-center rounded-md border pr-2 transition-colors motion-reduce:transition-none",
-															isActive
-																? "border-shell-active-foreground bg-neutral-active"
-																: "border-transparent hover:bg-muted/50",
+															"flex items-center rounded-md pr-2 transition-colors motion-reduce:transition-none",
+															// The keyboard's row looks like the hovered one: the hover step, never the accent.
+															isActive && "bg-muted",
 														)}
 													>
 														<button
@@ -474,7 +473,7 @@ export function LibrarySearchDialog({
 																<span
 																	className={cn(
 																		"block truncate text-sm",
-																		isActive && "text-shell-active-foreground",
+																		isActive && "text-heading",
 																	)}
 																>
 																	{result.title}
@@ -494,7 +493,7 @@ export function LibrarySearchDialog({
 																) : null}
 																<CornerDownLeft
 																	className={cn(
-																		"size-4 text-shell-active-foreground",
+																		"size-4",
 																		!isActive && "invisible",
 																	)}
 																/>
@@ -566,7 +565,7 @@ export function LibrarySearchDialog({
 								setShowAll(!showAll);
 								inputRef.current?.focus();
 							}}
-							className="inline-flex min-w-0 max-w-full items-center gap-2 rounded-sm px-1 py-1 text-shell-active-foreground outline-none hover:underline focus-visible:underline disabled:opacity-50"
+							className="inline-flex min-w-0 max-w-full items-center gap-2 rounded-sm px-1 py-1 text-foreground outline-none hover:text-heading hover:underline focus-visible:underline disabled:opacity-50"
 						>
 							<span className="truncate">
 								{showAll

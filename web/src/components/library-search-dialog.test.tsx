@@ -228,7 +228,7 @@ describe("LibrarySearchDialog", () => {
 		expect(screen.getByRole("listbox").contains(footer)).toBe(false);
 		expect(
 			screen.getByRole("option", { selected: true }).parentElement?.className,
-		).toContain("border-shell-active-foreground");
+		).toContain("bg-muted");
 	});
 
 	it("counts Best Match once on older servers without totals", async () => {

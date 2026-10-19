@@ -50,8 +50,7 @@ export function QueueTrackRow({
 				// The current row sits on the active step, so hover never darkens it.
 				!isCurrent && "hover:bg-muted",
 				// Margin plus padding match other rows' `pl-6` / `pr-3`, so number and duration columns stay put.
-				isCurrent &&
-					"my-1 mr-1 ml-2 rounded-sm bg-shell-active pr-2 pl-4 ring-1 ring-player-control-primary",
+				isCurrent && "my-1 mr-1 ml-2 rounded-sm bg-neutral-active pr-2 pl-4",
 			)}
 		>
 			{isCurrent ? (
@@ -78,8 +77,9 @@ export function QueueTrackRow({
 					// row, so their text keeps 4.5:1.
 					className={cn(
 						"block truncate text-sm leading-5",
+						// The playing title takes the accent: the one row it marks.
 						isCurrent
-							? "font-semibold text-heading"
+							? "font-semibold text-shell-active-foreground"
 							: state === "played"
 								? "text-caption group-hover:text-heading group-focus-within:text-heading"
 								: "text-foreground group-hover:text-heading group-focus-within:text-heading",

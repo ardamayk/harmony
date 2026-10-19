@@ -15,10 +15,10 @@ export type WindowControls = {
 	close: () => void;
 };
 
-// The open section (and a pressed Top Nav control) gets a lit pill: the active
-// step, accent text and a soft top highlight with a drop shadow. Hover stays
-// off the accent, so only the open section reads as marked.
-export const NAV_LINK_CLASS = `${LINK_BASE_CLASS} [&.active]:bg-neutral-active [&.active]:font-semibold [&.active]:text-shell-active-foreground [&.active]:shadow-lit`;
+// The open section (and a pressed Top Nav control) gets the active pill: the
+// active step, heading text, an accent icon and a soft top highlight with a
+// drop shadow. Hover stays off the accent, so only the open section is marked.
+export const NAV_LINK_CLASS = `${LINK_BASE_CLASS} [&.active]:bg-neutral-active [&.active]:font-semibold [&.active]:text-heading [&.active_svg]:text-shell-active-foreground [&.active]:shadow-lit`;
 
 /** Icon control in the Top Nav; `aria-pressed` lights it like the open section. */
 export const TOP_NAV_ICON_BUTTON_CLASS =
