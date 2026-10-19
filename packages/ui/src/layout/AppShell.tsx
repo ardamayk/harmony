@@ -69,6 +69,8 @@ function AppShellFrame({
 				style={
 					{
 						"--queue-drawer-width": metrics && `${metrics.queueWidth}px`,
+						// On the shell, so the Top Nav and the page share it.
+						"--queue-drawer-clearance": QUEUE_DRAWER_CONTENT_CLEARANCE,
 						"--library-search-width": metrics && `${metrics.searchWidth}px`,
 						"--library-search-center": metrics && `${metrics.searchCenter}px`,
 						"--library-search-top": metrics && `${metrics.searchTop}px`,
@@ -99,11 +101,6 @@ function AppShellFrame({
 						className={`flex h-full min-w-0 flex-1 flex-col overflow-auto bg-background pr-0 data-[queue-open]:pr-(--queue-drawer-clearance) transition-padding duration-300 ease-out ${
 							bottom ? PLAYER_DOCK_CONTENT_PADDING : ""
 						}`}
-						style={
-							{
-								"--queue-drawer-clearance": QUEUE_DRAWER_CONTENT_CLEARANCE,
-							} as CSSProperties
-						}
 					>
 						{children}
 					</main>

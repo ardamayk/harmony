@@ -318,7 +318,7 @@ describe("AppShell", () => {
 		expect(drawer?.style.getPropertyValue("--queue-drawer-width")).toBe("");
 		expect(main?.style.getPropertyValue("--queue-drawer-width")).toBe("");
 		expect(drawer?.className).toContain("w-(--queue-drawer-width,18rem)");
-		expect(main?.style.getPropertyValue("--queue-drawer-clearance")).toBe(
+		expect(shell?.style.getPropertyValue("--queue-drawer-clearance")).toBe(
 			"var(--queue-drawer-width, 18rem)",
 		);
 		const bottom = drawer?.style.getPropertyValue("--queue-drawer-bottom");
