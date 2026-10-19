@@ -1,7 +1,8 @@
 /**
- * Per-preset semantic overrides (imported after layers.css).
+ * After layers.css: dark mode for every preset from its three colours, then
+ * per-preset semantic overrides.
  * Add `@import './semantic/{preset-id}.css';` when registry entry has semanticOverride.
  */
-@import "./semantic/coastal-mist.css";
+@import "./dark-ladder.css";
 @import "./semantic/vintage-harbor.css";
 @import "./contrast.css";

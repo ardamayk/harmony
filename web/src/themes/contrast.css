@@ -13,32 +13,16 @@
 }
 
 /* Caption fade (layers.css default 85%): as faint as each preset allows while
-   keeping 4.5:1 on page, card, Player Bar and its pill. */
-[data-theme-preset="night-ember"].dark {
-	--caption: color-mix(in oklab, var(--text) 75%, var(--background));
-}
-
+   keeping 4.5:1 on page, card, Player Bar and its pill. Dark mode's tiers
+   come from dark-ladder.css. */
 [data-theme-preset="earthly"]:not(.dark),
-[data-theme-preset="night-ember"]:not(.dark),
-[data-theme-preset="coastal-mist"].dark {
+[data-theme-preset="night-ember"]:not(.dark) {
 	--caption: color-mix(in oklab, var(--text) 80%, var(--background));
 }
 
-[data-theme-preset="tokyo-night"].dark,
 [data-theme-preset="coastal-mist"]:not(.dark),
 [data-theme-preset="sage-hearth"]:not(.dark) {
 	--caption: color-mix(in oklab, var(--text) 90%, var(--background));
-}
-
-[data-theme-preset="sage-hearth"].dark {
-	--caption: color-mix(in oklab, var(--text) 95%, var(--background));
-}
-
-/* Body text here already sits near 4.5:1 on the pill, leaving no room below
-   it, so text moves halfway to the heading and the caption takes the slot. */
-[data-theme-preset="dusty-earth"].dark {
-	--text: color-mix(in oklab, var(--theme-5) 50%, var(--theme-6));
-	--caption: color-mix(in oklab, var(--theme-5) 90%, var(--theme-6));
 }
 
 [data-theme-preset="tokyo-night"]:not(.dark),
@@ -54,35 +38,8 @@
 	--player-control-primary: color-mix(in srgb, var(--primary) 85%, black);
 }
 
-[data-theme-preset="tokyo-night"].dark {
-	--primary-foreground: var(--theme-6);
-	/* A light glyph cannot clear both 3:1 against the bar and 4.5:1 on the
-	   button here, so the button lightens and its glyph goes dark. */
-	--player-control-primary: color-mix(in srgb, var(--primary) 70%, white);
-	--player-control-primary-foreground: color-mix(
-		in srgb,
-		var(--theme-1) 30%,
-		black
-	);
-}
-
-[data-theme-preset="dusty-earth"].dark {
-	--primary-foreground: #ffffff;
-	--player-control-primary: color-mix(in srgb, var(--primary) 60%, white);
-	--player-control-primary-foreground: color-mix(
-		in srgb,
-		var(--theme-1) 40%,
-		black
-	);
-}
-
 [data-theme-preset="dusty-earth"]:not(.dark) {
 	--player-control-primary: color-mix(in srgb, var(--primary) 60%, black);
-}
-
-[data-theme-preset="coastal-mist"].dark {
-	--primary-foreground: color-mix(in srgb, var(--theme-1) 50%, black);
-	--player-control-primary: color-mix(in srgb, var(--primary) 60%, white);
 }
 
 [data-theme-preset="coastal-mist"]:not(.dark) {
@@ -93,13 +50,6 @@
 
 [data-theme-preset="sage-hearth"]:not(.dark) {
 	--player-control-primary: color-mix(in srgb, var(--primary) 80%, black);
-}
-
-[data-theme-preset="vintage-harbor"].dark {
-	/* Ink on the peach takes its hue, as on the play button. */
-	--primary-foreground: oklch(
-		24% calc(0.04 * var(--accent-chroma)) var(--accent-hue)
-	);
 }
 
 [data-theme-preset="vintage-harbor"]:not(.dark) {

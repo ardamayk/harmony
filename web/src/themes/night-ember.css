@@ -5,4 +5,8 @@
 	--theme-4: #ff653f;
 	--theme-5: #ffc85c;
 	--theme-6: #f0e8ff;
+	/* Dark mode's colours (dark-ladder.css): neutral and its opposite accent. */
+	--neutral-hue: 300;
+	--accent-hue: 40;
+	--brand-hue: 40;
 }

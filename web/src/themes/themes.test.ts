@@ -63,6 +63,14 @@ describe("theme registry", () => {
 		}
 	});
 
+	it("keeps registry hues in sync with palette CSS files", () => {
+		for (const preset of THEME_PRESET_REGISTRY) {
+			const css = readPaletteCss(preset.id);
+			expect(css).toContain(`--neutral-hue: ${preset.hues.neutral};`);
+			expect(css).toContain(`--accent-hue: ${preset.hues.accent};`);
+		}
+	});
+
 	it("orders palette colors dark → light", () => {
 		for (const preset of THEME_PRESET_REGISTRY) {
 			expect(isDarkToLightOrder(preset.colors)).toBe(true);
@@ -166,10 +174,10 @@ describe("theme slot contract", () => {
 });
 
 describe("themePresetOptions", () => {
-	it("exposes six swatches per preset", async () => {
+	it("exposes the dark ladder's three colours per preset", async () => {
 		const { themePresetOptions } = await import("./presets");
 		for (const option of themePresetOptions) {
-			expect(option.swatches).toHaveLength(6);
+			expect(option.swatches).toHaveLength(3);
 		}
 	});
 });
@@ -235,14 +243,14 @@ function splitArgs(args: string): string[] {
 function resolvedTokens(
 	id: string,
 	dark: boolean,
-	accentHue = 62,
+	accentHue?: number,
 	accentChroma = 1,
 	accentLightness = 83,
 ) {
 	const files = [
 		`${id}.css`,
 		"layers.css",
-		"semantic/coastal-mist.css",
+		"dark-ladder.css",
 		"semantic/vintage-harbor.css",
 		"contrast.css",
 	];
@@ -266,6 +274,8 @@ function resolvedTokens(
 		}
 	}
 
+	// Without a cover hue the preset's own accent hue applies.
+	const hue = accentHue ?? Number(decls.get("--accent-hue"));
 	const evaluate = (raw: string): Rgb => {
 		const value = raw
 			.replace(
@@ -274,7 +284,13 @@ function resolvedTokens(
 			)
 			.replaceAll("calc(var(--accent-lightness) * 1%)", `${accentLightness}%`)
 			.replaceAll("calc(var(--accent-chroma) * 100%)", `${accentChroma * 100}%`)
-			.replaceAll("var(--accent-hue)", String(accentHue));
+			.replaceAll("var(--accent-hue)", String(hue))
+			// The preset's other hues (dark-ladder.css) are plain numbers.
+			.replace(/var\((--[\w-]+-hue)\)/g, (_, name: string) => {
+				const number = decls.get(name);
+				if (!number) throw new Error(`${id}: ${name} is not set`);
+				return number;
+			});
 		if (value.startsWith("#")) {
 			return [1, 3, 5].map(
 				(i) => Number.parseInt(value.slice(i, i + 2), 16) / 255,
@@ -335,8 +351,9 @@ const ACCENTS: AccentCase[] = [
 
 describe("text tiers", () => {
 	for (const preset of THEME_PRESET_REGISTRY) {
-		const accents: AccentCase[] =
-			preset.id === "vintage-harbor" ? ACCENTS : [[62, 1, 83]];
+		// Vintage Harbor takes any cover hue; the others keep their own.
+		const accents: (AccentCase | [undefined, number, number])[] =
+			preset.id === "vintage-harbor" ? ACCENTS : [[undefined, 1, 83]];
 		for (const dark of [true, false])
 			for (const [hue, chroma, lightness] of accents) {
 				it(`${preset.id} ${dark ? "dark" : "light"} hue ${hue} chroma ${chroma} fill L ${lightness}: heading ≥ text > caption, caption and text on active ≥ 4.5:1`, () => {
@@ -404,7 +421,7 @@ describe("text tiers", () => {
 						).toBeGreaterThanOrEqual(4.5);
 					}
 					// Page primary actions (the album's Play) fill with the accent too.
-					if (preset.id === "vintage-harbor") {
+					if (preset.id === "vintage-harbor" || dark) {
 						expect(
 							contrastRatio(token("--primary-foreground"), token("--primary")),
 							"label on --primary",
