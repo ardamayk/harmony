@@ -650,7 +650,13 @@ impl StreamProxy {
         proxy_path: &str,
         station_id: &str,
     ) -> Response {
-        let headers = copy_stream_headers(&response.headers);
+        let mut headers = copy_stream_headers(&response.headers);
+        // This server writes the rewritten playlist, so it names the type
+        // itself; a .m3u8 served as text/plain upstream still plays.
+        headers.insert(
+            header::CONTENT_TYPE,
+            HeaderValue::from_static(HLS_CONTENT_TYPE),
+        );
         let base = response.url.clone();
         let mut body = response.body;
         let mut playlist = Vec::new();
@@ -992,6 +998,35 @@ mod tests {
             assert_eq!(headers[header::X_CONTENT_TYPE_OPTIONS], "nosniff");
             assert_eq!(headers[header::CONTENT_SECURITY_POLICY], "sandbox");
         }
+    }
+
+    #[tokio::test]
+    async fn rewritten_playlists_are_served_as_hls_whatever_the_upstream_type() {
+        let fake = Arc::new(Fake {
+            responses: Mutex::new(vec![response(
+                "text/plain",
+                "https://radio.example/index.m3u8",
+                b"#EXTM3U\nseg.aac\n",
+            )]),
+            fetched: Mutex::new(Vec::new()),
+        });
+        let proxy = StreamProxy::new(fake, Arc::new(Sink(Mutex::default())));
+        let empty = crate::query::GoQuery::default();
+        let response = proxy
+            .stream(
+                StreamRequest {
+                    path: "/p",
+                    query: &empty,
+                    range: None,
+                },
+                &station("https://radio.example/index.m3u8"),
+            )
+            .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let headers = response.headers();
+        assert_eq!(headers[header::CONTENT_TYPE], HLS_CONTENT_TYPE);
+        assert_eq!(headers[header::X_CONTENT_TYPE_OPTIONS], "nosniff");
+        assert_eq!(headers[header::CONTENT_SECURITY_POLICY], "sandbox");
     }
 
     #[tokio::test]
