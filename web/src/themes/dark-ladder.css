@@ -10,8 +10,8 @@
 
    The ladder is Vintage Harbor's: page and Top Nav 22, Player Bar and Queue
    24, then 3 L a step: cards 27, raised controls and lines 30, hover 33,
-   active 36. Chroma grows with L at a fixed C/L of 0.1, so each step keeps
-   the page's relative saturation. Text takes the family's hue in three tiers
+   active 36. Chroma grows with L at a fixed C/L of 0.1 (times --neutral-chroma), so each
+   step keeps the page's relative saturation. Text takes the family's hue in three tiers
    (93 / 82 / 73) that keep 4.5:1 up to the hover step. */
 
 /* The accent's hue, set per preset; with "accent from cover" the Player Bar
@@ -22,6 +22,21 @@
 	syntax: "<number>";
 	inherits: true;
 	initial-value: 62;
+}
+
+/* Per-preset chroma scales, 1 unless {id}.css sets them: a near-grey
+   neutral, or an accent stronger than the shared C 0.063. Separate from
+   --accent-chroma, which the cover sets on the root. */
+@property --neutral-chroma {
+	syntax: "<number>";
+	inherits: true;
+	initial-value: 1;
+}
+
+@property --preset-accent-chroma {
+	syntax: "<number>";
+	inherits: true;
+	initial-value: 1;
 }
 
 /* 0 for a colourless cover (white-grey controls), lower for a pale one,
@@ -52,24 +67,30 @@
 
 [data-theme-preset].dark {
 	/* Surfaces: one family, one ladder. */
-	--background: oklch(22% 0.022 var(--neutral-hue));
+	--background: oklch(
+		22% calc(0.022 * var(--neutral-chroma)) var(--neutral-hue)
+	);
 	--sidebar: var(--background);
-	--card: oklch(27% 0.027 var(--neutral-hue));
+	--card: oklch(27% calc(0.027 * var(--neutral-chroma)) var(--neutral-hue));
 	--popover: var(--card);
 	/* Large panels sit half a step under the cards (a page/card mix, not a
 	   new colour): at the same L their area read brighter. Their edge comes
 	   from --player-border. */
 	--player: color-mix(in oklab, var(--background) 60%, var(--card));
 	--queue: var(--player);
-	--player-pill: oklch(30% 0.03 var(--neutral-hue));
+	--player-pill: oklch(
+		30% calc(0.03 * var(--neutral-chroma)) var(--neutral-hue)
+	);
 	--secondary: var(--player-pill);
 	--border: var(--player-pill);
 	/* A 4 L step alone (1.13:1) lost the panel edge in grayscale; Player
 	   Bar and Queue Drawer take the cards' line step, still without a shadow. */
 	--player-border: var(--border);
-	--muted: oklch(33% 0.033 var(--neutral-hue));
+	--muted: oklch(33% calc(0.033 * var(--neutral-chroma)) var(--neutral-hue));
 	--accent: var(--muted);
-	--sidebar-accent: oklch(36% 0.036 var(--neutral-hue));
+	--sidebar-accent: oklch(
+		36% calc(0.036 * var(--neutral-chroma)) var(--neutral-hue)
+	);
 	/* The active look (open section, pressed toggle, playing rows) sits on
 	   the neutral active step; only its glyph takes the accent, so the Play
 	   button stays the one accent fill. */
@@ -81,9 +102,9 @@
 	--player-artwork: var(--muted);
 
 	/* Text: the family's hue in three tiers. */
-	--heading: oklch(93% 0.02 var(--neutral-hue));
-	--text: oklch(82% 0.02 var(--neutral-hue));
-	--caption: oklch(73% 0.02 var(--neutral-hue));
+	--heading: oklch(93% calc(0.02 * var(--neutral-chroma)) var(--neutral-hue));
+	--text: oklch(82% calc(0.02 * var(--neutral-chroma)) var(--neutral-hue));
+	--caption: oklch(73% calc(0.02 * var(--neutral-chroma)) var(--neutral-hue));
 	--foreground: var(--text);
 	--card-foreground: var(--text);
 	--popover-foreground: var(--text);
@@ -98,31 +119,37 @@
 
 	/* One accent: primary actions, the seek fill, accent glyphs and text. */
 	--primary: oklch(
-		calc(var(--accent-lightness) * 1%) calc(0.063 * var(--accent-chroma))
+		calc(var(--accent-lightness) * 1%)
+			calc(0.063 * var(--accent-chroma) * var(--preset-accent-chroma))
 			var(--accent-hue)
 	);
 	/* Ink on the accent takes the accent family, not the neutral one. */
 	--primary-foreground: oklch(
-		24% calc(0.04 * var(--accent-chroma)) var(--accent-hue)
+		24% calc(0.04 * var(--accent-chroma) * var(--preset-accent-chroma))
+			var(--accent-hue)
 	);
 	--player-control-primary: var(--primary);
 	--player-control-primary-foreground: var(--primary-foreground);
 	--player-control-shadow: oklch(
-		calc(var(--accent-lightness) * 1%) calc(0.063 * var(--accent-chroma))
+		calc(var(--accent-lightness) * 1%)
+			calc(0.063 * var(--accent-chroma) * var(--preset-accent-chroma))
 			var(--accent-hue) / 0.2
 	);
 	--player-live-progress: var(--primary);
 	--sidebar-primary: var(--primary);
 	--sidebar-primary-foreground: var(--primary-foreground);
 	--shell-active-foreground: oklch(
-		83% calc(0.063 * var(--accent-chroma)) var(--accent-hue)
+		83% calc(0.063 * var(--accent-chroma) * var(--preset-accent-chroma))
+			var(--accent-hue)
 	);
 	--sidebar-accent-foreground: var(--shell-active-foreground);
 	/* The logo keeps the preset's accent whatever the cover. */
-	--shell-brand: oklch(83% 0.063 var(--brand-hue));
+	--shell-brand: oklch(
+		83% calc(0.063 * var(--preset-accent-chroma)) var(--brand-hue)
+	);
 
 	/* Support: focus rings and Queue source lines. */
-	--ring: oklch(58.2% 0.05 var(--neutral-hue));
+	--ring: oklch(58.2% calc(0.05 * var(--neutral-chroma)) var(--neutral-hue));
 	--sidebar-ring: var(--ring);
 
 	/* Decorative slots follow the ladder: no tinted glow behind the page. */

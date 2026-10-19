@@ -1,0 +1,16 @@
+[data-theme-preset="charcoal-coral"] {
+	--theme-1: #111113;
+	--theme-2: #2d2d31;
+	--theme-3: #bc4a3c;
+	--theme-4: #8b8b93;
+	--theme-5: #e7e7ea;
+	--theme-6: #f8f8fa;
+	/* Dark mode's colours (dark-ladder.css): neutral and its opposite accent. */
+	--neutral-hue: 286;
+	--accent-hue: 30;
+	--brand-hue: 30;
+	/* Near-grey graphite (C/L 0.025) and a stronger coral (C 0.091, near the
+	   gamut edge at L 83). */
+	--neutral-chroma: 0.25;
+	--preset-accent-chroma: 1.45;
+}
