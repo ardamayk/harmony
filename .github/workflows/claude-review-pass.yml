@@ -1,0 +1,259 @@
+name: Claude review pass
+
+# One review pass (bug or security), called by claude-review.yml. Each round:
+# three finder agents look for problems in parallel, three voter agents judge
+# every candidate, and a candidate becomes a finding when at least
+# VOTES_NEEDED voters call it real. A push is reviewed from the last reviewed
+# commit; after ROUND_LIMIT rounds the pass stops and asks a person to step
+# in. REVIEW.md tells the agents what matters and how to work; the merging,
+# voting and posting live in .github/scripts/claude_review.py.
+
+on:
+  workflow_call:
+    inputs:
+      pass:
+        description: bug or security
+        type: string
+        required: true
+      label:
+        description: The calling job's name; this pass's earlier runs are found by it.
+        type: string
+        required: true
+
+env:
+  REVIEW_MODEL: claude-sonnet-5-5
+  ROUND_LIMIT: 3
+  ROUND_OVERRIDE: review-more-rounds
+  VOTES_NEEDED: 2
+  SECTION: ${{ inputs.pass == 'security' && 'Security review' || 'Bug review' }}
+  # Agents only read; the Post job writes to the PR.
+  READ_TOOLS: >-
+    Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments:*),Bash(gh api repos/${{ github.repository }}/compare/*),Read,Grep,Glob
+  FINDER_SCHEMA: '{"type":"object","properties":{"findings":{"type":"array","items":{"type":"object","properties":{"path":{"type":"string"},"line":{"type":"integer"},"title":{"type":"string"},"detail":{"type":"string"},"previous_comment_id":{"type":["integer","null"]}},"required":["path","line","title","detail"]}}},"required":["findings"]}'
+  VOTER_SCHEMA: '{"type":"object","properties":{"votes":{"type":"array","items":{"type":"object","properties":{"id":{"type":"string"},"real":{"type":"boolean"},"reason":{"type":"string"}},"required":["id","real","reason"]}}},"required":["votes"]}'
+
+jobs:
+  plan:
+    name: Plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      round: ${{ steps.rounds.outputs.round }}
+      since: ${{ steps.rounds.outputs.since }}
+      skip: ${{ steps.rounds.outputs.skip }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PR: ${{ github.event.pull_request.number }}
+      HEAD_REF: ${{ github.event.pull_request.head.ref }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      LABEL: ${{ inputs.label }}
+    steps:
+      # A round is an earlier run for this PR whose "<label> / Post" job ran its
+      # "Record review round" step. The newest round's head is the REVIEWED UP TO
+      # baseline, dropped when the head no longer descends from it (after a
+      # force-push) so the whole PR is reviewed. A head that already passed clean
+      # is not reviewed again.
+      - id: rounds
+        name: Count earlier rounds
+        run: |
+          rounds=0
+          since=
+          clean=
+          while read -r id sha; do
+            [ -n "$id" ] || continue
+            steps=$(gh run view "$id" --repo "$GITHUB_REPOSITORY" --json jobs \
+              --jq ".jobs[] | select(.name == \"$LABEL / Post\") | .steps[] | select(.conclusion == \"success\") | .name")
+            if grep -qx "Record review round" <<<"$steps"; then
+              rounds=$((rounds + 1))
+              [ -n "$since" ] || since=$sha
+              if [ -z "$clean" ] && grep -qx "Record clean pass" <<<"$steps"; then clean=$sha; fi
+            fi
+          done < <(gh api -X GET "repos/$GITHUB_REPOSITORY/actions/workflows/claude-review.yml/runs" \
+            -f branch="$HEAD_REF" -f event=pull_request -f status=completed -f per_page=100 \
+            --jq ".workflow_runs[] | select(any(.pull_requests[]; .number == $PR)) | \"\\(.id) \\(.head_sha)\"")
+          if [ -n "$since" ] && [ "$since" != "$HEAD_SHA" ]; then
+            status=$(gh api "repos/$GITHUB_REPOSITORY/compare/$since...$HEAD_SHA" --jq .status 2>/dev/null || true)
+            if [ "$status" != ahead ]; then
+              echo "Baseline $since is not an ancestor of the head (${status:-unknown}); reviewing the whole PR."
+              since=
+            fi
+          fi
+          echo "since=$since" >> "$GITHUB_OUTPUT"
+          echo "round=$((rounds + 1))" >> "$GITHUB_OUTPUT"
+          if [ "$clean" = "$HEAD_SHA" ]; then
+            echo "This head already passed the $LABEL."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$rounds" -lt "$ROUND_LIMIT" ]; then exit 0; fi
+          if gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json labels --jq '.labels[].name' | grep -qx "$ROUND_OVERRIDE"; then
+            echo "Round limit lifted by the $ROUND_OVERRIDE label."; exit 0
+          fi
+          notice="$LABEL: round limit reached."
+          if ! gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json comments --jq '.comments[].body' | grep -qF "$notice"; then
+            gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body "**$notice** This PR has had $ROUND_LIMIT rounds of this review. Instead of another fix-and-review round, a person should step back and rethink the approach. To allow more rounds, add the \`$ROUND_OVERRIDE\` label and push again."
+          fi
+          echo "::error::Round limit ($ROUND_LIMIT) reached; a person should rethink the approach, or add the $ROUND_OVERRIDE label."
+          exit 1
+
+  find:
+    name: Find (${{ matrix.finder }})
+    needs: plan
+    if: needs.plan.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        finder: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 1
+      - id: claude
+        uses: anthropics/claude-code-action@5eb090f3c3afd701a0672cd32981197ca27688f6 # v1.0.253
+        with:
+          # From `claude setup-token` (Max subscription), stored as a repo secret.
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+            HEAD SHA: ${{ github.event.pull_request.head.sha }}
+            ROUND: ${{ needs.plan.outputs.round }}
+            REVIEWED UP TO: ${{ needs.plan.outputs.since || 'none (first round)' }}
+            ROLE: finder ${{ matrix.finder }} of 3 in the ${{ inputs.pass }} pass
+
+            Read CLAUDE.md for the coding rules and REVIEW.md, then follow REVIEW.md's "Process"
+            (the finder steps), "Skip" and "${{ env.SECTION }}" sections. Two other finders work in
+            parallel and three voters judge every candidate, so report each problem you confirmed.
+            Do not post anything to the PR.
+          claude_args: |
+            --allowedTools "${{ env.READ_TOOLS }}"
+            --json-schema '${{ env.FINDER_SCHEMA }}'
+            --model ${{ env.REVIEW_MODEL }}
+      - name: Save candidates
+        env:
+          RESULT: ${{ steps.claude.outputs.structured_output }}
+        run: |
+          if [ -z "$RESULT" ]; then echo "::error::Finder ${{ matrix.finder }} returned no result."; exit 1; fi
+          mkdir -p "$RUNNER_TEMP/out" && printf '%s' "$RESULT" > "$RUNNER_TEMP/out/finder.json"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ${{ inputs.pass }}-finder-${{ matrix.finder }}
+          path: ${{ runner.temp }}/out/finder.json
+
+  vote:
+    name: Vote (${{ matrix.voter }})
+    needs: [plan, find]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        voter: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 1
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: ${{ inputs.pass }}-finder-*
+          path: ${{ runner.temp }}/finders
+      - id: merge
+        name: Merge candidates
+        run: |
+          rm -rf .claude-review && mkdir .claude-review
+          python3 -I .github/scripts/claude_review.py merge "$RUNNER_TEMP/finders" .claude-review/candidates.json
+          echo "count=$(jq length .claude-review/candidates.json)" >> "$GITHUB_OUTPUT"
+      - id: claude
+        if: steps.merge.outputs.count != '0'
+        uses: anthropics/claude-code-action@5eb090f3c3afd701a0672cd32981197ca27688f6 # v1.0.253
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+            HEAD SHA: ${{ github.event.pull_request.head.sha }}
+            ROLE: voter ${{ matrix.voter }} of 3 in the ${{ inputs.pass }} pass
+
+            Read CLAUDE.md for the coding rules and REVIEW.md, then follow REVIEW.md's "Process"
+            (the voter steps), "Skip" and "${{ env.SECTION }}" sections. The candidates are in
+            .claude-review/candidates.json. Return a vote for every candidate id. Do not post
+            anything to the PR.
+          claude_args: |
+            --allowedTools "${{ env.READ_TOOLS }}"
+            --json-schema '${{ env.VOTER_SCHEMA }}'
+            --model ${{ env.REVIEW_MODEL }}
+      - name: Save votes
+        env:
+          COUNT: ${{ steps.merge.outputs.count }}
+          RESULT: ${{ steps.claude.outputs.structured_output }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/out"
+          if [ "$COUNT" = 0 ]; then RESULT='{"votes":[]}'; fi
+          if [ -z "$RESULT" ]; then echo "::error::Voter ${{ matrix.voter }} returned no result."; exit 1; fi
+          printf '%s' "$RESULT" > "$RUNNER_TEMP/out/voter.json"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ${{ inputs.pass }}-voter-${{ matrix.voter }}
+          path: ${{ runner.temp }}/out/voter.json
+
+  # The pass's single result: it fails when an earlier job failed, a finding is
+  # open, or the round limit was hit, so it is the check to make required.
+  post:
+    name: Post
+    needs: [plan, find, vote]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      PR: ${{ github.event.pull_request.number }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      PASS_LABEL: ${{ inputs.label }}
+      ROUND: ${{ needs.plan.outputs.round }}
+    steps:
+      - id: gate
+        name: Check the round finished
+        env:
+          SKIP: ${{ needs.plan.outputs.skip }}
+          PLAN: ${{ needs.plan.result }}
+          FIND: ${{ needs.find.result }}
+          VOTE: ${{ needs.vote.result }}
+        run: |
+          if [ "$SKIP" = true ]; then echo "This head already passed the $PASS_LABEL."; echo "done=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          if [ "$PLAN" != success ] || [ "$FIND" != success ] || [ "$VOTE" != success ]; then
+            echo "::error::The $PASS_LABEL did not finish (plan: $PLAN, find: $FIND, vote: $VOTE)."
+            exit 1
+          fi
+      - if: steps.gate.outputs.done != 'true'
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 1
+      - if: steps.gate.outputs.done != 'true'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: ${{ inputs.pass }}-finder-*
+          path: ${{ runner.temp }}/finders
+      - if: steps.gate.outputs.done != 'true'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: ${{ inputs.pass }}-voter-*
+          path: ${{ runner.temp }}/voters
+      - id: post
+        if: steps.gate.outputs.done != 'true'
+        name: Tally votes and post findings
+        run: |
+          python3 -I .github/scripts/claude_review.py merge "$RUNNER_TEMP/finders" "$RUNNER_TEMP/candidates.json"
+          python3 -I .github/scripts/claude_review.py post "$RUNNER_TEMP/candidates.json" "$RUNNER_TEMP/voters"
+      # These two mark the run for later rounds' count and baseline.
+      - name: Record review round
+        if: steps.gate.outputs.done != 'true'
+        run: echo "Round $ROUND of the $PASS_LABEL finished."
+      - name: Record clean pass
+        if: steps.gate.outputs.done != 'true' && steps.post.outputs.findings == '0'
+        run: echo "The $PASS_LABEL passed at $HEAD_SHA."
+      - name: Fail on open findings
+        if: steps.gate.outputs.done != 'true' && steps.post.outputs.findings != '0'
+        run: |
+          echo "::error::${{ steps.post.outputs.findings }} open finding(s) in the $PASS_LABEL; fix them or reply with why they are not problems."
+          exit 1
