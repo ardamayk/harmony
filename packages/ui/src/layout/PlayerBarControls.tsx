@@ -46,6 +46,8 @@ const ACTIVE_CONTROL_BUTTON_CLASS =
 	"bg-neutral-active text-shell-active-foreground shadow-lit";
 const VOLUME_WHEEL_STEP = 0.05;
 const MAX_QUEUE_BADGE_COUNT = 9;
+// Past this point Previous restarts the Track instead of going back one.
+const PREVIOUS_RESTARTS_AFTER_SECONDS = 30;
 
 type PlaybackControlsProps = {
 	isRadioPlaying: boolean;
@@ -95,6 +97,8 @@ function TransportControls({
 	onCycleRepeatMode,
 	onPrevious,
 	onNext,
+	onSeek,
+	currentTime,
 }: PlaybackControlsProps) {
 	return (
 		<div className="flex items-center gap-6 group-data-stage/controls:w-full group-data-stage/controls:justify-between group-data-stage/controls:gap-2">
@@ -106,7 +110,11 @@ function TransportControls({
 			<QueueNavigationButton
 				label="Previous"
 				disabled={!hasCurrentTrack}
-				onPlay={onPrevious}
+				onPlay={() =>
+					currentTime > PREVIOUS_RESTARTS_AFTER_SECONDS
+						? onSeek(0)
+						: onPrevious()
+				}
 			/>
 			<PrimaryPlaybackButton
 				isPlaying={isPlaying}
