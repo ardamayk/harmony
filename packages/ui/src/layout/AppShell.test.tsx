@@ -382,6 +382,44 @@ describe("AppShell", () => {
 		);
 	});
 
+	it("drops the search card over the field again when the field moves without resizing", () => {
+		const observed = new Map<Element, () => void>();
+		vi.stubGlobal(
+			"ResizeObserver",
+			class {
+				constructor(private callback: () => void) {}
+				observe(target: Element) {
+					observed.set(target, this.callback);
+				}
+				unobserve() {}
+				disconnect() {}
+			},
+		);
+		let fieldLeft = 300;
+		const getBounds = HTMLElement.prototype.getBoundingClientRect;
+		vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+			function (this: HTMLElement) {
+				if (this.hasAttribute("data-library-search-field"))
+					return new DOMRect(fieldLeft, 8, 500, 48);
+				if (this.hasAttribute("data-app-shell"))
+					return new DOMRect(0, 0, 1600, 900);
+				return getBounds.call(this);
+			},
+		);
+		const { container } = renderShell(<AppShell onSearch={vi.fn()} />);
+		const shell = container.querySelector<HTMLElement>("[data-app-shell]");
+		// The drawer's measured width shifts the field left at its own size:
+		// only the spacer beside it resizes.
+		const spacer = container.querySelector("header")?.children[1];
+		const remeasure = spacer ? observed.get(spacer) : undefined;
+		if (!remeasure) throw new Error("The Top Nav's children were not observed");
+		fieldLeft = 260;
+		act(remeasure);
+		expect(shell?.style.getPropertyValue("--library-search-center")).toBe(
+			"510px",
+		);
+	});
+
 	it("lets the Desktop Client drag the window by the top nav's empty space", () => {
 		const { container } = render(<TopNav onSearch={vi.fn()} />);
 		const header = container.querySelector("header") as HTMLElement;

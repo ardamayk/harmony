@@ -95,10 +95,16 @@ export function useQueueDrawerWidth(
 		const observer = new ResizeObserver(measure);
 		observer.observe(shell);
 		// The field moves and resizes without the shell resizing (the Home
-		// button or brand beside it changing size, a late web font), and the
-		// search card must still drop exactly over it.
+		// button or brand beside it changing size, a late web font, the Top
+		// Nav's drawer-wide margin once the drawer is measured), and the
+		// search card must still drop exactly over it. A move without a
+		// resize shows as a sibling resizing, so the bar's children are
+		// watched too.
 		const field = shell.querySelector("[data-library-search-field]");
 		if (field) observer.observe(field);
+		for (const sibling of field?.closest("header")?.children ?? []) {
+			observer.observe(sibling);
+		}
 		window.addEventListener("resize", measure);
 		return () => {
 			observer.disconnect();
