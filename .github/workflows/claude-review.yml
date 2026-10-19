@@ -41,10 +41,11 @@ jobs:
       PR: ${{ github.event.pull_request.number }}
       HEAD_REF: ${{ github.event.pull_request.head.ref }}
     steps:
-      # A round is an earlier run of this workflow on the PR's branch in which the
-      # Claude bug review itself finished (its "Fail on open findings" step ran);
-      # runs that failed before it, or stopped at the limit, do not count and do
-      # not move the REVIEWED UP TO baseline. After ROUND_LIMIT rounds the review
+      # A round is an earlier run of this workflow on the PR's branch in which
+      # Claude returned a result (its "Record review round" step ran); runs that
+      # failed before that, returned nothing (for example while the workflow file
+      # differs from main and the action skips itself) or stopped at the limit do
+      # not count and do not move the REVIEWED UP TO baseline. After ROUND_LIMIT rounds the review
       # stops and asks a person to step in, so an agent author and the reviewer
       # cannot loop; the ROUND_OVERRIDE label lifts it.
       - id: rounds
@@ -55,8 +56,8 @@ jobs:
           while read -r id sha; do
             [ -n "$id" ] || continue
             if gh run view "$id" --repo "$GITHUB_REPOSITORY" --json jobs \
-              --jq '.jobs[] | select(.name == "Claude bug review") | .steps[] | select(.name == "Fail on open findings") | .conclusion' \
-              | grep -qxE 'success|failure'; then
+              --jq '.jobs[] | select(.name == "Claude bug review") | .steps[] | select(.name == "Record review round") | .conclusion' \
+              | grep -qx success; then
               rounds=$((rounds + 1))
               [ -n "$since" ] || since=$sha
             fi
@@ -96,6 +97,10 @@ jobs:
           claude_args: |
             --allowedTools "${{ env.REVIEW_TOOLS }}"
             --json-schema '${{ env.FINDINGS_SCHEMA }}'
+      # Its presence marks this run as a round for later runs' count.
+      - name: Record review round
+        if: steps.claude.outputs.structured_output != ''
+        run: echo "Claude returned a result; this run counts as a review round."
       - name: Fail on open findings
         env:
           RESULT: ${{ steps.claude.outputs.structured_output }}
