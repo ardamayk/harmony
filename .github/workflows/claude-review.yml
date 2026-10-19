@@ -41,24 +41,37 @@ jobs:
       PR: ${{ github.event.pull_request.number }}
       HEAD_REF: ${{ github.event.pull_request.head.ref }}
     steps:
-      # Rounds are earlier finished runs of this workflow on the PR's branch. After
-      # ROUND_LIMIT of them the review stops and asks a person to step in, so an
-      # agent author and the reviewer cannot loop; the ROUND_OVERRIDE label lifts it.
+      # A round is an earlier run of this workflow on the PR's branch in which the
+      # Claude bug review itself finished (its "Fail on open findings" step ran);
+      # runs that failed before it, or stopped at the limit, do not count and do
+      # not move the REVIEWED UP TO baseline. After ROUND_LIMIT rounds the review
+      # stops and asks a person to step in, so an agent author and the reviewer
+      # cannot loop; the ROUND_OVERRIDE label lifts it.
       - id: rounds
         name: Count earlier review rounds
         run: |
-          runs=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow claude-review.yml --branch "$HEAD_REF" \
-            --event pull_request --status completed --limit 100 --json conclusion,headSha \
-            --jq '[.[] | select(.conclusion != "cancelled" and .conclusion != "skipped")]')
-          rounds=$(jq length <<<"$runs")
-          echo "since=$(jq -r '.[0].headSha // empty' <<<"$runs")" >> "$GITHUB_OUTPUT"
+          rounds=0
+          since=
+          while read -r id sha; do
+            [ -n "$id" ] || continue
+            if gh run view "$id" --repo "$GITHUB_REPOSITORY" --json jobs \
+              --jq '.jobs[] | select(.name == "Claude bug review") | .steps[] | select(.name == "Fail on open findings") | .conclusion' \
+              | grep -qxE 'success|failure'; then
+              rounds=$((rounds + 1))
+              [ -n "$since" ] || since=$sha
+            fi
+          done < <(gh run list --repo "$GITHUB_REPOSITORY" --workflow claude-review.yml --branch "$HEAD_REF" \
+            --event pull_request --status completed --limit 100 --json databaseId,headSha \
+            --jq '.[] | "\(.databaseId) \(.headSha)"')
+          echo "since=$since" >> "$GITHUB_OUTPUT"
           echo "round=$((rounds + 1))" >> "$GITHUB_OUTPUT"
           if [ "$rounds" -lt "$ROUND_LIMIT" ]; then exit 0; fi
           if gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json labels --jq '.labels[].name' | grep -qx "$ROUND_OVERRIDE"; then
             echo "Round limit lifted by the $ROUND_OVERRIDE label."; exit 0
           fi
-          if [ "$rounds" -eq "$ROUND_LIMIT" ]; then
-            gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body "**Claude bug review: round limit reached.** This PR has had $ROUND_LIMIT review rounds. Instead of another fix-and-review round, a person should step back and rethink the approach. To allow more rounds, add the \`$ROUND_OVERRIDE\` label and push again."
+          notice="Claude bug review: round limit reached."
+          if ! gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json comments --jq '.comments[].body' | grep -qF "$notice"; then
+            gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body "**$notice** This PR has had $ROUND_LIMIT review rounds. Instead of another fix-and-review round, a person should step back and rethink the approach. To allow more rounds, add the \`$ROUND_OVERRIDE\` label and push again."
           fi
           echo "::error::Review round limit ($ROUND_LIMIT) reached; a person should rethink the approach, or add the $ROUND_OVERRIDE label."
           exit 1
@@ -66,7 +79,7 @@ jobs:
         with:
           fetch-depth: 1
       - id: claude
-        uses: anthropics/claude-code-action@v1
+        uses: anthropics/claude-code-action@5eb090f3c3afd701a0672cd32981197ca27688f6 # v1.0.253
         with:
           # From `claude setup-token` (Max subscription), stored as a repo secret.
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -115,7 +128,7 @@ jobs:
           fetch-depth: 1
       - id: claude
         if: steps.done.outputs.skip != 'true'
-        uses: anthropics/claude-code-action@v1
+        uses: anthropics/claude-code-action@5eb090f3c3afd701a0672cd32981197ca27688f6 # v1.0.253
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
