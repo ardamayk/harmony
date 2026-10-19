@@ -3,10 +3,11 @@
 
 use crate::config::Config;
 use crate::dependencies::Report;
+use crate::respond::ApiError;
 use crate::{api, modules, static_assets};
 use axum::Router;
 use axum::extract::Request;
-use axum::http::{HeaderName, Method, StatusCode};
+use axum::http::{HeaderMap, HeaderName, Method, StatusCode, header};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
@@ -89,6 +90,8 @@ pub fn router(state: AppState) -> Router {
         .merge(modules::managed_import::routes())
         .fallback(static_assets::web)
         .layer(middleware::from_fn(stream_aware_timeout))
+        .layer(middleware::from_fn(no_simple_writes))
+        .layer(middleware::from_fn(loopback_host))
         .layer(cors)
         .layer(CatchPanicLayer::new())
         .with_state(state)
@@ -125,6 +128,89 @@ fn cors(origins: &[String]) -> CorsLayer {
         .allow_headers(headers)
         .allow_credentials(true)
         .max_age(Duration::from_secs(300))
+}
+
+/// The server has no authentication and trusts being reachable only on
+/// loopback, but any website can make the user's browser call it. This
+/// refuses a Host that is not a loopback name, so a page that rebinds its own
+/// domain to 127.0.0.1 (DNS rebinding) cannot use the API as its own origin.
+/// A request without a Host does not come from a browser.
+async fn loopback_host(request: Request, next: Next) -> Response {
+    let host = request
+        .headers()
+        .get(header::HOST)
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_owned)
+        .or_else(|| {
+            request
+                .uri()
+                .authority()
+                .map(|authority| authority.to_string())
+        });
+    match host {
+        Some(host) if !is_loopback_host(&host) => ApiError::new(
+            StatusCode::FORBIDDEN,
+            "forbidden_host",
+            "the Music Server only answers requests addressed to a loopback host",
+        )
+        .into_response(),
+        _ => next.run(request).await,
+    }
+}
+
+fn is_loopback_host(host: &str) -> bool {
+    let name = match host.strip_prefix('[') {
+        Some(bracketed) => bracketed.split(']').next().unwrap_or_default(),
+        None => host.rsplit_once(':').map_or(host, |(name, _)| name),
+    };
+    name.eq_ignore_ascii_case("localhost")
+        || name
+            .parse::<std::net::IpAddr>()
+            .is_ok_and(|address| address.is_loopback())
+}
+
+/// Refuses a state-changing request whose body a cross-site page can send
+/// without a CORS preflight: a form content type, or a body without one.
+/// The clients send JSON or audio with its own media type, which a browser
+/// only sends cross-origin after the CORS allowlist approves it.
+async fn no_simple_writes(request: Request, next: Next) -> Response {
+    if is_simple_write(request.method(), request.headers()) {
+        return ApiError::new(
+            StatusCode::UNSUPPORTED_MEDIA_TYPE,
+            "unsupported_media_type",
+            "send the request body as application/json or with its media type",
+        )
+        .into_response();
+    }
+    next.run(request).await
+}
+
+fn is_simple_write(method: &Method, headers: &HeaderMap) -> bool {
+    if matches!(*method, Method::GET | Method::HEAD | Method::OPTIONS) {
+        return false;
+    }
+    match headers
+        .get(header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+    {
+        Some(value) => matches!(
+            value
+                .split(';')
+                .next()
+                .unwrap_or_default()
+                .trim()
+                .to_ascii_lowercase()
+                .as_str(),
+            "text/plain" | "application/x-www-form-urlencoded" | "multipart/form-data"
+        ),
+        None => {
+            headers.contains_key(header::TRANSFER_ENCODING)
+                || headers
+                    .get(header::CONTENT_LENGTH)
+                    .and_then(|value| value.to_str().ok())
+                    .is_some_and(|length| length.trim() != "0")
+        }
+    }
 }
 
 /// Bounds every request to 60s (504 when it runs out, like chi's Timeout),
