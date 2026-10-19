@@ -5,6 +5,7 @@ services:
     environment:
       SERVER_ADDR: "127.0.0.1:8090"
       DATABASE_PATH: /data/app.db
+      MANAGED_STORAGE_PATH: /data/managed
     volumes:
       - app-data:/data
       - ${MUSIC_PATH:-./music}:/music:ro

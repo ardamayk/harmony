@@ -29,6 +29,8 @@ COPY --from=builder /src/target/release/earthly-music-server /app/server
 COPY --from=builder /src/server/migrations /app/migrations
 ENV SERVER_ADDR=127.0.0.1:8090
 ENV DATABASE_PATH=/data/app.db
+# Imported music lives in the data volume, next to the database.
+ENV MANAGED_STORAGE_PATH=/data/managed
 EXPOSE 8090
 VOLUME ["/data", "/music"]
 ENTRYPOINT ["/app/server"]
