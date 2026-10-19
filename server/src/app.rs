@@ -75,6 +75,7 @@ impl AppState {
 
 pub fn router(state: AppState) -> Router {
     let cors = cors(&state.config.cors_origins);
+    let origins = Arc::new(state.config.cors_origins.clone());
     Router::new()
         .route("/api/v1/health", get(api::get_health))
         .route("/api/v1/me", get(api::get_me))
@@ -91,6 +92,10 @@ pub fn router(state: AppState) -> Router {
         .fallback(static_assets::web)
         .layer(middleware::from_fn(stream_aware_timeout))
         .layer(middleware::from_fn(no_simple_writes))
+        .layer(middleware::from_fn(move |request: Request, next: Next| {
+            let origins = origins.clone();
+            async move { trusted_origin(&origins, request, next).await }
+        }))
         .layer(middleware::from_fn(loopback_host))
         .layer(cors)
         .layer(CatchPanicLayer::new())
@@ -167,6 +172,50 @@ fn is_loopback_host(host: &str) -> bool {
         || name
             .parse::<std::net::IpAddr>()
             .is_ok_and(|address| address.is_loopback())
+}
+
+/// Refuses a state-changing request from a page on another origin. Browsers
+/// send Origin on every cross-origin write, even a body-less `no-cors` POST
+/// that needs no preflight, so only this server's own pages and the CORS
+/// allowlist may change state. Requests without Origin (the desktop core,
+/// scripts) are not from a browser page and pass.
+async fn trusted_origin(origins: &[String], request: Request, next: Next) -> Response {
+    if is_untrusted_write(origins, request.method(), request.headers()) {
+        return ApiError::new(
+            StatusCode::FORBIDDEN,
+            "forbidden_origin",
+            "the Music Server only accepts changes from its own pages",
+        )
+        .into_response();
+    }
+    next.run(request).await
+}
+
+fn is_untrusted_write(origins: &[String], method: &Method, headers: &HeaderMap) -> bool {
+    if matches!(*method, Method::GET | Method::HEAD | Method::OPTIONS) {
+        return false;
+    }
+    let Some(origin) = headers.get(header::ORIGIN) else {
+        return false;
+    };
+    let Ok(origin) = origin.to_str() else {
+        return true;
+    };
+    if origins
+        .iter()
+        .any(|allowed| allowed.eq_ignore_ascii_case(origin))
+    {
+        return false;
+    }
+    let same_origin = origin
+        .split_once("://")
+        .zip(
+            headers
+                .get(header::HOST)
+                .and_then(|host| host.to_str().ok()),
+        )
+        .is_some_and(|((_, authority), host)| authority.eq_ignore_ascii_case(host));
+    !same_origin
 }
 
 /// Refuses a state-changing request whose body a cross-site page can send

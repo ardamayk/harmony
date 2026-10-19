@@ -315,3 +315,31 @@ async fn form_bodies_are_refused_on_writes() {
     let (status, _, _) = send(&router, request).await;
     assert_ne!(status, StatusCode::UNSUPPORTED_MEDIA_TYPE);
 }
+
+// A body-less no-cors POST needs no preflight and carries no Content-Type,
+// but the browser still names the page's Origin; only this server's own
+// pages and the CORS allowlist may change state.
+#[tokio::test(flavor = "multi_thread")]
+async fn writes_from_other_origins_are_refused() {
+    let directory = tempfile::tempdir().unwrap();
+    let router = router(directory.path()).await;
+    for (origin, expected_forbidden) in [
+        (Some("https://evil.example"), true),
+        (Some("null"), true),
+        (Some(ORIGIN), false),
+        (Some("http://127.0.0.1:8090"), false),
+        (None, false),
+    ] {
+        let mut request =
+            Request::post("/api/v1/import-batches").header(header::HOST, "127.0.0.1:8090");
+        if let Some(origin) = origin {
+            request = request.header(header::ORIGIN, origin);
+        }
+        let (status, _, _) = send(&router, request.body(Body::empty()).unwrap()).await;
+        assert_eq!(
+            status == StatusCode::FORBIDDEN,
+            expected_forbidden,
+            "{origin:?}: {status}"
+        );
+    }
+}
