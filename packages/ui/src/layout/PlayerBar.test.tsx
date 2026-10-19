@@ -1273,6 +1273,23 @@ describe("PlayerBar", () => {
 		expect(previous).not.toHaveBeenCalled();
 	});
 
+	it("restarts the Track on the Previous shortcut after 30 seconds", async () => {
+		const engine = new InMemoryPlaybackEngine();
+		const previous = vi.spyOn(engine, "previous");
+		const seek = vi.spyOn(engine, "seek");
+		renderPlayerBar(undefined, engine);
+		await act(async () => {
+			screen.getByRole("button", { name: "Start track" }).click();
+		});
+		await act(async () => engine.seek(31));
+		seek.mockClear();
+
+		fireEvent.keyDown(document.body, { key: "MediaTrackPrevious" });
+
+		expect(seek).toHaveBeenCalledWith(0);
+		expect(previous).not.toHaveBeenCalled();
+	});
+
 	it.each([
 		["mpv-crash-loop", "Native playback stopped after repeated failures."],
 		["mpv-restart-failed", "Native playback could not restart. Try again."],
