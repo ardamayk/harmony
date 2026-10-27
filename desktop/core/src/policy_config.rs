@@ -140,6 +140,7 @@ struct SavedFormats {
     mix_format: String,
 }
 
+#[derive(Clone)]
 struct OriginalFormats {
     device_id: String,
     device_format: WaveFormat,
@@ -308,11 +309,13 @@ impl PolicyConfigRateAdapter {
 
     /// Restores every saved endpoint that is present and saves the rest
     /// again: an absent endpoint, or one whose restore failed (the first such
-    /// error is returned).
+    /// error is returned). `keep` is saved with them untouched, so an entry
+    /// the caller still needs never leaves the file.
     fn restore_present(
         &self,
         policy: &IPolicyConfig,
         originals: Vec<OriginalFormats>,
+        keep: &[OriginalFormats],
     ) -> Result<Vec<OriginalFormats>, String> {
         let mut pending = Vec::new();
         let mut first_error = None;
@@ -335,7 +338,9 @@ impl PolicyConfigRateAdapter {
                 pending.push(original);
             }
         }
-        self.store(&pending)?;
+        let mut stored = pending.clone();
+        stored.extend_from_slice(keep);
+        self.store(&stored)?;
         match first_error {
             Some(error) => Err(error),
             None => Ok(pending),
@@ -350,7 +355,7 @@ impl PolicyConfigRateAdapter {
         }
         let _com = ComScope::enter()?;
         let policy = policy_config().map_err(|_| UNAVAILABLE_MESSAGE.to_owned())?;
-        self.restore_present(&policy, originals).map(|_| ())
+        self.restore_present(&policy, originals, &[]).map(|_| ())
     }
 
     fn force(&self, policy: &IPolicyConfig, rate_hz: u32) -> Result<(), String> {
@@ -361,8 +366,9 @@ impl PolicyConfigRateAdapter {
             .load()?
             .into_iter()
             .partition(|original| original.device_id == device_id);
-        // The default output changed: the previous ones get their formats back.
-        let mut saved = self.restore_present(policy, others)?;
+        // The default output changed: the previous ones get their formats
+        // back, while this one's saved original stays in the file.
+        let mut saved = self.restore_present(policy, others, &current)?;
         let original = match current.into_iter().next() {
             Some(original) => original,
             None => {
