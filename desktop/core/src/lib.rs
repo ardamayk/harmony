@@ -557,6 +557,7 @@ fn hand_off_volume_to_device(
             target,
             applied_db,
             software_volume,
+            false,
         ),
         Err(error) => eprintln!("Output volume hand-off could not be recorded: {error}"),
     }
@@ -606,30 +607,57 @@ fn return_device_volume(state: &AppState, processing: &mut ProcessingController)
             eprintln!("Software volume could not be saved: {error}");
         }
     }
-    // The device that took the hand-off gets it back, not whichever output
-    // is the default now.
-    let restored = match attenuation.target.as_deref() {
-        Some(target) => undo_hand_off_on(RecordedRoute::SystemSink, target, attenuation.applied_db),
-        None => state
+    let restored = match device_return(attenuation.route, attenuation.target.as_deref()) {
+        DeviceReturn::Nothing => Ok(true),
+        DeviceReturn::Named(target) => {
+            undo_hand_off_on(RecordedRoute::SystemSink, target, attenuation.applied_db)
+        }
+        DeviceReturn::CurrentDefault => state
             .device_volume
             .change_db(VolumeRoute::SystemSink, -attenuation.applied_db)
             .map(|_| true),
     };
-    let is_device_restored = attenuation.route != VolumeRoute::SystemSink
-        || match restored {
-            Ok(true) => true,
-            Ok(false) => {
-                eprintln!("System output volume stays recorded until its absent output returns.");
-                false
+    match restored {
+        Ok(true) => clear_device_attenuation_record(&state.device_attenuation_record),
+        // The record stays, so the next start retries the device; mpv already
+        // has the listener's level, so that start must not apply it again.
+        failed => {
+            match failed {
+                Ok(_) => eprintln!(
+                    "System output volume stays recorded until its absent output returns."
+                ),
+                Err(error) => eprintln!("System output volume could not be restored: {error}"),
             }
-            Err(error) => {
-                eprintln!("System output volume could not be restored: {error}");
-                false
-            }
-        };
-    // A failed restore keeps the record, so the next start retries it.
-    if is_device_restored {
-        clear_device_attenuation_record(&state.device_attenuation_record);
+            save_device_attenuation_record(
+                &state.device_attenuation_record,
+                attenuation.route,
+                attenuation.target,
+                attenuation.applied_db,
+                attenuation.software_volume,
+                true,
+            );
+        }
+    }
+}
+
+/// Where returning a hand-off goes.
+#[derive(Debug, PartialEq)]
+enum DeviceReturn<'a> {
+    /// A raw ALSA card: PipeWire restores its own volume when it takes the
+    /// card back, and no system output was attenuated.
+    Nothing,
+    /// The sink or endpoint that took it, even if another one is the default
+    /// now.
+    Named(&'a str),
+    /// The system output whose name was not known at the hand-off.
+    CurrentDefault,
+}
+
+fn device_return(route: VolumeRoute, target: Option<&str>) -> DeviceReturn<'_> {
+    match (route, target) {
+        (VolumeRoute::AlsaCard(_), _) => DeviceReturn::Nothing,
+        (VolumeRoute::SystemSink, Some(target)) => DeviceReturn::Named(target),
+        (VolumeRoute::SystemSink, None) => DeviceReturn::CurrentDefault,
     }
 }
 
@@ -646,6 +674,10 @@ struct DeviceAttenuationRecord {
     target: Option<String>,
     applied_db: f64,
     software_volume: f64,
+    /// mpv already has the listener's level back; only the device is left.
+    /// Retrying a kept record must not lower mpv's level a second time.
+    #[serde(default)]
+    listener_level_restored: bool,
 }
 
 #[derive(Clone, Copy, serde::Deserialize, Serialize)]
@@ -700,6 +732,7 @@ fn save_device_attenuation_record(
     target: Option<String>,
     applied_db: f64,
     software_volume: f64,
+    listener_level_restored: bool,
 ) {
     let record = DeviceAttenuationRecord {
         route: match route {
@@ -709,8 +742,13 @@ fn save_device_attenuation_record(
         target,
         applied_db,
         software_volume,
+        listener_level_restored,
     };
-    let result = serde_json::to_string(&record)
+    write_device_attenuation_record(path, &record);
+}
+
+fn write_device_attenuation_record(path: &Path, record: &DeviceAttenuationRecord) {
+    let result = serde_json::to_string(record)
         .map_err(|error| error.to_string())
         .and_then(|text| std::fs::write(path, text).map_err(|error| error.to_string()));
     if let Err(error) = result {
@@ -733,7 +771,7 @@ fn recover_left_device_attenuation(path: &Path, processing: &mut ProcessingContr
     let Ok(text) = std::fs::read_to_string(path) else {
         return;
     };
-    let record: DeviceAttenuationRecord = match serde_json::from_str(&text) {
+    let mut record: DeviceAttenuationRecord = match serde_json::from_str(&text) {
         Ok(record) => record,
         Err(error) => {
             eprintln!("Output volume hand-off record is unreadable: {error}");
@@ -744,19 +782,27 @@ fn recover_left_device_attenuation(path: &Path, processing: &mut ProcessingContr
     // As `return_device_volume` does: the slider's value since the hand-off
     // on top of the level the device carried, so a change made meanwhile
     // survives and nothing plays louder.
-    let volume = returned_volume(processing.state().software_volume, record.software_volume);
-    if let Err(error) = processing.set_software_volume(volume) {
-        eprintln!("Software volume could not be restored after a hand-off: {error}");
+    if !record.listener_level_restored {
+        let volume = returned_volume(processing.state().software_volume, record.software_volume);
+        if let Err(error) = processing.set_software_volume(volume) {
+            eprintln!("Software volume could not be restored after a hand-off: {error}");
+        }
     }
     match undo_recorded_hand_off(&record) {
         Ok(true) => {
             eprintln!("Output volume hand-off left by the previous run was undone.");
             clear_device_attenuation_record(path);
+            return;
         }
         Ok(false) => {
             eprintln!("Output volume hand-off left on an absent output is kept until it returns.")
         }
         Err(error) => eprintln!("Output volume hand-off could not be undone: {error}"),
+    }
+    // Kept for the next start's device retry, which must leave mpv alone.
+    if !record.listener_level_restored {
+        record.listener_level_restored = true;
+        write_device_attenuation_record(path, &record);
     }
 }
 
@@ -1405,9 +1451,35 @@ fn release(mut state: Arc<AppState>) {
 #[cfg(test)]
 mod tests {
     use super::{
-        DeviceAttenuationRecord, RecordedRoute, returned_volume, shell_action,
-        validate_playback_source,
+        DeviceAttenuationRecord, DeviceReturn, RecordedRoute, device_return, returned_volume,
+        shell_action, validate_playback_source,
     };
+    use crate::device_volume::VolumeRoute;
+
+    #[test]
+    fn returning_a_raw_alsa_hand_off_leaves_every_system_output_alone() {
+        assert_eq!(
+            device_return(VolumeRoute::AlsaCard(2), None),
+            DeviceReturn::Nothing
+        );
+        assert_eq!(
+            device_return(VolumeRoute::SystemSink, Some("alsa_output.usb-dac")),
+            DeviceReturn::Named("alsa_output.usb-dac")
+        );
+        assert_eq!(
+            device_return(VolumeRoute::SystemSink, None),
+            DeviceReturn::CurrentDefault
+        );
+    }
+
+    #[test]
+    fn a_record_without_the_restored_flag_reads_as_not_yet_restored() {
+        let record: DeviceAttenuationRecord = serde_json::from_str(
+            r#"{"route":"system-sink","target":"sink","appliedDb":-3.5,"softwareVolume":0.2}"#,
+        )
+        .expect("record");
+        assert!(!record.listener_level_restored);
+    }
     use crate::playback_app_actions::DesktopPlaybackAction;
     use serde_json::json;
 
@@ -1418,6 +1490,7 @@ mod tests {
             target: Some("alsa_output.usb-dac".to_owned()),
             applied_db: -3.5,
             software_volume: 0.68,
+            listener_level_restored: false,
         };
         let text = serde_json::to_string(&record).expect("record JSON");
 
@@ -1437,6 +1510,7 @@ mod tests {
             target: None,
             applied_db: -3.5,
             software_volume: 0.68,
+            listener_level_restored: false,
         };
 
         assert_eq!(super::undo_recorded_hand_off(&record), Ok(true));
