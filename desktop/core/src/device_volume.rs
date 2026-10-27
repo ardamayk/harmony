@@ -149,6 +149,7 @@ mod tests {
         parse_pactl_raw_volume, scale_pactl_raw_volume,
     };
 
+    #[cfg_attr(windows, ignore = "asserts Linux raw ALSA device ids")]
     #[test]
     fn parses_the_tools_this_route_reads() {
         assert_eq!(

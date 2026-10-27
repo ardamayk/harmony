@@ -5219,6 +5219,7 @@ mod tests {
         assert_eq!(observed.output_mode, output_mode);
     }
 
+    #[cfg_attr(windows, ignore = "asserts Linux raw ALSA device ids")]
     #[test]
     fn direct_alsa_selection_uses_raw_hardware_and_reports_pipewire_bypass() {
         let (event_sender, events) = std::sync::mpsc::channel();
@@ -5282,6 +5283,7 @@ mod tests {
         assert_eq!(decoded.telemetry.device.format.sample_rate_hz, Some(96_000));
     }
 
+    #[cfg_attr(windows, ignore = "asserts Linux raw ALSA device ids")]
     #[test]
     fn real_mpv_reserves_raw_alsa_before_switching_and_releases_it_for_system_output() {
         assert_eq!(
@@ -5316,6 +5318,7 @@ mod tests {
         );
     }
 
+    #[cfg_attr(windows, ignore = "asserts Linux raw ALSA device ids")]
     #[test]
     fn direct_alsa_reobserves_the_negotiated_format_for_each_new_source() {
         let (event_sender, events) = std::sync::mpsc::channel();
@@ -5374,6 +5377,7 @@ mod tests {
         assert_eq!(ready.telemetry.device.format.sample_rate_hz, Some(192_000));
     }
 
+    #[cfg_attr(windows, ignore = "asserts Linux raw ALSA device ids")]
     #[test]
     fn direct_alsa_negotiated_format_survives_periodic_path_refresh() {
         let (event_sender, events) = std::sync::mpsc::channel();
@@ -5444,6 +5448,7 @@ mod tests {
         assert!(!error.message.contains("secret-device-token"));
     }
 
+    #[cfg_attr(windows, ignore = "asserts Linux raw ALSA device ids")]
     #[test]
     fn direct_alsa_failure_requires_explicit_system_fallback() {
         let (_event_sender, events) = std::sync::mpsc::channel();
@@ -5497,6 +5502,7 @@ mod tests {
         );
     }
 
+    #[cfg_attr(windows, ignore = "asserts Linux raw ALSA device ids")]
     #[test]
     fn exclusive_selection_waits_for_real_output_before_publishing() {
         let (_event_sender, events) = std::sync::mpsc::channel();
@@ -5537,6 +5543,7 @@ mod tests {
         );
     }
 
+    #[cfg_attr(windows, ignore = "asserts Linux raw ALSA device ids")]
     #[test]
     fn disconnected_direct_dac_pauses_without_silent_fallback() {
         let (_event_sender, events) = std::sync::mpsc::channel();
@@ -5595,6 +5602,7 @@ mod tests {
         assert!(fallback.output_device_issue.is_none());
     }
 
+    #[cfg_attr(windows, ignore = "asserts Linux raw ALSA device ids")]
     #[test]
     fn exclusive_output_failure_restores_system_output() {
         let (event_sender, events) = std::sync::mpsc::channel();
