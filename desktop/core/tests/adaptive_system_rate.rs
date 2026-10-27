@@ -1,3 +1,6 @@
+// PipeWire's rate control and these shell-script fixtures exist only on Unix.
+#![cfg(unix)]
+
 use earthly_audio_core::adaptive_system_rate::{
     AdaptiveCleanupMarker, AdaptiveSystemRateController, CommandPipeWireRateAdapter,
     FileAdaptiveCleanupMarker, PipeWireRateAdapter,

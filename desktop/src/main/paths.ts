@@ -1,5 +1,7 @@
 import { join, resolve } from "node:path";
 
+const EXECUTABLE_SUFFIX = process.platform === "win32" ? ".exe" : "";
+
 export type ShellPaths = {
 	/** The Rust core binary. */
 	core: string;
@@ -21,7 +23,10 @@ export function shellPaths(
 	return {
 		core: resolve(
 			env.EARTHLY_AUDIO_CORE_PATH ??
-				join(desktopDirectory, "../target/release/earthly-audio-core"),
+				join(
+					desktopDirectory,
+					`../target/release/earthly-audio-core${EXECUTABLE_SUFFIX}`,
+				),
 		),
 		rendererRoot: resolve(
 			env.EARTHLY_AUDIO_RENDERER_DIR ?? join(desktopDirectory, "../web/dist"),

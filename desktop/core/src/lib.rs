@@ -4,7 +4,13 @@ pub mod desktop_import;
 mod device_volume;
 mod exclusive_output;
 pub mod media_proxy;
+#[cfg(target_os = "linux")]
 mod mpris;
+#[cfg(not(target_os = "linux"))]
+#[path = "mpris_unsupported.rs"]
+mod mpris;
+#[cfg(windows)]
+mod mpv_pipe;
 pub mod output_device;
 mod playback;
 mod playback_app_actions;
@@ -13,6 +19,8 @@ mod playback_navigation;
 mod playback_publish;
 mod playback_restore;
 #[cfg(test)]
+// Its stream fixtures serve the Linux-only real-mpv tests.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 mod playback_test_support;
 mod playback_tray;
 pub mod processing;
@@ -20,9 +28,11 @@ mod queue_events;
 mod rpc;
 pub mod runtime;
 pub mod telemetry;
+#[cfg(windows)]
+mod wasapi;
 
 use adaptive_system_rate::{
-    AdaptiveSystemRateController, CommandPipeWireRateAdapter, FileAdaptiveCleanupMarker,
+    AdaptiveSystemRateController, FileAdaptiveCleanupMarker, PlatformRateAdapter,
 };
 use connection::{
     ConnectionCheck, ConnectionError, ConnectionErrorCode, ConnectionStore, HttpBridge,
@@ -32,11 +42,11 @@ use desktop_import::{
     DesktopImportError, ImportSelection, ImportSelectionStore, ImportUploadProgress, ProgressSink,
     upload_selection,
 };
-use device_volume::{CommandDeviceVolume, DeviceVolume, VolumeRoute, hardware_step_db};
+use device_volume::{DeviceVolume, PlatformDeviceVolume, VolumeRoute, hardware_step_db};
 use media_proxy::MediaProxy;
 use mpris::MprisBridge;
 use output_device::{
-    ActiveOutputError, ActiveOutputResolver, CommandPipeWireActiveOutputResolver, OutputDevice,
+    ActiveOutputError, ActiveOutputResolver, OutputDevice, PlatformActiveOutputResolver,
 };
 use playback::{
     OutputDeviceIssueCode, PlaybackCommandError, PlaybackController, PlaybackSessionState,
@@ -60,7 +70,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, RwLock, Weak, mpsc};
 use std::time::Duration;
-use telemetry::CommandPipeWireObserver;
+use telemetry::PlatformPathObserver;
 
 const CONNECTION_FILE_NAME: &str = "server-connection.json";
 const PLAYBACK_SNAPSHOT_FILE_NAME: &str = "playback-session.json";
@@ -1006,7 +1016,7 @@ impl AppState {
         exit: mpsc::Sender<()>,
     ) -> Result<Arc<Self>, String> {
         let adaptive_system_rate = AdaptiveSystemRateController::recover_startup_if_marked(
-            Arc::new(CommandPipeWireRateAdapter::new()),
+            Arc::new(PlatformRateAdapter::new()),
             Arc::new(FileAdaptiveCleanupMarker::new(
                 config_directory.join(ADAPTIVE_CLEANUP_MARKER_FILE_NAME),
             )),
@@ -1031,7 +1041,7 @@ impl AppState {
             .map_err(|error| error.to_string())?;
         let playback_lifecycle = Arc::new(Mutex::new(PlaybackLifecycle::new()));
         let active_output_resolver: Arc<dyn ActiveOutputResolver> =
-            Arc::new(CommandPipeWireActiveOutputResolver::new());
+            Arc::new(PlatformActiveOutputResolver::new());
         let mut processing =
             ProcessingController::open(Box::new(FileProcessingSettingsStorage::new(
                 config_directory.join(PROCESSING_SETTINGS_FILE_NAME),
@@ -1070,7 +1080,7 @@ impl AppState {
         }
         let playback = PlaybackController::start_default_with_lifecycle(
             playback_lifecycle.clone(),
-            Arc::new(CommandPipeWireObserver::new()),
+            Arc::new(PlatformPathObserver::new()),
             adaptive_system_rate,
             move |state| publisher.publish(state),
         )?;
@@ -1119,7 +1129,7 @@ impl AppState {
             output,
             exiting: AtomicBool::new(false),
             exit,
-            device_volume: Arc::new(CommandDeviceVolume),
+            device_volume: Arc::new(PlatformDeviceVolume {}),
             device_attenuation: Mutex::new(None),
         });
         let _ = mpris_state.set(Arc::downgrade(&state));

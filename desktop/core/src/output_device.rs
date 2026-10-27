@@ -29,6 +29,17 @@ pub trait ActiveOutputResolver: Send + Sync {
     fn resolve(&self) -> Result<OutputDevice, ActiveOutputError>;
 }
 
+/// Exclusive's device discovery on this platform: the PipeWire default sink's
+/// raw ALSA hardware on Linux, the default WASAPI render endpoint on Windows.
+#[cfg(unix)]
+pub type PlatformActiveOutputResolver = CommandPipeWireActiveOutputResolver;
+#[cfg(windows)]
+pub type PlatformActiveOutputResolver = crate::wasapi::WasapiActiveOutputResolver;
+#[cfg(unix)]
+pub type PlatformOutputDeviceAdapter = CommandAlsaOutputDeviceAdapter;
+#[cfg(windows)]
+pub type PlatformOutputDeviceAdapter = crate::wasapi::WasapiOutputDeviceAdapter;
+
 pub struct CommandPipeWireActiveOutputResolver {
     binary: PathBuf,
 }
@@ -163,6 +174,13 @@ impl OutputDeviceCatalog {
     }
 }
 
+/// A WASAPI endpoint id, such as `{0.0.0.00000000}.{guid}`.
+#[cfg(windows)]
+fn is_raw_hardware_id(device_id: &str) -> bool {
+    device_id.starts_with("{0.0.0.") && device_id.contains("}.{") && device_id.ends_with('}')
+}
+
+#[cfg(not(windows))]
 fn is_raw_hardware_id(device_id: &str) -> bool {
     let Some(components) = device_id.strip_prefix("hw:") else {
         return false;

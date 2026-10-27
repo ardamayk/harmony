@@ -1,3 +1,6 @@
+// The PipeWire/ALSA coordinator below is Linux's; Windows uses `wasapi`.
+#![cfg_attr(windows, allow(dead_code))]
+
 use serde_json::Value;
 use std::io::{BufRead, BufReader, Read};
 use std::path::PathBuf;
@@ -37,6 +40,14 @@ pub(crate) trait ExclusiveOutputCoordinator: Send + Sync {
     fn acquire(&self, device_id: &str) -> Result<(), String>;
     fn release(&self) -> Result<(), String>;
 }
+
+/// Linux disables the PipeWire card profile around raw ALSA access; WASAPI
+/// exclusive mode needs no lease.
+#[cfg(unix)]
+pub(crate) type PlatformExclusiveOutputCoordinator = PipeWireExclusiveOutputCoordinator;
+#[cfg(windows)]
+pub(crate) type PlatformExclusiveOutputCoordinator =
+    crate::wasapi::WasapiExclusiveOutputCoordinator;
 
 trait AudioCardProfileLease: Send {
     fn release(&mut self) -> Result<(), String>;

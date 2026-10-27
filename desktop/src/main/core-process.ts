@@ -60,7 +60,10 @@ export class CoreProcess extends EventEmitter<CoreProcessEvents> {
 			// Its own process group: Ctrl+C in a terminal reaches only the
 			// shell, which then stops the core through stdin so it can save
 			// the Playback Session. A crashed shell closes stdin all the same.
-			detached: true,
+			// On Windows `detached` would give the core its own console window
+			// instead, so the core stays in the shell's console, hidden.
+			detached: process.platform !== "win32",
+			windowsHide: true,
 		});
 		this.exitPromise = new Promise((resolve) => {
 			const finish = (code: number | null, signal: NodeJS.Signals | null) => {

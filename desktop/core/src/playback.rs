@@ -1,8 +1,8 @@
 use crate::adaptive_system_rate::AdaptiveSystemRateController;
-use crate::exclusive_output::{ExclusiveOutputCoordinator, PipeWireExclusiveOutputCoordinator};
+use crate::exclusive_output::{ExclusiveOutputCoordinator, PlatformExclusiveOutputCoordinator};
 use crate::output_device::{
-    AlsaOutputDeviceAdapter, CommandAlsaOutputDeviceAdapter, OutputDevice, OutputDeviceCatalog,
-    OutputDeviceError,
+    AlsaOutputDeviceAdapter, OutputDevice, OutputDeviceCatalog, OutputDeviceError,
+    PlatformOutputDeviceAdapter,
 };
 use crate::playback_lifecycle::{
     PlaybackLifecycle, PlaybackLifecycleAction, PlaybackSessionSnapshot,
@@ -19,8 +19,12 @@ use crate::telemetry::{
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::fs;
-use std::io::{BufRead, BufReader, ErrorKind, Write};
+#[cfg(unix)]
+use std::io::{BufRead, BufReader};
+use std::io::{ErrorKind, Write};
+#[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
+#[cfg(unix)]
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
@@ -35,7 +39,11 @@ const DEFAULT_VOLUME: f64 = 0.8;
 const GAPLESS_APPEND_LEAD_SECONDS: f64 = 10.0;
 const EVENT_POLL_INTERVAL: Duration = Duration::from_millis(50);
 const MPV_COMMAND_TIMEOUT: Duration = Duration::from_secs(5);
+#[cfg(not(windows))]
 const MPV_PINNED_VERSION: &str = include_str!("../mpv-version.txt");
+/// The official mpv 0.41.0 Windows release build reports its git version.
+#[cfg(windows)]
+const MPV_PINNED_VERSION: &str = include_str!("../mpv-windows-version.txt");
 const MPV_START_TIMEOUT: Duration = Duration::from_secs(3);
 const MPV_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(1);
 const PLAYBACK_FAILED_MESSAGE: &str = "Playback failed. Check the source and try again.";
@@ -62,6 +70,25 @@ const OUTPUT_DEVICE_REFRESH_INTERVAL: Duration = Duration::from_millis(20);
 const PATH_REFRESH_INTERVAL: Duration = Duration::from_secs(2);
 #[cfg(test)]
 const PATH_REFRESH_INTERVAL: Duration = Duration::from_millis(20);
+
+/// mpv's private JSON IPC: a socket pair on Unix, a named pipe on Windows.
+#[cfg(unix)]
+type MpvIpcStream = UnixStream;
+#[cfg(unix)]
+type MpvIpcReader = BufReader<UnixStream>;
+#[cfg(windows)]
+type MpvIpcStream = crate::mpv_pipe::MpvPipe;
+#[cfg(windows)]
+type MpvIpcReader = crate::mpv_pipe::MpvPipeReader;
+#[cfg(unix)]
+const MPV_EXECUTABLE: &str = "mpv";
+#[cfg(windows)]
+const MPV_EXECUTABLE: &str = "mpv.exe";
+/// The last mpv candidate: the system package on Linux, `PATH` on Windows.
+#[cfg(unix)]
+const SYSTEM_MPV: &str = "/usr/bin/mpv";
+#[cfg(windows)]
+const SYSTEM_MPV: &str = "mpv.exe";
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -316,7 +343,7 @@ impl RealMpvProcess {
                     requests,
                     worker: Mutex::new(Some(worker)),
                     ipc_directory: ipc_directory.clone(),
-                    exclusive_output: Arc::new(PipeWireExclusiveOutputCoordinator::new()),
+                    exclusive_output: Arc::new(PlatformExclusiveOutputCoordinator::new()),
                     appended: Mutex::new(None),
                 };
                 process.observe_properties()?;
@@ -391,14 +418,52 @@ impl RealMpvProcess {
     fn restore_system_output(&self) -> Result<(), String> {
         let disable_result = self.command(json!(["set_property", "aid", "no"]));
         let device_result = self.command(json!(["set_property", "audio-device", "auto"]));
+        let shared_result = self.leave_exclusive_mode();
         let release_result = self.exclusive_output.release();
         let enable_result = self.command(json!(["set_property", "aid", "auto"]));
         disable_result?;
         device_result?;
+        shared_result?;
         release_result?;
         enable_result?;
         Ok(())
     }
+
+    /// Raw ALSA hardware is exclusive by itself; WASAPI opens an endpoint
+    /// exclusively only when mpv asks for it.
+    #[cfg(windows)]
+    fn enter_exclusive_mode(&self) -> Result<(), String> {
+        self.command(json!(["set_property", "audio-exclusive", true]))
+            .map(|_| ())
+    }
+
+    #[cfg(not(windows))]
+    fn enter_exclusive_mode(&self) -> Result<(), String> {
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    fn leave_exclusive_mode(&self) -> Result<(), String> {
+        self.command(json!(["set_property", "audio-exclusive", false]))
+            .map(|_| ())
+    }
+
+    #[cfg(not(windows))]
+    fn leave_exclusive_mode(&self) -> Result<(), String> {
+        Ok(())
+    }
+}
+
+/// mpv's name for the Exclusive device: raw ALSA hardware on Linux, a WASAPI
+/// endpoint on Windows.
+#[cfg(not(windows))]
+fn exclusive_audio_device(device_id: &str) -> String {
+    format!("alsa/{device_id}")
+}
+
+#[cfg(windows)]
+fn exclusive_audio_device(device_id: &str) -> String {
+    format!("wasapi/{device_id}")
 }
 
 fn remove_ipc_directory(path: &Path, context: &str) {
@@ -432,7 +497,14 @@ pub fn probe_mpv_status() -> MpvStatus {
 
 fn probe_mpv_binary(binary: &Path) -> MpvStatus {
     let pinned_version = MPV_PINNED_VERSION.trim().to_owned();
-    let output = match Command::new(binary).arg("--version").output() {
+    let mut command = Command::new(binary);
+    command.arg("--version");
+    #[cfg(windows)]
+    std::os::windows::process::CommandExt::creation_flags(
+        &mut command,
+        crate::mpv_pipe::CREATE_NO_WINDOW,
+    );
+    let output = match command.output() {
         Ok(output) => output,
         Err(error) => {
             return MpvStatus {
@@ -467,7 +539,7 @@ fn resolve_mpv_binary() -> PathBuf {
     match std::env::current_exe() {
         Ok(executable) => {
             if let Some(directory) = executable.parent() {
-                let packaged_binary = directory.join("mpv");
+                let packaged_binary = directory.join(MPV_EXECUTABLE);
                 if packaged_binary.is_file() {
                     return packaged_binary;
                 }
@@ -479,11 +551,13 @@ fn resolve_mpv_binary() -> PathBuf {
             eprintln!("Packaged mpv lookup failed: current executable is unknown: {error}")
         }
     }
-    let development_binary = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("binaries/mpv");
+    let development_binary = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("binaries")
+        .join(MPV_EXECUTABLE);
     if development_binary.is_file() {
         return development_binary;
     }
-    PathBuf::from("/usr/bin/mpv")
+    PathBuf::from(SYSTEM_MPV)
 }
 
 impl MpvProcessAdapter for RealMpvProcess {
@@ -575,11 +649,14 @@ impl MpvProcessAdapter for RealMpvProcess {
                     };
                 }
                 let result = self
-                    .command(json!([
-                        "set_property",
-                        "audio-device",
-                        format!("alsa/{device_id}")
-                    ]))
+                    .enter_exclusive_mode()
+                    .and_then(|_| {
+                        self.command(json!([
+                            "set_property",
+                            "audio-device",
+                            exclusive_audio_device(device_id)
+                        ]))
+                    })
                     .and_then(|_| self.command(json!(["set_property", "aid", "auto"])));
                 if let Err(error) = result {
                     if let Err(restore_error) = self.restore_system_output() {
@@ -701,11 +778,51 @@ fn create_private_ipc_directory() -> Result<PathBuf, String> {
     let path = std::env::temp_dir().join(format!("earthly-audio-mpv-{name}"));
     fs::create_dir(&path)
         .map_err(|error| format!("Private mpv IPC directory could not be created: {error}"))?;
+    #[cfg(unix)]
     fs::set_permissions(&path, fs::Permissions::from_mode(0o700))
         .map_err(|error| format!("Private mpv IPC permissions could not be set: {error}"))?;
     Ok(path)
 }
 
+/// On Windows the endpoint directory only names the pipe and is cleaned up
+/// like the Unix one; mpv itself serves the pipe.
+#[cfg(windows)]
+fn start_mpv_worker(
+    binary: &Path,
+    ipc_directory: &Path,
+    extra_arguments: Vec<String>,
+) -> Result<MpvWorker, String> {
+    use std::os::windows::process::CommandExt;
+
+    let pipe_name = crate::mpv_pipe::pipe_name(ipc_directory);
+    let mut command = Command::new(binary);
+    configure_mpv_command(&mut command, Path::new(&pipe_name), extra_arguments);
+    command.creation_flags(crate::mpv_pipe::CREATE_NO_WINDOW);
+    let mut child = command
+        .spawn()
+        .map_err(|error| format!("Pinned mpv child could not start: {error}"))?;
+    drop(command);
+    if let Err(error) = crate::mpv_pipe::bind_lifetime_to_core(&child) {
+        terminate_mpv(&mut child);
+        return Err(error);
+    }
+    let connected =
+        crate::mpv_pipe::MpvPipe::connect(&pipe_name, Instant::now() + MPV_START_TIMEOUT, || {
+            child
+                .try_wait()
+                .map(|status| status.is_some())
+                .map_err(|error| format!("Pinned mpv status could not be read: {error}"))
+        });
+    match connected {
+        Ok(stream) => Ok(spawn_mpv_worker(child, stream)),
+        Err(error) => {
+            terminate_mpv(&mut child);
+            Err(error)
+        }
+    }
+}
+
+#[cfg(unix)]
 fn start_mpv_worker(
     binary: &Path,
     ipc_directory: &Path,
@@ -745,15 +862,19 @@ fn configure_mpv_command(command: &mut Command, socket_path: &Path, extra_argume
         // Speed changes must not shift pitch; make mpv's default explicit.
         .arg("--audio-pitch-correction=yes")
         .arg(format!("--volume={}", DEFAULT_VOLUME * 100.0))
-        .arg(format!("--input-ipc-server={}", socket_path.display()))
-        // mpv exits on EOF even if the Desktop Client is killed without running Drop.
-        .arg("--input-ipc-client=fd://0")
+        .arg(format!("--input-ipc-server={}", socket_path.display()));
+    // mpv exits on EOF even if the Desktop Client is killed without running Drop.
+    // Windows has no fd:// client; a Job Object provides the same link there.
+    #[cfg(unix)]
+    command.arg("--input-ipc-client=fd://0");
+    command
         .args(extra_arguments)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
 }
 
+#[cfg(unix)]
 fn wait_for_mpv_socket(child: &mut Child, socket_path: &Path) -> Result<(), String> {
     let deadline = Instant::now() + MPV_START_TIMEOUT;
     while Instant::now() < deadline {
@@ -775,7 +896,7 @@ fn wait_for_mpv_socket(child: &mut Child, socket_path: &Path) -> Result<(), Stri
 
 fn spawn_mpv_worker(
     child: Child,
-    stream: UnixStream,
+    stream: MpvIpcStream,
 ) -> (Sender<MpvWorkerRequest>, JoinHandle<()>, Receiver<MpvEvent>) {
     let (request_sender, request_receiver) = mpsc::channel();
     let (event_sender, event_receiver) = mpsc::channel();
@@ -787,12 +908,12 @@ fn spawn_mpv_worker(
 
 fn run_mpv_worker(
     mut child: Child,
-    mut stream: UnixStream,
+    mut stream: MpvIpcStream,
     requests: Receiver<MpvWorkerRequest>,
     events: Sender<MpvEvent>,
 ) {
-    let reader_stream = match stream.try_clone() {
-        Ok(stream) => stream,
+    let mut reader = match open_mpv_reader(&stream) {
+        Ok(reader) => reader,
         Err(error) => {
             send_mpv_event(
                 &events,
@@ -803,7 +924,6 @@ fn run_mpv_worker(
             return;
         }
     };
-    let mut reader = BufReader::new(reader_stream);
     let mut request_id = 0_u64;
     loop {
         match requests.recv_timeout(EVENT_POLL_INTERVAL) {
@@ -867,9 +987,19 @@ fn run_mpv_worker(
     terminate_mpv(&mut child);
 }
 
+#[cfg(unix)]
+fn open_mpv_reader(stream: &MpvIpcStream) -> std::io::Result<MpvIpcReader> {
+    stream.try_clone().map(BufReader::new)
+}
+
+#[cfg(windows)]
+fn open_mpv_reader(stream: &MpvIpcStream) -> std::io::Result<MpvIpcReader> {
+    stream.reader(EVENT_POLL_INTERVAL)
+}
+
 fn execute_mpv_command(
-    stream: &mut UnixStream,
-    reader: &mut BufReader<UnixStream>,
+    stream: &mut MpvIpcStream,
+    reader: &mut MpvIpcReader,
     events: &Sender<MpvEvent>,
     request_id: u64,
     command: Value,
@@ -885,7 +1015,7 @@ fn execute_mpv_command(
 }
 
 fn write_mpv_request(
-    stream: &mut UnixStream,
+    stream: &mut MpvIpcStream,
     request_id: u64,
     command: Value,
 ) -> Result<(), String> {
@@ -898,7 +1028,7 @@ fn write_mpv_request(
 }
 
 fn read_mpv_message(
-    reader: &mut BufReader<UnixStream>,
+    reader: &mut MpvIpcReader,
     events: &Sender<MpvEvent>,
     request_id: u64,
 ) -> Result<Option<Result<Value, String>>, String> {
@@ -929,7 +1059,7 @@ fn mpv_response_result(message: &Value) -> Result<Value, String> {
     }
 }
 
-fn drain_mpv_event(reader: &mut BufReader<UnixStream>, events: &Sender<MpvEvent>) {
+fn drain_mpv_event(reader: &mut MpvIpcReader, events: &Sender<MpvEvent>) {
     if let Err(error) = read_mpv_message(reader, events, u64::MAX) {
         report_native_playback_error(&format!("mpv event drain failed: {error}"));
         send_mpv_event(
@@ -1073,7 +1203,7 @@ impl PlaybackController {
             PlaybackControllerSetup {
                 starter: Some(starter),
                 path_observer: Some(path_observer),
-                output_device_adapter: Some(Box::new(CommandAlsaOutputDeviceAdapter::new())),
+                output_device_adapter: Some(Box::new(PlatformOutputDeviceAdapter::new())),
                 adaptive_system_rate: Some(adaptive_system_rate),
                 ..PlaybackControllerSetup::new(lifecycle)
             },
@@ -3799,6 +3929,8 @@ fn effective_replay_gain_mode(
 }
 
 #[cfg(test)]
+// The real-mpv tests and their fixtures are Linux-only.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code, unused_imports))]
 mod tests {
     use super::{
         LiveReconnectState, MpvEvent, MpvOutputConfiguration, MpvProcessAdapter, MpvWorkerRequest,
@@ -3828,6 +3960,7 @@ mod tests {
     };
     use serde_json::json;
     use std::fs;
+    #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
     use std::path::PathBuf;
     use std::process::Command;
@@ -7179,6 +7312,7 @@ mod tests {
         wait_for_state(controller, |state| state.current_time > 0.05);
     }
 
+    #[cfg(unix)]
     #[test]
     #[ignore = "requires pinned mpv"]
     fn real_pinned_mpv_exits_when_desktop_lifetime_connection_closes() {

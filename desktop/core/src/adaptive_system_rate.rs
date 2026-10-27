@@ -8,7 +8,20 @@ use std::sync::Arc;
 pub trait PipeWireRateAdapter: Send + Sync {
     fn forced_rate_hz(&self) -> Result<Option<u32>, String>;
     fn set_forced_rate_hz(&self, rate_hz: Option<u32>) -> Result<(), String>;
+
+    /// Whether this system can force its rate at all; enabling Adaptive
+    /// fails up front instead of at the first Track when it cannot.
+    fn ensure_available(&self) -> Result<(), String> {
+        Ok(())
+    }
 }
+
+/// The system rate control this platform has: PipeWire's forced graph rate on
+/// Linux; none on Windows, where Adaptive reports itself unavailable.
+#[cfg(unix)]
+pub type PlatformRateAdapter = CommandPipeWireRateAdapter;
+#[cfg(windows)]
+pub type PlatformRateAdapter = crate::wasapi::UnsupportedRateAdapter;
 
 pub trait AdaptiveCleanupMarker: Send + Sync {
     fn is_required(&self) -> Result<bool, String>;
@@ -260,6 +273,7 @@ impl AdaptiveSystemRateController {
     }
 
     pub fn enable(&mut self) -> Result<(), String> {
+        self.adapter.ensure_available()?;
         self.cleanup_marker.mark_required()?;
         self.state.is_enabled = true;
         Ok(())

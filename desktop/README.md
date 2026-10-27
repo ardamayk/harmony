@@ -39,3 +39,31 @@ Settings live in `~/.config/audio.earthly.desktop` (server connection, Playback 
 The Desktop Client does not bundle a Go server, database, or server lifecycle.
 
 On Linux, the Player Bar output menu offers Normal, Exclusive, and Adaptive. Normal follows the operating system's active PipeWire output. Exclusive automatically resolves that active output to raw ALSA hardware; it does not show a separate device picker. Outputs without a raw ALSA mapping, including Bluetooth sinks, remain on Normal with an actionable error. Adaptive changes the PipeWire graph rate system-wide and therefore requires confirmation.
+
+## Windows
+
+The same shell and core run on Windows; only the platform layer differs, and Linux keeps everything above.
+
+- mpv IPC is a private named pipe (`\\.\pipe\earthly-audio-mpv-<random>`) instead of a Unix socket, and a kill-on-close Job Object stands in for the `fd://0` lifetime link, so mpv still ends with the core (`core/src/mpv_pipe.rs`).
+- Output modes use WASAPI (`core/src/wasapi.rs`). Normal follows the default Windows output. Exclusive resolves the default render endpoint and opens it with mpv's `wasapi/<endpoint>` device and `audio-exclusive`, and moves attenuation onto the endpoint's own volume. Adaptive reports itself unavailable: Windows has no supported API for forcing the shared-mode rate, and Exclusive already plays at the source rate.
+- MPRIS is Linux-only; on Windows media keys and the system media overlay are not wired yet.
+- Settings live in `%APPDATA%\audio.earthly.desktop`.
+
+Requirements: Node 24, pnpm, Rust with the `x86_64-pc-windows-gnullvm` target, MSYS2 with the CLANG64 clang, and pinned mpv: the official `mpv-v0.41.0-x86_64-w64-mingw32.zip` release build (it reports `0.41.0-dev-g41f6a6450`, pinned in `core/mpv-windows-version.txt`). Its `mpv.exe` and the DLLs beside it come from `EARTHLY_AUDIO_MPV_PATH` or `core/binaries/`. The Music Server runs elsewhere (Linux or WSL); the connection screen takes its loopback origin, such as WSL's forwarded `http://127.0.0.1:8090`.
+
+The core's TLS stack (AWS-LC under rustls) compiles C, which the scripts build with MSYS2 CLANG64 (`C:\msys64`, or `MSYS2_ROOT`). `.cargo/config.toml` links the C runtime and libunwind statically for that target, so the core needs no MSYS2 DLLs at run time.
+
+```powershell
+winget install MSYS2.MSYS2
+C:\msys64\usr\bin\bash.exe -lc "pacman -Syu --noconfirm && pacman -S --needed --noconfirm mingw-w64-clang-x86_64-clang mingw-w64-clang-x86_64-lld"
+rustup target add x86_64-pc-windows-gnullvm
+```
+
+```powershell
+pnpm install
+pnpm --dir desktop run win:dev     # debug core, Vite HMR, shell
+pnpm --dir desktop run win:build   # web/dist, release core with mpv.exe beside it, shell
+pnpm --dir desktop run win:start   # the built client
+```
+
+`EARTHLY_AUDIO_CORE_PATH` runs a prebuilt core instead, such as one cross-built in WSL with `cargo build --release -p earthly-audio-core --target x86_64-pc-windows-gnu` (needs mingw-w64).

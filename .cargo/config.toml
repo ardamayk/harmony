@@ -1,0 +1,5 @@
+# The Windows Desktop core builds with MSYS2 CLANG64 for this target (see
+# desktop/README.md). Linking the C runtime and libunwind statically keeps the
+# core free of MSYS2 DLLs, so it runs outside the MSYS2 environment.
+[target.x86_64-pc-windows-gnullvm]
+rustflags = ["-Ctarget-feature=+crt-static"]

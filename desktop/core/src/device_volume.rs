@@ -1,3 +1,6 @@
+// The pactl/amixer routes below are Linux's; Windows uses `wasapi`.
+#![cfg_attr(windows, allow(dead_code))]
+
 use std::process::Command;
 
 /// Where a bit-perfect Output Mode keeps the listener's attenuation instead of
@@ -10,11 +13,24 @@ pub(crate) enum VolumeRoute {
 }
 
 impl VolumeRoute {
+    #[cfg(not(windows))]
     pub(crate) fn for_alsa_device(device_id: &str) -> Option<Self> {
         let card = device_id.strip_prefix("hw:")?.split(',').next()?;
         card.parse().ok().map(Self::AlsaCard)
     }
+
+    /// Exclusive opens the default WASAPI endpoint, whose own volume is the
+    /// system output's.
+    #[cfg(windows)]
+    pub(crate) fn for_alsa_device(_device_id: &str) -> Option<Self> {
+        Some(Self::SystemSink)
+    }
 }
+
+#[cfg(unix)]
+pub(crate) type PlatformDeviceVolume = CommandDeviceVolume;
+#[cfg(windows)]
+pub(crate) type PlatformDeviceVolume = crate::wasapi::WasapiDeviceVolume;
 
 pub(crate) trait DeviceVolume: Send + Sync {
     /// Changes the route's volume by `delta_db` and returns the change the
