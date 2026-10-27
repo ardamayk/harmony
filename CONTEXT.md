@@ -193,7 +193,7 @@ An advanced Native Playback output mode that opens a selected ALSA `hw:` Output 
 _Avoid_: PipeWire exclusive mode, guaranteed device availability
 
 **Adaptive System Rate**:
-A Native Playback output mode that temporarily forces the local PipeWire graph to each Playback Source's sample rate and therefore changes processing for every application on the device.
+A Native Playback output mode that temporarily forces the device's system audio rate (the PipeWire graph on Linux, the default output's shared-mode format on Windows) to each Playback Source's sample rate and therefore changes processing for every application on the device.
 _Avoid_: Bitrate matching, bit-depth matching, isolated application setting
 
 **Playback Telemetry**:
