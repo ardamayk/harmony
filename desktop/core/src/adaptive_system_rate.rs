@@ -17,11 +17,19 @@ pub trait PipeWireRateAdapter: Send + Sync {
 }
 
 /// The system rate control this platform has: PipeWire's forced graph rate on
-/// Linux; none on Windows, where Adaptive reports itself unavailable.
+/// Linux; the default endpoint's shared-mode format on Windows, whose original
+/// is kept in `state_directory` until it is restored.
 #[cfg(unix)]
-pub type PlatformRateAdapter = CommandPipeWireRateAdapter;
+pub fn platform_rate_adapter(_state_directory: &std::path::Path) -> Arc<dyn PipeWireRateAdapter> {
+    Arc::new(CommandPipeWireRateAdapter::new())
+}
+
 #[cfg(windows)]
-pub type PlatformRateAdapter = crate::wasapi::UnsupportedRateAdapter;
+pub fn platform_rate_adapter(state_directory: &std::path::Path) -> Arc<dyn PipeWireRateAdapter> {
+    Arc::new(crate::policy_config::PolicyConfigRateAdapter::new(
+        state_directory.join("adaptive-system-rate.windows-format.json"),
+    ))
+}
 
 pub trait AdaptiveCleanupMarker: Send + Sync {
     fn is_required(&self) -> Result<bool, String>;

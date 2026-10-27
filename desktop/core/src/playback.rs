@@ -315,6 +315,44 @@ enum MpvWorkerRequest {
     Shutdown,
 }
 
+/// The running mpv's request channel. Windows restarts every stream on an
+/// endpoint when Adaptive changes its format, so Adaptive closes mpv's audio
+/// before the change and reopens it after (`set_mpv_audio_enabled`). It goes
+/// through mpv's own request channel, never the process lock, which the
+/// caller may hold.
+#[cfg(windows)]
+static CURRENT_MPV_REQUESTS: Mutex<Option<Sender<MpvWorkerRequest>>> = Mutex::new(None);
+
+/// Closes (`false`) or reopens (`true`) the running mpv's audio stream; a
+/// no-op while no mpv runs.
+#[cfg(windows)]
+pub(crate) fn set_mpv_audio_enabled(enabled: bool) -> Result<(), String> {
+    let Some(requests) = CURRENT_MPV_REQUESTS
+        .lock()
+        .map_err(|_| "Native mpv request state is unavailable.".to_owned())?
+        .clone()
+    else {
+        return Ok(());
+    };
+    let (response, result) = mpsc::channel();
+    let track = if enabled { "auto" } else { "no" };
+    if requests
+        .send(MpvWorkerRequest::Command {
+            command: json!(["set_property", "aid", track]),
+            event_boundary: None,
+            response,
+        })
+        .is_err()
+    {
+        // mpv already stopped: there is no stream to close or reopen.
+        return Ok(());
+    }
+    result
+        .recv_timeout(MPV_COMMAND_TIMEOUT)
+        .map_err(|_| "Native mpv command timed out.".to_owned())?
+        .map(|_| ())
+}
+
 type StartedMpvProcess = (Box<dyn MpvProcessAdapter>, Receiver<MpvEvent>, PathBuf);
 type MpvWorker = (Sender<MpvWorkerRequest>, JoinHandle<()>, Receiver<MpvEvent>);
 
@@ -339,6 +377,10 @@ impl RealMpvProcess {
         let ipc_directory = create_private_ipc_directory()?;
         match start_mpv_worker(&binary, &ipc_directory, extra_arguments) {
             Ok((requests, worker, events)) => {
+                #[cfg(windows)]
+                if let Ok(mut current) = CURRENT_MPV_REQUESTS.lock() {
+                    *current = Some(requests.clone());
+                }
                 let process = Self {
                     requests,
                     worker: Mutex::new(Some(worker)),

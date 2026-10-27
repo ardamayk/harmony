@@ -6,11 +6,9 @@
 //!   to mpv as `wasapi/<endpoint id>` with `audio-exclusive`; WASAPI exclusive
 //!   mode needs no card-profile juggling, so its coordinator holds no lease.
 //! - Device volume is the endpoint's own volume (`IAudioEndpointVolume`).
-//! - Windows has no supported API for forcing the shared-mode rate, so
-//!   Adaptive System Rate reports itself unavailable, and there is no graph
-//!   to observe for PipeWire telemetry.
+//! - Adaptive System Rate changes the endpoint's shared-mode format
+//!   (`policy_config`); there is no graph to observe for PipeWire telemetry.
 
-use crate::adaptive_system_rate::PipeWireRateAdapter;
 use crate::device_volume::{DeviceVolume, VolumeRoute};
 use crate::exclusive_output::ExclusiveOutputCoordinator;
 use crate::output_device::{
@@ -21,24 +19,23 @@ use windows::Win32::Devices::FunctionDiscovery::PKEY_Device_FriendlyName;
 use windows::Win32::Foundation::{ERROR_NOT_FOUND, RPC_E_CHANGED_MODE};
 use windows::Win32::Media::Audio::Endpoints::IAudioEndpointVolume;
 use windows::Win32::Media::Audio::{
-    DEVICE_STATE_ACTIVE, IMMDevice, IMMDeviceEnumerator, MMDeviceEnumerator, eConsole, eRender,
+    DEVICE_STATE_ACTIVE, ENDPOINT_HARDWARE_SUPPORT_VOLUME, IMMDevice, IMMDeviceEnumerator,
+    MMDeviceEnumerator, eConsole, eRender,
 };
 use windows::Win32::System::Com::{
     CLSCTX_ALL, COINIT_MULTITHREADED, CoCreateInstance, CoInitializeEx, CoTaskMemFree,
     CoUninitialize, STGM_READ,
 };
 
-pub(crate) const ADAPTIVE_UNAVAILABLE_MESSAGE: &str = "Adaptive is not available on Windows: Windows offers no supported way to change the system audio rate. Use Exclusive for bit-perfect playback.";
-
 /// Initializes COM on the calling thread for one call. A thread that already
 /// joined an apartment keeps it; COM is only uninitialized when this call
 /// initialized it.
-struct ComScope {
+pub(crate) struct ComScope {
     owns_initialization: bool,
 }
 
 impl ComScope {
-    fn enter() -> Result<Self, String> {
+    pub(crate) fn enter() -> Result<Self, String> {
         // SAFETY: paired with CoUninitialize in Drop when it succeeded.
         let result = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) };
         if result.is_ok() {
@@ -64,24 +61,31 @@ impl Drop for ComScope {
     }
 }
 
-fn enumerator() -> windows::core::Result<IMMDeviceEnumerator> {
+pub(crate) fn enumerator() -> windows::core::Result<IMMDeviceEnumerator> {
     // SAFETY: COM is initialized by the caller's ComScope.
     unsafe { CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL) }
 }
 
-fn default_render_device(enumerator: &IMMDeviceEnumerator) -> windows::core::Result<IMMDevice> {
+pub(crate) fn default_render_device(
+    enumerator: &IMMDeviceEnumerator,
+) -> windows::core::Result<IMMDevice> {
     // SAFETY: COM is initialized by the caller's ComScope.
     unsafe { enumerator.GetDefaultAudioEndpoint(eRender, eConsole) }
 }
 
-fn endpoint(device: &IMMDevice) -> windows::core::Result<OutputDevice> {
+/// The endpoint id mpv and IPolicyConfig take, such as `{0.0.0.00000000}.{guid}`.
+pub(crate) fn endpoint_id(device: &IMMDevice) -> windows::core::Result<String> {
     // SAFETY: GetId returns a CoTaskMem string that is freed after copying.
-    let id = unsafe {
+    unsafe {
         let raw = device.GetId()?;
         let id = raw.to_string();
         CoTaskMemFree(Some(raw.0.cast()));
-        id?
-    };
+        Ok(id?)
+    }
+}
+
+fn endpoint(device: &IMMDevice) -> windows::core::Result<OutputDevice> {
+    let id = endpoint_id(device)?;
     let name = friendly_name(device).unwrap_or_else(|| id.clone());
     Ok(OutputDevice { id, name })
 }
@@ -192,64 +196,49 @@ impl ExclusiveOutputCoordinator for WasapiExclusiveOutputCoordinator {
     }
 }
 
-/// Moves the default render endpoint's volume. Exclusive always opens the
-/// default endpoint, so every route lands on it.
+/// Moves the default render endpoint's volume, only where the endpoint applies
+/// it in hardware. There the stream reaching it keeps its samples, which is
+/// what the hand-off is for; a software endpoint volume would change them like
+/// mpv's does, so such an endpoint takes nothing and mpv keeps the volume.
+/// Exclusive always opens the default endpoint, so every route lands on it.
 pub(crate) struct WasapiDeviceVolume;
 
 impl DeviceVolume for WasapiDeviceVolume {
     fn change_db(&self, _route: VolumeRoute, delta_db: f64) -> Result<f64, String> {
         let _com = ComScope::enter()?;
-        let change = || -> windows::core::Result<f64> {
-            let device = default_render_device(&enumerator()?)?;
-            // SAFETY: COM is initialized by the ComScope above; the volume
-            // interface is used only while `device` is alive.
-            unsafe {
-                let volume: IAudioEndpointVolume = device.Activate(CLSCTX_ALL, None)?;
-                let (mut minimum, mut maximum, mut _step) = (0.0_f32, 0.0_f32, 0.0_f32);
-                volume.GetVolumeRange(&mut minimum, &mut maximum, &mut _step)?;
-                let before = volume.GetMasterVolumeLevel()?;
-                let target = (f64::from(before) + delta_db)
-                    .clamp(f64::from(minimum), f64::from(maximum))
-                    as f32;
-                volume.SetMasterVolumeLevel(target, std::ptr::null())?;
-                Ok(f64::from(volume.GetMasterVolumeLevel()?) - f64::from(before))
+        let device = default_render_device(&enumerator().map_err(|error| error.to_string())?)
+            .map_err(|error| format!("The default output could not be found: {error}"))?;
+        change_endpoint_db(&device, delta_db, true)
+    }
+}
+
+/// Returns the change the endpoint made, which is smaller at its limits, and
+/// none when `hardware_only` and the endpoint has no hardware volume.
+fn change_endpoint_db(
+    device: &IMMDevice,
+    delta_db: f64,
+    hardware_only: bool,
+) -> Result<f64, String> {
+    let change = || -> windows::core::Result<f64> {
+        // SAFETY: COM is initialized by the caller's ComScope; the volume
+        // interface is used only while `device` is alive.
+        unsafe {
+            let volume: IAudioEndpointVolume = device.Activate(CLSCTX_ALL, None)?;
+            if hardware_only
+                && volume.QueryHardwareSupport()? & ENDPOINT_HARDWARE_SUPPORT_VOLUME == 0
+            {
+                return Ok(0.0);
             }
-        };
-        change().map_err(|error| format!("The output device volume could not be changed: {error}"))
-    }
-}
-
-/// Windows exposes no supported way to force the shared-mode mix rate.
-/// Clearing a forced rate always succeeds, so cleanup paths stay quiet.
-pub struct UnsupportedRateAdapter;
-
-impl UnsupportedRateAdapter {
-    pub fn new() -> Self {
-        Self
-    }
-}
-
-impl Default for UnsupportedRateAdapter {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl PipeWireRateAdapter for UnsupportedRateAdapter {
-    fn forced_rate_hz(&self) -> Result<Option<u32>, String> {
-        Ok(None)
-    }
-
-    fn set_forced_rate_hz(&self, rate_hz: Option<u32>) -> Result<(), String> {
-        match rate_hz {
-            None => Ok(()),
-            Some(_) => Err(ADAPTIVE_UNAVAILABLE_MESSAGE.to_owned()),
+            let (mut minimum, mut maximum, mut _step) = (0.0_f32, 0.0_f32, 0.0_f32);
+            volume.GetVolumeRange(&mut minimum, &mut maximum, &mut _step)?;
+            let before = volume.GetMasterVolumeLevel()?;
+            let target =
+                (f64::from(before) + delta_db).clamp(f64::from(minimum), f64::from(maximum)) as f32;
+            volume.SetMasterVolumeLevel(target, std::ptr::null())?;
+            Ok(f64::from(volume.GetMasterVolumeLevel()?) - f64::from(before))
         }
-    }
-
-    fn ensure_available(&self) -> Result<(), String> {
-        Err(ADAPTIVE_UNAVAILABLE_MESSAGE.to_owned())
-    }
+    };
+    change().map_err(|error| format!("The output device volume could not be changed: {error}"))
 }
 
 /// There is no PipeWire graph on Windows; the path stays unobserved.

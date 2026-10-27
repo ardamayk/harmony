@@ -23,6 +23,8 @@ mod playback_restore;
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 mod playback_test_support;
 mod playback_tray;
+#[cfg(windows)]
+mod policy_config;
 pub mod processing;
 mod queue_events;
 mod rpc;
@@ -32,7 +34,7 @@ pub mod telemetry;
 mod wasapi;
 
 use adaptive_system_rate::{
-    AdaptiveSystemRateController, FileAdaptiveCleanupMarker, PlatformRateAdapter,
+    AdaptiveSystemRateController, FileAdaptiveCleanupMarker, platform_rate_adapter,
 };
 use connection::{
     ConnectionCheck, ConnectionError, ConnectionErrorCode, ConnectionStore, HttpBridge,
@@ -1016,7 +1018,7 @@ impl AppState {
         exit: mpsc::Sender<()>,
     ) -> Result<Arc<Self>, String> {
         let adaptive_system_rate = AdaptiveSystemRateController::recover_startup_if_marked(
-            Arc::new(PlatformRateAdapter::new()),
+            platform_rate_adapter(config_directory),
             Arc::new(FileAdaptiveCleanupMarker::new(
                 config_directory.join(ADAPTIVE_CLEANUP_MARKER_FILE_NAME),
             )),

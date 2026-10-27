@@ -32,8 +32,10 @@ uuid = { version = "=1.25.0", features = ["v4"] }
 mpris-server = { version = "=0.10.0", features = ["tokio"] }
 
 # Windows: mpv's named-pipe IPC, its Job Object lifetime link, WASAPI endpoint
-# discovery and volume, and handle-based file identity for Desktop Import.
+# discovery and volume, handle-based file identity for Desktop Import, and the
+# IPolicyConfig interface Adaptive declares (windows-core's interface macro).
 [target.'cfg(windows)'.dependencies]
+windows-core = "=0.62.2"
 windows = { version = "=0.62.2", features = [
     "Win32_Devices_FunctionDiscovery",
     "Win32_Foundation",
