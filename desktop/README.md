@@ -40,12 +40,14 @@ The Desktop Client does not bundle a Go server, database, or server lifecycle.
 
 On Linux, the Player Bar output menu offers Normal, Exclusive, and Adaptive. Normal follows the operating system's active PipeWire output. Exclusive automatically resolves that active output to raw ALSA hardware; it does not show a separate device picker. Outputs without a raw ALSA mapping, including Bluetooth sinks, remain on Normal with an actionable error. Adaptive changes the PipeWire graph rate system-wide and therefore requires confirmation.
 
+Exclusive and Adaptive keep mpv at full volume and move the listener's volume onto the device (the raw ALSA card, or the default PipeWire sink). Each hand-off is recorded in `device-volume-hand-off.json` until it is returned, so a client that was killed has it undone at the next start: mpv comes back at the listener's level first, then the sink gets its volume back (PipeWire restores a card's own volume itself).
+
 ## Windows
 
 The same shell and core run on Windows; only the platform layer differs, and Linux keeps everything above.
 
 - mpv IPC is a private named pipe (`\\.\pipe\earthly-audio-mpv-<random>`) instead of a Unix socket, and a kill-on-close Job Object stands in for the `fd://0` lifetime link, so mpv still ends with the core (`core/src/mpv_pipe.rs`).
-- Output modes use WASAPI (`core/src/wasapi.rs`). Normal follows the default Windows output. Exclusive resolves the default render endpoint and opens it with mpv's `wasapi/<endpoint>` device and `audio-exclusive`, and moves attenuation onto the endpoint's own volume. Adaptive reports itself unavailable: Windows has no supported API for forcing the shared-mode rate, and Exclusive already plays at the source rate.
+- Output modes use WASAPI (`core/src/wasapi.rs`). Normal follows the default Windows output. Exclusive resolves the default render endpoint and opens it with mpv's `wasapi/<endpoint>` device and `audio-exclusive`,. Exclusive and Adaptive move the listener's volume onto the endpoint only when the endpoint applies it in hardware (`IAudioEndpointVolume::QueryHardwareSupport`); a software endpoint volume would change the samples like mpv's, so mpv keeps it there. The endpoint volume is system-wide, so the hand-off record above undoes it at the next start if the client was killed. Adaptive sets the default endpoint's shared-mode format (its "Default Format" in Sound settings) to each Track's sample rate, system-wide like the PipeWire graph rate, through `IPolicyConfig` (`core/src/policy_config.rs`). That interface is the one the Sound control panel uses, but Microsoft does not document it, so a Windows release could change it; Adaptive then reports itself unavailable while Normal and Exclusive keep working. The original format is saved in `adaptive-system-rate.windows-format.json` before the first change and restored when Adaptive turns off, the client quits, or it starts again after a crash. A rate the device does not support keeps the original format.
 - MPRIS is Linux-only; on Windows media keys and the system media overlay are not wired yet.
 - Settings live in `%APPDATA%\audio.earthly.desktop`.
 

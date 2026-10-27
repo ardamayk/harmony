@@ -78,6 +78,7 @@ const CONNECTION_FILE_NAME: &str = "server-connection.json";
 const PLAYBACK_SNAPSHOT_FILE_NAME: &str = "playback-session.json";
 const PROCESSING_SETTINGS_FILE_NAME: &str = "processing-settings.json";
 const ADAPTIVE_CLEANUP_MARKER_FILE_NAME: &str = "adaptive-system-rate.cleanup-required";
+const DEVICE_ATTENUATION_FILE_NAME: &str = "device-volume-hand-off.json";
 const PLAYBACK_STATE_EVENT: &str = "desktop-playback-state";
 const CONNECTION_CHANGED_EVENT: &str = "server-connection-changed";
 const QUEUE_EVENTS_ERROR_EVENT: &str = "desktop-queue-events-error";
@@ -110,6 +111,8 @@ struct AppState {
     exit: mpsc::Sender<()>,
     device_volume: Arc<dyn DeviceVolume>,
     device_attenuation: Mutex<Option<DeviceAttenuation>>,
+    /// Where a hand-off is recorded until it is undone.
+    device_attenuation_record: PathBuf,
 }
 
 /// Attenuation moved from mpv onto the output device while a bit-perfect
@@ -542,6 +545,12 @@ fn hand_off_volume_to_device(
             software_volume,
         });
     }
+    save_device_attenuation_record(
+        &state.device_attenuation_record,
+        route,
+        applied_db,
+        software_volume,
+    );
     let is_volume_only = !processing.state().equalizer.is_enabled
         && processing.state().replay_gain_mode == ReplayGainMode::Off;
     match update_processing_locked(state, processing, |processing| {
@@ -588,12 +597,142 @@ fn return_device_volume(state: &AppState, processing: &mut ProcessingController)
             eprintln!("Software volume could not be saved: {error}");
         }
     }
-    if attenuation.route == VolumeRoute::SystemSink
-        && let Err(error) = state
+    let is_device_restored = attenuation.route != VolumeRoute::SystemSink
+        || match state
             .device_volume
             .change_db(VolumeRoute::SystemSink, -attenuation.applied_db)
+        {
+            Ok(_) => true,
+            Err(error) => {
+                eprintln!("System output volume could not be restored: {error}");
+                false
+            }
+        };
+    // A failed restore keeps the record, so the next start retries it.
+    if is_device_restored {
+        clear_device_attenuation_record(&state.device_attenuation_record);
+    }
+}
+
+/// A hand-off as it stands on the device, so a client killed before
+/// `return_device_volume` has it undone at the next start: mpv's volume was
+/// saved at full, and a system output left attenuated (the PipeWire sink, the
+/// Windows endpoint) would quiet every application and add up across starts.
+#[derive(serde::Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DeviceAttenuationRecord {
+    route: RecordedRoute,
+    /// The sink or endpoint that carries it; none for a raw ALSA card, whose
+    /// own volume PipeWire restores when it takes the card back.
+    target: Option<String>,
+    applied_db: f64,
+    software_volume: f64,
+}
+
+#[derive(Clone, Copy, serde::Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+enum RecordedRoute {
+    SystemSink,
+    AlsaCard,
+}
+
+#[cfg(not(windows))]
+fn hand_off_target(route: VolumeRoute) -> Result<Option<String>, String> {
+    match route {
+        VolumeRoute::SystemSink => device_volume::default_sink_name().map(Some),
+        VolumeRoute::AlsaCard(_) => Ok(None),
+    }
+}
+
+#[cfg(windows)]
+fn hand_off_target(_route: VolumeRoute) -> Result<Option<String>, String> {
+    wasapi::default_endpoint_id().map(Some)
+}
+
+/// `Ok(false)` while the device that carries it is absent.
+#[cfg(not(windows))]
+fn undo_recorded_hand_off(record: &DeviceAttenuationRecord) -> Result<bool, String> {
+    match (record.route, record.target.as_deref()) {
+        (RecordedRoute::SystemSink, Some(sink)) => {
+            device_volume::change_named_sink_db(sink, -record.applied_db).map(|_| true)
+        }
+        _ => Ok(true),
+    }
+}
+
+#[cfg(windows)]
+fn undo_recorded_hand_off(record: &DeviceAttenuationRecord) -> Result<bool, String> {
+    match record.target.as_deref() {
+        Some(endpoint) => wasapi::change_named_endpoint_db(endpoint, -record.applied_db),
+        None => Ok(true),
+    }
+}
+
+fn save_device_attenuation_record(
+    path: &Path,
+    route: VolumeRoute,
+    applied_db: f64,
+    software_volume: f64,
+) {
+    let target = match hand_off_target(route) {
+        Ok(target) => target,
+        Err(error) => {
+            eprintln!("Output volume hand-off could not be recorded: {error}");
+            return;
+        }
+    };
+    let record = DeviceAttenuationRecord {
+        route: match route {
+            VolumeRoute::SystemSink => RecordedRoute::SystemSink,
+            VolumeRoute::AlsaCard(_) => RecordedRoute::AlsaCard,
+        },
+        target,
+        applied_db,
+        software_volume,
+    };
+    let result = serde_json::to_string(&record)
+        .map_err(|error| error.to_string())
+        .and_then(|text| std::fs::write(path, text).map_err(|error| error.to_string()));
+    if let Err(error) = result {
+        eprintln!("Output volume hand-off could not be recorded: {error}");
+    }
+}
+
+fn clear_device_attenuation_record(path: &Path) {
+    if let Err(error) = std::fs::remove_file(path)
+        && error.kind() != std::io::ErrorKind::NotFound
     {
-        eprintln!("System output volume could not be restored: {error}");
+        eprintln!("Output volume hand-off record could not be cleared: {error}");
+    }
+}
+
+/// Undoes a hand-off a killed client left on the device. mpv's volume was
+/// saved at full while the device carried the attenuation, so the listener's
+/// level is put back first: nothing plays louder than they chose.
+fn recover_left_device_attenuation(path: &Path, processing: &mut ProcessingController) {
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return;
+    };
+    let record: DeviceAttenuationRecord = match serde_json::from_str(&text) {
+        Ok(record) => record,
+        Err(error) => {
+            eprintln!("Output volume hand-off record is unreadable: {error}");
+            clear_device_attenuation_record(path);
+            return;
+        }
+    };
+    if let Err(error) = processing.set_software_volume(record.software_volume) {
+        eprintln!("Software volume could not be restored after a hand-off: {error}");
+    }
+    match undo_recorded_hand_off(&record) {
+        Ok(true) => {
+            eprintln!("Output volume hand-off left by the previous run was undone.");
+            clear_device_attenuation_record(path);
+        }
+        Ok(false) => {
+            eprintln!("Output volume hand-off left on an absent output is kept until it returns.")
+        }
+        Err(error) => eprintln!("Output volume hand-off could not be undone: {error}"),
     }
 }
 
@@ -1051,6 +1190,8 @@ impl AppState {
         if processing.output_mode() == OutputMode::AdaptiveSystemRate {
             processing.set_output_mode(OutputMode::System)?;
         }
+        let device_attenuation_record = config_directory.join(DEVICE_ATTENUATION_FILE_NAME);
+        recover_left_device_attenuation(&device_attenuation_record, &mut processing);
 
         // MPRIS commands can arrive before the state exists, and must not
         // keep it alive at exit; they reach it through a weak reference.
@@ -1133,6 +1274,7 @@ impl AppState {
             exit,
             device_volume: Arc::new(PlatformDeviceVolume {}),
             device_attenuation: Mutex::new(None),
+            device_attenuation_record,
         });
         let _ = mpris_state.set(Arc::downgrade(&state));
         hand_off_restored_exclusive_volume(&state);
@@ -1238,9 +1380,43 @@ fn release(mut state: Arc<AppState>) {
 
 #[cfg(test)]
 mod tests {
-    use super::{returned_volume, shell_action, validate_playback_source};
+    use super::{
+        DeviceAttenuationRecord, RecordedRoute, returned_volume, shell_action,
+        validate_playback_source,
+    };
     use crate::playback_app_actions::DesktopPlaybackAction;
     use serde_json::json;
+
+    #[test]
+    fn a_hand_off_record_keeps_its_route_target_and_the_listeners_level() {
+        let record = DeviceAttenuationRecord {
+            route: RecordedRoute::SystemSink,
+            target: Some("alsa_output.usb-dac".to_owned()),
+            applied_db: -3.5,
+            software_volume: 0.68,
+        };
+        let text = serde_json::to_string(&record).expect("record JSON");
+
+        assert!(text.contains("\"route\":\"system-sink\""), "{text}");
+        let read: DeviceAttenuationRecord = serde_json::from_str(&text).expect("read back");
+        assert_eq!(read.target.as_deref(), Some("alsa_output.usb-dac"));
+        assert_eq!(read.applied_db, -3.5);
+        assert_eq!(read.software_volume, 0.68);
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn a_raw_alsa_hand_off_needs_no_device_undo() {
+        // PipeWire restores the card's own volume; only mpv's level comes back.
+        let record = DeviceAttenuationRecord {
+            route: RecordedRoute::AlsaCard,
+            target: None,
+            applied_db: -3.5,
+            software_volume: 0.68,
+        };
+
+        assert_eq!(super::undo_recorded_hand_off(&record), Ok(true));
+    }
 
     #[test]
     fn native_playback_rejects_urls_outside_private_media_proxy() {

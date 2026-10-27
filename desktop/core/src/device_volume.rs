@@ -49,16 +49,35 @@ impl DeviceVolume for CommandDeviceVolume {
     }
 }
 
+fn change_system_sink(delta_db: f64) -> Result<f64, String> {
+    change_sink("@DEFAULT_SINK@", delta_db)
+}
+
+/// The default PipeWire sink's name, which a hand-off record names so its
+/// undo reaches that sink even after the default changed.
+pub(crate) fn default_sink_name() -> Result<String, String> {
+    let name = run("pactl", &["get-default-sink"])?.trim().to_owned();
+    if name.is_empty() || name == "@DEFAULT_SINK@" {
+        return Err("The system output could not be resolved.".to_owned());
+    }
+    Ok(name)
+}
+
+/// Changes a named sink's volume, to undo a recorded hand-off.
+pub(crate) fn change_named_sink_db(sink: &str, delta_db: f64) -> Result<f64, String> {
+    change_sink(sink, delta_db)
+}
+
 /// PipeWire splits a sink volume between the hardware control and software
 /// itself, so the whole change always lands.
-fn change_system_sink(delta_db: f64) -> Result<f64, String> {
-    let output = run("pactl", &["get-sink-volume", "@DEFAULT_SINK@"])?;
+fn change_sink(sink: &str, delta_db: f64) -> Result<f64, String> {
+    let output = run("pactl", &["get-sink-volume", sink])?;
     let raw = parse_pactl_raw_volume(&output)
         .ok_or_else(|| "The system output volume could not be read.".to_owned())?;
     // shortcut: one value for every channel resets a non-centre balance; read
     // each channel when balance matters.
     let next = scale_pactl_raw_volume(raw, delta_db).to_string();
-    run("pactl", &["set-sink-volume", "@DEFAULT_SINK@", &next])?;
+    run("pactl", &["set-sink-volume", sink, &next])?;
     Ok(delta_db)
 }
 

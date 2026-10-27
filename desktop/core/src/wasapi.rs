@@ -201,6 +201,9 @@ impl ExclusiveOutputCoordinator for WasapiExclusiveOutputCoordinator {
 /// what the hand-off is for; a software endpoint volume would change them like
 /// mpv's does, so such an endpoint takes nothing and mpv keeps the volume.
 /// Exclusive always opens the default endpoint, so every route lands on it.
+///
+/// The endpoint volume is system-wide, so `lib.rs` records each hand-off on
+/// disk and undoes one a killed client left behind at the next start.
 pub(crate) struct WasapiDeviceVolume;
 
 impl DeviceVolume for WasapiDeviceVolume {
@@ -210,6 +213,33 @@ impl DeviceVolume for WasapiDeviceVolume {
             .map_err(|error| format!("The default output could not be found: {error}"))?;
         change_endpoint_db(&device, delta_db, true)
     }
+}
+
+/// The default render endpoint's id, which a hand-off record names.
+pub(crate) fn default_endpoint_id() -> Result<String, String> {
+    let _com = ComScope::enter()?;
+    let device = default_render_device(&enumerator().map_err(|error| error.to_string())?)
+        .map_err(|error| format!("The default output could not be found: {error}"))?;
+    endpoint_id(&device).map_err(|error| error.to_string())
+}
+
+/// Changes a named endpoint's volume by `delta_db`, hardware or not: used to
+/// undo a recorded hand-off. `Ok(false)` while the endpoint is absent.
+pub(crate) fn change_named_endpoint_db(device_id: &str, delta_db: f64) -> Result<bool, String> {
+    let _com = ComScope::enter()?;
+    // SAFETY: COM is initialized by the ComScope above.
+    let device = unsafe {
+        enumerator()
+            .and_then(|enumerator| enumerator.GetDevice(&windows_core::HSTRING::from(device_id)))
+    };
+    let Ok(device) = device else {
+        return Ok(false);
+    };
+    // SAFETY: COM is initialized by the ComScope above.
+    if unsafe { device.GetState() }.ok() != Some(DEVICE_STATE_ACTIVE) {
+        return Ok(false);
+    }
+    change_endpoint_db(&device, delta_db, false).map(|_| true)
 }
 
 /// Returns the change the endpoint made, which is smaller at its limits, and
@@ -259,5 +289,30 @@ impl Default for NoSystemPathObserver {
 impl PipeWireObserver for NoSystemPathObserver {
     fn observe(&self) -> Result<Option<PipeWireObservation>, String> {
         Ok(None)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ComScope, default_render_device, enumerator};
+    use windows::Win32::Media::Audio::Endpoints::IAudioEndpointVolume;
+    use windows::Win32::System::Com::CLSCTX_ALL;
+
+    #[test]
+    #[ignore = "reads the real default output's volume and mute"]
+    fn real_default_output_volume_and_mute() {
+        let _com = ComScope::enter().expect("COM");
+        let device = default_render_device(&enumerator().unwrap()).expect("default output");
+        // SAFETY: COM is initialized above; `device` outlives the interface.
+        unsafe {
+            let volume: IAudioEndpointVolume = device.Activate(CLSCTX_ALL, None).unwrap();
+            eprintln!(
+                "default output: {:.1} dB, scalar {:.3}, mute {}, hardware support {:#x}",
+                volume.GetMasterVolumeLevel().unwrap(),
+                volume.GetMasterVolumeLevelScalar().unwrap(),
+                volume.GetMute().unwrap().as_bool(),
+                volume.QueryHardwareSupport().unwrap()
+            );
+        }
     }
 }
