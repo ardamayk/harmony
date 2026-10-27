@@ -1,6 +1,11 @@
 import { join, resolve } from "node:path";
 
-const EXECUTABLE_SUFFIX = process.platform === "win32" ? ".exe" : "";
+/** The release core `cargo build --release` leaves: on Windows the scripts
+ * build for the gnullvm target, which gets its own target directory. */
+const DEFAULT_RELEASE_CORE =
+	process.platform === "win32"
+		? "../target/x86_64-pc-windows-gnullvm/release/earthly-audio-core.exe"
+		: "../target/release/earthly-audio-core";
 
 export type ShellPaths = {
 	/** The Rust core binary. */
@@ -23,10 +28,7 @@ export function shellPaths(
 	return {
 		core: resolve(
 			env.EARTHLY_AUDIO_CORE_PATH ??
-				join(
-					desktopDirectory,
-					`../target/release/earthly-audio-core${EXECUTABLE_SUFFIX}`,
-				),
+				join(desktopDirectory, DEFAULT_RELEASE_CORE),
 		),
 		rendererRoot: resolve(
 			env.EARTHLY_AUDIO_RENDERER_DIR ?? join(desktopDirectory, "../web/dist"),
