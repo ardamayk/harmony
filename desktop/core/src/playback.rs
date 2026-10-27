@@ -1662,11 +1662,14 @@ impl PlaybackController {
     }
 
     fn enable_adaptive_controller(&self) -> Result<(), PlaybackCommandError> {
-        let result = self
+        let mut controller = self
             .adaptive_controller()?
             .lock()
-            .map_err(|_| PlaybackCommandError::new("Adaptive System Rate state is unavailable."))?
-            .enable();
+            .map_err(|_| PlaybackCommandError::new("Adaptive System Rate state is unavailable."))?;
+        controller
+            .ensure_available()
+            .map_err(PlaybackCommandError::new)?;
+        let result = controller.enable();
         match result {
             Ok(()) => Ok(()),
             Err(error) => {

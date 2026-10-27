@@ -272,8 +272,13 @@ impl AdaptiveSystemRateController {
         &self.state
     }
 
+    /// Fails when this system cannot force its rate at all, before enabling
+    /// saves anything.
+    pub fn ensure_available(&self) -> Result<(), String> {
+        self.adapter.ensure_available()
+    }
+
     pub fn enable(&mut self) -> Result<(), String> {
-        self.adapter.ensure_available()?;
         self.cleanup_marker.mark_required()?;
         self.state.is_enabled = true;
         Ok(())
