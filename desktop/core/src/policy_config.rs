@@ -244,8 +244,14 @@ fn is_device_active(device_id: &str) -> bool {
 }
 
 /// Forces the default render endpoint's shared-mode rate through
-/// `IPolicyConfig`. The original formats live in `saved_path` from the first
-/// change until they are restored.
+/// `IPolicyConfig`. Each changed endpoint's original formats live in
+/// `saved_path` from its first change until they are restored.
+///
+/// An endpoint that is absent when its formats should come back stays saved,
+/// and every start restores the saved endpoints that are present, whether or
+/// not Adaptive's cleanup marker asks for it: reconnecting the endpoint later
+/// still gets its format back, and Adaptive on another endpoint adds an entry
+/// instead of replacing it.
 pub(crate) struct PolicyConfigRateAdapter {
     saved_path: PathBuf,
     lock: Mutex<()>,
@@ -253,30 +259,45 @@ pub(crate) struct PolicyConfigRateAdapter {
 
 impl PolicyConfigRateAdapter {
     pub(crate) fn new(saved_path: PathBuf) -> Self {
-        Self {
+        let adapter = Self {
             saved_path,
             lock: Mutex::new(()),
+        };
+        if let Err(error) = adapter.restore_saved() {
+            eprintln!("Adaptive could not restore a saved output format at start: {error}");
         }
+        adapter
     }
 
-    fn load(&self) -> Result<Option<OriginalFormats>, String> {
+    fn load(&self) -> Result<Vec<OriginalFormats>, String> {
         let text = match fs::read_to_string(&self.saved_path) {
             Ok(text) => text,
-            Err(error) if error.kind() == ErrorKind::NotFound => return Ok(None),
+            Err(error) if error.kind() == ErrorKind::NotFound => return Ok(Vec::new()),
             Err(error) => return Err(format!("{}: {error}", self.saved_path.display())),
         };
-        let saved: SavedFormats = serde_json::from_str(&text)
+        let saved: Vec<SavedFormats> = serde_json::from_str(&text)
             .map_err(|error| format!("{}: {error}", self.saved_path.display()))?;
-        OriginalFormats::from_saved(saved)
-            .map(Some)
+        saved
+            .into_iter()
+            .map(OriginalFormats::from_saved)
+            .collect::<Option<Vec<_>>>()
             .ok_or_else(|| format!("{}: invalid saved format", self.saved_path.display()))
     }
 
-    fn save(&self, original: &OriginalFormats) -> Result<(), String> {
+    /// Writes the endpoints still waiting for their formats; none removes the file.
+    fn store(&self, originals: &[OriginalFormats]) -> Result<(), String> {
+        if originals.is_empty() {
+            return match fs::remove_file(&self.saved_path) {
+                Ok(()) => Ok(()),
+                Err(error) if error.kind() == ErrorKind::NotFound => Ok(()),
+                Err(error) => Err(format!("{}: {error}", self.saved_path.display())),
+            };
+        }
         if let Some(parent) = self.saved_path.parent() {
             fs::create_dir_all(parent).map_err(|error| error.to_string())?;
         }
-        let text = serde_json::to_string(&original.to_saved()).map_err(|e| e.to_string())?;
+        let saved: Vec<SavedFormats> = originals.iter().map(OriginalFormats::to_saved).collect();
+        let text = serde_json::to_string(&saved).map_err(|error| error.to_string())?;
         fs::write(&self.saved_path, text).map_err(|error| {
             format!(
                 "Adaptive could not save the original output format to {}: {error}",
@@ -285,70 +306,89 @@ impl PolicyConfigRateAdapter {
         })
     }
 
-    fn forget(&self) -> Result<(), String> {
-        match fs::remove_file(&self.saved_path) {
-            Ok(()) => Ok(()),
-            Err(error) if error.kind() == ErrorKind::NotFound => Ok(()),
-            Err(error) => Err(format!("{}: {error}", self.saved_path.display())),
+    /// Restores every saved endpoint that is present and saves the rest
+    /// again: an absent endpoint, or one whose restore failed (the first such
+    /// error is returned).
+    fn restore_present(
+        &self,
+        policy: &IPolicyConfig,
+        originals: Vec<OriginalFormats>,
+    ) -> Result<Vec<OriginalFormats>, String> {
+        let mut pending = Vec::new();
+        let mut first_error = None;
+        for original in originals {
+            if !is_device_active(&original.device_id) {
+                eprintln!(
+                    "Adaptive keeps the original format of an absent output device until it returns."
+                );
+                pending.push(original);
+                continue;
+            }
+            eprintln!("Adaptive restoring the original output format.");
+            if let Err(error) = set_device_formats_if_changed(
+                policy,
+                &original.device_id,
+                &original.device_format,
+                &original.mix_format,
+            ) {
+                first_error.get_or_insert(error);
+                pending.push(original);
+            }
+        }
+        self.store(&pending)?;
+        match first_error {
+            Some(error) => Err(error),
+            None => Ok(pending),
         }
     }
 
-    /// Puts the saved formats back. An endpoint that is gone keeps its saved
-    /// formats for a later start instead of failing the caller.
-    fn restore(&self, policy: &IPolicyConfig, original: &OriginalFormats) -> Result<(), String> {
-        eprintln!("Adaptive restoring the original output format.");
-        if !is_device_active(&original.device_id) {
-            eprintln!(
-                "Adaptive left the original format of an absent output device saved for later restore."
-            );
+    /// Puts back the formats of every saved endpoint that is present.
+    fn restore_saved(&self) -> Result<(), String> {
+        let originals = self.load()?;
+        if originals.is_empty() {
             return Ok(());
         }
-        set_device_formats_if_changed(
-            policy,
-            &original.device_id,
-            &original.device_format,
-            &original.mix_format,
-        )?;
-        self.forget()
+        let _com = ComScope::enter()?;
+        let policy = policy_config().map_err(|_| UNAVAILABLE_MESSAGE.to_owned())?;
+        self.restore_present(&policy, originals).map(|_| ())
     }
 
     fn force(&self, policy: &IPolicyConfig, rate_hz: u32) -> Result<(), String> {
         let device = default_render_device(&enumerator().map_err(|e| e.to_string())?)
             .map_err(|error| format!("Adaptive could not find the default output: {error}"))?;
         let device_id = endpoint_id(&device).map_err(|error| error.to_string())?;
-        let mut original = self.load()?;
-        if let Some(saved) = original
-            .as_ref()
-            .filter(|saved| saved.device_id != device_id)
-        {
-            // The default output changed: give the previous one its format back.
-            self.restore(policy, saved)?;
-            original = None;
-        }
-        let original = match original {
+        let (current, others): (Vec<_>, Vec<_>) = self
+            .load()?
+            .into_iter()
+            .partition(|original| original.device_id == device_id);
+        // The default output changed: the previous ones get their formats back.
+        let mut saved = self.restore_present(policy, others)?;
+        let original = match current.into_iter().next() {
             Some(original) => original,
             None => {
                 let (device_format, mix_format) = device_formats(policy, &device_id)?;
-                let original = OriginalFormats {
+                OriginalFormats {
                     device_id: device_id.clone(),
                     device_format,
                     mix_format,
-                };
-                // Saved before anything changes, so a crash can be undone.
-                self.save(&original)?;
-                original
+                }
             }
         };
         let mut device_format = original.device_format.with_sample_rate(rate_hz);
         let mut mix_format = original.mix_format.with_sample_rate(rate_hz);
+        let (original_device, original_mix) =
+            (original.device_format.clone(), original.mix_format.clone());
+        saved.push(original);
+        // Saved before anything changes, so a crash can be undone.
+        self.store(&saved)?;
         if !device_supports(&device_id, &device_format)? {
             // The hardware cannot run at this rate: play through the original
             // format, which Windows resamples to, rather than failing the Track.
             eprintln!(
                 "Adaptive kept the original output format: the device does not support {rate_hz} Hz."
             );
-            device_format = original.device_format.clone();
-            mix_format = original.mix_format.clone();
+            device_format = original_device;
+            mix_format = original_mix;
         }
         set_device_formats_if_changed(policy, &device_id, &device_format, &mix_format)
     }
@@ -436,13 +476,17 @@ fn record_format_change() {
 }
 
 impl PipeWireRateAdapter for PolicyConfigRateAdapter {
-    /// The rate Adaptive left on the endpoint, while its original is saved.
+    /// The rate Adaptive left on a saved endpoint that is present.
     fn forced_rate_hz(&self) -> Result<Option<u32>, String> {
         let _lock = self
             .lock
             .lock()
             .map_err(|_| "Adaptive state is unavailable.")?;
-        let Some(original) = self.load()? else {
+        let Some(original) = self
+            .load()?
+            .into_iter()
+            .find(|original| is_device_active(&original.device_id))
+        else {
             return Ok(None);
         };
         let _com = ComScope::enter()?;
@@ -451,24 +495,20 @@ impl PipeWireRateAdapter for PolicyConfigRateAdapter {
         Ok(Some(device_format.sample_rate_hz()))
     }
 
+    /// Clearing the rate restores every saved endpoint that is present; an
+    /// absent one stays saved for a later start rather than failing the caller.
     fn set_forced_rate_hz(&self, rate_hz: Option<u32>) -> Result<(), String> {
         let _lock = self
             .lock
             .lock()
             .map_err(|_| "Adaptive state is unavailable.")?;
-        let _com = ComScope::enter()?;
         match rate_hz {
             Some(rate_hz) => {
+                let _com = ComScope::enter()?;
                 let policy = policy_config().map_err(|_| UNAVAILABLE_MESSAGE.to_owned())?;
                 self.force(&policy, rate_hz)
             }
-            None => {
-                let Some(original) = self.load()? else {
-                    return Ok(());
-                };
-                let policy = policy_config().map_err(|_| UNAVAILABLE_MESSAGE.to_owned())?;
-                self.restore(&policy, &original)
-            }
+            None => self.restore_saved(),
         }
     }
 
