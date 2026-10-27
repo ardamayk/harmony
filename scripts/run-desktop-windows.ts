@@ -215,7 +215,8 @@ function build() {
 
 async function start() {
 	const core =
-		prebuiltCore() ?? join(targetDirectory, "release/earthly-audio-core.exe");
+		prebuiltCore() ??
+		join(targetDirectory, coreTarget, "release/earthly-audio-core.exe");
 	for (const required of [
 		core,
 		join(desktopDirectory, "dist/main.cjs"),
