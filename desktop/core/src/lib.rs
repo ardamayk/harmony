@@ -121,6 +121,9 @@ struct DeviceAttenuation {
     route: VolumeRoute,
     applied_db: f64,
     software_volume: f64,
+    /// The sink or endpoint that carries it, so returning it reaches that
+    /// device even after the default output changed; none when unknown.
+    target: Option<String>,
 }
 
 #[derive(Clone, Serialize)]
@@ -538,19 +541,25 @@ fn hand_off_volume_to_device(
         }
         return playback_state;
     }
+    let target = hand_off_target(route);
     if let Ok(mut attenuation) = state.device_attenuation.lock() {
         *attenuation = Some(DeviceAttenuation {
             route,
             applied_db,
             software_volume,
+            target: target.clone().ok().flatten(),
         });
     }
-    save_device_attenuation_record(
-        &state.device_attenuation_record,
-        route,
-        applied_db,
-        software_volume,
-    );
+    match target {
+        Ok(target) => save_device_attenuation_record(
+            &state.device_attenuation_record,
+            route,
+            target,
+            applied_db,
+            software_volume,
+        ),
+        Err(error) => eprintln!("Output volume hand-off could not be recorded: {error}"),
+    }
     let is_volume_only = !processing.state().equalizer.is_enabled
         && processing.state().replay_gain_mode == ReplayGainMode::Off;
     match update_processing_locked(state, processing, |processing| {
@@ -597,12 +606,22 @@ fn return_device_volume(state: &AppState, processing: &mut ProcessingController)
             eprintln!("Software volume could not be saved: {error}");
         }
     }
-    let is_device_restored = attenuation.route != VolumeRoute::SystemSink
-        || match state
+    // The device that took the hand-off gets it back, not whichever output
+    // is the default now.
+    let restored = match attenuation.target.as_deref() {
+        Some(target) => undo_hand_off_on(RecordedRoute::SystemSink, target, attenuation.applied_db),
+        None => state
             .device_volume
             .change_db(VolumeRoute::SystemSink, -attenuation.applied_db)
-        {
-            Ok(_) => true,
+            .map(|_| true),
+    };
+    let is_device_restored = attenuation.route != VolumeRoute::SystemSink
+        || match restored {
+            Ok(true) => true,
+            Ok(false) => {
+                eprintln!("System output volume stays recorded until its absent output returns.");
+                false
+            }
             Err(error) => {
                 eprintln!("System output volume could not be restored: {error}");
                 false
@@ -650,37 +669,38 @@ fn hand_off_target(_route: VolumeRoute) -> Result<Option<String>, String> {
 }
 
 /// `Ok(false)` while the device that carries it is absent.
-#[cfg(not(windows))]
 fn undo_recorded_hand_off(record: &DeviceAttenuationRecord) -> Result<bool, String> {
-    match (record.route, record.target.as_deref()) {
-        (RecordedRoute::SystemSink, Some(sink)) => {
-            device_volume::change_named_sink_db(sink, -record.applied_db).map(|_| true)
+    match record.target.as_deref() {
+        Some(target) => undo_hand_off_on(record.route, target, record.applied_db),
+        None => Ok(true),
+    }
+}
+
+/// Gives `target` back the `applied_db` a hand-off took from it; a raw ALSA
+/// card needs nothing, PipeWire restores its own volume. `Ok(false)` while
+/// the device is absent.
+#[cfg(not(windows))]
+fn undo_hand_off_on(route: RecordedRoute, target: &str, applied_db: f64) -> Result<bool, String> {
+    match route {
+        RecordedRoute::SystemSink => {
+            device_volume::change_named_sink_db(target, -applied_db).map(|_| true)
         }
-        _ => Ok(true),
+        RecordedRoute::AlsaCard => Ok(true),
     }
 }
 
 #[cfg(windows)]
-fn undo_recorded_hand_off(record: &DeviceAttenuationRecord) -> Result<bool, String> {
-    match record.target.as_deref() {
-        Some(endpoint) => wasapi::change_named_endpoint_db(endpoint, -record.applied_db),
-        None => Ok(true),
-    }
+fn undo_hand_off_on(_route: RecordedRoute, target: &str, applied_db: f64) -> Result<bool, String> {
+    wasapi::change_named_endpoint_db(target, -applied_db)
 }
 
 fn save_device_attenuation_record(
     path: &Path,
     route: VolumeRoute,
+    target: Option<String>,
     applied_db: f64,
     software_volume: f64,
 ) {
-    let target = match hand_off_target(route) {
-        Ok(target) => target,
-        Err(error) => {
-            eprintln!("Output volume hand-off could not be recorded: {error}");
-            return;
-        }
-    };
     let record = DeviceAttenuationRecord {
         route: match route {
             VolumeRoute::SystemSink => RecordedRoute::SystemSink,
