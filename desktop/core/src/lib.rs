@@ -721,7 +721,11 @@ fn recover_left_device_attenuation(path: &Path, processing: &mut ProcessingContr
             return;
         }
     };
-    if let Err(error) = processing.set_software_volume(record.software_volume) {
+    // As `return_device_volume` does: the slider's value since the hand-off
+    // on top of the level the device carried, so a change made meanwhile
+    // survives and nothing plays louder.
+    let volume = returned_volume(processing.state().software_volume, record.software_volume);
+    if let Err(error) = processing.set_software_volume(volume) {
         eprintln!("Software volume could not be restored after a hand-off: {error}");
     }
     match undo_recorded_hand_off(&record) {
