@@ -24,13 +24,20 @@ const SERVER_CAPABILITIES: &[&str] = &[
 /// the managed file on first request.
 pub const TRACK_WAVEFORM_CAPABILITY: &str = "track-waveform.v1";
 
-pub fn server_capabilities(report: &dependencies::Report) -> Vec<String> {
+/// Advertised only when the operator configured `EXTERNAL_SOURCE_SEARCH`
+/// (ADR 0032). A missing yt-dlp shows as its Server Dependency instead.
+pub const EXTERNAL_SOURCE_CAPABILITY: &str = "external-source.v1";
+
+pub fn server_capabilities(report: &dependencies::Report, external_source: bool) -> Vec<String> {
     let mut capabilities: Vec<String> = SERVER_CAPABILITIES
         .iter()
         .map(|&capability| capability.to_owned())
         .collect();
     if report.has(dependencies::FFMPEG) {
         capabilities.push(TRACK_WAVEFORM_CAPABILITY.to_owned());
+    }
+    if external_source {
+        capabilities.push(EXTERNAL_SOURCE_CAPABILITY.to_owned());
     }
     capabilities
 }
@@ -47,7 +54,7 @@ pub async fn get_health(State(state): State<AppState>) -> Json<HealthResponse> {
     Json(HealthResponse {
         status: "ok",
         version: state.config.version.clone(),
-        capabilities: server_capabilities(&state.dependencies),
+        capabilities: server_capabilities(&state.dependencies, state.external_source.is_enabled()),
         dependencies: state.dependencies.0.clone(),
     })
 }

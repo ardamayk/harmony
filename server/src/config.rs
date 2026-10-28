@@ -26,6 +26,17 @@ pub struct Config {
     pub lyrics_lookup_enabled: bool,
     /// The operator's own Last.fm API key, for Track play counts (ADR 0030).
     pub lastfm_api_key: Option<String>,
+    /// The operator's yt-dlp search, off when unset (ADR 0032).
+    pub external_source: Option<ExternalSourceConfig>,
+}
+
+/// The External Source: which yt-dlp search runs, and with which binary.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ExternalSourceConfig {
+    /// A yt-dlp search prefix such as `scsearch`.
+    pub search_prefix: String,
+    /// The yt-dlp binary: a name looked up on PATH, or a path.
+    pub yt_dlp: String,
 }
 
 #[derive(Debug, thiserror::Error, PartialEq)]
@@ -38,6 +49,8 @@ pub enum ConfigError {
     NotLoopback(String),
     #[error("ARTIST_INFO_LANGUAGE {0:?} must be a Wikipedia language code such as en or tr")]
     InvalidLanguage(String),
+    #[error("EXTERNAL_SOURCE_SEARCH {0:?} must be a yt-dlp search prefix such as scsearch")]
+    InvalidExternalSourceSearch(String),
 }
 
 impl Config {
@@ -77,6 +90,23 @@ impl Config {
         {
             return Err(ConfigError::InvalidLanguage(artist_info_language));
         }
+        // The prefix becomes part of yt-dlp's argument, so only a search
+        // prefix's shape passes.
+        let external_source_search = get("EXTERNAL_SOURCE_SEARCH", "").trim().to_owned();
+        let external_source = if external_source_search.is_empty() {
+            None
+        } else if is_search_prefix(&external_source_search) {
+            Some(ExternalSourceConfig {
+                search_prefix: external_source_search,
+                yt_dlp: Some(get("YT_DLP", "").trim().to_owned())
+                    .filter(|binary| !binary.is_empty())
+                    .unwrap_or_else(|| "yt-dlp".to_owned()),
+            })
+        } else {
+            return Err(ConfigError::InvalidExternalSourceSearch(
+                external_source_search,
+            ));
+        };
         Ok(Self {
             addr: get("SERVER_ADDR", "127.0.0.1:8090"),
             database_path: get("DATABASE_PATH", "./data/app.db"),
@@ -124,8 +154,22 @@ impl Config {
             ),
             lastfm_api_key: Some(get("LASTFM_API_KEY", "").trim().to_owned())
                 .filter(|key| !key.is_empty()),
+            external_source,
         })
     }
+}
+
+/// `^[a-z][a-z0-9]{0,30}search$`, the shape of yt-dlp's search prefixes.
+fn is_search_prefix(value: &str) -> bool {
+    let Some(name) = value.strip_suffix("search") else {
+        return false;
+    };
+    let mut characters = name.chars();
+    name.len() <= 31
+        && characters
+            .next()
+            .is_some_and(|first| first.is_ascii_lowercase())
+        && characters.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
 }
 
 /// The server has no authentication yet, so it only binds to loopback.
@@ -190,6 +234,7 @@ mod tests {
         assert_eq!(config.artist_info_language, "en");
         assert!(config.lyrics_lookup_enabled);
         assert_eq!(config.lastfm_api_key, None);
+        assert_eq!(config.external_source, None);
         // Writes through the dev and preview proxies keep the browser's
         // Origin, which the origin check accepts only from this list.
         for origin in ["http://localhost:3000", "http://localhost:4173"] {
@@ -210,6 +255,58 @@ mod tests {
                 .expect("config")
                 .lastfm_api_key,
             None
+        );
+    }
+
+    #[test]
+    fn external_source_is_on_only_with_a_search_prefix() {
+        assert_eq!(
+            config(&[("EXTERNAL_SOURCE_SEARCH", " scsearch ")])
+                .expect("config")
+                .external_source,
+            Some(ExternalSourceConfig {
+                search_prefix: "scsearch".to_owned(),
+                yt_dlp: "yt-dlp".to_owned(),
+            })
+        );
+        assert_eq!(
+            config(&[
+                ("EXTERNAL_SOURCE_SEARCH", "ytsearch"),
+                ("YT_DLP", "/opt/yt-dlp/bin/yt-dlp")
+            ])
+            .expect("config")
+            .external_source
+            .map(|source| source.yt_dlp),
+            Some("/opt/yt-dlp/bin/yt-dlp".to_owned())
+        );
+        assert_eq!(
+            config(&[("EXTERNAL_SOURCE_SEARCH", "  "), ("YT_DLP", "yt-dlp")])
+                .expect("config")
+                .external_source,
+            None
+        );
+        for invalid in [
+            "search",
+            "Scsearch",
+            "scsearch:",
+            "sc search",
+            "1search",
+            "--execsearch",
+            "scsearch10",
+            &format!("a{}search", "b".repeat(31)),
+        ] {
+            assert_eq!(
+                config(&[("EXTERNAL_SOURCE_SEARCH", invalid)]).err(),
+                Some(ConfigError::InvalidExternalSourceSearch(invalid.to_owned())),
+                "{invalid}"
+            );
+        }
+        assert!(
+            config(&[(
+                "EXTERNAL_SOURCE_SEARCH",
+                &format!("a{}search", "b".repeat(30))
+            )])
+            .is_ok()
         );
     }
 
