@@ -396,8 +396,8 @@ fn selected_file(path: PathBuf, file: fs::File) -> Result<SelectedFile, DesktopI
         .ok_or_else(selection_error)?
         .to_owned();
     Ok(SelectedFile {
+        identity: handle_identity(&file, &metadata),
         path,
-        identity: file_identity(&metadata),
         name,
         size: metadata.len(),
     })
@@ -411,7 +411,7 @@ fn open_verified_directory(path: &Path) -> Result<Dir, DesktopImportError> {
     let file = open_directory_without_following(path).map_err(|_| selection_error())?;
     let opened_metadata = file.metadata().map_err(|_| selection_error())?;
     if !opened_metadata.is_dir()
-        || file_identity(&opened_metadata) != file_identity(&selected_metadata)
+        || handle_identity(&file, &opened_metadata) != path_identity(path, &selected_metadata)
     {
         return Err(selection_error());
     }
@@ -428,8 +428,9 @@ fn open_verified_file(
     }
     let file = open_without_following(path).map_err(|_| selection_error())?;
     let opened_metadata = file.metadata().map_err(|_| selection_error())?;
-    let selected_identity = expected_identity.unwrap_or_else(|| file_identity(&selected_metadata));
-    if !opened_metadata.is_file() || file_identity(&opened_metadata) != selected_identity {
+    let selected_identity =
+        expected_identity.unwrap_or_else(|| path_identity(path, &selected_metadata));
+    if !opened_metadata.is_file() || handle_identity(&file, &opened_metadata) != selected_identity {
         return Err(selection_error());
     }
     Ok(file)
@@ -490,17 +491,63 @@ fn file_identity(metadata: &fs::Metadata) -> FileIdentity {
     }
 }
 
-#[cfg(windows)]
-fn file_identity(metadata: &fs::Metadata) -> FileIdentity {
-    use std::os::windows::fs::MetadataExt;
+#[cfg(unix)]
+fn path_identity(_path: &Path, metadata: &fs::Metadata) -> FileIdentity {
+    file_identity(metadata)
+}
 
+#[cfg(unix)]
+fn handle_identity(_file: &fs::File, metadata: &fs::Metadata) -> FileIdentity {
+    file_identity(metadata)
+}
+
+/// Windows path metadata carries no volume serial or file index, so the
+/// identity of a selected path is read from a handle opened without
+/// following reparse points.
+#[cfg(windows)]
+fn path_identity(path: &Path, metadata: &fs::Metadata) -> FileIdentity {
+    let file = if metadata.is_dir() {
+        open_directory_without_following(path)
+    } else {
+        open_without_following(path)
+    };
+    match file {
+        Ok(file) => handle_identity(&file, metadata),
+        Err(_) => unreadable_identity(1),
+    }
+}
+
+#[cfg(windows)]
+fn handle_identity(file: &fs::File, _metadata: &fs::Metadata) -> FileIdentity {
+    use std::os::windows::io::AsRawHandle;
+    use windows::Win32::Foundation::HANDLE;
+    use windows::Win32::Storage::FileSystem::{
+        BY_HANDLE_FILE_INFORMATION, GetFileInformationByHandle,
+    };
+
+    let mut information = BY_HANDLE_FILE_INFORMATION::default();
+    // SAFETY: the handle belongs to `file`, which outlives this call.
+    let result =
+        unsafe { GetFileInformationByHandle(HANDLE(file.as_raw_handle()), &mut information) };
+    if result.is_err() {
+        return unreadable_identity(2);
+    }
     FileIdentity {
         values: [
-            metadata.volume_serial_number().unwrap_or_default() as u64,
-            metadata.file_index().unwrap_or_default(),
+            u64::from(information.dwVolumeSerialNumber),
+            (u64::from(information.nFileIndexHigh) << 32) | u64::from(information.nFileIndexLow),
             0,
             0,
         ],
+    }
+}
+
+/// An identity that never equals another one, so a file whose identity
+/// cannot be read is refused instead of matching.
+#[cfg(windows)]
+fn unreadable_identity(source: u64) -> FileIdentity {
+    FileIdentity {
+        values: [u64::MAX, u64::MAX, source, Uuid::new_v4().as_u64_pair().0],
     }
 }
 
@@ -559,6 +606,8 @@ fn canceled_error() -> DesktopImportError {
 }
 
 #[cfg(test)]
+// The directory-walk tests build FIFOs and symlinks, which are Unix-only.
+#[cfg_attr(not(unix), allow(unused_imports))]
 mod tests {
     use super::{
         ImportSelectionStore, ImportUploadProgress, ProgressThrottle, cancellable_preparation,

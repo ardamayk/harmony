@@ -39,3 +39,41 @@ Settings live in `~/.config/audio.earthly.desktop` (server connection, Playback 
 The Desktop Client does not bundle a Go server, database, or server lifecycle.
 
 On Linux, the Player Bar output menu offers Normal, Exclusive, and Adaptive. Normal follows the operating system's active PipeWire output. Exclusive automatically resolves that active output to raw ALSA hardware; it does not show a separate device picker. Outputs without a raw ALSA mapping, including Bluetooth sinks, remain on Normal with an actionable error. Adaptive changes the PipeWire graph rate system-wide and therefore requires confirmation.
+
+Exclusive and Adaptive keep mpv at full volume and move the listener's volume onto the device (the raw ALSA card, or the default PipeWire sink). Each hand-off is recorded in `device-volume-hand-off.json` until it is returned, so a client that was killed has it undone at the next start: mpv comes back at the listener's level first, then the sink gets its volume back (PipeWire restores a card's own volume itself).
+
+## Windows
+
+The same shell and core run on Windows; only the platform layer differs, and Linux keeps everything above.
+
+- mpv IPC is a private named pipe (`\\.\pipe\earthly-audio-mpv-<random>`) instead of a Unix socket, and a kill-on-close Job Object stands in for the `fd://0` lifetime link, so mpv still ends with the core (`core/src/mpv_pipe.rs`).
+- Output modes use WASAPI (`core/src/wasapi.rs`). Normal follows the default Windows output. Exclusive resolves the default render endpoint and opens it with mpv's `wasapi/<endpoint>` device and `audio-exclusive`,. Exclusive and Adaptive move the listener's volume onto the endpoint only when the endpoint applies it in hardware (`IAudioEndpointVolume::QueryHardwareSupport`); a software endpoint volume would change the samples like mpv's, so mpv keeps it there. The endpoint volume is system-wide, so the hand-off record above undoes it at the next start if the client was killed. Adaptive sets the default endpoint's shared-mode format (its "Default Format" in Sound settings) to each Track's sample rate, system-wide like the PipeWire graph rate, through `IPolicyConfig` (`core/src/policy_config.rs`). That interface is the one the Sound control panel uses, but Microsoft does not document it, so a Windows release could change it; Adaptive then reports itself unavailable while Normal and Exclusive keep working. The original format is saved in `adaptive-system-rate.windows-format.json` before the first change and restored when Adaptive turns off, the client quits, or it starts again after a crash. A rate the device does not support keeps the original format.
+- MPRIS is Linux-only; on Windows media keys and the system media overlay are not wired yet.
+- Settings live in `%APPDATA%\audio.earthly.desktop`.
+
+The Windows client is built entirely inside WSL; there is no Windows clone or Windows toolchain.
+
+- The core is cross-built for `x86_64-pc-windows-gnu` with WSL's mingw-w64 and needs no extra DLLs at run time.
+- Pinned mpv is the official `mpv-v0.41.0-x86_64-w64-mingw32.zip` release build. It is downloaded once into `~/.cache/earthly-audio-windows` and checked against its SHA-256. It reports `0.41.0-dev-g41f6a6450`, pinned in `core/mpv-windows-version.txt`, and `mpv.exe` ships with the DLLs beside it.
+- electron-builder packages the shell with its `dir` target (`electron-builder.yml`). It neither signs nor edits the executable, so no Wine is needed.
+- The result is copied to `%LOCALAPPDATA%\EarthlyAudio` (`EARTHLY_AUDIO_WINDOWS_OUT` overrides it) and started from there through WSL interop.
+
+```text
+Earthly Audio.exe
+resources/app/       package.json, dist/ (shell bundle), resources/icon.png
+resources/web/dist/  the Web Client
+resources/core/      earthly-audio-core.exe, mpv.exe and its DLLs
+```
+
+Requirements: WSL with mingw-w64 (`sudo apt install mingw-w64`), the Rust target (`rustup target add x86_64-pc-windows-gnu`), and the repository's mise toolchain. The Music Server runs in WSL or elsewhere; the connection screen takes its loopback origin, such as WSL's forwarded `http://127.0.0.1:8090`.
+
+```bash
+mise run desktop:windows         # web/dist, shell, release core, pinned mpv; package and install
+mise run desktop:windows:start   # launch the installed client
+mise run desktop:windows:dev     # installed client with a fresh shell, debug core, and Vite HMR from WSL
+mise run desktop:windows:clean   # remove target/desktop-windows and the installed client
+```
+
+`desktop:windows:dev` needs a previous `desktop:windows`. It replaces the shell bundle and the core inside the installed client and passes `EARTHLY_AUDIO_DEV_SERVER_URL` to it through `WSLENV`. Quit the client before rebuilding: Windows locks the files of a running program.
+
+Installers are not built yet; an electron-builder NSIS target would come later.

@@ -26,7 +26,31 @@ tokio = { version = "=1.53.1", features = ["fs", "io-util", "net", "rt-multi-thr
 tokio-util = { version = "=0.7.19", features = ["io", "rt"] }
 url = "=2.5.8"
 uuid = { version = "=1.25.0", features = ["v4"] }
+
+# MPRIS is the Linux desktop's media-control surface (D-Bus).
+[target.'cfg(target_os = "linux")'.dependencies]
 mpris-server = { version = "=0.10.0", features = ["tokio"] }
+
+# Windows: mpv's named-pipe IPC, its Job Object lifetime link, WASAPI endpoint
+# discovery and volume, handle-based file identity for Desktop Import, and the
+# IPolicyConfig interface Adaptive declares (windows-core's interface macro).
+[target.'cfg(windows)'.dependencies]
+windows-core = "=0.62.2"
+windows = { version = "=0.62.2", features = [
+    "Win32_Devices_FunctionDiscovery",
+    "Win32_Foundation",
+    "Win32_Media_Audio",
+    "Win32_Media_Audio_Endpoints",
+    "Win32_Security",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Com",
+    "Win32_System_Com_StructuredStorage",
+    "Win32_System_JobObjects",
+    "Win32_System_Pipes",
+    "Win32_System_Threading",
+    "Win32_System_Variant",
+    "Win32_UI_Shell_PropertiesSystem",
+] }
 
 [dev-dependencies]
 tokio = { version = "=1.53.1", features = ["macros", "rt-multi-thread", "time"] }

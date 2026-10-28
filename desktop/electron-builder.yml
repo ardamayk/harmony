@@ -1,0 +1,26 @@
+# Windows package of the Desktop Client, built from WSL by
+# scripts/desktop-windows/cli.ts. Only the unpacked `dir` target for now;
+# installers (NSIS) come later.
+appId: audio.earthly.desktop
+productName: Earthly Audio
+# Unpacked, so the shell's paths stay plain folders beside resources/core.
+asar: false
+# The shell bundles everything it imports, so no node_modules ship.
+files:
+  - dist/**
+  - resources/**
+  - package.json
+directories:
+  output: ../target/desktop-windows/out
+extraResources:
+  - from: ../target/desktop-windows/core
+    to: core
+  - from: ../web/dist
+    to: web/dist
+win:
+  target:
+    - target: dir
+      arch: [x64]
+  # Editing the exe's resources and signing need Wine on Linux.
+  signAndEditExecutable: false
+npmRebuild: false

@@ -1,3 +1,6 @@
+// These cases select raw ALSA ids (`hw:N,M`); Windows ids are WASAPI endpoints.
+#![cfg(unix)]
+
 use earthly_audio_core::output_device::{
     AlsaOutputDeviceAdapter, OutputDevice, OutputDeviceCatalog, OutputDeviceError,
 };

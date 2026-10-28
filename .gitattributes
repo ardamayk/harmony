@@ -1,0 +1,17 @@
+# Keep LF everywhere, including Windows checkouts with core.autocrlf: bash
+# scripts and git hooks fail on CRLF, and Oxfmt/rustfmt write LF.
+* text=auto eol=lf
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+*.png binary
+*.ico binary
+*.jpg binary
+*.flac binary
+*.mp3 binary
+*.m4a binary
+*.ogg binary
+*.opus binary
+*.wav binary
+*.db binary

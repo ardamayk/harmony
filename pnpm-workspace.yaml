@@ -19,3 +19,6 @@ overrides:
 allowBuilds:
   esbuild: true
   lightningcss: true
+  # electron-builder's Squirrel.Windows maker; the Windows build uses the
+  # `dir` target, so its 7-Zip selection script never needs to run.
+  electron-winstaller: false

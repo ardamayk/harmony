@@ -1,3 +1,6 @@
+// The PipeWire observer and its shell-script fixtures exist only on Unix.
+#![cfg(unix)]
+
 use earthly_audio_core::telemetry;
 use earthly_audio_core::telemetry::{
     AudioFormatObservation, CommandPipeWireObserver, ObservedMpvProperties, PipeWireObservation,

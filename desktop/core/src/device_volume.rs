@@ -1,3 +1,6 @@
+// The pactl/amixer routes below are Linux's; Windows uses `wasapi`.
+#![cfg_attr(windows, allow(dead_code))]
+
 use std::process::Command;
 
 /// Where a bit-perfect Output Mode keeps the listener's attenuation instead of
@@ -10,11 +13,24 @@ pub(crate) enum VolumeRoute {
 }
 
 impl VolumeRoute {
+    #[cfg(not(windows))]
     pub(crate) fn for_alsa_device(device_id: &str) -> Option<Self> {
         let card = device_id.strip_prefix("hw:")?.split(',').next()?;
         card.parse().ok().map(Self::AlsaCard)
     }
+
+    /// Exclusive opens the default WASAPI endpoint, whose own volume is the
+    /// system output's.
+    #[cfg(windows)]
+    pub(crate) fn for_alsa_device(_device_id: &str) -> Option<Self> {
+        Some(Self::SystemSink)
+    }
 }
+
+#[cfg(unix)]
+pub(crate) type PlatformDeviceVolume = CommandDeviceVolume;
+#[cfg(windows)]
+pub(crate) type PlatformDeviceVolume = crate::wasapi::WasapiDeviceVolume;
 
 pub(crate) trait DeviceVolume: Send + Sync {
     /// Changes the route's volume by `delta_db` and returns the change the
@@ -33,16 +49,35 @@ impl DeviceVolume for CommandDeviceVolume {
     }
 }
 
+fn change_system_sink(delta_db: f64) -> Result<f64, String> {
+    change_sink("@DEFAULT_SINK@", delta_db)
+}
+
+/// The default PipeWire sink's name, which a hand-off record names so its
+/// undo reaches that sink even after the default changed.
+pub(crate) fn default_sink_name() -> Result<String, String> {
+    let name = run("pactl", &["get-default-sink"])?.trim().to_owned();
+    if name.is_empty() || name == "@DEFAULT_SINK@" {
+        return Err("The system output could not be resolved.".to_owned());
+    }
+    Ok(name)
+}
+
+/// Changes a named sink's volume, to undo a recorded hand-off.
+pub(crate) fn change_named_sink_db(sink: &str, delta_db: f64) -> Result<f64, String> {
+    change_sink(sink, delta_db)
+}
+
 /// PipeWire splits a sink volume between the hardware control and software
 /// itself, so the whole change always lands.
-fn change_system_sink(delta_db: f64) -> Result<f64, String> {
-    let output = run("pactl", &["get-sink-volume", "@DEFAULT_SINK@"])?;
+fn change_sink(sink: &str, delta_db: f64) -> Result<f64, String> {
+    let output = run("pactl", &["get-sink-volume", sink])?;
     let raw = parse_pactl_raw_volume(&output)
         .ok_or_else(|| "The system output volume could not be read.".to_owned())?;
     // shortcut: one value for every channel resets a non-centre balance; read
     // each channel when balance matters.
     let next = scale_pactl_raw_volume(raw, delta_db).to_string();
-    run("pactl", &["set-sink-volume", "@DEFAULT_SINK@", &next])?;
+    run("pactl", &["set-sink-volume", sink, &next])?;
     Ok(delta_db)
 }
 
@@ -133,6 +168,7 @@ mod tests {
         parse_pactl_raw_volume, scale_pactl_raw_volume,
     };
 
+    #[cfg_attr(windows, ignore = "asserts Linux raw ALSA device ids")]
     #[test]
     fn parses_the_tools_this_route_reads() {
         assert_eq!(

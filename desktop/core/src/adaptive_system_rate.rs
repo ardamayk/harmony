@@ -8,6 +8,27 @@ use std::sync::Arc;
 pub trait PipeWireRateAdapter: Send + Sync {
     fn forced_rate_hz(&self) -> Result<Option<u32>, String>;
     fn set_forced_rate_hz(&self, rate_hz: Option<u32>) -> Result<(), String>;
+
+    /// Whether this system can force its rate at all; enabling Adaptive
+    /// fails up front instead of at the first Track when it cannot.
+    fn ensure_available(&self) -> Result<(), String> {
+        Ok(())
+    }
+}
+
+/// The system rate control this platform has: PipeWire's forced graph rate on
+/// Linux; the default endpoint's shared-mode format on Windows, whose original
+/// is kept in `state_directory` until it is restored.
+#[cfg(unix)]
+pub fn platform_rate_adapter(_state_directory: &std::path::Path) -> Arc<dyn PipeWireRateAdapter> {
+    Arc::new(CommandPipeWireRateAdapter::new())
+}
+
+#[cfg(windows)]
+pub fn platform_rate_adapter(state_directory: &std::path::Path) -> Arc<dyn PipeWireRateAdapter> {
+    Arc::new(crate::policy_config::PolicyConfigRateAdapter::new(
+        state_directory.join("adaptive-system-rate.windows-format.json"),
+    ))
 }
 
 pub trait AdaptiveCleanupMarker: Send + Sync {
@@ -257,6 +278,12 @@ impl AdaptiveSystemRateController {
 
     pub fn state(&self) -> &AdaptiveSystemRateState {
         &self.state
+    }
+
+    /// Fails when this system cannot force its rate at all, before enabling
+    /// saves anything.
+    pub fn ensure_available(&self) -> Result<(), String> {
+        self.adapter.ensure_available()
     }
 
     pub fn enable(&mut self) -> Result<(), String> {

@@ -4,6 +4,8 @@ use crate::playback_lifecycle::{
 };
 use std::sync::{Arc, Mutex};
 
+// Play, Pause, Stop, SeekTo, SetVolume and SetRate arrive only over MPRIS.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) enum DesktopPlaybackAction {
     OpenMainWindow,

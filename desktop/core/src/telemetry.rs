@@ -113,6 +113,12 @@ pub trait PipeWireObserver: Send + Sync {
     fn observe(&self) -> Result<Option<PipeWireObservation>, String>;
 }
 
+/// The system audio path observer: `pw-dump` on Linux; none on Windows.
+#[cfg(unix)]
+pub type PlatformPathObserver = CommandPipeWireObserver;
+#[cfg(windows)]
+pub type PlatformPathObserver = crate::wasapi::NoSystemPathObserver;
+
 pub struct CommandPipeWireObserver {
     binary: PathBuf,
     target_node_name: Option<String>,

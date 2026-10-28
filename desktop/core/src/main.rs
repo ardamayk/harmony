@@ -28,9 +28,20 @@ fn config_directory() -> Result<PathBuf, String> {
         Some(other) => return Err(format!("unknown argument '{other}'")),
         None => {}
     }
-    let base = std::env::var_os("XDG_CONFIG_HOME")
+    Ok(default_config_base()?.join("audio.earthly.desktop"))
+}
+
+#[cfg(windows)]
+fn default_config_base() -> Result<PathBuf, String> {
+    std::env::var_os("APPDATA")
+        .map(PathBuf::from)
+        .ok_or_else(|| "APPDATA is not set".to_owned())
+}
+
+#[cfg(not(windows))]
+fn default_config_base() -> Result<PathBuf, String> {
+    std::env::var_os("XDG_CONFIG_HOME")
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".config")))
-        .ok_or_else(|| "neither XDG_CONFIG_HOME nor HOME is set".to_owned())?;
-    Ok(base.join("audio.earthly.desktop"))
+        .ok_or_else(|| "neither XDG_CONFIG_HOME nor HOME is set".to_owned())
 }
