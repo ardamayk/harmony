@@ -1,5 +1,7 @@
 import type {
 	CoverSize,
+	ExternalTrack,
+	ExternalTrackPlayback,
 	Playlist,
 	PlaylistDetail,
 	PlaylistList,
@@ -87,10 +89,18 @@ export type RadioPlaybackApi = {
 	getRadioNowPlaying: (stationId: string) => Promise<RadioNowPlaying>;
 };
 
+export type ExternalSourcePlaybackApi = {
+	getExternalTrackPlayback: (
+		externalTrackId: string,
+	) => Promise<ExternalTrackPlayback>;
+	getExternalStreamUrl: (streamPath: string) => string;
+};
+
 export type PlaybackApi = PlaybackQueueApi &
 	PlaybackAssetApi &
 	PlaylistLibraryApi &
-	RadioPlaybackApi;
+	RadioPlaybackApi &
+	ExternalSourcePlaybackApi;
 
 type PlaybackContextValue = {
 	queue: QueueItem[];
@@ -102,6 +112,7 @@ type PlaybackContextValue = {
 	currentTrack: Track | null;
 	currentRadioStation: RadioStation | null;
 	radioNowPlaying: RadioNowPlaying | null;
+	currentExternalTrack: ExternalTrack | null;
 	isPlaying: boolean;
 	isReconnecting: boolean;
 	currentTime: number;
@@ -128,6 +139,8 @@ type PlaybackContextValue = {
 	) => Promise<void>;
 	playRadioStation: (station: RadioStation) => Promise<void>;
 	playRadioCatalogPreview: (result: RadioSearchResult) => Promise<void>;
+	/** Resolves an External Track through the Music Server and plays it. */
+	playExternalTrack: (track: ExternalTrack) => Promise<void>;
 	queueTracks: (trackIds: string[], source?: QueueItemSource) => Promise<void>;
 	playQueueIndex: (index: number) => Promise<void>;
 	playNext: (trackId: string) => Promise<void>;
@@ -234,6 +247,10 @@ export function PlaybackProvider({
 		() => getCurrentRadioStation(session.source),
 		[session.source],
 	);
+	const currentExternalTrack =
+		session.source?.type === "external-track"
+			? session.source.externalTrack
+			: null;
 	const radioNowPlayingStationId =
 		session.source?.type === "radio-station" ? session.source.station.id : null;
 
@@ -571,6 +588,35 @@ export function PlaybackProvider({
 		[engine],
 	);
 
+	// An External Track plays on its own: it never joins the Queue, so its
+	// end stops playback instead of advancing (the ended effect is Track-only).
+	const playExternalTrack = useCallback(
+		async (track: ExternalTrack) => {
+			setRadioNowPlaying(null);
+			try {
+				const playback = await apiRef.current.getExternalTrackPlayback(
+					track.id,
+				);
+				const streamUrl = apiRef.current.getExternalStreamUrl(
+					playback.streamPath,
+				);
+				await engine.play({
+					type: "external-track",
+					externalTrack: track,
+					playbackUrl: streamUrl,
+					sourceUrl: streamUrl,
+				});
+			} catch (error) {
+				console.warn("Failed to start External Track playback", {
+					extractor: track.extractor,
+					error,
+				});
+				throw error;
+			}
+		},
+		[engine],
+	);
+
 	const queueTracks = useCallback(
 		async (trackIds: string[], source: QueueItemSource = { kind: "user" }) => {
 			for (const trackId of trackIds) {
@@ -626,6 +672,7 @@ export function PlaybackProvider({
 			currentTrack,
 			currentRadioStation,
 			radioNowPlaying,
+			currentExternalTrack,
 			isPlaying:
 				session.status === "playing" || session.status === "reconnecting",
 			isReconnecting: session.status === "reconnecting",
@@ -649,6 +696,7 @@ export function PlaybackProvider({
 			playTrack,
 			playRadioStation,
 			playRadioCatalogPreview,
+			playExternalTrack,
 			queueTracks,
 			playQueueIndex,
 			playNext,
@@ -694,6 +742,7 @@ export function PlaybackProvider({
 			currentTrack,
 			currentRadioStation,
 			radioNowPlaying,
+			currentExternalTrack,
 			session,
 			errorCause,
 			errorRecovery,
@@ -705,6 +754,7 @@ export function PlaybackProvider({
 			playTrack,
 			playRadioStation,
 			playRadioCatalogPreview,
+			playExternalTrack,
 			queueTracks,
 			playQueueIndex,
 			playNext,

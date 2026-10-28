@@ -48,6 +48,11 @@ const mockPlaybackApi = {
 	getRadioStationStreamUrl: (id: string) => `/radio/${id}`,
 	getRadioCatalogPreviewStreamUrl: (id: string) => `/radio/preview/${id}`,
 	getRadioNowPlaying: async () => ({}),
+	getExternalTrackPlayback: async (externalTrackId: string) => ({
+		format: "progressive" as const,
+		streamPath: `/api/v1/external/tracks/${externalTrackId}/stream`,
+	}),
+	getExternalStreamUrl: (streamPath: string) => `/server${streamPath}`,
 	listPlaylists: async () => ({ items: [], total: 0 }),
 	getPlaylist: async (playlistId: string) => ({
 		id: playlistId,

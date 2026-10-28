@@ -1,4 +1,4 @@
-import type { RadioStation } from "@repo/api-client";
+import type { ExternalTrack, RadioStation } from "@repo/api-client";
 import {
 	act,
 	cleanup,
@@ -92,6 +92,11 @@ const api: PlaybackApi = {
 	getRadioCatalogPreviewStreamUrl: (stationUuid) =>
 		`/radio/preview/${stationUuid}`,
 	getRadioNowPlaying: vi.fn(async () => ({})),
+	getExternalTrackPlayback: vi.fn(async (externalTrackId: string) => ({
+		format: "progressive" as const,
+		streamPath: `/api/v1/external/tracks/${externalTrackId}/stream`,
+	})),
+	getExternalStreamUrl: (streamPath: string) => `/server${streamPath}`,
 	listPlaylists: vi.fn(async () => ({
 		items: [
 			{ id: "favorites", name: "Favorites", isDefault: true, trackCount: 0 },
@@ -440,6 +445,55 @@ describe("PlayerBar", () => {
 		expect(screen.queryByText("0:00")).toBeNull();
 		expect(screen.queryByLabelText("Seek")).toBeNull();
 		expect(screen.getByLabelText("Quality High Quality")).toBeTruthy();
+	});
+
+	it("shows an External Track with a label, seeking and no Queue controls", async () => {
+		vi.useFakeTimers();
+		try {
+			const { engine } = renderPlayerBar();
+			const externalTrack: ExternalTrack = {
+				id: "external-1",
+				title: "External Song",
+				artistName: null,
+				durationMs: 90000,
+				webpageUrl: null,
+				extractor: "Soundcloud",
+			};
+			await act(async () => {
+				await engine.play({
+					type: "external-track",
+					externalTrack,
+					playbackUrl: "/api/v1/external/tracks/external-1/stream",
+					sourceUrl: "/api/v1/external/tracks/external-1/stream",
+				});
+			});
+			act(() => {
+				vi.advanceTimersByTime(500);
+			});
+
+			expect(screen.getByText("External Song")).toBeTruthy();
+			expect(screen.getByText("Soundcloud")).toBeTruthy();
+			expect(screen.getByText("External")).toBeTruthy();
+			expect(screen.getByText("1:30")).toBeTruthy();
+			expect(screen.queryByText("LIVE")).toBeNull();
+			expect((screen.getByLabelText("Seek") as HTMLInputElement).disabled).toBe(
+				false,
+			);
+			for (const name of ["Previous", "Next", "Track actions"]) {
+				expect(
+					(screen.getByRole("button", { name }) as HTMLButtonElement).disabled,
+				).toBe(true);
+			}
+			expect(
+				(screen.getByRole("button", { name: "Pause" }) as HTMLButtonElement)
+					.disabled,
+			).toBe(false);
+			expect(screen.getByTestId("now-playing-announcer").textContent).toBe(
+				"Now playing: External Song",
+			);
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 
 	it("shows an inline error banner with Retry and Skip after a failed Track", async () => {

@@ -9,19 +9,26 @@ const ANNOUNCE_DELAY_MS = 400;
  * a new track or a new station is announced.
  */
 export function NowPlayingAnnouncer() {
-	const { currentTrack, currentRadioStation } = usePlayback();
+	const { currentTrack, currentRadioStation, currentExternalTrack } =
+		usePlayback();
 	const [message, setMessage] = useState("");
 
 	const sourceKey = currentTrack
 		? `track:${currentTrack.id}`
-		: currentRadioStation
-			? `station:${currentRadioStation.id}`
-			: null;
+		: currentExternalTrack
+			? `external:${currentExternalTrack.id}`
+			: currentRadioStation
+				? `station:${currentRadioStation.id}`
+				: null;
 	const nextMessage = currentTrack
 		? `Now playing: ${currentTrack.title} by ${currentTrack.artistName}`
-		: currentRadioStation
-			? `Now playing: ${currentRadioStation.name}`
-			: "";
+		: currentExternalTrack
+			? currentExternalTrack.artistName
+				? `Now playing: ${currentExternalTrack.title} by ${currentExternalTrack.artistName}`
+				: `Now playing: ${currentExternalTrack.title}`
+			: currentRadioStation
+				? `Now playing: ${currentRadioStation.name}`
+				: "";
 
 	if (!sourceKey && message !== "") setMessage("");
 

@@ -25,6 +25,7 @@ export type {
 } from "./playback/PlaybackEngine";
 export { DEFAULT_PLAYBACK_SESSION_STATE } from "./playback/PlaybackEngine";
 export type {
+	ExternalSourcePlaybackApi,
 	PlaybackApi,
 	PlaybackAssetApi,
 	PlaybackErrorRecovery,

@@ -63,6 +63,11 @@ function createApi(
 		getRadioCatalogPreviewStreamUrl: (stationUuid) =>
 			`/radio/preview/${stationUuid}`,
 		getRadioNowPlaying: vi.fn(async () => ({})),
+		getExternalTrackPlayback: vi.fn(async (externalTrackId: string) => ({
+			format: "progressive" as const,
+			streamPath: `/api/v1/external/tracks/${externalTrackId}/stream`,
+		})),
+		getExternalStreamUrl: (streamPath: string) => `/server${streamPath}`,
 		listPlaylists: vi.fn(async () => ({ items: [], total: 0 })),
 		getPlaylist: vi.fn(async (playlistId: string) => ({
 			id: playlistId,

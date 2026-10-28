@@ -41,6 +41,11 @@ const api: PlaybackApi = {
 	getRadioStationStreamUrl: (stationId) => `/radio/${stationId}`,
 	getRadioCatalogPreviewStreamUrl: (stationUuid) => `/preview/${stationUuid}`,
 	getRadioNowPlaying: vi.fn(async () => ({})),
+	getExternalTrackPlayback: vi.fn(async (externalTrackId: string) => ({
+		format: "progressive" as const,
+		streamPath: `/api/v1/external/tracks/${externalTrackId}/stream`,
+	})),
+	getExternalStreamUrl: (streamPath: string) => `/server${streamPath}`,
 	listPlaylists: vi.fn(async () => ({ items: [], total: 0 })),
 	getPlaylist: vi.fn(async (id: string) => ({
 		id,
@@ -99,5 +104,41 @@ describe("MiniPlayerWindow", () => {
 		fireEvent.click(screen.getByRole("button", { name: "Close mini player" }));
 		expect(onExpand).toHaveBeenCalledOnce();
 		expect(onClose).toHaveBeenCalledOnce();
+	});
+
+	it("shows an External Track as seekable without Queue navigation", async () => {
+		const engine = new InMemoryPlaybackEngine();
+		render(
+			<PlaybackProvider api={api} engine={engine}>
+				<MiniPlayerWindow />
+			</PlaybackProvider>,
+		);
+
+		await act(async () => {
+			await engine.play({
+				type: "external-track",
+				externalTrack: {
+					id: "external-1",
+					title: "External Song",
+					artistName: "Uploader",
+					durationMs: 90000,
+					webpageUrl: null,
+					extractor: "Youtube",
+				},
+				playbackUrl: "/api/v1/external/tracks/external-1/stream",
+				sourceUrl: "/api/v1/external/tracks/external-1/stream",
+			});
+		});
+
+		const root = screen.getByTestId("mini-player-window");
+		expect(root.textContent).toContain("External Song");
+		expect(root.textContent).toContain("Uploader");
+		expect((screen.getByLabelText("Seek") as HTMLInputElement).disabled).toBe(
+			false,
+		);
+		expect(
+			(screen.getByRole("button", { name: "Next" }) as HTMLButtonElement)
+				.disabled,
+		).toBe(true);
 	});
 });

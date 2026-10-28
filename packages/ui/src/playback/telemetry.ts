@@ -107,7 +107,9 @@ export function createFallbackPlaybackTelemetry(
 ): PlaybackTelemetry {
 	const track = source?.type === "track" ? source.track : null;
 	const telemetry = createBrowserPlaybackTelemetry(track, softwareVolume);
-	if (!source || source.type === "track") return telemetry;
+	// An External Track's codec and bitrate are unknown until the engine reports them.
+	if (!source || source.type === "track" || source.type === "external-track")
+		return telemetry;
 	const radio =
 		source.type === "radio-station" ? source.station : source.result;
 	return {

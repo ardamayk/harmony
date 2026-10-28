@@ -173,6 +173,7 @@ export function PlayerBar({
 		currentTrack,
 		currentRadioStation,
 		radioNowPlaying,
+		currentExternalTrack,
 		isPlaying,
 		isReconnecting,
 		currentTime,
@@ -236,7 +237,7 @@ export function PlayerBar({
 	useEffect(() => {
 		applyTransitionFade(playbackPreferences.transitionFadeMs);
 	}, [playbackPreferences.transitionFadeMs]);
-	const canSeek = Boolean(currentTrack);
+	const canSeek = Boolean(currentTrack || currentExternalTrack);
 	const seekBy = useCallback(
 		(delta: number) => {
 			if (!canSeek) return;
@@ -396,24 +397,35 @@ export function PlayerBar({
 	}, []);
 
 	const isRadioPlaying = Boolean(currentRadioStation);
-	const hasPlayableSource = Boolean(currentTrack || currentRadioStation);
+	const hasPlayableSource = Boolean(
+		currentTrack || currentExternalTrack || currentRadioStation,
+	);
 	const radioTitle =
 		radioNowPlaying?.title ??
 		radioNowPlaying?.raw ??
 		currentRadioStation?.name ??
 		null;
 	const nowPlayingTitle =
-		currentTrack?.title ?? radioTitle ?? "Nothing playing";
+		currentTrack?.title ??
+		currentExternalTrack?.title ??
+		radioTitle ??
+		"Nothing playing";
 	const nowPlayingSubtitle = isReconnecting
 		? "Reconnecting…"
 		: (currentTrack?.artistName ??
+			(currentExternalTrack
+				? (currentExternalTrack.artistName ?? currentExternalTrack.extractor)
+				: null) ??
 			(isRadioPlaying
 				? radioNowPlaying?.artist && radioNowPlaying.artist !== radioTitle
 					? radioNowPlaying.artist
 					: "Live radio"
 				: null) ??
 			"Select a track");
-	const nowPlayingCaption = currentTrack?.albumTitle ?? null;
+	// An External Track is marked in the caption line an Album title uses.
+	const nowPlayingCaption = currentExternalTrack
+		? "External"
+		: (currentTrack?.albumTitle ?? null);
 	// The bar shows a 56–64px cover; the full-screen views get a large one.
 	const artworkUrl = currentTrack
 		? getAlbumCoverUrl(currentTrack.albumId, 128)
@@ -450,12 +462,17 @@ export function PlayerBar({
 			? duration
 			: currentTrack?.durationMs
 				? currentTrack.durationMs / 1000
-				: 0;
+				: currentExternalTrack?.durationMs
+					? currentExternalTrack.durationMs / 1000
+					: 0;
 
 	const qualityLabel = isRadioPlaying
 		? formatRadioQualityLabel(currentRadioStation)
 		: formatQualityLabel(currentTrack);
-	const hasActiveSource = currentTrack !== null || currentRadioStation !== null;
+	const hasActiveSource =
+		currentTrack !== null ||
+		currentExternalTrack !== null ||
+		currentRadioStation !== null;
 	const outputAlert = playbackError ? null : outputDeviceIssue?.message;
 	const qualityDetailRows = useMemo(
 		() =>
@@ -936,6 +953,7 @@ export function PlayerBar({
 					isPlaying={isPlaying}
 					hasPlayableSource={hasPlayableSource}
 					hasCurrentTrack={Boolean(currentTrack)}
+					canSeek={canSeek}
 					currentTime={currentTime}
 					effectiveDuration={effectiveDuration}
 					bufferedEnd={bufferedEnd}

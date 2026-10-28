@@ -20,6 +20,7 @@ export function MiniPlayerWindow({
 	const {
 		currentTrack,
 		currentRadioStation,
+		currentExternalTrack,
 		isPlaying,
 		currentTime,
 		duration,
@@ -36,9 +37,15 @@ export function MiniPlayerWindow({
 	} = usePlayback();
 	const isRadioPlaying = Boolean(currentRadioStation);
 	const title =
-		currentTrack?.title ?? currentRadioStation?.name ?? "Nothing playing";
+		currentTrack?.title ??
+		currentExternalTrack?.title ??
+		currentRadioStation?.name ??
+		"Nothing playing";
 	const subtitle =
 		currentTrack?.artistName ??
+		(currentExternalTrack
+			? (currentExternalTrack.artistName ?? currentExternalTrack.extractor)
+			: null) ??
 		(isRadioPlaying ? "Live radio" : "Select a track in the main window");
 	const artworkUrl = currentTrack
 		? getAlbumCoverUrl(currentTrack.albumId, 128)
@@ -48,7 +55,9 @@ export function MiniPlayerWindow({
 			? duration
 			: currentTrack?.durationMs
 				? currentTrack.durationMs / 1000
-				: 0;
+				: currentExternalTrack?.durationMs
+					? currentExternalTrack.durationMs / 1000
+					: 0;
 
 	return (
 		<div
@@ -111,8 +120,11 @@ export function MiniPlayerWindow({
 				<PlaybackControls
 					isRadioPlaying={isRadioPlaying}
 					isPlaying={isPlaying}
-					hasPlayableSource={Boolean(currentTrack || currentRadioStation)}
+					hasPlayableSource={Boolean(
+						currentTrack || currentExternalTrack || currentRadioStation,
+					)}
 					hasCurrentTrack={Boolean(currentTrack)}
+					canSeek={Boolean(currentTrack || currentExternalTrack)}
 					currentTime={currentTime}
 					effectiveDuration={effectiveDuration}
 					bufferedEnd={bufferedEnd}

@@ -63,6 +63,10 @@ const playbackApi: PlaybackApi = {
 	getRadioCatalogPreviewStreamUrl: (stationUuid) =>
 		apiClient.getRadioCatalogPreviewStreamUrl(stationUuid),
 	getRadioNowPlaying: (stationId) => apiClient.getRadioNowPlaying(stationId),
+	getExternalTrackPlayback: (externalTrackId) =>
+		apiClient.getExternalTrackPlayback(externalTrackId),
+	getExternalStreamUrl: (streamPath) =>
+		apiClient.getExternalStreamUrl(streamPath),
 	listPlaylists: () => apiClient.listPlaylists(),
 	getPlaylist: (playlistId) => apiClient.getPlaylist(playlistId),
 	createPlaylist: (name) => apiClient.createPlaylist({ name }),

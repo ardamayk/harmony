@@ -1,5 +1,6 @@
 import {
 	ApiError,
+	type ExternalTrack,
 	type QueueEvent,
 	type RadioSearchResult,
 	type RadioStation,
@@ -64,6 +65,15 @@ const catalogResult: RadioSearchResult = {
 	tags: [],
 };
 
+const externalTrack: ExternalTrack = {
+	id: "external-1",
+	title: "External Song",
+	artistName: "Uploader",
+	durationMs: 90000,
+	webpageUrl: "https://soundcloud.com/uploader/external-song",
+	extractor: "Soundcloud",
+};
+
 const queueItems = [
 	{ id: "item-1", trackId: track.id, position: 0, track },
 	{ id: "item-2", trackId: track2.id, position: 1, track: track2 },
@@ -98,6 +108,11 @@ function createApi(items = queueItems): PlaybackApi {
 		getRadioCatalogPreviewStreamUrl: (stationUuid) =>
 			`/radio/preview/${stationUuid}`,
 		getRadioNowPlaying: vi.fn(async () => ({ raw: "Artist - Song" })),
+		getExternalTrackPlayback: vi.fn(async (externalTrackId: string) => ({
+			format: "hls" as const,
+			streamPath: `/api/v1/external/tracks/${externalTrackId}/playlist.m3u8`,
+		})),
+		getExternalStreamUrl: (streamPath: string) => `/server${streamPath}`,
 		listPlaylists: vi.fn(async () => ({ items: [], total: 0 })),
 		getPlaylist: vi.fn(async (playlistId: string) => ({
 			id: playlistId,
@@ -139,6 +154,9 @@ function Harness() {
 			<span data-testid="track">{playback.currentTrack?.title ?? ""}</span>
 			<span data-testid="radio">
 				{playback.currentRadioStation?.name ?? ""}
+			</span>
+			<span data-testid="external">
+				{playback.currentExternalTrack?.title ?? ""}
 			</span>
 			<span data-testid="now-playing">
 				{playback.radioNowPlaying?.raw ?? ""}
@@ -222,6 +240,14 @@ function Harness() {
 				onClick={() => void playback.playRadioCatalogPreview(catalogResult)}
 			>
 				Preview
+			</button>
+			<button
+				type="button"
+				onClick={() =>
+					void playback.playExternalTrack(externalTrack).catch(() => undefined)
+				}
+			>
+				External
 			</button>
 			<button type="button" onClick={() => playback.setVolume(0.3)}>
 				Volume
@@ -462,6 +488,81 @@ describe("PlaybackProvider", () => {
 		});
 		expect(screen.getByTestId("radio").textContent).toBe("");
 		expect(screen.getByTestId("queue").textContent).toBe(queueBeforePlayback);
+	});
+
+	it("plays an External Track outside the Queue and stops at its end", async () => {
+		const api = createApi();
+		const { engine } = renderPlayback(api);
+		await act(async () => {});
+		const queueBeforePlayback = screen.getByTestId("queue").textContent;
+		await act(async () =>
+			screen.getByRole("button", { name: "Track" }).click(),
+		);
+
+		await act(async () =>
+			screen.getByRole("button", { name: "External" }).click(),
+		);
+
+		expect(api.getExternalTrackPlayback).toHaveBeenCalledWith("external-1");
+		const streamUrl = "/server/api/v1/external/tracks/external-1/playlist.m3u8";
+		expect(engine.getState().source).toEqual({
+			type: "external-track",
+			externalTrack,
+			playbackUrl: streamUrl,
+			sourceUrl: streamUrl,
+		});
+		expect(engine.getState().duration).toBe(90);
+		expect(screen.getByTestId("external").textContent).toBe("External Song");
+		expect(screen.getByTestId("track").textContent).toBe("");
+		expect(screen.getByTestId("radio").textContent).toBe("");
+		expect(api.getRadioNowPlaying).not.toHaveBeenCalled();
+
+		await act(async () => engine.finish());
+
+		expect(engine.getState()).toMatchObject({
+			status: "ended",
+			source: { type: "external-track" },
+		});
+		expect(screen.getByTestId("queue").textContent).toBe(queueBeforePlayback);
+		expect(api.appendQueueItem).not.toHaveBeenCalled();
+		expect(api.replaceQueue).not.toHaveBeenCalled();
+	});
+
+	it("rejects when an External Track cannot be resolved", async () => {
+		const api = createApi();
+		const failure = new Error("unplayable");
+		api.getExternalTrackPlayback = vi.fn(async () => {
+			throw failure;
+		});
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const onRejected = vi.fn();
+		function Trigger() {
+			const { playExternalTrack } = usePlayback();
+			return (
+				<button
+					type="button"
+					onClick={() =>
+						void playExternalTrack(externalTrack).catch(onRejected)
+					}
+				>
+					Play External
+				</button>
+			);
+		}
+		const engine = new InMemoryPlaybackEngine();
+		render(
+			<PlaybackProvider api={api} engine={engine}>
+				<Trigger />
+			</PlaybackProvider>,
+		);
+
+		await act(async () =>
+			screen.getByRole("button", { name: "Play External" }).click(),
+		);
+
+		expect(onRejected).toHaveBeenCalledWith(failure);
+		expect(engine.getState().source).toBeNull();
+		warn.mockRestore();
 	});
 
 	it("exposes an active reconnecting Radio Station session", async () => {

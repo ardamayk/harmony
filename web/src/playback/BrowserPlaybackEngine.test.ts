@@ -457,6 +457,64 @@ describe("BrowserPlaybackEngine", () => {
 		engine.destroy();
 	});
 
+	it("plays an HLS External Track through hls.js and ends instead of reconnecting", async () => {
+		vi.useFakeTimers();
+		const hls = {
+			attachMedia: vi.fn(),
+			destroy: vi.fn(),
+			loadSource: vi.fn(),
+		};
+		const session = {
+			metadata: null as MediaMetadata | null,
+			playbackState: "none" as MediaSessionPlaybackState,
+			setActionHandler: vi.fn(),
+			setPositionState: vi.fn(),
+		};
+		vi.stubGlobal(
+			"MediaMetadata",
+			class {
+				constructor(public init: MediaMetadataInit) {}
+			},
+		);
+		const engine = new BrowserPlaybackEngine({
+			createMedia: () => media,
+			mediaSession: session,
+			hls: {
+				isSupported: () => true,
+				create: () => hls,
+			},
+		});
+		const streamUrl = "/api/v1/external/tracks/external-1/playlist.m3u8";
+
+		await engine.play({
+			type: "external-track",
+			externalTrack: {
+				id: "external-1",
+				title: "External Song",
+				artistName: null,
+				durationMs: 30500,
+				webpageUrl: "https://soundcloud.com/uploader/external-song",
+				extractor: "Soundcloud",
+			},
+			playbackUrl: streamUrl,
+			sourceUrl: streamUrl,
+		});
+
+		expect(hls.loadSource).toHaveBeenCalledWith(streamUrl);
+		expect(engine.getState().duration).toBe(30.5);
+		expect(
+			(session.metadata as unknown as { init: MediaMetadataInit }).init,
+		).toMatchObject({ title: "External Song", artist: "", artwork: [] });
+
+		media.paused = true;
+		media.dispatchEvent(new Event("ended"));
+		await vi.advanceTimersByTimeAsync(2000);
+
+		expect(engine.getState().status).toBe("ended");
+		expect(media.play).toHaveBeenCalledOnce();
+		engine.destroy();
+	});
+
 	it("does not load hls.js for non-HLS playback", async () => {
 		const loadHls = vi.fn();
 		const engine = new BrowserPlaybackEngine({

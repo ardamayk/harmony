@@ -1,4 +1,9 @@
-import type { RadioSearchResult, RadioStation, Track } from "@repo/api-client";
+import type {
+	ExternalTrack,
+	RadioSearchResult,
+	RadioStation,
+	Track,
+} from "@repo/api-client";
 import type {
 	EqualizerPreset,
 	OutputDevice,
@@ -30,6 +35,17 @@ export type PlaybackSource =
 	| {
 			type: "catalog-preview";
 			result: RadioSearchResult;
+			playbackUrl: string;
+			sourceUrl: string;
+	  }
+	| {
+			/**
+			 * An External Track played through the Music Server: not live,
+			 * seekable, never queued, favourited or restored. Both URLs are the
+			 * server's stream path, so a `.m3u8` path selects HLS playback.
+			 */
+			type: "external-track";
+			externalTrack: ExternalTrack;
 			playbackUrl: string;
 			sourceUrl: string;
 	  };
