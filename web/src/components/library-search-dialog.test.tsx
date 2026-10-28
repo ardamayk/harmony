@@ -1,4 +1,4 @@
-import type { LibrarySearchResponse } from "@repo/api-client";
+import type { ExternalTrack, LibrarySearchResponse } from "@repo/api-client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
 	act,
@@ -23,8 +23,11 @@ import { LibrarySearchDialog } from "./library-search-dialog";
 
 const mocks = vi.hoisted(() => ({
 	searchLibrary: vi.fn(),
+	searchExternalSource: vi.fn(),
+	hasExternalSource: false,
 	navigate: vi.fn(),
 	playTrack: vi.fn(),
+	playExternalTrack: vi.fn(),
 	addToQueue: vi.fn(),
 	toastSuccess: vi.fn(),
 	toastError: vi.fn(),
@@ -33,8 +36,13 @@ const mocks = vi.hoisted(() => ({
 vi.mock("#/lib/api", () => ({
 	apiClient: {
 		searchLibrary: mocks.searchLibrary,
+		searchExternalSource: mocks.searchExternalSource,
 		getAlbumCoverUrl: (id: string) => `/api/v1/library/albums/${id}/cover`,
 	},
+}));
+vi.mock("#/hooks/use-server-capability", () => ({
+	useServerCapability: (capability: string) =>
+		capability === "external-source.v1" && mocks.hasExternalSource,
 }));
 vi.mock("@tanstack/react-router", () => ({
 	useNavigate: () => mocks.navigate,
@@ -44,6 +52,7 @@ vi.mock("@repo/ui", async (importOriginal) => ({
 	usePlayback: () => ({
 		playTrack: mocks.playTrack,
 		addToQueue: mocks.addToQueue,
+		playExternalTrack: mocks.playExternalTrack,
 	}),
 	toast: { success: mocks.toastSuccess, error: mocks.toastError },
 }));
@@ -109,6 +118,141 @@ describe("LibrarySearchDialog", () => {
 		cleanup();
 		vi.clearAllMocks();
 		vi.useRealTimers();
+		mocks.hasExternalSource = false;
+	});
+
+	describe("External Source", () => {
+		const daftPunk: ExternalTrack = {
+			id: "token.signature",
+			title: "Around the World",
+			artistName: "Daft Punk",
+			durationMs: 429_000,
+			webpageUrl: "https://soundcloud.com/daftpunk/around-the-world",
+			extractor: "Soundcloud",
+		};
+
+		beforeEach(() => {
+			mocks.searchExternalSource.mockResolvedValue({
+				source: "scsearch",
+				items: [daftPunk],
+			});
+			mocks.playExternalTrack.mockResolvedValue(undefined);
+		});
+
+		it("stays hidden and never searches without the capability", async () => {
+			renderDialog();
+			fireEvent.change(screen.getByRole("combobox"), {
+				target: { value: "ne" },
+			});
+			await screen.findByText("Nemo mix");
+			expect(screen.queryByRole("group", { name: "External" })).toBeNull();
+			expect(mocks.searchExternalSource).not.toHaveBeenCalled();
+		});
+
+		it("lists External Tracks in their own group after the library groups", async () => {
+			mocks.hasExternalSource = true;
+			renderDialog();
+			fireEvent.change(screen.getByRole("combobox"), {
+				target: { value: "ne" },
+			});
+			const external = await screen.findByRole("group", { name: "External" });
+			const option = await within(external).findByRole("option", {
+				name: /^Around the World/,
+			});
+			expect(option.textContent).toContain("Daft Punk");
+			expect(option.textContent).toContain("7:09");
+			expect(option.textContent).not.toContain("Open");
+			expect(mocks.searchExternalSource).toHaveBeenCalledWith("ne");
+			const library = screen.getByRole("region", { name: "From Your Library" });
+			expect(within(library).queryByText("Around the World")).toBeNull();
+			expect(
+				library.compareDocumentPosition(external) &
+					Node.DOCUMENT_POSITION_FOLLOWING,
+			).toBeTruthy();
+			// No queue action: an External Track never joins the Queue.
+			expect(
+				within(external).queryByRole("button", { name: /to queue/ }),
+			).toBeNull();
+		});
+
+		it("plays the chosen External Track and closes", async () => {
+			mocks.hasExternalSource = true;
+			const { onOpenChange } = renderDialog();
+			fireEvent.change(screen.getByRole("combobox"), {
+				target: { value: "ne" },
+			});
+			fireEvent.click(
+				await screen.findByRole("option", { name: /^Around the World/ }),
+			);
+			expect(mocks.playExternalTrack).toHaveBeenCalledWith(daftPunk);
+			expect(mocks.playTrack).not.toHaveBeenCalled();
+			expect(onOpenChange).toHaveBeenCalledWith(false);
+		});
+
+		it("reaches External Tracks with the keyboard after the library rows", async () => {
+			mocks.hasExternalSource = true;
+			mocks.searchLibrary.mockResolvedValue({ ...empty, tracks: [nemo] });
+			const { onOpenChange } = renderDialog();
+			const input = screen.getByRole("combobox");
+			fireEvent.change(input, { target: { value: "ne" } });
+			await screen.findByRole("option", { name: /^Around the World/ });
+			fireEvent.keyDown(input, { key: "ArrowDown" });
+			fireEvent.keyDown(input, { key: "Enter", shiftKey: true });
+			expect(mocks.addToQueue).not.toHaveBeenCalled();
+			fireEvent.keyDown(input, { key: "Enter" });
+			expect(mocks.playExternalTrack).toHaveBeenCalledWith(daftPunk);
+			expect(onOpenChange).toHaveBeenCalledWith(false);
+		});
+
+		it("keeps the library groups when the External Source fails", async () => {
+			mocks.hasExternalSource = true;
+			mocks.searchExternalSource.mockRejectedValue(
+				new Error("external_source_failed"),
+			);
+			renderDialog();
+			fireEvent.change(screen.getByRole("combobox"), {
+				target: { value: "ne" },
+			});
+			const external = await screen.findByRole("group", { name: "External" });
+			expect(
+				(await within(external).findByRole("alert")).textContent,
+			).toContain("External results could not be loaded.");
+			expect(screen.getAllByRole("alert")).toHaveLength(1);
+			const library = screen.getByRole("region", { name: "From Your Library" });
+			expect(within(library).getByText("Nemo mix")).toBeTruthy();
+
+			mocks.searchExternalSource.mockResolvedValue({
+				source: "scsearch",
+				items: [daftPunk],
+			});
+			fireEvent.click(within(external).getByRole("button", { name: "Retry" }));
+			await within(external).findByRole("option", {
+				name: /^Around the World/,
+			});
+			expect(within(external).queryByRole("alert")).toBeNull();
+		});
+
+		it("shows its own loading and empty states", async () => {
+			mocks.hasExternalSource = true;
+			let finish!: (value: { source: string; items: ExternalTrack[] }) => void;
+			mocks.searchExternalSource.mockImplementation(
+				() =>
+					new Promise((resolve) => {
+						finish = resolve;
+					}),
+			);
+			renderDialog();
+			fireEvent.change(screen.getByRole("combobox"), {
+				target: { value: "ne" },
+			});
+			const external = await screen.findByRole("group", { name: "External" });
+			await screen.findByText("Nemo mix");
+			expect(within(external).getByText("Searching…")).toBeTruthy();
+			await act(async () => finish({ source: "scsearch", items: [] }));
+			expect(
+				await within(external).findByText("No External results for “ne”."),
+			).toBeTruthy();
+		});
 	});
 
 	it("shows Best Match before ordered nonempty categories", async () => {

@@ -1,4 +1,8 @@
-import type { LibrarySearchResult } from "@repo/api-client";
+import {
+	EXTERNAL_SOURCE_CAPABILITY,
+	type ExternalTrack,
+	type LibrarySearchResult,
+} from "@repo/api-client";
 import { AlbumArt, toast, usePlayback } from "@repo/ui";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
@@ -7,6 +11,7 @@ import {
 	ArrowUp,
 	CornerDownLeft,
 	Disc3,
+	Globe,
 	ListMusic,
 	ListPlus,
 	LoaderCircle,
@@ -32,6 +37,7 @@ import {
 } from "#/components/ui/dialog";
 import { useDebouncedValue } from "#/hooks/use-debounced-value";
 import { useReturnFocus } from "#/hooks/use-return-focus";
+import { useServerCapability } from "#/hooks/use-server-capability";
 import { apiClient } from "#/lib/api";
 import { getTrackArtistName } from "#/lib/library-display";
 import { libraryQueryKeys } from "#/lib/library-query-keys";
@@ -47,8 +53,23 @@ type SearchResult = {
 	subtitle?: string;
 	albumId?: string;
 	trackId?: string;
+	/** Choosing it opens a page instead of playing; the row says "Open". */
+	opensPage?: boolean;
+	/** Shown for External Tracks, which have no library page to open. */
+	duration?: string;
 	action: () => void;
 };
+
+/** m:ss, or h:mm:ss from one hour. */
+function formatDuration(ms: number): string {
+	const total = Math.max(0, Math.round(ms / 1000));
+	const hours = Math.floor(total / 3600);
+	const minutes = Math.floor((total % 3600) / 60);
+	const seconds = (total % 60).toString().padStart(2, "0");
+	return hours > 0
+		? `${hours}:${minutes.toString().padStart(2, "0")}:${seconds}`
+		: `${minutes}:${seconds}`;
+}
 
 type SearchGroup = {
 	label: string;
@@ -68,7 +89,9 @@ function subscribeToNothing(): () => void {
 /**
  * Searches every library surface at once: Tracks, Albums, Artists, Genres and
  * Playlists. Results are grouped under "From Your Library"; choosing a track
- * plays it, anything else opens its page.
+ * plays it, anything else opens its page. When the Music Server offers the
+ * External Source, its results follow in their own "External" group, which
+ * loads and fails on its own.
  */
 export function LibrarySearchDialog({
 	open,
@@ -106,7 +129,9 @@ export function LibrarySearchDialog({
 	const listboxRef = useRef<HTMLDivElement>(null);
 	const returnFocus = useReturnFocus();
 	const navigate = useNavigate();
-	const { playTrack, addToQueue } = usePlayback();
+	const { playTrack, addToQueue, playExternalTrack } = usePlayback();
+	const hasExternalSource = useServerCapability(EXTERNAL_SOURCE_CAPABILITY);
+	const canShowExternal = canShowResults && hasExternalSource;
 	const listboxId = useId();
 	const measureResults = useCallback((content: HTMLDivElement | null) => {
 		if (!content) return;
@@ -149,6 +174,15 @@ export function LibrarySearchDialog({
 		retry: false,
 	});
 
+	// No placeholder data: yt-dlp takes seconds, and the previous query's
+	// External Tracks would sit under the new query for that long.
+	const externalSearch = useQuery({
+		queryKey: ["external-search", debouncedQuery],
+		queryFn: () => apiClient.searchExternalSource(debouncedQuery),
+		enabled: canShowExternal,
+		retry: false,
+	});
+
 	const close = useCallback(() => onOpenChange(false), [onOpenChange]);
 
 	const groups = useMemo<SearchGroup[]>(() => {
@@ -161,6 +195,7 @@ export function LibrarySearchDialog({
 			title: result.name,
 			albumId: result.type === "album" ? result.id : result.album?.id,
 			trackId: result.type === "track" ? result.id : undefined,
+			opensPage: result.type !== "track",
 			subtitle: [
 				getTrackArtistName({ artists: result.artists ?? [], artistName: "" }),
 				result.album?.name,
@@ -228,16 +263,38 @@ export function LibrarySearchDialog({
 		].filter((group) => group.results.length > 0);
 	}, [canShowResults, search.data, navigate, playTrack, close, showAll]);
 
-	const flatResults = useMemo(
+	const externalResults = useMemo<SearchResult[]>(() => {
+		if (!canShowExternal || !externalSearch.data) return [];
+		return externalSearch.data.items.map((track: ExternalTrack) => ({
+			key: `external:${track.id}`,
+			title: track.title,
+			subtitle: track.artistName ?? undefined,
+			duration:
+				track.durationMs != null ? formatDuration(track.durationMs) : undefined,
+			action: () => {
+				void playExternalTrack(track);
+				close();
+			},
+		}));
+	}, [canShowExternal, externalSearch.data, playExternalTrack, close]);
+
+	const libraryResults = useMemo(
 		() => groups.flatMap((group) => group.results),
 		[groups],
+	);
+	// Keyboard order follows the screen: library groups, then External.
+	const flatResults = useMemo(
+		() => [...libraryResults, ...externalResults],
+		[libraryResults, externalResults],
 	);
 	const activeResult =
 		flatResults.find((result) => result.key === activeKey) ?? flatResults[0];
 	const failed = canShowResults && search.isError;
 	const isSearching = hasQuery && (isDebouncing || search.isFetching);
 	const showEmpty =
-		canShowResults && !isSearching && !failed && flatResults.length === 0;
+		canShowResults && !isSearching && !failed && libraryResults.length === 0;
+	const externalFailed = canShowExternal && externalSearch.isError;
+	const isSearchingExternal = canShowExternal && externalSearch.isFetching;
 
 	const resultCount =
 		canShowResults && search.data
@@ -315,6 +372,94 @@ export function LibrarySearchDialog({
 		}
 	};
 
+	const renderOption = (result: SearchResult, Icon: typeof Music2) => {
+		const isActive = activeResult?.key === result.key;
+		return (
+			<li
+				key={result.key}
+				className={cn(
+					"flex items-center rounded-md pr-2 transition-colors motion-reduce:transition-none",
+					// The keyboard's row looks like the hovered one: the hover step, never the accent.
+					isActive && "bg-muted",
+				)}
+			>
+				<button
+					type="button"
+					id={optionId(listboxId, result.key)}
+					role="option"
+					aria-selected={isActive}
+					tabIndex={-1}
+					className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-left outline-none"
+					onMouseEnter={() => setActiveKey(result.key)}
+					onMouseDown={(event) => event.preventDefault()}
+					onClick={result.action}
+				>
+					{result.albumId ? (
+						<AlbumArt
+							coverUrl={apiClient.getAlbumCoverUrl(result.albumId, 128)}
+							title={result.title}
+							className="size-10 shrink-0 rounded-sm"
+						/>
+					) : (
+						<span className="flex size-10 shrink-0 items-center justify-center rounded-sm bg-muted/50 text-caption">
+							<Icon className="size-4" />
+						</span>
+					)}
+					<span className="min-w-0 flex-1">
+						<span
+							className={cn(
+								"block truncate text-sm",
+								isActive && "text-heading",
+							)}
+						>
+							{result.title}
+						</span>
+						{result.subtitle ? (
+							<span className="mt-0.5 block truncate text-caption text-xs">
+								{result.subtitle}
+							</span>
+						) : null}
+					</span>
+					{result.duration ? (
+						<span className="shrink-0 text-caption text-xs tabular-nums">
+							{result.duration}
+						</span>
+					) : null}
+					<span
+						aria-hidden
+						className="flex shrink-0 items-center gap-2 text-caption text-xs"
+					>
+						{result.opensPage ? (
+							<span className="hidden sm:inline">Open</span>
+						) : null}
+						<CornerDownLeft
+							className={cn("size-4", !isActive && "invisible")}
+						/>
+					</span>
+				</button>
+				{result.trackId ? (
+					<button
+						type="button"
+						aria-label={`Add ${result.title} to queue`}
+						title="Add to queue (Shift+Enter)"
+						aria-disabled={pendingTracks.has(result.trackId)}
+						onFocus={() => setActiveKey(result.key)}
+						onClick={() => {
+							void queueResult(result);
+						}}
+						className="flex size-10 shrink-0 items-center justify-center rounded-md text-caption outline-none hover:bg-foreground/10 hover:text-heading focus-visible:bg-foreground/10 focus-visible:text-heading aria-disabled:opacity-50"
+					>
+						{pendingTracks.has(result.trackId) ? (
+							<LoaderCircle className="size-4 motion-safe:animate-spin" />
+						) : (
+							<ListPlus className="size-4" />
+						)}
+					</button>
+				) : null}
+			</li>
+		);
+	};
+
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
 			{/* Transparent overlay: the page stays as it is behind the search card. */}
@@ -376,7 +521,7 @@ export function LibrarySearchDialog({
 				</div>
 				<div
 					id={listboxId}
-					aria-busy={isSearching}
+					aria-busy={isSearching || isSearchingExternal}
 					ref={listboxRef}
 					role="listbox"
 					aria-label="Search results"
@@ -391,7 +536,7 @@ export function LibrarySearchDialog({
 						{failed ? (
 							<div role="alert" className="px-3 py-3 text-sm">
 								<p>
-									{flatResults.length > 0
+									{libraryResults.length > 0
 										? "Search results could not be refreshed."
 										: "Search results could not be loaded."}
 								</p>
@@ -412,7 +557,7 @@ export function LibrarySearchDialog({
 								Nothing in your library matches “{debouncedQuery}”.
 							</p>
 						) : null}
-						{isSearching && flatResults.length === 0 ? (
+						{isSearching && libraryResults.length === 0 ? (
 							<p className="px-3 py-6 text-center text-caption text-sm">
 								Searching…
 							</p>
@@ -433,100 +578,50 @@ export function LibrarySearchDialog({
 											{group.label}
 										</p>
 										<ul className="flex flex-col">
-											{group.results.map((result) => {
-												const isActive = activeResult?.key === result.key;
-												return (
-													<li
-														key={result.key}
-														className={cn(
-															"flex items-center rounded-md pr-2 transition-colors motion-reduce:transition-none",
-															// The keyboard's row looks like the hovered one: the hover step, never the accent.
-															isActive && "bg-muted",
-														)}
-													>
-														<button
-															type="button"
-															id={optionId(listboxId, result.key)}
-															role="option"
-															aria-selected={isActive}
-															tabIndex={-1}
-															className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-left outline-none"
-															onMouseEnter={() => setActiveKey(result.key)}
-															onMouseDown={(event) => event.preventDefault()}
-															onClick={result.action}
-														>
-															{result.albumId ? (
-																<AlbumArt
-																	coverUrl={apiClient.getAlbumCoverUrl(
-																		result.albumId,
-																		128,
-																	)}
-																	title={result.title}
-																	className="size-10 shrink-0 rounded-sm"
-																/>
-															) : (
-																<span className="flex size-10 shrink-0 items-center justify-center rounded-sm bg-muted/50 text-caption">
-																	<group.icon className="size-4" />
-																</span>
-															)}
-															<span className="min-w-0 flex-1">
-																<span
-																	className={cn(
-																		"block truncate text-sm",
-																		isActive && "text-heading",
-																	)}
-																>
-																	{result.title}
-																</span>
-																{result.subtitle ? (
-																	<span className="mt-0.5 block truncate text-caption text-xs">
-																		{result.subtitle}
-																	</span>
-																) : null}
-															</span>
-															<span
-																aria-hidden
-																className="flex shrink-0 items-center gap-2 text-caption text-xs"
-															>
-																{!result.trackId ? (
-																	<span className="hidden sm:inline">Open</span>
-																) : null}
-																<CornerDownLeft
-																	className={cn(
-																		"size-4",
-																		!isActive && "invisible",
-																	)}
-																/>
-															</span>
-														</button>
-														{result.trackId ? (
-															<button
-																type="button"
-																aria-label={`Add ${result.title} to queue`}
-																title="Add to queue (Shift+Enter)"
-																aria-disabled={pendingTracks.has(
-																	result.trackId,
-																)}
-																onFocus={() => setActiveKey(result.key)}
-																onClick={() => {
-																	void queueResult(result);
-																}}
-																className="flex size-10 shrink-0 items-center justify-center rounded-md text-caption outline-none hover:bg-foreground/10 hover:text-heading focus-visible:bg-foreground/10 focus-visible:text-heading aria-disabled:opacity-50"
-															>
-																{pendingTracks.has(result.trackId) ? (
-																	<LoaderCircle className="size-4 motion-safe:animate-spin" />
-																) : (
-																	<ListPlus className="size-4" />
-																)}
-															</button>
-														) : null}
-													</li>
-												);
-											})}
+											{group.results.map((result) =>
+												renderOption(result, group.icon),
+											)}
 										</ul>
 									</div>
 								))}
 							</section>
+						) : null}
+						{canShowExternal ? (
+							// biome-ignore lint/a11y/useSemanticElements: listbox option groups are not form fieldsets.
+							<div role="group" aria-label="External" className="pt-3">
+								<p className="flex items-center gap-2 px-3 py-2 font-medium text-caption text-xs uppercase tracking-wider">
+									<Globe className="size-3.5" />
+									External
+								</p>
+								{externalResults.length > 0 ? (
+									<ul className="flex flex-col">
+										{externalResults.map((result) =>
+											renderOption(result, Globe),
+										)}
+									</ul>
+								) : null}
+								{externalFailed ? (
+									<div role="alert" className="px-3 py-2 text-sm">
+										<p>External results could not be loaded.</p>
+										<button
+											type="button"
+											className="mt-2 underline"
+											disabled={isSearchingExternal}
+											onClick={() => {
+												void externalSearch.refetch();
+											}}
+										>
+											Retry
+										</button>
+									</div>
+								) : isSearchingExternal && externalResults.length === 0 ? (
+									<p className="px-3 py-2 text-caption text-sm">Searching…</p>
+								) : externalSearch.isSuccess && externalResults.length === 0 ? (
+									<p className="px-3 py-2 text-caption text-sm">
+										No External results for “{debouncedQuery}”.
+									</p>
+								) : null}
+							</div>
 						) : null}
 					</div>
 				</div>
