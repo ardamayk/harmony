@@ -8,9 +8,6 @@
     "dev": "bash ../scripts/run-desktop.sh dev",
     "build": "bash ../scripts/run-desktop.sh build",
     "start": "bash ../scripts/run-desktop.sh start",
-    "win:dev": "node ../scripts/run-desktop-windows.ts dev",
-    "win:build": "node ../scripts/run-desktop-windows.ts build",
-    "win:start": "node ../scripts/run-desktop-windows.ts start",
     "build:shell": "rm -rf dist && vp pack",
     "prepare:mpv": "./scripts/prepare-mpv-sidecar.sh",
     "test": "vp test",
@@ -27,6 +24,7 @@
     "@repo/tsconfig": "workspace:*",
     "@types/node": "^24",
     "electron": "44.9.1",
+    "electron-builder": "26.17.0",
     "vite": "catalog:",
     "vite-plus": "catalog:",
     "web": "workspace:*"

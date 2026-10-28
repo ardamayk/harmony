@@ -51,21 +51,29 @@ The same shell and core run on Windows; only the platform layer differs, and Lin
 - MPRIS is Linux-only; on Windows media keys and the system media overlay are not wired yet.
 - Settings live in `%APPDATA%\audio.earthly.desktop`.
 
-Requirements: Node 24, pnpm, Rust with the `x86_64-pc-windows-gnullvm` target, MSYS2 with the CLANG64 clang, and pinned mpv: the official `mpv-v0.41.0-x86_64-w64-mingw32.zip` release build (it reports `0.41.0-dev-g41f6a6450`, pinned in `core/mpv-windows-version.txt`). Its `mpv.exe` and the DLLs beside it come from `EARTHLY_AUDIO_MPV_PATH` or `core/binaries/`. The Music Server runs elsewhere (Linux or WSL); the connection screen takes its loopback origin, such as WSL's forwarded `http://127.0.0.1:8090`.
+The Windows client is built entirely inside WSL; there is no Windows clone or Windows toolchain.
 
-The core's TLS stack (AWS-LC under rustls) compiles C, which the scripts build with MSYS2 CLANG64 (`C:\msys64`, or `MSYS2_ROOT`). `.cargo/config.toml` links the C runtime and libunwind statically for that target, so the core needs no MSYS2 DLLs at run time.
+- The core is cross-built for `x86_64-pc-windows-gnu` with WSL's mingw-w64 and needs no extra DLLs at run time.
+- Pinned mpv is the official `mpv-v0.41.0-x86_64-w64-mingw32.zip` release build. It is downloaded once into `~/.cache/earthly-audio-windows` and checked against its SHA-256. It reports `0.41.0-dev-g41f6a6450`, pinned in `core/mpv-windows-version.txt`, and `mpv.exe` ships with the DLLs beside it.
+- electron-builder packages the shell with its `dir` target (`electron-builder.yml`). It neither signs nor edits the executable, so no Wine is needed.
+- The result is copied to `%LOCALAPPDATA%\EarthlyAudio` (`EARTHLY_AUDIO_WINDOWS_OUT` overrides it) and started from there through WSL interop.
 
-```powershell
-winget install MSYS2.MSYS2
-C:\msys64\usr\bin\bash.exe -lc "pacman -Syu --noconfirm && pacman -S --needed --noconfirm mingw-w64-clang-x86_64-clang mingw-w64-clang-x86_64-lld"
-rustup target add x86_64-pc-windows-gnullvm
+```text
+Earthly Audio.exe
+resources/app/       package.json, dist/ (shell bundle), resources/icon.png
+resources/web/dist/  the Web Client
+resources/core/      earthly-audio-core.exe, mpv.exe and its DLLs
 ```
 
-```powershell
-pnpm install
-pnpm --dir desktop run win:dev     # debug core, Vite HMR, shell
-pnpm --dir desktop run win:build   # web/dist, release core with mpv.exe beside it, shell
-pnpm --dir desktop run win:start   # the built client
+Requirements: WSL with mingw-w64 (`sudo apt install mingw-w64`), the Rust target (`rustup target add x86_64-pc-windows-gnu`), and the repository's mise toolchain. The Music Server runs in WSL or elsewhere; the connection screen takes its loopback origin, such as WSL's forwarded `http://127.0.0.1:8090`.
+
+```bash
+mise run desktop:windows         # web/dist, shell, release core, pinned mpv; package and install
+mise run desktop:windows:start   # launch the installed client
+mise run desktop:windows:dev     # installed client with a fresh shell, debug core, and Vite HMR from WSL
+mise run desktop:windows:clean   # remove target/desktop-windows and the installed client
 ```
 
-`EARTHLY_AUDIO_CORE_PATH` runs a prebuilt core instead, such as one cross-built in WSL with `cargo build --release -p earthly-audio-core --target x86_64-pc-windows-gnu` (needs mingw-w64).
+`desktop:windows:dev` needs a previous `desktop:windows`. It replaces the shell bundle and the core inside the installed client and passes `EARTHLY_AUDIO_DEV_SERVER_URL` to it through `WSLENV`. Quit the client before rebuilding: Windows locks the files of a running program.
+
+Installers are not built yet; an electron-builder NSIS target would come later.

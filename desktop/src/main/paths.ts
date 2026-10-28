@@ -1,10 +1,11 @@
 import { join, resolve } from "node:path";
 
-/** The release core `cargo build --release` leaves: on Windows the scripts
- * build for the gnullvm target, which gets its own target directory. */
-const DEFAULT_RELEASE_CORE =
+/** The default core. Windows only runs the packaged client, where
+ * `desktopDirectory` is resources/app and the core ships in resources/core;
+ * elsewhere it is the release core `cargo build --release` leaves. */
+const DEFAULT_CORE =
 	process.platform === "win32"
-		? "../target/x86_64-pc-windows-gnullvm/release/earthly-audio-core.exe"
+		? "../core/earthly-audio-core.exe"
 		: "../target/release/earthly-audio-core";
 
 export type ShellPaths = {
@@ -27,8 +28,7 @@ export function shellPaths(
 ): ShellPaths {
 	return {
 		core: resolve(
-			env.EARTHLY_AUDIO_CORE_PATH ??
-				join(desktopDirectory, DEFAULT_RELEASE_CORE),
+			env.EARTHLY_AUDIO_CORE_PATH ?? join(desktopDirectory, DEFAULT_CORE),
 		),
 		rendererRoot: resolve(
 			env.EARTHLY_AUDIO_RENDERER_DIR ?? join(desktopDirectory, "../web/dist"),

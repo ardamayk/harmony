@@ -1,11 +1,12 @@
 {
-  "include": ["*.ts"],
+  "include": ["*.ts", "desktop-windows/*.ts"],
   "compilerOptions": {
     "target": "ES2024",
     "module": "ESNext",
     "moduleResolution": "bundler",
     "types": ["node"],
     "noEmit": true,
+    "allowImportingTsExtensions": true,
     "strict": true,
     "skipLibCheck": true
   }

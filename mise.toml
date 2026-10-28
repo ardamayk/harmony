@@ -83,6 +83,22 @@ description = "Build the release Desktop Client: Rust core with pinned mpv, Elec
 depends = ["web:build"]
 run = "pnpm --dir desktop run build"
 
+[tasks."desktop:windows"]
+description = "Build the Windows Desktop Client from WSL into %LOCALAPPDATA%\\EarthlyAudio: mingw core, pinned mpv, electron-builder dir"
+run = "node scripts/desktop-windows/cli.ts build"
+
+[tasks."desktop:windows:start"]
+description = "Launch the built Windows Desktop Client from WSL"
+run = "node scripts/desktop-windows/cli.ts start"
+
+[tasks."desktop:windows:dev"]
+description = "Run the built Windows Desktop Client with a fresh shell, debug core, and the WSL Vite dev server (HMR)"
+run = "node scripts/desktop-windows/cli.ts dev"
+
+[tasks."desktop:windows:clean"]
+description = "Remove the Windows Desktop Client's staging folder and its Windows output folder"
+run = "node scripts/desktop-windows/cli.ts clean"
+
 # --- Static checks -----------------------------------------------------------
 
 [tasks.format]
