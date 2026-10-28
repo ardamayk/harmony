@@ -6082,6 +6082,76 @@ mod tests {
     }
 
     #[test]
+    fn external_tracks_load_their_proxy_url_with_the_known_duration() {
+        let (_event_sender, event_receiver) = std::sync::mpsc::channel();
+        let loaded_url = Arc::new(Mutex::new(None));
+        let process = FakeMpvProcess {
+            loaded_url: loaded_url.clone(),
+            is_shutdown: Arc::new(AtomicBool::new(false)),
+            load_error: None,
+        };
+        let controller = PlaybackController::start(Box::new(process), event_receiver, |_| {});
+        let external_source = json!({
+            "type": "external-track",
+            "externalTrack": {
+                "id": "eyJ1Ijoi.c2ln",
+                "title": "Around the World",
+                "artistName": "Daft Punk",
+                "durationMs": 427000,
+                "webpageUrl": "https://soundcloud.com/daftpunk/around-the-world",
+                "extractor": "Soundcloud"
+            },
+            "playbackUrl": "http://127.0.0.1:43129/token/api/v1/external/tracks/eyJ1Ijoi.c2ln/playlist.m3u8",
+            "sourceUrl": "http://music.example/api/v1/external/tracks/eyJ1Ijoi.c2ln/playlist.m3u8"
+        });
+
+        let external = controller
+            .play(Some(external_source.clone()))
+            .expect("play External Track");
+        assert_eq!(external.source, Some(external_source.clone()));
+        assert_eq!(external.status, PlaybackStatus::Playing);
+        assert_eq!(external.duration, 427.0);
+        assert!(!super::is_live_source(&external_source));
+        assert_eq!(
+            loaded_url.lock().expect("loaded URL").as_deref(),
+            Some("http://127.0.0.1:43129/token/api/v1/external/tracks/eyJ1Ijoi.c2ln/playlist.m3u8")
+        );
+    }
+
+    #[test]
+    fn external_track_sources_parse_with_unknown_fields_and_missing_metadata() {
+        let parsed = crate::playback_navigation::PlaybackSource::parse(&json!({
+            "type": "external-track",
+            "externalTrack": {
+                "id": "eyJ1Ijoi.c2ln",
+                "title": "Snippet",
+                "artistName": null,
+                "durationMs": null,
+                "webpageUrl": null,
+                "extractor": "Youtube",
+                "futureField": true
+            },
+            "playbackUrl": "http://127.0.0.1:43129/token/api/v1/external/tracks/eyJ1Ijoi.c2ln/stream",
+            "sourceUrl": "http://music.example/api/v1/external/tracks/eyJ1Ijoi.c2ln/stream",
+            "futureSourceField": 1
+        }))
+        .expect("parse External Track");
+        assert_eq!(
+            parsed.playback_url(),
+            Ok("http://127.0.0.1:43129/token/api/v1/external/tracks/eyJ1Ijoi.c2ln/stream")
+        );
+        assert_eq!(parsed.duration_seconds(), 0.0);
+        assert!(
+            crate::playback_navigation::PlaybackSource::parse(&json!({
+                "type": "external-track",
+                "externalTrack": { "title": "No id" },
+                "playbackUrl": "http://127.0.0.1:43129/token/api/v1/external/tracks/x/stream"
+            }))
+            .is_err()
+        );
+    }
+
+    #[test]
     fn controls_ended_and_errors_flow_through_native_state() {
         let (event_sender, event_receiver) = std::sync::mpsc::channel();
         let is_shutdown = Arc::new(AtomicBool::new(false));

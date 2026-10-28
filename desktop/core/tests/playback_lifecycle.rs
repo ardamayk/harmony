@@ -109,6 +109,59 @@ fn relaunch_rebinds_catalog_previews_to_the_preview_stream_route() {
 }
 
 #[test]
+fn rebinding_external_tracks_keeps_the_stream_or_playlist_route() {
+    for resource in ["stream", "playlist.m3u8"] {
+        let snapshot = PlaybackSessionSnapshot::new(
+            Some(json!({
+                "type": "external-track",
+                "externalTrack": { "id": "eyJ1Ijoi.c2ln", "title": "Around the World" },
+                "playbackUrl": format!("http://127.0.0.1:43129/expired-token/api/v1/external/tracks/eyJ1Ijoi.c2ln/{resource}")
+            })),
+            30.0,
+            0.8,
+            false,
+            "off",
+        )
+        .expect("valid snapshot");
+
+        let rebound = snapshot
+            .rebind_media_proxy("http://127.0.0.1:43129/new-token")
+            .expect("rebind private proxy");
+
+        assert_eq!(
+            rebound
+                .source()
+                .and_then(|source| source.get("playbackUrl"))
+                .and_then(serde_json::Value::as_str),
+            Some(
+                format!(
+                    "http://127.0.0.1:43129/new-token/api/v1/external/tracks/eyJ1Ijoi.c2ln/{resource}"
+                )
+                .as_str()
+            )
+        );
+    }
+
+    let unknown_route = PlaybackSessionSnapshot::new(
+        Some(json!({
+            "type": "external-track",
+            "externalTrack": { "id": "eyJ1Ijoi.c2ln", "title": "Around the World" },
+            "playbackUrl": "http://127.0.0.1:43129/token/api/v1/external/tracks/eyJ1Ijoi.c2ln/playback"
+        })),
+        0.0,
+        0.8,
+        false,
+        "off",
+    )
+    .expect("valid snapshot");
+    assert!(
+        unknown_route
+            .rebind_media_proxy("http://127.0.0.1:43129/new-token")
+            .is_err()
+    );
+}
+
+#[test]
 fn renderer_reload_preserves_background_playback_and_republishes_state() {
     let mut lifecycle = PlaybackLifecycle::new();
 

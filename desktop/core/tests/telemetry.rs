@@ -102,6 +102,16 @@ fn radio_sources_publish_available_codec_and_bitrate_metadata() {
 }
 
 #[test]
+fn external_tracks_publish_no_invented_source_metadata() {
+    let external = telemetry::SourceObservation::from_playback_source(&json!({
+        "type": "external-track",
+        "externalTrack": { "id": "token.signature", "title": "Around the World", "extractor": "Soundcloud" }
+    }));
+
+    assert_eq!(external, telemetry::SourceObservation::unknown());
+}
+
+#[test]
 fn missing_pipewire_evidence_remains_unknown() {
     let observed = PlaybackTelemetry::native_system_output(
         telemetry::SourceObservation::unknown(),

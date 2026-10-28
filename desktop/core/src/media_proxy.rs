@@ -344,7 +344,35 @@ fn is_media_path(path: &str) -> bool {
     (path.starts_with("/api/v1/tracks/") && path.ends_with("/stream"))
         || (path.starts_with("/api/v1/radio/stations/") && path.ends_with("/stream"))
         || (path.starts_with("/api/v1/radio/preview/") && path.ends_with("/stream"))
+        || is_external_track_path(path)
         || is_image_path(path)
+}
+
+/// External Track audio: the progressive stream, the HLS playlist, and the
+/// signed resources the Music Server rewrites that playlist to.
+fn is_external_track_path(path: &str) -> bool {
+    match path.split('/').collect::<Vec<_>>().as_slice() {
+        [
+            "",
+            "api",
+            "v1",
+            "external",
+            "tracks",
+            track_id,
+            "stream" | "playlist.m3u8",
+        ] => !track_id.is_empty(),
+        [
+            "",
+            "api",
+            "v1",
+            "external",
+            "tracks",
+            track_id,
+            "resources",
+            resource,
+        ] => !track_id.is_empty() && !resource.is_empty(),
+        _ => false,
+    }
 }
 
 /// Album covers, Artist photos and Managed Import artwork. The renderer loads them from here
@@ -415,7 +443,7 @@ fn proxy_state_error() -> ConnectionError {
 
 #[cfg(test)]
 mod tests {
-    use super::{MediaProxy, ensure_read_method, proxy_relative_url};
+    use super::{MediaProxy, ensure_read_method, proxy_relative_url, rewrite_hls_manifest};
     use crate::connection::{HttpBridge, ServerOrigin};
     use axum::Router;
     use axum::body::Body;
@@ -495,6 +523,58 @@ mod tests {
                 "{rejected} must stay private"
             );
         }
+    }
+
+    #[test]
+    fn proxy_serves_external_track_stream_playlist_and_resources_only() {
+        for allowed in [
+            "/api/v1/external/tracks/eyJ1Ijoi.c2ln/stream",
+            "/api/v1/external/tracks/eyJ1Ijoi.c2ln/playlist.m3u8",
+            "/api/v1/external/tracks/eyJ1Ijoi.c2ln/resources/segment-signed",
+        ] {
+            let uri = format!("/token{allowed}").parse().expect("URI");
+            assert_eq!(
+                proxy_relative_url(&uri, "token").expect("External Track path allowed"),
+                allowed
+            );
+        }
+
+        for rejected in [
+            "/token/api/v1/external/search",
+            "/token/api/v1/external/tracks/eyJ1Ijoi.c2ln/playback",
+            "/token/api/v1/external/tracks//stream",
+            "/token/api/v1/external/tracks/eyJ1Ijoi.c2ln/resources/",
+            "/token/api/v1/external/tracks/eyJ1Ijoi.c2ln/resources/a/b",
+            "/token/api/v1/external/tracks/eyJ1Ijoi.c2ln/stream/extra",
+        ] {
+            let uri = rejected.parse().expect("URI");
+            assert!(
+                proxy_relative_url(&uri, "token").is_err(),
+                "{rejected} must stay private"
+            );
+        }
+    }
+
+    #[test]
+    fn external_track_playlists_are_rewritten_behind_the_proxy_token() {
+        let rewritten = rewrite_hls_manifest(
+            "#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI=\"/api/v1/external/tracks/t.s/resources/key-signed\"\n#EXTINF:6,\n/api/v1/external/tracks/t.s/resources/segment-signed\n",
+            "token",
+        )
+        .expect("rewrite External Track playlist");
+        assert!(
+            rewritten.contains("URI=\"/token/api/v1/external/tracks/t.s/resources/key-signed\"")
+        );
+        assert!(
+            rewritten.contains("\n/token/api/v1/external/tracks/t.s/resources/segment-signed\n")
+        );
+        assert!(
+            rewrite_hls_manifest(
+                "#EXTM3U\n#EXTINF:6,\n/api/v1/external/tracks/t.s/playback\n",
+                "token"
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -663,6 +743,40 @@ mod tests {
             .to_ascii_lowercase();
         assert!(request.contains("range: bytes=4-7"));
         assert!(request.contains("?url=https%3a%2f%2fmedia.example%2fsegment.ts"));
+    }
+
+    #[tokio::test]
+    async fn external_track_stream_preserves_range_and_partial_content() {
+        let (origin, captured_request) = serve_range_response();
+        let proxy = start_proxy(&origin);
+        let response = reqwest::Client::new()
+            .get(format!(
+                "{}/api/v1/external/tracks/eyJ1Ijoi.c2ln/stream",
+                proxy.base_url()
+            ))
+            .header("range", "bytes=4-7")
+            .send()
+            .await
+            .expect("request proxy");
+
+        assert_eq!(response.status(), reqwest::StatusCode::PARTIAL_CONTENT);
+        assert_eq!(
+            response
+                .headers()
+                .get("content-range")
+                .and_then(|value| value.to_str().ok()),
+            Some("bytes 4-7/12")
+        );
+        assert_eq!(
+            response.bytes().await.expect("range body").as_ref(),
+            b"4567"
+        );
+        let request = captured_request
+            .recv_timeout(Duration::from_millis(500))
+            .expect("captured upstream request")
+            .to_ascii_lowercase();
+        assert!(request.starts_with("get /api/v1/external/tracks/eyj1ijoi.c2ln/stream "));
+        assert!(request.contains("range: bytes=4-7"));
     }
 
     #[tokio::test]

@@ -36,6 +36,8 @@ impl SourceObservation {
             Some("track") => source.get("track"),
             Some("radio-station") => source.get("station"),
             Some("catalog-preview") => source.get("result"),
+            // External Tracks carry no codec metadata; the decoder observation still reports it.
+            Some("external-track") => None,
             _ => None,
         };
         let is_track = source_type == Some("track");
