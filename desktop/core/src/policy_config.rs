@@ -165,6 +165,15 @@ impl OriginalFormats {
     }
 }
 
+/// The saved list, or the single endpoint the first Windows builds saved.
+fn parse_saved(text: &str) -> Result<Vec<SavedFormats>, serde_json::Error> {
+    serde_json::from_str::<Vec<SavedFormats>>(text).or_else(|error| {
+        serde_json::from_str::<SavedFormats>(text)
+            .map(|one| vec![one])
+            .map_err(|_| error)
+    })
+}
+
 fn policy_config() -> windows::core::Result<IPolicyConfig> {
     // SAFETY: COM is initialized by the caller's ComScope.
     unsafe { CoCreateInstance(&POLICY_CONFIG_CLIENT, None, CLSCTX_ALL) }
@@ -276,7 +285,7 @@ impl PolicyConfigRateAdapter {
             Err(error) if error.kind() == ErrorKind::NotFound => return Ok(Vec::new()),
             Err(error) => return Err(format!("{}: {error}", self.saved_path.display())),
         };
-        let saved: Vec<SavedFormats> = serde_json::from_str(&text)
+        let saved = parse_saved(&text)
             .map_err(|error| format!("{}: {error}", self.saved_path.display()))?;
         saved
             .into_iter()
@@ -347,9 +356,24 @@ impl PolicyConfigRateAdapter {
         }
     }
 
-    /// Puts back the formats of every saved endpoint that is present.
+    /// Puts back the formats of every saved endpoint that is present. A file
+    /// that cannot be read is set aside instead of failing: it must never stop
+    /// the client from starting.
     fn restore_saved(&self) -> Result<(), String> {
-        let originals = self.load()?;
+        let originals = match self.load() {
+            Ok(originals) => originals,
+            Err(error) => {
+                let aside = self.saved_path.with_extension("json.unreadable");
+                eprintln!(
+                    "Adaptive set aside an unreadable saved output format ({error}); it is kept at {}.",
+                    aside.display()
+                );
+                if let Err(error) = fs::rename(&self.saved_path, &aside) {
+                    eprintln!("Adaptive could not set the unreadable file aside: {error}");
+                }
+                return Ok(());
+            }
+        };
         if originals.is_empty() {
             return Ok(());
         }
@@ -583,6 +607,19 @@ mod tests {
         assert!(device_format.sample_rate_hz() >= 8_000);
         assert!(mix_format.sample_rate_hz() >= 8_000);
         assert!(super::device_supports(&id, &device_format).expect("support check"));
+    }
+
+    #[test]
+    fn the_first_builds_single_saved_endpoint_still_reads() {
+        let format = stereo_24_bit(48_000).to_hex();
+        let single = format!(
+            r#"{{"deviceId":"{{0.0.0.00000000}}.{{a}}","deviceFormat":"{format}","mixFormat":"{format}"}}"#
+        );
+        let list = format!("[{single}]");
+
+        assert_eq!(super::parse_saved(&single).expect("single").len(), 1);
+        assert_eq!(super::parse_saved(&list).expect("list").len(), 1);
+        assert!(super::parse_saved("{}").is_err());
     }
 
     #[test]
