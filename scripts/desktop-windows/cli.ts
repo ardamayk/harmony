@@ -39,7 +39,9 @@ import { stageMpv } from "./mpv.ts";
 
 const executableName = "Earthly Audio.exe";
 const coreName = "earthly-audio-core.exe";
-const devServerUrl = "http://localhost:3000";
+// IPv4 on purpose: Windows resolves `localhost` to ::1 first, and WSL2
+// forwards only the IPv4 loopback to the Vite server in WSL.
+const devServerUrl = "http://127.0.0.1:3000";
 const devServerStartupAttempts = 300;
 
 function run(command: string, args: string[]) {
@@ -201,8 +203,9 @@ async function dev() {
 	process.on("SIGTERM", () => process.exit(143));
 	await waitForDevServer(web);
 
-	// WSLENV lists the variables interop passes to Windows processes.
-	const wslEnv = [process.env.WSLENV, "EARTHLY_AUDIO_DEV_SERVER_URL/u"]
+	// WSLENV lists the variables interop passes to Windows processes. No
+	// `/u` flag: WSL 2.6 drops a variable marked WSL-to-Windows-only.
+	const wslEnv = [process.env.WSLENV, "EARTHLY_AUDIO_DEV_SERVER_URL"]
 		.filter(Boolean)
 		.join(":");
 	const client = spawn(executable, [], {
