@@ -148,8 +148,14 @@ description = "Regenerate server/.sqlx after adding or changing a sqlx query (ne
 run = "bash scripts/sqlx-prepare.sh"
 
 [tasks."desktop:test"]
-description = "Run Desktop core (Rust) and Electron shell unit tests"
-run = ["pnpm --dir desktop run test:core", "pnpm --dir desktop run test"]
+description = "Run Desktop core (Rust), Electron shell and Windows build script unit tests"
+run = [
+	"pnpm --dir desktop run test:core",
+	"pnpm --dir desktop run test",
+	# node:test suites of the WSL-side Windows build (pinned download integrity),
+	# named *.node-test.ts so Vitest's default *.test.ts pattern skips them.
+	"node --test scripts/desktop-windows/*.node-test.ts",
+]
 
 [tasks."web:test:e2e"]
 description = "Run Web Client Playwright tests"
