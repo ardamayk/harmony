@@ -183,6 +183,54 @@ describe("createApiClient", () => {
 		expect(headers.get("Authorization")).toBe("Bearer secret");
 	});
 
+	it("searches the External Source and resolves an External Track's stream URL", async () => {
+		type ExternalTrack = components["schemas"]["ExternalTrack"];
+		expectTypeOf<ExternalTrack["artistName"]>().toEqualTypeOf<string | null>();
+		expectTypeOf<ExternalTrack["durationMs"]>().toEqualTypeOf<number | null>();
+		expectTypeOf<
+			components["schemas"]["ExternalTrackPlayback"]["format"]
+		>().toEqualTypeOf<"progressive" | "hls">();
+		const track: ExternalTrack = {
+			id: "eyJ1Ijoi.c2ln",
+			title: "One More Time",
+			artistName: "Daft Punk",
+			durationMs: 320_000,
+			webpageUrl: "https://soundcloud.com/daftpunk/one-more-time",
+			extractor: "Soundcloud",
+		};
+		const transport = vi
+			.fn<typeof fetch>()
+			.mockResolvedValueOnce(
+				Response.json({ source: "scsearch", items: [track] }),
+			)
+			.mockResolvedValueOnce(Response.json({ source: "scsearch", items: [] }))
+			.mockResolvedValueOnce(
+				Response.json({
+					format: "hls",
+					streamPath: `/api/v1/external/tracks/${track.id}/playlist.m3u8`,
+				}),
+			);
+		const client = createApiClient({
+			baseUrl: "http://music.test",
+			streamBaseUrl: "http://127.0.0.1:43129/token",
+			transport,
+		});
+
+		await expect(
+			client.searchExternalSource("daft punk & co"),
+		).resolves.toEqual({ source: "scsearch", items: [track] });
+		await client.searchExternalSource("daft punk", 5);
+		const playback = await client.getExternalTrackPlayback(track.id);
+		expect(transport.mock.calls.map(([input]) => input)).toEqual([
+			"http://music.test/api/v1/external/search?q=daft+punk+%26+co",
+			"http://music.test/api/v1/external/search?q=daft+punk&limit=5",
+			"http://music.test/api/v1/external/tracks/eyJ1Ijoi.c2ln/playback",
+		]);
+		expect(client.getExternalStreamUrl(playback.streamPath)).toBe(
+			"http://127.0.0.1:43129/token/api/v1/external/tracks/eyJ1Ijoi.c2ln/playlist.m3u8",
+		);
+	});
+
 	it("previews and explicitly confirms Permanent Track Deletion", async () => {
 		const preview = {
 			trackId: "track-1",

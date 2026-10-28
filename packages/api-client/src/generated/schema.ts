@@ -952,6 +952,107 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/external/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search the External Source through yt-dlp
+         * @description Runs one yt-dlp search with the operator's configured search prefix (EXTERNAL_SOURCE_SEARCH, for example scsearch) and returns at most limit External Tracks in the order yt-dlp listed them. Nothing is downloaded or stored; each id is an opaque, signed token that only this Music Server process accepts and that stops working when it restarts.
+         */
+        get: operations["searchExternalSource"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/external/tracks/{externalTrackId}/playback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Resolve an External Track and tell the client how to play it
+         * @description Resolves the External Track's audio with yt-dlp (cached for a few minutes; only URLs are cached, never audio) and returns the Music Server path to stream it from. Progressive audio streams from /stream; HLS audio plays from /playlist.m3u8, whose suffix lets clients detect HLS from the URL.
+         */
+        get: operations["getExternalTrackPlayback"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/external/tracks/{externalTrackId}/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stream progressive External Track audio through the Music Server
+         * @description Proxies the resolved progressive audio. A Range request is passed upstream and answered with 206; Content-Type (media types only, otherwise application/octet-stream), Content-Range, Accept-Ranges, and Content-Length are copied. An HLS External Track answers 422; play it from /playlist.m3u8 instead.
+         */
+        get: operations["streamExternalTrack"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        /** Check External Track audio availability without downloading it */
+        head: operations["headExternalTrackStream"];
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/external/tracks/{externalTrackId}/playlist.m3u8": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get an HLS External Track's playlist through the Music Server
+         * @description The upstream HLS playlist, rewritten so every media playlist, segment, and key URL points back to this Music Server as a signed /resources/{resource} URL, like the radio HLS proxy. A progressive External Track answers 422; stream it from /stream instead.
+         */
+        get: operations["getExternalTrackPlaylist"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/external/tracks/{externalTrackId}/resources/{resource}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get one HLS media playlist, segment, or key of an External Track
+         * @description Only reachable through URLs emitted by a rewritten External Track playlist; the resource token is signed for this External Track and process. Nested media playlists are rewritten the same way.
+         */
+        get: operations["getExternalTrackResource"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -960,9 +1061,9 @@ export interface components {
             /** @enum {string} */
             status: "ok";
             version: string;
-            /** @description Named server behaviors supported by this release. The versioned /api/v1 surface itself is advertised as api.v1. Queue event streaming is advertised as playback.queue-events.v1 and the first strict FLAC Managed Import tracer bullet as managed-import.v1. Multi-file Managed Import Batches are advertised as managed-import-batches.v1, Permanent Track Deletion as managed-track-deletion.v1, explicit Track Replacement as managed-track-replacement.v1, Album deletion (one Permanent Track Deletion per Track, previewed once) as managed-album-deletion.v1, and lazily generated waveform peaks as track-waveform.v1 (only when ffmpeg is installed). Clients gate optional behavior on the exact capability name and must ignore unknown entries so newer servers stay compatible with older clients. */
+            /** @description Named server behaviors supported by this release. The versioned /api/v1 surface itself is advertised as api.v1. Queue event streaming is advertised as playback.queue-events.v1 and the first strict FLAC Managed Import tracer bullet as managed-import.v1. Multi-file Managed Import Batches are advertised as managed-import-batches.v1, Permanent Track Deletion as managed-track-deletion.v1, explicit Track Replacement as managed-track-replacement.v1, Album deletion (one Permanent Track Deletion per Track, previewed once) as managed-album-deletion.v1, lazily generated waveform peaks as track-waveform.v1 (only when ffmpeg is installed), and External Source search and playback through yt-dlp as external-source.v1 (only when EXTERNAL_SOURCE_SEARCH is configured; a missing yt-dlp shows in dependencies and answers 503). Clients gate optional behavior on the exact capability name and must ignore unknown entries so newer servers stay compatible with older clients. */
             capabilities: string[];
-            /** @description Server Dependencies probed once at startup, in a stable order (ffmpeg, ffprobe). They describe the deployment environment so an operator can see what the installation supports. */
+            /** @description Server Dependencies probed once at startup, in a stable order (ffmpeg, ffprobe, then the optional yt-dlp only when EXTERNAL_SOURCE_SEARCH is configured). They describe the deployment environment so an operator can see what the installation supports. */
             dependencies: components["schemas"]["ServerDependency"][];
         };
         ServerDependency: {
@@ -1582,6 +1683,30 @@ export interface components {
             genres: components["schemas"]["LibrarySearchResult"][];
             playlists: components["schemas"]["LibrarySearchResult"][];
         };
+        /** @description One playable result from the External Source. It is not stored in the Library and cannot join the Playback Queue or a Playlist. */
+        ExternalTrack: {
+            /** @description Opaque, signed token naming the External Track's page and extractor; valid only until the Music Server restarts. */
+            id: string;
+            title: string;
+            /** @description yt-dlp's artist, else uploader, else channel */
+            artistName: string | null;
+            durationMs: number | null;
+            /** @description The External Track's page on its site, for attribution */
+            webpageUrl: string | null;
+            /** @description yt-dlp extractor key, for example Soundcloud or Youtube */
+            extractor: string;
+        };
+        ExternalSearchResponse: {
+            /** @description The configured yt-dlp search prefix, for example scsearch */
+            source: string;
+            items: components["schemas"]["ExternalTrack"][];
+        };
+        ExternalTrackPlayback: {
+            /** @enum {string} */
+            format: "progressive" | "hls";
+            /** @description Music Server path to play from, relative to the stream base URL: /api/v1/external/tracks/{externalTrackId}/stream for progressive audio, /api/v1/external/tracks/{externalTrackId}/playlist.m3u8 for HLS. */
+            streamPath: string;
+        };
         Playlist: {
             /** Format: uuid */
             id: string;
@@ -1978,6 +2103,51 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
+        /** @description The External Source is not configured on this Music Server (code external_source_disabled). */
+        ExternalSourceDisabled: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description The External Track has no usable audio: no http(s) audio format, DRM, or a live stream; also a progressive route asked for an HLS External Track or the other way round (code external_track_unplayable). */
+        ExternalTrackUnplayable: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description yt-dlp exited with an error or printed unparseable output, or the upstream audio request failed (code external_source_failed). The message carries yt-dlp's last ERROR line when there is one. */
+        ExternalSourceFailed: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description yt-dlp is not installed or could not be started on the Music Server (code external_source_unavailable). */
+        ExternalSourceUnavailable: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description yt-dlp did not finish in time: 20 seconds for a search, 30 seconds for resolving an External Track (code external_source_timeout). */
+        ExternalSourceTimeout: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
     };
     parameters: {
         limit: number;
@@ -1990,6 +2160,8 @@ export interface components {
         queueItemId: string;
         playlistId: string;
         stationId: string;
+        /** @description Opaque External Track id from searchExternalSource */
+        externalTrackId: string;
     };
     requestBodies: never;
     headers: never;
@@ -3811,6 +3983,225 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
+        };
+    };
+    searchExternalSource: {
+        parameters: {
+            query: {
+                /** @description The query text, passed to yt-dlp as one argument */
+                q: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description External Tracks found by the External Source */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExternalSearchResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["ExternalSourceDisabled"];
+            502: components["responses"]["ExternalSourceFailed"];
+            503: components["responses"]["ExternalSourceUnavailable"];
+            504: components["responses"]["ExternalSourceTimeout"];
+        };
+    };
+    getExternalTrackPlayback: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque External Track id from searchExternalSource */
+                externalTrackId: components["parameters"]["externalTrackId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description How to play the External Track */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExternalTrackPlayback"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["ExternalSourceDisabled"];
+            422: components["responses"]["ExternalTrackUnplayable"];
+            502: components["responses"]["ExternalSourceFailed"];
+            503: components["responses"]["ExternalSourceUnavailable"];
+            504: components["responses"]["ExternalSourceTimeout"];
+        };
+    };
+    streamExternalTrack: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque External Track id from searchExternalSource */
+                externalTrackId: components["parameters"]["externalTrackId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Full audio stream */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "audio/*": string;
+                    "video/*": string;
+                    "application/octet-stream": string;
+                };
+            };
+            /** @description Partial content (Range request) */
+            206: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "audio/*": string;
+                    "video/*": string;
+                    "application/octet-stream": string;
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["ExternalSourceDisabled"];
+            422: components["responses"]["ExternalTrackUnplayable"];
+            502: components["responses"]["ExternalSourceFailed"];
+            503: components["responses"]["ExternalSourceUnavailable"];
+            504: components["responses"]["ExternalSourceTimeout"];
+        };
+    };
+    headExternalTrackStream: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque External Track id from searchExternalSource */
+                externalTrackId: components["parameters"]["externalTrackId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description External Track audio is available */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Partial content (Range request) */
+            206: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["ExternalSourceDisabled"];
+            422: components["responses"]["ExternalTrackUnplayable"];
+            502: components["responses"]["ExternalSourceFailed"];
+            503: components["responses"]["ExternalSourceUnavailable"];
+            504: components["responses"]["ExternalSourceTimeout"];
+        };
+    };
+    getExternalTrackPlaylist: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque External Track id from searchExternalSource */
+                externalTrackId: components["parameters"]["externalTrackId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Rewritten HLS playlist */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/vnd.apple.mpegurl": string;
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["ExternalSourceDisabled"];
+            /** @description DRM-protected HLS is unsupported */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            422: components["responses"]["ExternalTrackUnplayable"];
+            502: components["responses"]["ExternalSourceFailed"];
+            503: components["responses"]["ExternalSourceUnavailable"];
+            504: components["responses"]["ExternalSourceTimeout"];
+        };
+    };
+    getExternalTrackResource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque External Track id from searchExternalSource */
+                externalTrackId: components["parameters"]["externalTrackId"];
+                /** @description Signed HLS resource token emitted by a proxied playlist */
+                resource: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description HLS media playlist, segment, or key */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/vnd.apple.mpegurl": string;
+                    "audio/*": string;
+                    "video/*": string;
+                    "application/octet-stream": string;
+                };
+            };
+            /** @description Partial HLS media resource */
+            206: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "audio/*": string;
+                    "video/*": string;
+                    "application/octet-stream": string;
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["ExternalSourceDisabled"];
+            /** @description DRM-protected HLS is unsupported */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            502: components["responses"]["ExternalSourceFailed"];
         };
     };
 }

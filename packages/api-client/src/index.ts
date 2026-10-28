@@ -135,6 +135,9 @@ export type RadioSearchResultList = Schemas["RadioSearchResultList"];
 export type RadioCatalogOption = Schemas["RadioCatalogOption"];
 export type RadioCatalogOptionList = Schemas["RadioCatalogOptionList"];
 export type RadioImportRequest = Schemas["RadioImportRequest"];
+export type ExternalTrack = Schemas["ExternalTrack"];
+export type ExternalSearchResponse = Schemas["ExternalSearchResponse"];
+export type ExternalTrackPlayback = Schemas["ExternalTrackPlayback"];
 
 export class ApiError extends Error {
 	constructor(
@@ -679,6 +682,19 @@ export function createApiClient(config: ApiClientConfig) {
 			request<RadioNowPlaying>(
 				`/api/v1/radio/stations/${stationId}/now-playing`,
 			),
+		/** Searches the External Source; `limit` defaults to the server's 10 (at most 20). */
+		searchExternalSource: (q: string, limit?: number) =>
+			request<ExternalSearchResponse>(
+				`/api/v1/external/search?${new URLSearchParams({ q }).toString()}${limit != null ? `&limit=${limit}` : ""}`,
+			),
+		/** Resolves an External Track; play `streamPath` through getExternalStreamUrl. */
+		getExternalTrackPlayback: (externalTrackId: string) =>
+			request<ExternalTrackPlayback>(
+				`/api/v1/external/tracks/${encodeURIComponent(externalTrackId)}/playback`,
+			),
+		/** `streamPath` is an ExternalTrackPlayback's server path; keeps `.m3u8` for HLS detection. */
+		getExternalStreamUrl: (streamPath: string) =>
+			`${getStreamBaseUrl()}${streamPath}`,
 		getRadioStationStreamUrl: (stationId: string) =>
 			`${getStreamBaseUrl()}/api/v1/radio/stations/${stationId}/stream`,
 		getRadioCatalogPreviewStreamUrl: (stationUuid: string) =>

@@ -18,6 +18,11 @@ export const MANAGED_TRACK_REPLACEMENT_CAPABILITY =
 export const MANAGED_ALBUM_DELETION_CAPABILITY = "managed-album-deletion.v1";
 /** Lazily generated waveform peaks; only advertised when ffmpeg is installed. */
 export const TRACK_WAVEFORM_CAPABILITY = "track-waveform.v1";
+/**
+ * External Source search and playback through yt-dlp (ADR 0032); only
+ * advertised when the operator configured EXTERNAL_SOURCE_SEARCH.
+ */
+export const EXTERNAL_SOURCE_CAPABILITY = "external-source.v1";
 
 export type ServerCapabilities =
 	| HealthResponse

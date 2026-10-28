@@ -15,6 +15,12 @@ tags:
   - name: playback
   - name: playlists
   - name: radio
+  - name: external-source
+    description: >-
+      Search and playback through the operator-installed yt-dlp (ADR 0032).
+      Advertised through the external-source.v1 capability; every route
+      answers 404 external_source_disabled while EXTERNAL_SOURCE_SEARCH is
+      not configured.
 paths:
   /api/v1/health:
     get:
@@ -1644,6 +1650,257 @@ paths:
                 $ref: "#/components/schemas/RadioNowPlaying"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/external/search:
+    get:
+      tags: [external-source]
+      operationId: searchExternalSource
+      summary: Search the External Source through yt-dlp
+      description: >-
+        Runs one yt-dlp search with the operator's configured search prefix
+        (EXTERNAL_SOURCE_SEARCH, for example scsearch) and returns at most
+        limit External Tracks in the order yt-dlp listed them. Nothing is
+        downloaded or stored; each id is an opaque, signed token that only
+        this Music Server process accepts and that stops working when it
+        restarts.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: The query text, passed to yt-dlp as one argument
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 200
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 20
+            default: 10
+      responses:
+        "200":
+          description: External Tracks found by the External Source
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExternalSearchResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/ExternalSourceDisabled"
+        "502":
+          $ref: "#/components/responses/ExternalSourceFailed"
+        "503":
+          $ref: "#/components/responses/ExternalSourceUnavailable"
+        "504":
+          $ref: "#/components/responses/ExternalSourceTimeout"
+  /api/v1/external/tracks/{externalTrackId}/playback:
+    get:
+      tags: [external-source]
+      operationId: getExternalTrackPlayback
+      summary: Resolve an External Track and tell the client how to play it
+      description: >-
+        Resolves the External Track's audio with yt-dlp (cached for a few
+        minutes; only URLs are cached, never audio) and returns the Music
+        Server path to stream it from. Progressive audio streams from
+        /stream; HLS audio plays from /playlist.m3u8, whose suffix lets
+        clients detect HLS from the URL.
+      parameters:
+        - $ref: "#/components/parameters/externalTrackId"
+      responses:
+        "200":
+          description: How to play the External Track
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExternalTrackPlayback"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/ExternalSourceDisabled"
+        "422":
+          $ref: "#/components/responses/ExternalTrackUnplayable"
+        "502":
+          $ref: "#/components/responses/ExternalSourceFailed"
+        "503":
+          $ref: "#/components/responses/ExternalSourceUnavailable"
+        "504":
+          $ref: "#/components/responses/ExternalSourceTimeout"
+  /api/v1/external/tracks/{externalTrackId}/stream:
+    head:
+      tags: [external-source]
+      operationId: headExternalTrackStream
+      summary: Check External Track audio availability without downloading it
+      parameters:
+        - $ref: "#/components/parameters/externalTrackId"
+      responses:
+        "200":
+          description: External Track audio is available
+        "206":
+          description: Partial content (Range request)
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/ExternalSourceDisabled"
+        "422":
+          $ref: "#/components/responses/ExternalTrackUnplayable"
+        "502":
+          $ref: "#/components/responses/ExternalSourceFailed"
+        "503":
+          $ref: "#/components/responses/ExternalSourceUnavailable"
+        "504":
+          $ref: "#/components/responses/ExternalSourceTimeout"
+    get:
+      tags: [external-source]
+      operationId: streamExternalTrack
+      summary: Stream progressive External Track audio through the Music Server
+      description: >-
+        Proxies the resolved progressive audio. A Range request is passed
+        upstream and answered with 206; Content-Type (media types only,
+        otherwise application/octet-stream), Content-Range, Accept-Ranges,
+        and Content-Length are copied. An HLS External Track answers 422;
+        play it from /playlist.m3u8 instead.
+      parameters:
+        - $ref: "#/components/parameters/externalTrackId"
+      responses:
+        "200":
+          description: Full audio stream
+          content:
+            audio/*:
+              schema:
+                type: string
+                format: binary
+            video/*:
+              schema:
+                type: string
+                format: binary
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "206":
+          description: Partial content (Range request)
+          content:
+            audio/*:
+              schema:
+                type: string
+                format: binary
+            video/*:
+              schema:
+                type: string
+                format: binary
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/ExternalSourceDisabled"
+        "422":
+          $ref: "#/components/responses/ExternalTrackUnplayable"
+        "502":
+          $ref: "#/components/responses/ExternalSourceFailed"
+        "503":
+          $ref: "#/components/responses/ExternalSourceUnavailable"
+        "504":
+          $ref: "#/components/responses/ExternalSourceTimeout"
+  /api/v1/external/tracks/{externalTrackId}/playlist.m3u8:
+    get:
+      tags: [external-source]
+      operationId: getExternalTrackPlaylist
+      summary: Get an HLS External Track's playlist through the Music Server
+      description: >-
+        The upstream HLS playlist, rewritten so every media playlist, segment,
+        and key URL points back to this Music Server as a signed
+        /resources/{resource} URL, like the radio HLS proxy. A progressive
+        External Track answers 422; stream it from /stream instead.
+      parameters:
+        - $ref: "#/components/parameters/externalTrackId"
+      responses:
+        "200":
+          description: Rewritten HLS playlist
+          content:
+            application/vnd.apple.mpegurl:
+              schema:
+                type: string
+                format: binary
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/ExternalSourceDisabled"
+        "415":
+          description: DRM-protected HLS is unsupported
+        "422":
+          $ref: "#/components/responses/ExternalTrackUnplayable"
+        "502":
+          $ref: "#/components/responses/ExternalSourceFailed"
+        "503":
+          $ref: "#/components/responses/ExternalSourceUnavailable"
+        "504":
+          $ref: "#/components/responses/ExternalSourceTimeout"
+  /api/v1/external/tracks/{externalTrackId}/resources/{resource}:
+    get:
+      tags: [external-source]
+      operationId: getExternalTrackResource
+      summary: Get one HLS media playlist, segment, or key of an External Track
+      description: >-
+        Only reachable through URLs emitted by a rewritten External Track
+        playlist; the resource token is signed for this External Track and
+        process. Nested media playlists are rewritten the same way.
+      parameters:
+        - $ref: "#/components/parameters/externalTrackId"
+        - name: resource
+          in: path
+          required: true
+          description: Signed HLS resource token emitted by a proxied playlist
+          schema:
+            type: string
+      responses:
+        "200":
+          description: HLS media playlist, segment, or key
+          content:
+            application/vnd.apple.mpegurl:
+              schema:
+                type: string
+                format: binary
+            audio/*:
+              schema:
+                type: string
+                format: binary
+            video/*:
+              schema:
+                type: string
+                format: binary
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "206":
+          description: Partial HLS media resource
+          content:
+            audio/*:
+              schema:
+                type: string
+                format: binary
+            video/*:
+              schema:
+                type: string
+                format: binary
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/ExternalSourceDisabled"
+        "415":
+          description: DRM-protected HLS is unsupported
+        "502":
+          $ref: "#/components/responses/ExternalSourceFailed"
 components:
   securitySchemes:
     bearerAuth:
@@ -1689,6 +1946,48 @@ components:
             $ref: "#/components/schemas/ErrorResponse"
     RangeNotSatisfiable:
       description: Range not satisfiable
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    ExternalSourceDisabled:
+      description: >-
+        The External Source is not configured on this Music Server
+        (code external_source_disabled).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    ExternalTrackUnplayable:
+      description: >-
+        The External Track has no usable audio: no http(s) audio format, DRM,
+        or a live stream; also a progressive route asked for an HLS External
+        Track or the other way round (code external_track_unplayable).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    ExternalSourceFailed:
+      description: >-
+        yt-dlp exited with an error or printed unparseable output, or the
+        upstream audio request failed (code external_source_failed). The
+        message carries yt-dlp's last ERROR line when there is one.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    ExternalSourceUnavailable:
+      description: >-
+        yt-dlp is not installed or could not be started on the Music Server
+        (code external_source_unavailable).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    ExternalSourceTimeout:
+      description: >-
+        yt-dlp did not finish in time: 20 seconds for a search, 30 seconds
+        for resolving an External Track (code external_source_timeout).
       content:
         application/json:
           schema:
@@ -1765,6 +2064,15 @@ components:
       schema:
         type: string
         format: uuid
+    externalTrackId:
+      name: externalTrackId
+      in: path
+      required: true
+      description: Opaque External Track id from searchExternalSource
+      schema:
+        type: string
+        maxLength: 2048
+        pattern: "^[A-Za-z0-9_.-]+$"
   schemas:
     HealthResponse:
       type: object
@@ -1788,8 +2096,11 @@ components:
             Track Deletion as managed-track-deletion.v1, explicit Track
             Replacement as managed-track-replacement.v1, Album deletion
             (one Permanent Track Deletion per Track, previewed once) as
-            managed-album-deletion.v1, and lazily generated waveform peaks as
-            track-waveform.v1 (only when ffmpeg is installed). Clients gate optional
+            managed-album-deletion.v1, lazily generated waveform peaks as
+            track-waveform.v1 (only when ffmpeg is installed), and External
+            Source search and playback through yt-dlp as external-source.v1
+            (only when EXTERNAL_SOURCE_SEARCH is configured; a missing yt-dlp
+            shows in dependencies and answers 503). Clients gate optional
             behavior on the exact capability name and must ignore unknown
             entries so newer servers stay compatible with older clients.
         dependencies:
@@ -1798,7 +2109,8 @@ components:
             $ref: "#/components/schemas/ServerDependency"
           description: >-
             Server Dependencies probed once at startup, in a stable order
-            (ffmpeg, ffprobe). They describe the deployment environment
+            (ffmpeg, ffprobe, then the optional yt-dlp only when
+            EXTERNAL_SOURCE_SEARCH is configured). They describe the deployment environment
             so an operator can see what the installation supports.
     ServerDependency:
       type: object
@@ -3020,6 +3332,62 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LibrarySearchResult"
+    ExternalTrack:
+      type: object
+      description: >-
+        One playable result from the External Source. It is not stored in the
+        Library and cannot join the Playback Queue or a Playlist.
+      required: [id, title, artistName, durationMs, webpageUrl, extractor]
+      properties:
+        id:
+          type: string
+          maxLength: 2048
+          description: >-
+            Opaque, signed token naming the External Track's page and
+            extractor; valid only until the Music Server restarts.
+        title:
+          type: string
+        artistName:
+          type: string
+          nullable: true
+          description: yt-dlp's artist, else uploader, else channel
+        durationMs:
+          type: integer
+          minimum: 0
+          nullable: true
+        webpageUrl:
+          type: string
+          nullable: true
+          description: The External Track's page on its site, for attribution
+        extractor:
+          type: string
+          description: yt-dlp extractor key, for example Soundcloud or Youtube
+    ExternalSearchResponse:
+      type: object
+      required: [source, items]
+      properties:
+        source:
+          type: string
+          description: The configured yt-dlp search prefix, for example scsearch
+        items:
+          type: array
+          maxItems: 20
+          items:
+            $ref: "#/components/schemas/ExternalTrack"
+    ExternalTrackPlayback:
+      type: object
+      required: [format, streamPath]
+      properties:
+        format:
+          type: string
+          enum: [progressive, hls]
+        streamPath:
+          type: string
+          description: >-
+            Music Server path to play from, relative to the stream base URL:
+            /api/v1/external/tracks/{externalTrackId}/stream for progressive
+            audio, /api/v1/external/tracks/{externalTrackId}/playlist.m3u8
+            for HLS.
     Playlist:
       type: object
       required: [id, name, isDefault, trackCount]
