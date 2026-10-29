@@ -1619,6 +1619,56 @@ async fn exhausted_sources_fail_the_acquisition_with_the_files_that_arrived() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn the_files_of_a_failed_acquisition_can_still_be_imported() {
+    let slskd = FakeSlskd::start().await;
+    slskd.content("01 One More Time.flac", FLAC);
+    slskd.file_behaves(ALICE_ONE, Behavior::Fail);
+    slskd.file_behaves(ALICE_TWO, Behavior::Fail);
+    slskd.user_behaves("erin", Behavior::Offline);
+    // bob has only the first file.
+    let (harness, search_id) = acquiring(&slskd, NO_STALL).await;
+    let id = acquire_hi_res(&harness, &search_id).await;
+    let failed = wait_for(&harness, &id, "failure", |body| body["state"] == "failed").await;
+    let batch_uri = format!(
+        "/api/v1/import-batches/{}",
+        failed["batchId"].as_str().expect("batchId")
+    );
+    let (status, batch) = send(&harness.router, Method::GET, &batch_uri).await;
+    assert_eq!(status, StatusCode::OK, "{batch}");
+    let ready = batch["files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|file| file["state"] == "accepted")
+        .expect("the file that arrived is ready")
+        .clone();
+    let (status, confirmed) = send_json(
+        &harness.router,
+        Method::POST,
+        &format!("{batch_uri}/confirm"),
+        Some(json!({"revision": batch["revision"], "selectedFileIds": [ready["jobId"]]})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{confirmed}");
+    assert_eq!(library_track_count(&harness).await, 1);
+    // Confirmation completes it, as for any acquisition; the reason still
+    // says which files never arrived.
+    let body = acquisition(&harness, &id).await;
+    assert_eq!(body["state"], "completed", "{body}");
+    let reason = body["failureReason"].as_str().unwrap_or_default();
+    assert!(reason.contains("1 of 2 files"), "{body}");
+    // Dismissing it leaves the imported Track alone.
+    let (status, _) = send(
+        &harness.router,
+        Method::DELETE,
+        &format!("/api/v1/soulseek/acquisitions/{id}"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    assert_eq!(library_track_count(&harness).await, 1);
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn deleting_a_failed_acquisition_dismisses_it() {
     let slskd = FakeSlskd::start().await;
     for user in ["alice", "erin", "bob"] {

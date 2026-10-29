@@ -353,6 +353,9 @@ impl Soulseek {
     /// The acquisition as the listener sees it now: completed as soon as its
     /// batch is confirmed, cancelled as soon as its batch is cancelled
     /// through the import-batches routes, before the worker records it.
+    /// A failed acquisition's batch holds the files that arrived; confirming
+    /// it completes the acquisition too, as `completed` always follows
+    /// confirmation, and its failure reason still names the missing files.
     async fn observe(&self, mut acquisition: Acquisition) -> Acquisition {
         if matches!(
             acquisition.state,
