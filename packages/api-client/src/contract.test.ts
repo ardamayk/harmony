@@ -188,6 +188,7 @@ describe("capability negotiation at the client seam", () => {
 						MANAGED_IMPORT_CAPABILITY,
 						"future.optional.v3",
 					],
+					dependencies: [],
 					experimental: { ignored: true },
 				}),
 				{ status: 200, headers: { "Content-Type": "application/json" } },

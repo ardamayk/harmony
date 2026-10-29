@@ -13,4 +13,7 @@ export const apiClient = createApiClient({
 	mediaBaseUrl: isDesktop ? getMediaProxyBaseUrl : undefined,
 	queueEventSubscriber: isDesktop ? listenForQueueEvents : undefined,
 	transport: isDesktop ? desktopFetch : undefined,
+	// Contract checks in development and tests only; production builds skip
+	// them (library lists can hold thousands of items). See ADR 0034.
+	validateResponses: import.meta.env.DEV,
 });

@@ -117,17 +117,19 @@ describe("createApiClient", () => {
 	});
 
 	it("revalidates previously fresh waveform responses after Track Replacement", async () => {
-		const transport = vi
-			.fn<typeof fetch>()
-			.mockResolvedValue(
-				new Response(
-					JSON.stringify({ trackId: "track-1", peaks: [128], peakCount: 1 }),
-				),
-			);
+		const transport = vi.fn<typeof fetch>().mockResolvedValue(
+			new Response(
+				JSON.stringify({
+					trackId: "00000000-0000-4000-8000-000000000001",
+					peaks: [128],
+					peakCount: 1,
+				}),
+			),
+		);
 		const client = createApiClient({ baseUrl: "http://music.test", transport });
-		await client.getTrackWaveform("track-1");
+		await client.getTrackWaveform("00000000-0000-4000-8000-000000000001");
 		expect(transport).toHaveBeenCalledWith(
-			"http://music.test/api/v1/library/tracks/track-1/waveform",
+			"http://music.test/api/v1/library/tracks/00000000-0000-4000-8000-000000000001/waveform",
 			expect.objectContaining({ cache: "no-cache" }),
 		);
 	});
@@ -149,14 +151,20 @@ describe("createApiClient", () => {
 			);
 		const client = createApiClient({ baseUrl: "http://music.test", transport });
 
-		await expect(client.getArtistBiography("artist-1")).resolves.toEqual({
+		await expect(
+			client.getArtistBiography("00000000-0000-4000-8000-000000000005"),
+		).resolves.toEqual({
 			text: "A band.",
 			sourceUrl: "https://w.example/a",
 		});
-		await expect(client.getArtistBiography("artist-1")).resolves.toBeNull();
-		await expect(client.getArtistBiography("artist-1")).rejects.toThrow("boom");
+		await expect(
+			client.getArtistBiography("00000000-0000-4000-8000-000000000005"),
+		).resolves.toBeNull();
+		await expect(
+			client.getArtistBiography("00000000-0000-4000-8000-000000000005"),
+		).rejects.toThrow("boom");
 		expect(transport).toHaveBeenCalledWith(
-			"http://music.test/api/v1/library/artists/artist-1/biography",
+			"http://music.test/api/v1/library/artists/00000000-0000-4000-8000-000000000005/biography",
 			expect.anything(),
 		);
 	});
@@ -172,11 +180,13 @@ describe("createApiClient", () => {
 			getToken: () => "secret",
 		});
 
-		await expect(client.headTrackStream("track-1")).resolves.toEqual({
+		await expect(
+			client.headTrackStream("00000000-0000-4000-8000-000000000001"),
+		).resolves.toEqual({
 			status: 404,
 		});
 		expect(transport).toHaveBeenCalledWith(
-			"http://music.test/api/v1/tracks/track-1/stream",
+			"http://music.test/api/v1/tracks/00000000-0000-4000-8000-000000000001/stream",
 			expect.objectContaining({ method: "HEAD" }),
 		);
 		const headers = new Headers(transport.mock.calls[0]?.[1]?.headers);
@@ -185,7 +195,7 @@ describe("createApiClient", () => {
 
 	it("previews and explicitly confirms Permanent Track Deletion", async () => {
 		const preview = {
-			trackId: "track-1",
+			trackId: "00000000-0000-4000-8000-000000000001",
 			trackTitle: "Delete Me",
 			managedFile: { path: "library/artist/album/track.flac", sizeBytes: 11 },
 			playlistReferences: [],
@@ -202,16 +212,18 @@ describe("createApiClient", () => {
 			);
 		const client = createApiClient({ baseUrl: "http://music.test", transport });
 
-		await expect(client.previewTrackDeletion("track-1")).resolves.toEqual(
-			preview,
-		);
-		await expect(client.deleteTrack("track-1", "token-1")).resolves.toEqual({
+		await expect(
+			client.previewTrackDeletion("00000000-0000-4000-8000-000000000001"),
+		).resolves.toEqual(preview);
+		await expect(
+			client.deleteTrack("00000000-0000-4000-8000-000000000001", "token-1"),
+		).resolves.toEqual({
 			deletedFiles: 1,
 		});
 
 		expect(transport).toHaveBeenNthCalledWith(
 			2,
-			"http://music.test/api/v1/library/tracks/track-1",
+			"http://music.test/api/v1/library/tracks/00000000-0000-4000-8000-000000000001",
 			expect.objectContaining({
 				method: "DELETE",
 				body: JSON.stringify({ confirmationToken: "token-1" }),
@@ -223,16 +235,26 @@ describe("createApiClient", () => {
 
 	it("previews and explicitly confirms an Album deletion as per-Track deletions", async () => {
 		const preview = {
-			albumId: "album-1",
+			albumId: "00000000-0000-4000-8000-000000000004",
 			albumTitle: "1989",
 			trackCount: 2,
 			totalSizeBytes: 22,
 			tracks: [
-				{ trackId: "track-1", trackTitle: "First", sizeBytes: 11 },
-				{ trackId: "track-2", trackTitle: "Second", sizeBytes: 11 },
+				{
+					trackId: "00000000-0000-4000-8000-000000000001",
+					trackTitle: "First",
+					sizeBytes: 11,
+				},
+				{
+					trackId: "00000000-0000-4000-8000-000000000002",
+					trackTitle: "Second",
+					sizeBytes: 11,
+				},
 			],
 			playlistReferences: [],
-			queueReferences: [{ userId: "user-1", itemCount: 2 }],
+			queueReferences: [
+				{ userId: "00000000-0000-4000-8000-000000000009", itemCount: 2 },
+			],
 			confirmationToken: "album-token",
 		};
 		const result = {
@@ -250,21 +272,21 @@ describe("createApiClient", () => {
 			);
 		const client = createApiClient({ baseUrl: "http://music.test", transport });
 
-		await expect(client.previewAlbumDeletion("album-1")).resolves.toEqual(
-			preview,
-		);
-		await expect(client.deleteAlbum("album-1", "album-token")).resolves.toEqual(
-			result,
-		);
+		await expect(
+			client.previewAlbumDeletion("00000000-0000-4000-8000-000000000004"),
+		).resolves.toEqual(preview);
+		await expect(
+			client.deleteAlbum("00000000-0000-4000-8000-000000000004", "album-token"),
+		).resolves.toEqual(result);
 
 		expect(transport).toHaveBeenNthCalledWith(
 			1,
-			"http://music.test/api/v1/library/albums/album-1/deletion",
+			"http://music.test/api/v1/library/albums/00000000-0000-4000-8000-000000000004/deletion",
 			expect.anything(),
 		);
 		expect(transport).toHaveBeenNthCalledWith(
 			2,
-			"http://music.test/api/v1/library/albums/album-1",
+			"http://music.test/api/v1/library/albums/00000000-0000-4000-8000-000000000004",
 			expect.objectContaining({
 				method: "DELETE",
 				body: JSON.stringify({ confirmationToken: "album-token" }),
@@ -276,13 +298,13 @@ describe("createApiClient", () => {
 
 	it("creates and confirms a multi-file Managed Import Batch", async () => {
 		const createdBatch = {
-			id: "batch-1",
+			id: "00000000-0000-4000-8000-000000000007",
 			status: "uploading",
 			revision: 1,
 			files: [],
 		};
 		const completedBatch = {
-			id: "batch-1",
+			id: "00000000-0000-4000-8000-000000000007",
 			status: "completed",
 			revision: 4,
 			files: [],
@@ -293,7 +315,7 @@ describe("createApiClient", () => {
 			.mockResolvedValueOnce(
 				Response.json(
 					{
-						id: "import-1",
+						id: "00000000-0000-4000-8000-000000000003",
 						status: "uploading",
 						revision: 1,
 						validationProgress: 0,
@@ -312,26 +334,36 @@ describe("createApiClient", () => {
 		const report = await client.confirmManagedImportBatch(
 			batch.id,
 			2,
-			["import-1"],
-			[{ jobId: "import-1", action: "import_separately" }],
+			["00000000-0000-4000-8000-000000000003"],
+			[
+				{
+					jobId: "00000000-0000-4000-8000-000000000003",
+					action: "import_separately",
+				},
+			],
 		);
 
 		expect(report.status).toBe("completed");
 		expect(JSON.parse(String(transport.mock.calls[1]?.[1]?.body))).toEqual({
-			batchId: "batch-1",
+			batchId: "00000000-0000-4000-8000-000000000007",
 			clientFileId: "00000000-0000-4000-8000-000000000001",
 		});
 		expect(JSON.parse(String(transport.mock.calls[2]?.[1]?.body))).toEqual({
 			revision: 2,
-			selectedFileIds: ["import-1"],
-			duplicateDecisions: [{ jobId: "import-1", action: "import_separately" }],
+			selectedFileIds: ["00000000-0000-4000-8000-000000000003"],
+			duplicateDecisions: [
+				{
+					jobId: "00000000-0000-4000-8000-000000000003",
+					action: "import_separately",
+				},
+			],
 		});
 	});
 
 	it("polls observable Managed Import validation results", async () => {
 		const transport = vi.fn<typeof fetch>().mockResolvedValue(
 			Response.json({
-				id: "import-1",
+				id: "00000000-0000-4000-8000-000000000003",
 				status: "failed",
 				revision: 1,
 				validationProgress: 40,
@@ -340,12 +372,14 @@ describe("createApiClient", () => {
 		);
 		const client = createApiClient({ baseUrl: "http://music.test", transport });
 
-		const result = await client.getManagedImportJob("import-1");
+		const result = await client.getManagedImportJob(
+			"00000000-0000-4000-8000-000000000003",
+		);
 
 		expect(result.validationProgress).toBe(40);
 		expect(result.errorCode).toBe("validation_cancelled");
 		expect(transport).toHaveBeenCalledWith(
-			"http://music.test/api/v1/imports/import-1",
+			"http://music.test/api/v1/imports/00000000-0000-4000-8000-000000000003",
 			expect.objectContaining({ headers: expect.any(Headers) }),
 		);
 	});
@@ -356,17 +390,19 @@ describe("createApiClient", () => {
 			.mockResolvedValue(new Response(null, { status: 204 }));
 		const client = createApiClient({ baseUrl: "http://music.test", transport });
 
-		await client.cancelManagedImportBatch("batch-1");
-		await client.cancelManagedImport("import-1");
+		await client.cancelManagedImportBatch(
+			"00000000-0000-4000-8000-000000000007",
+		);
+		await client.cancelManagedImport("00000000-0000-4000-8000-000000000003");
 
 		expect(transport).toHaveBeenNthCalledWith(
 			1,
-			"http://music.test/api/v1/import-batches/batch-1",
+			"http://music.test/api/v1/import-batches/00000000-0000-4000-8000-000000000007",
 			expect.objectContaining({ method: "DELETE" }),
 		);
 		expect(transport).toHaveBeenNthCalledWith(
 			2,
-			"http://music.test/api/v1/imports/import-1",
+			"http://music.test/api/v1/imports/00000000-0000-4000-8000-000000000003",
 			expect.objectContaining({ method: "DELETE" }),
 		);
 	});
@@ -375,7 +411,7 @@ describe("createApiClient", () => {
 		const payload = {
 			items: [
 				{
-					importId: "batch-1",
+					importId: "00000000-0000-4000-8000-000000000007",
 					startedAt: "2026-09-02T10:00:00Z",
 					completedAt: "2026-09-02T10:01:00Z",
 					resultCode: "partially_completed",
@@ -390,14 +426,14 @@ describe("createApiClient", () => {
 					},
 					files: [
 						{
-							fileId: "file-1",
-							jobId: "job-1",
+							fileId: "00000000-0000-4000-8000-000000000014",
+							jobId: "00000000-0000-4000-8000-000000000013",
 							safeFilename: "track.flac",
 							startedAt: "2026-09-02T10:00:00Z",
 							completedAt: "2026-09-02T10:01:00Z",
 							contentSha256: "0".repeat(64),
 							resultCode: "imported",
-							createdTrackId: "track-1",
+							createdTrackId: "00000000-0000-4000-8000-000000000001",
 						},
 					],
 				},
@@ -423,7 +459,7 @@ describe("createApiClient", () => {
 			.mockResolvedValueOnce(
 				Response.json(
 					{
-						id: "import-1",
+						id: "00000000-0000-4000-8000-000000000003",
 						status: "uploading",
 						revision: 1,
 						validationProgress: 0,
@@ -433,9 +469,10 @@ describe("createApiClient", () => {
 			)
 			.mockResolvedValueOnce(
 				Response.json({
-					jobId: "import-1",
+					jobId: "00000000-0000-4000-8000-000000000003",
 					status: "awaiting_confirmation",
 					revision: 2,
+					duplicateClassification: "none",
 					file: {
 						originalFilename: "fixture.flac",
 						title: "Inspection Fixture",
@@ -459,10 +496,10 @@ describe("createApiClient", () => {
 			)
 			.mockResolvedValueOnce(
 				Response.json({
-					jobId: "import-1",
+					jobId: "00000000-0000-4000-8000-000000000003",
 					status: "committed",
 					revision: 3,
-					trackId: "track-1",
+					trackId: "00000000-0000-4000-8000-000000000001",
 				}),
 			);
 		const client = createApiClient({
@@ -481,11 +518,11 @@ describe("createApiClient", () => {
 		);
 		const result = await client.confirmManagedImport(job.id, preview.revision);
 
-		expect(result.trackId).toBe("track-1");
+		expect(result.trackId).toBe("00000000-0000-4000-8000-000000000001");
 		expect(progress).toEqual([0, 100]);
 		expect(transport).toHaveBeenNthCalledWith(
 			2,
-			"http://music.test/api/v1/imports/import-1/file",
+			"http://music.test/api/v1/imports/00000000-0000-4000-8000-000000000003/file",
 			expect.objectContaining({ method: "PUT", body: file }),
 		);
 		const uploadHeaders = new Headers(transport.mock.calls[1]?.[1]?.headers);
@@ -499,7 +536,7 @@ describe("createApiClient", () => {
 	it("uploads WAV Managed Imports with the audio/wav content type", async () => {
 		const transport = vi.fn<typeof fetch>().mockResolvedValueOnce(
 			Response.json({
-				jobId: "import-1",
+				jobId: "00000000-0000-4000-8000-000000000003",
 				status: "awaiting_confirmation",
 				revision: 2,
 			}),
@@ -507,10 +544,12 @@ describe("createApiClient", () => {
 		const client = createApiClient({
 			baseUrl: "http://music.test",
 			transport,
+			// Only the request headers matter here, not the preview.
+			validateResponses: false,
 		});
 
 		await client.uploadManagedImportFile(
-			"import-1",
+			"00000000-0000-4000-8000-000000000003",
 			"recording.wav",
 			new Blob(["wav bytes"], { type: "audio/wav" }),
 		);
@@ -540,7 +579,7 @@ describe("createApiClient", () => {
 
 		await expect(
 			client.uploadManagedImportFile(
-				"import-1",
+				"00000000-0000-4000-8000-000000000003",
 				"missing-title.flac",
 				new Blob(["flac bytes"], { type: "audio/flac" }),
 			),
@@ -558,17 +597,17 @@ describe("createApiClient", () => {
 		const transport = vi.fn<typeof fetch>(async (input) => {
 			if (input.toString().includes("/library/albums/")) {
 				return Response.json({
-					id: "album-1",
+					id: "00000000-0000-4000-8000-000000000004",
 					title: "Deprecated-shape Album",
-					artistId: "artist-1",
+					artistId: "00000000-0000-4000-8000-000000000005",
 					artistName: "Deprecated-shape Artist",
 					genres: ["Rock"],
 					tracks: [
 						{
-							id: "track-1",
+							id: "00000000-0000-4000-8000-000000000001",
 							title: "Deprecated-shape Track",
 							artistName: "Track Artist",
-							albumId: "album-1",
+							albumId: "00000000-0000-4000-8000-000000000004",
 							durationMs: 1000,
 							format: "flac",
 							genre: "Electronic / Ambient",
@@ -579,10 +618,10 @@ describe("createApiClient", () => {
 			return Response.json({
 				items: [
 					{
-						id: "track-1",
+						id: "00000000-0000-4000-8000-000000000001",
 						title: "Deprecated-shape Track",
 						artistName: "Track Artist",
-						albumId: "album-1",
+						albumId: "00000000-0000-4000-8000-000000000004",
 						durationMs: 1000,
 						format: "flac",
 						genre: "Electronic / Ambient",
@@ -593,11 +632,14 @@ describe("createApiClient", () => {
 		});
 		const client = createApiClient({ baseUrl: "", transport });
 
-		const album = await client.getAlbum("album-1");
+		const album = await client.getAlbum("00000000-0000-4000-8000-000000000004");
 		const tracks = await client.listTracks();
 
 		expect(album.albumArtists).toEqual([
-			{ id: "artist-1", name: "Deprecated-shape Artist" },
+			{
+				id: "00000000-0000-4000-8000-000000000005",
+				name: "Deprecated-shape Artist",
+			},
 		]);
 		expect(album.genreItems).toEqual([
 			{ id: "legacy-genre:Rock", name: "Rock" },
@@ -839,8 +881,10 @@ describe("createApiClient", () => {
 		expect(client.getTrackStreamUrl("abc")).toBe(
 			"http://localhost:8080/api/v1/tracks/abc/stream",
 		);
-		expect(client.getRadioStationStreamUrl("station-1")).toBe(
-			"http://localhost:8080/api/v1/radio/stations/station-1/stream",
+		expect(
+			client.getRadioStationStreamUrl("00000000-0000-4000-8000-000000000008"),
+		).toBe(
+			"http://localhost:8080/api/v1/radio/stations/00000000-0000-4000-8000-000000000008/stream",
 		);
 	});
 
@@ -851,6 +895,7 @@ describe("createApiClient", () => {
 					status: "ok",
 					version: "0.1.0",
 					capabilities: ["api.v1"],
+					dependencies: [],
 				}),
 				{ status: 200 },
 			),
@@ -875,29 +920,45 @@ describe("createApiClient", () => {
 			streamBaseUrl: () => mediaBaseUrl,
 		});
 
-		expect(client.getAlbumCoverUrl("album-1")).toBe(
-			"earthly-media://localhost/api/v1/library/albums/album-1/cover",
+		expect(
+			client.getAlbumCoverUrl("00000000-0000-4000-8000-000000000004"),
+		).toBe(
+			"earthly-media://localhost/api/v1/library/albums/00000000-0000-4000-8000-000000000004/cover",
 		);
 		// A size asks the server for a scaled-down cover.
-		expect(client.getAlbumCoverUrl("album-1", 512)).toBe(
-			"earthly-media://localhost/api/v1/library/albums/album-1/cover?size=512",
+		expect(
+			client.getAlbumCoverUrl("00000000-0000-4000-8000-000000000004", 512),
+		).toBe(
+			"earthly-media://localhost/api/v1/library/albums/00000000-0000-4000-8000-000000000004/cover?size=512",
 		);
-		expect(client.getArtistPhotoUrl("artist-1")).toBe(
-			"earthly-media://localhost/api/v1/library/artists/artist-1/photo",
+		expect(
+			client.getArtistPhotoUrl("00000000-0000-4000-8000-000000000005"),
+		).toBe(
+			"earthly-media://localhost/api/v1/library/artists/00000000-0000-4000-8000-000000000005/photo",
 		);
-		expect(client.getTrackStreamUrl("track-1")).toBe(
-			"http://127.0.0.1:41000/token-1/api/v1/tracks/track-1/stream",
+		expect(
+			client.getTrackStreamUrl("00000000-0000-4000-8000-000000000001"),
+		).toBe(
+			"http://127.0.0.1:41000/token-1/api/v1/tracks/00000000-0000-4000-8000-000000000001/stream",
 		);
-		expect(client.getRadioStationStreamUrl("station-1")).toBe(
-			"http://127.0.0.1:41000/token-1/api/v1/radio/stations/station-1/stream",
+		expect(
+			client.getRadioStationStreamUrl("00000000-0000-4000-8000-000000000008"),
+		).toBe(
+			"http://127.0.0.1:41000/token-1/api/v1/radio/stations/00000000-0000-4000-8000-000000000008/stream",
 		);
-		expect(client.getRadioCatalogPreviewStreamUrl("preview-1")).toBe(
-			"http://127.0.0.1:41000/token-1/api/v1/radio/preview/preview-1/stream",
+		expect(
+			client.getRadioCatalogPreviewStreamUrl(
+				"00000000-0000-4000-8000-000000000015",
+			),
+		).toBe(
+			"http://127.0.0.1:41000/token-1/api/v1/radio/preview/00000000-0000-4000-8000-000000000015/stream",
 		);
 
 		mediaBaseUrl = "http://127.0.0.1:42000/token-2";
-		expect(client.getTrackStreamUrl("track-2")).toBe(
-			"http://127.0.0.1:42000/token-2/api/v1/tracks/track-2/stream",
+		expect(
+			client.getTrackStreamUrl("00000000-0000-4000-8000-000000000002"),
+		).toBe(
+			"http://127.0.0.1:42000/token-2/api/v1/tracks/00000000-0000-4000-8000-000000000002/stream",
 		);
 	});
 
@@ -910,24 +971,36 @@ describe("createApiClient", () => {
 		);
 		const client = createApiClient({ baseUrl: "", transport });
 
-		await client.replacePlaybackQueue(["track-1"], "1");
-		await client.appendPlaybackQueueItem("track-1", "1");
-		await client.removePlaybackQueueItem("item-1", "1");
-		await client.reorderPlaybackQueue(["item-1"], "1");
+		await client.replacePlaybackQueue(
+			["00000000-0000-4000-8000-000000000001"],
+			"1",
+		);
+		await client.appendPlaybackQueueItem(
+			"00000000-0000-4000-8000-000000000001",
+			"1",
+		);
+		await client.removePlaybackQueueItem(
+			"00000000-0000-4000-8000-000000000006",
+			"1",
+		);
+		await client.reorderPlaybackQueue(
+			["00000000-0000-4000-8000-000000000006"],
+			"1",
+		);
 
 		expect(JSON.parse(String(transport.mock.calls[0]?.[1]?.body))).toEqual({
-			trackIds: ["track-1"],
+			trackIds: ["00000000-0000-4000-8000-000000000001"],
 			revision: "1",
 		});
 		expect(JSON.parse(String(transport.mock.calls[1]?.[1]?.body))).toEqual({
-			trackId: "track-1",
+			trackId: "00000000-0000-4000-8000-000000000001",
 			revision: "1",
 		});
 		expect(
 			new Headers(transport.mock.calls[2]?.[1]?.headers).get("If-Match"),
 		).toBe("1");
 		expect(JSON.parse(String(transport.mock.calls[3]?.[1]?.body))).toEqual({
-			itemIds: ["item-1"],
+			itemIds: ["00000000-0000-4000-8000-000000000006"],
 			revision: "1",
 		});
 	});
@@ -946,10 +1019,22 @@ describe("createApiClient", () => {
 			);
 		const client = createApiClient({ baseUrl: "", transport });
 		const mutations = [
-			() => client.replacePlaybackQueue(["track-1"], "1"),
-			() => client.appendPlaybackQueueItem("track-1", "1"),
+			() =>
+				client.replacePlaybackQueue(
+					["00000000-0000-4000-8000-000000000001"],
+					"1",
+				),
+			() =>
+				client.appendPlaybackQueueItem(
+					"00000000-0000-4000-8000-000000000001",
+					"1",
+				),
 			() => client.reorderPlaybackQueue([], "1"),
-			() => client.removePlaybackQueueItem("item-1", "1"),
+			() =>
+				client.removePlaybackQueueItem(
+					"00000000-0000-4000-8000-000000000006",
+					"1",
+				),
 		];
 
 		for (const mutation of mutations) {
@@ -963,7 +1048,12 @@ describe("createApiClient", () => {
 
 function serverHealthResponse(capabilities: string[]) {
 	return new Response(
-		JSON.stringify({ status: "ok", version: "0.1.0", capabilities }),
+		JSON.stringify({
+			status: "ok",
+			version: "0.1.0",
+			capabilities,
+			dependencies: [],
+		}),
 		{
 			status: 200,
 			headers: { "Content-Type": "application/json" },

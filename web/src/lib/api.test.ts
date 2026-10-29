@@ -67,7 +67,12 @@ describe("desktop API client", () => {
 
 function serverHealthResponse(capabilities: string[]) {
 	return new Response(
-		JSON.stringify({ status: "ok", version: "0.1.0", capabilities }),
+		JSON.stringify({
+			status: "ok",
+			version: "0.1.0",
+			capabilities,
+			dependencies: [],
+		}),
 		{
 			status: 200,
 			headers: { "Content-Type": "application/json" },

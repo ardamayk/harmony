@@ -6,6 +6,9 @@ STAGED_ROOT="$(mktemp -d)"
 trap 'rm -rf -- "$STAGED_ROOT"' EXIT
 
 git -C "$REPOSITORY_ROOT" checkout-index --all --prefix="$STAGED_ROOT/"
+# The staged zod generator resolves @hey-api/openapi-ts from the checkout.
+ln -s "$REPOSITORY_ROOT/packages/contracts/node_modules" \
+	"$STAGED_ROOT/packages/contracts/node_modules"
 
 # Resolve the repository's pinned toolchain; the temporary checkout is not a
 # trusted mise directory and would otherwise fall back to global tool versions.
