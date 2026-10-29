@@ -128,6 +128,7 @@ export function PlayerBar({
 	onToggleMiniPlayer,
 	windowControls,
 	canShowWaveform = false,
+	externalSourceName,
 }: {
 	onPlaylistMutated?: () => void;
 	/** Favorite state of the current Track; the host app owns the Favorites playlist. */
@@ -142,6 +143,8 @@ export function PlayerBar({
 	windowControls?: WindowControls;
 	/** Whether the Music Server advertises track-waveform.v1. */
 	canShowWaveform?: boolean;
+	/** The External Source's site, such as YouTube, shown next to "External". */
+	externalSourceName?: string;
 } = {}) {
 	const navigate = useNavigate();
 	const actionsButtonRef = useRef<HTMLButtonElement>(null);
@@ -423,7 +426,9 @@ export function PlayerBar({
 			"Select a track");
 	// An External Track is marked in the caption line an Album title uses.
 	const nowPlayingCaption = currentExternalTrack
-		? "External"
+		? externalSourceName
+			? `External – ${externalSourceName}`
+			: "External"
 		: (currentTrack?.albumTitle ?? null);
 	// The bar shows a 56–64px cover; the full-screen views get a large one.
 	// An External Track has one size, about 300px.
