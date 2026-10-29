@@ -1,6 +1,7 @@
-//! The embedded Web Client and product docs. `mise run server:build` builds
-//! both and copies them into server/static (scripts/sync-static.sh) before
-//! the server compiles; only the empty directories are committed.
+//! The embedded Web Client, product docs and Scalar's API reference bundle.
+//! `mise run server:build` builds the first two and copies all three into
+//! server/static (scripts/sync-static.sh) before the server compiles; only
+//! the empty directories are committed.
 
 use axum::body::Body;
 use axum::http::{StatusCode, Uri, header};
@@ -14,6 +15,11 @@ struct Web;
 #[derive(RustEmbed)]
 #[folder = "static/docs"]
 struct Docs;
+
+/// Scalar's standalone browser bundle from `@scalar/api-reference`.
+#[derive(RustEmbed)]
+#[folder = "static/api-reference"]
+struct ApiReference;
 
 /// Serves a Web Client asset, or index.html for any other path so the
 /// client's history routes load on reload.
@@ -46,6 +52,12 @@ pub async fn docs(uri: Uri) -> Response {
         path.to_owned()
     };
     asset::<Docs>(&path).unwrap_or_else(|| StatusCode::NOT_FOUND.into_response())
+}
+
+/// Serves `/api/docs/scalar/*`, the files of Scalar's browser bundle.
+pub async fn api_reference(uri: Uri) -> Response {
+    let path = uri.path().trim_start_matches("/api/docs/scalar/");
+    asset::<ApiReference>(path).unwrap_or_else(|| StatusCode::NOT_FOUND.into_response())
 }
 
 fn asset<E: RustEmbed>(path: &str) -> Option<Response> {

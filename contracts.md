@@ -118,14 +118,16 @@ Generated files are committed (ADR 0013). `mise run generate:check` regenerates 
 
 The Go server also validated responses against the schema in its tests; the Rust server was instead checked answer for answer against the Go server while it was ported (ADR 0025).
 
-## Swagger UI
+## API reference
 
 - Spec URL: `/api/openapi.yaml`
-- UI: `/api/docs`
+- UI: `/api/docs`, Scalar's API reference (ADR 0035)
+
+The page (`server/api-reference.html` and `server/api-reference.js`) and Scalar's standalone bundle are served by the Music Server; nothing loads from a CDN. The bundle comes from `@scalar/api-reference`, pinned in `packages/docs/package.json`; `scripts/sync-static.sh api-reference` copies it into `server/static/api-reference`, and `mise run server:build`, `mise run dev` and the Docker build run that copy. `server/tests/contract.rs` checks that the page and its scripts are served under a Content-Security-Policy that allows no other origin.
 
 ## Product documentation
 
-Human-readable docs live in `packages/docs/content/*.mdx` and are served at `/docs/`. API reference stays in Swagger; do not duplicate endpoint lists in MDX.
+Human-readable docs live in `packages/docs/content/*.mdx` and are served at `/docs/`. API reference stays in the OpenAPI spec and `/api/docs`; do not duplicate endpoint lists in MDX.
 
 After building docs only, run:
 

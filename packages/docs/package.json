@@ -9,6 +9,7 @@
     "preview": "vp preview"
   },
   "dependencies": {
+    "@scalar/api-reference": "1.74.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },
