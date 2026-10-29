@@ -6,6 +6,7 @@ import {
 	useMemo,
 	useState,
 } from "react";
+import { parseQueuePinned } from "../lib/stored-preferences";
 
 // Device-local on purpose: whether the Queue Drawer pushes the page aside is
 // a per-window habit, so it lives in this client's storage, not the server's
@@ -15,7 +16,7 @@ const QUEUE_PINNED_KEY = "earthly-audio-queue-pinned";
 function readQueuePinned(): boolean {
 	if (typeof window === "undefined") return true;
 	try {
-		return window.localStorage.getItem(QUEUE_PINNED_KEY) !== "false";
+		return parseQueuePinned(window.localStorage.getItem(QUEUE_PINNED_KEY));
 	} catch {
 		return true;
 	}

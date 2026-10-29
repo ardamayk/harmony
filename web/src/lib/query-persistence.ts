@@ -4,6 +4,7 @@ import type {
 } from "@tanstack/react-query-persist-client";
 import { ApiError } from "@repo/api-client";
 import type { Query } from "@tanstack/react-query";
+import { z } from "zod";
 
 /**
  * Library, playlist and saved-station lists are kept on disk (IndexedDB) so
@@ -52,6 +53,28 @@ export function shouldPersistQuery(query: Query): boolean {
 		default:
 			return false;
 	}
+}
+
+/**
+ * The saved envelope TanStack Query restores from. Only its shape is
+ * checked, not the (possibly thousands of) saved responses inside it.
+ */
+const persistedClientSchema = z.looseObject({
+	timestamp: z.number(),
+	buster: z.string(),
+	clientState: z.looseObject({
+		queries: z.array(z.unknown()),
+		mutations: z.array(z.unknown()),
+	}),
+});
+
+/** A saved cache, or nothing when it is missing, old or corrupt. */
+export function parsePersistedClient(
+	value: unknown,
+): PersistedClient | undefined {
+	return persistedClientSchema.safeParse(value).success
+		? (value as PersistedClient)
+		: undefined;
 }
 
 function openDatabase(): Promise<IDBDatabase> {
@@ -108,9 +131,10 @@ export function createQueryPersister(
 		},
 		restoreClient: async () => {
 			const key = await serverKey();
-			return run<PersistedClient | undefined>("readonly", (store) =>
-				store.get(key),
-			).catch(() => undefined);
+			return run<unknown>("readonly", (store) => store.get(key)).then(
+				parsePersistedClient,
+				() => undefined,
+			);
 		},
 		removeClient: async () => {
 			const key = await serverKey();
