@@ -35,6 +35,7 @@ const ID: &str = "<id>";
 /// External Track id or an HLS resource token decodes to page and media
 /// URLs, and an album key can spell out the album.
 const ROUTE_WORDS: &[&str] = &[
+    "acquisitions",
     "albums",
     "api",
     "artists",
@@ -73,7 +74,10 @@ const ROUTE_WORDS: &[&str] = &[
     "replacement",
     "resources",
     "search",
+    "searches",
+    "soulseek",
     "stations",
+    "status",
     "stream",
     "tags",
     "tracks",

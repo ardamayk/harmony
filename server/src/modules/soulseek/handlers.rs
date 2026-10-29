@@ -9,10 +9,21 @@ use axum::Router;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::Response;
+use axum::routing::{get, post};
 
 pub fn routes() -> Router<AppState> {
-    // Every path under the prefix, until the routes themselves exist.
-    Router::new().nest("/api/v1/soulseek", Router::new().fallback(unimplemented))
+    Router::new()
+        .route("/api/v1/soulseek/status", get(unimplemented))
+        .route("/api/v1/soulseek/searches", post(unimplemented))
+        .route("/api/v1/soulseek/searches/{search_id}", get(unimplemented))
+        .route(
+            "/api/v1/soulseek/acquisitions",
+            get(unimplemented).post(unimplemented),
+        )
+        .route(
+            "/api/v1/soulseek/acquisitions/{acquisition_id}",
+            get(unimplemented).delete(unimplemented),
+        )
 }
 
 impl From<SoulseekError> for ApiError {

@@ -1073,6 +1073,108 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/soulseek/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read slskd's reachability, its Soulseek login and the sharing of Managed Storage
+         * @description Answers 200 even when slskd is unreachable or logged out, so the settings can explain why Install might fail. The sharing state compares slskd's shares with Managed Storage's path as slskd sees it; it is read-only.
+         */
+        get: operations["getSoulseekStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/soulseek/searches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start a Soulseek search through slskd
+         * @description Starts one slskd search and returns its id at once; results arrive while it runs. Searches are not stored by the Music Server and live as long as slskd keeps them.
+         */
+        post: operations["startSoulseekSearch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/soulseek/searches/{searchId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read a Soulseek search's state and its Acquisition Versions so far
+         * @description Clients poll this while state is searching. Versions and their sources are ordered for display only (versions by complete-source count, then source count; sources complete first, then free upload slot, then queue length, then speed); no version is ranked by quality.
+         */
+        get: operations["getSoulseekSearch"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/soulseek/acquisitions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Soulseek Acquisitions, newest first */
+        get: operations["listSoulseekAcquisitions"];
+        put?: never;
+        /**
+         * Start acquiring an Acquisition Version, or return the active one
+         * @description Snapshots the version's sources from the search and starts with sourceId when given, else with the first source in display order. When an acquisition of the same query, scope and version key is still active, it is returned with 200 instead of starting another.
+         */
+        post: operations["startSoulseekAcquisition"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/soulseek/acquisitions/{acquisitionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read one acquisition's state, current source and per-file progress */
+        get: operations["getSoulseekAcquisition"];
+        put?: never;
+        post?: never;
+        /**
+         * Cancel an acquisition and remove its downloads and staging
+         * @description Stops slskd's transfers, deletes partial and finished downloads and cancels the acquisition's Import Batch. Unavailable while the batch is committing, as for any Import Batch.
+         */
+        delete: operations["cancelSoulseekAcquisition"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1081,7 +1183,7 @@ export interface components {
             /** @enum {string} */
             status: "ok";
             version: string;
-            /** @description Named server behaviors supported by this release. The versioned /api/v1 surface itself is advertised as api.v1. Queue event streaming is advertised as playback.queue-events.v1 and the first strict FLAC Managed Import tracer bullet as managed-import.v1. Multi-file Managed Import Batches are advertised as managed-import-batches.v1, Permanent Track Deletion as managed-track-deletion.v1, explicit Track Replacement as managed-track-replacement.v1, Album deletion (one Permanent Track Deletion per Track, previewed once) as managed-album-deletion.v1, lazily generated waveform peaks as track-waveform.v1 (only when ffmpeg is installed), and External Source search and playback through yt-dlp as external-source.v1 (only when EXTERNAL_SOURCE_SEARCH is configured; a missing yt-dlp shows in dependencies and answers 503). Clients gate optional behavior on the exact capability name and must ignore unknown entries so newer servers stay compatible with older clients. */
+            /** @description Named server behaviors supported by this release. The versioned /api/v1 surface itself is advertised as api.v1. Queue event streaming is advertised as playback.queue-events.v1 and the first strict FLAC Managed Import tracer bullet as managed-import.v1. Multi-file Managed Import Batches are advertised as managed-import-batches.v1, Permanent Track Deletion as managed-track-deletion.v1, explicit Track Replacement as managed-track-replacement.v1, Album deletion (one Permanent Track Deletion per Track, previewed once) as managed-album-deletion.v1, lazily generated waveform peaks as track-waveform.v1 (only when ffmpeg is installed), and External Source search and playback through yt-dlp as external-source.v1 (only when EXTERNAL_SOURCE_SEARCH is configured; a missing yt-dlp shows in dependencies and answers 503), and Soulseek Acquisition through the operator's slskd as soulseek-acquisition.v1 (only when SLSKD_URL, SLSKD_API_KEY and SLSKD_DOWNLOADS_PATH are configured). Clients gate optional behavior on the exact capability name and must ignore unknown entries so newer servers stay compatible with older clients. */
             capabilities: string[];
             /** @description Server Dependencies probed once at startup, in a stable order (ffmpeg, ffprobe, then the optional yt-dlp only when EXTERNAL_SOURCE_SEARCH is configured). They describe the deployment environment so an operator can see what the installation supports. */
             dependencies: components["schemas"]["ServerDependency"][];
@@ -1736,6 +1838,162 @@ export interface components {
             /** @description Music Server path to play from, relative to the stream base URL: /api/v1/external/tracks/{externalTrackId}/stream for progressive audio, /api/v1/external/tracks/{externalTrackId}/playlist.m3u8 for HLS. */
             streamPath: string;
         };
+        SoulseekStatus: {
+            slskd: {
+                /** @description True when slskd answered with the configured API key. */
+                reachable: boolean;
+                /** @description slskd's version, when it answered. */
+                version?: string;
+            };
+            soulseek: {
+                /** @description True when slskd is connected to the Soulseek server. */
+                connected: boolean;
+                loggedIn: boolean;
+                /** @description The Soulseek user slskd is logged in as. */
+                username?: string;
+            };
+            /** @description Whether slskd shares Managed Storage (Soulseek Sharing). The operator changes it in slskd's configuration, never through the Music Server. */
+            sharing: {
+                /**
+                 * @description unknown when slskd is unreachable.
+                 * @enum {string}
+                 */
+                state: "shared" | "not_shared" | "unknown";
+                /** @description Files slskd shares from Managed Storage, when shared. */
+                sharedFileCount?: number;
+            };
+        };
+        /**
+         * @description album acquires the whole Album, one source being one user's folder; track acquires one file, one source being one user's file.
+         * @enum {string}
+         */
+        AcquisitionScope: "album" | "track";
+        SoulseekSearchCreate: {
+            /** @description The Soulseek query, usually built from an External Track. */
+            query: string;
+            scope: components["schemas"]["AcquisitionScope"];
+        };
+        SoulseekSearchStarted: {
+            /** Format: uuid */
+            searchId: string;
+        };
+        SoulseekSearch: {
+            /** Format: uuid */
+            searchId: string;
+            query: string;
+            scope: components["schemas"]["AcquisitionScope"];
+            /** @enum {string} */
+            state: "searching" | "complete";
+            versions: components["schemas"]["AcquisitionVersion"][];
+        };
+        /** @description The quality the sources report, never inferred: an attribute no source reports is absent, and such files form their own version. */
+        AcquisitionQuality: {
+            /** @description Lower-case file extension, for example flac or mp3. */
+            format: string;
+            lossless: boolean;
+            /** @description Lossless only. */
+            bitDepth?: number;
+            /** @description Lossless only. */
+            sampleRateHz?: number;
+            /** @description Lossy only. */
+            bitrateKbps?: number;
+            /** @description Lossy only. */
+            variableBitrate?: boolean;
+        };
+        AcquisitionVersion: {
+            /** @description Opaque key of the format and quality within this search. */
+            versionKey: string;
+            quality: components["schemas"]["AcquisitionQuality"];
+            /** @description The largest file count among the version's sources. */
+            fileCount: number;
+            /**
+             * Format: int64
+             * @description Size of the largest source.
+             */
+            totalBytes: number;
+            sourceCount: number;
+            completeSourceCount: number;
+            sources: components["schemas"]["AcquisitionSource"][];
+        };
+        AcquisitionSource: {
+            /** @description Opaque id of the source within its version. */
+            sourceId: string;
+            /** @description The Soulseek user offering the files. */
+            username: string;
+            /** @description The user's folder, or for track scope the file's folder. */
+            folder: string;
+            fileCount: number;
+            /** Format: int64 */
+            totalBytes: number;
+            /** @description False when the source has fewer files than the largest source of its version, for example 12 of 19; always true for track scope. */
+            complete: boolean;
+            hasFreeUploadSlot: boolean;
+            queueLength: number;
+            /** Format: int64 */
+            uploadSpeedBytesPerSecond: number;
+        };
+        AcquisitionSourceReference: {
+            sourceId: string;
+            username: string;
+            folder: string;
+        };
+        SoulseekAcquisitionCreate: {
+            /** Format: uuid */
+            searchId: string;
+            versionKey: string;
+            /** @description A source of the version to start with; unset, the first. */
+            sourceId?: string;
+        };
+        SoulseekAcquisitionList: {
+            items: components["schemas"]["SoulseekAcquisition"][];
+        };
+        SoulseekAcquisition: {
+            /** Format: uuid */
+            acquisitionId: string;
+            query: string;
+            scope: components["schemas"]["AcquisitionScope"];
+            versionKey: string;
+            quality: components["schemas"]["AcquisitionQuality"];
+            /**
+             * @description review is the Import Preview awaiting confirmation; completed follows confirmation.
+             * @enum {string}
+             */
+            state: "downloading" | "importing" | "review" | "completed" | "failed" | "cancelled";
+            /**
+             * Format: uuid
+             * @description The server-owned Managed Import Batch, once importing starts; review and confirm it through the import-batches routes.
+             */
+            batchId?: string;
+            currentSource?: components["schemas"]["AcquisitionSourceReference"];
+            sourcesTried: number;
+            /** @description Sources of the version snapshotted at start. */
+            sourceCount: number;
+            files: components["schemas"]["SoulseekAcquisitionFile"][];
+            /** @description Why the acquisition failed, for display; present when failed. */
+            failureReason?: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        SoulseekAcquisitionFile: {
+            /** @description The remote file's name, without its folder. */
+            filename: string;
+            /**
+             * @description staged means Managed Import took the file into its batch.
+             * @enum {string}
+             */
+            state: "queued" | "downloading" | "downloaded" | "staged" | "failed";
+            /** Format: int64 */
+            bytesTransferred: number;
+            /** Format: int64 */
+            totalBytes: number;
+            /**
+             * Format: uuid
+             * @description The file's Managed Import job, once staged.
+             */
+            jobId?: string;
+        };
         Playlist: {
             /** Format: uuid */
             id: string;
@@ -2186,6 +2444,51 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
+        /** @description Soulseek Acquisition is not configured on this Music Server (code soulseek_acquisition_disabled). */
+        SoulseekAcquisitionDisabled: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description Soulseek Acquisition is not configured (code soulseek_acquisition_disabled), or slskd no longer knows the search (code search_not_found). */
+        SoulseekSearchNotFound: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description Soulseek Acquisition is not configured (code soulseek_acquisition_disabled), slskd no longer knows the search (code search_not_found), or the search has no Acquisition Version with that key or no such source in it (code version_not_found). */
+        SoulseekVersionNotFound: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description Soulseek Acquisition is not configured (code soulseek_acquisition_disabled), or there is no such acquisition (code acquisition_not_found). */
+        SoulseekAcquisitionNotFound: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description slskd did not answer (code slskd_unreachable), or it is not logged in to Soulseek (code soulseek_not_logged_in). The message says which, so the clients can show it. */
+        SlskdUnavailable: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
     };
     parameters: {
         limit: number;
@@ -2200,6 +2503,9 @@ export interface components {
         stationId: string;
         /** @description Opaque External Track id from searchExternalSource */
         externalTrackId: string;
+        /** @description slskd's search id from startSoulseekSearch */
+        searchId: string;
+        acquisitionId: string;
     };
     requestBodies: never;
     headers: never;
@@ -4257,6 +4563,181 @@ export interface operations {
             404: components["responses"]["ExternalTrackArtworkNotFound"];
             502: components["responses"]["ExternalSourceFailed"];
             504: components["responses"]["ExternalSourceTimeout"];
+        };
+    };
+    getSoulseekStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current slskd, Soulseek and sharing state */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SoulseekStatus"];
+                };
+            };
+            404: components["responses"]["SoulseekAcquisitionDisabled"];
+        };
+    };
+    startSoulseekSearch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SoulseekSearchCreate"];
+            };
+        };
+        responses: {
+            /** @description Search started */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SoulseekSearchStarted"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["SoulseekAcquisitionDisabled"];
+            503: components["responses"]["SlskdUnavailable"];
+        };
+    };
+    getSoulseekSearch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description slskd's search id from startSoulseekSearch */
+                searchId: components["parameters"]["searchId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Search state and Acquisition Versions */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SoulseekSearch"];
+                };
+            };
+            404: components["responses"]["SoulseekSearchNotFound"];
+            503: components["responses"]["SlskdUnavailable"];
+        };
+    };
+    listSoulseekAcquisitions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Soulseek Acquisitions */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SoulseekAcquisitionList"];
+                };
+            };
+            404: components["responses"]["SoulseekAcquisitionDisabled"];
+        };
+    };
+    startSoulseekAcquisition: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SoulseekAcquisitionCreate"];
+            };
+        };
+        responses: {
+            /** @description The active acquisition of the same query, scope and version */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SoulseekAcquisition"];
+                };
+            };
+            /** @description Acquisition started */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SoulseekAcquisition"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["SoulseekVersionNotFound"];
+            503: components["responses"]["SlskdUnavailable"];
+        };
+    };
+    getSoulseekAcquisition: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                acquisitionId: components["parameters"]["acquisitionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current acquisition */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SoulseekAcquisition"];
+                };
+            };
+            404: components["responses"]["SoulseekAcquisitionNotFound"];
+        };
+    };
+    cancelSoulseekAcquisition: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                acquisitionId: components["parameters"]["acquisitionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Acquisition cancelled and its files removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["SoulseekAcquisitionNotFound"];
+            409: components["responses"]["Conflict"];
         };
     };
 }

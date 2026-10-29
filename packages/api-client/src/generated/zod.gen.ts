@@ -578,6 +578,136 @@ export const zExternalTrackPlayback = z.object({
     streamPath: z.string()
 });
 
+export const zSoulseekStatus = z.object({
+    slskd: z.object({
+        reachable: z.boolean(),
+        version: z.string().optional()
+    }),
+    soulseek: z.object({
+        connected: z.boolean(),
+        loggedIn: z.boolean(),
+        username: z.string().optional()
+    }),
+    sharing: z.object({
+        state: z.enum([
+            'shared',
+            'not_shared',
+            'unknown'
+        ]),
+        sharedFileCount: z.int().gte(0).optional()
+    })
+});
+
+/**
+ * album acquires the whole Album, one source being one user's folder; track acquires one file, one source being one user's file.
+ */
+export const zAcquisitionScope = z.enum(['album', 'track']);
+
+export const zSoulseekSearchCreate = z.object({
+    query: z.string().min(1).max(200),
+    scope: zAcquisitionScope
+});
+
+export const zSoulseekSearchStarted = z.object({
+    searchId: z.guid()
+});
+
+/**
+ * The quality the sources report, never inferred: an attribute no source reports is absent, and such files form their own version.
+ */
+export const zAcquisitionQuality = z.object({
+    format: z.string(),
+    lossless: z.boolean(),
+    bitDepth: z.int().gte(1).optional(),
+    sampleRateHz: z.int().gte(1).optional(),
+    bitrateKbps: z.int().gte(1).optional(),
+    variableBitrate: z.boolean().optional()
+});
+
+export const zAcquisitionSource = z.object({
+    sourceId: z.string(),
+    username: z.string(),
+    folder: z.string(),
+    fileCount: z.int().gte(1),
+    totalBytes: z.coerce.bigint().gte(BigInt(0)).max(BigInt('9223372036854775807'), { error: 'Invalid value: Expected int64 to be <= 9223372036854775807' }),
+    complete: z.boolean(),
+    hasFreeUploadSlot: z.boolean(),
+    queueLength: z.int().gte(0),
+    uploadSpeedBytesPerSecond: z.coerce.bigint().gte(BigInt(0)).max(BigInt('9223372036854775807'), { error: 'Invalid value: Expected int64 to be <= 9223372036854775807' })
+});
+
+export const zAcquisitionVersion = z.object({
+    versionKey: z.string(),
+    quality: zAcquisitionQuality,
+    fileCount: z.int().gte(1),
+    totalBytes: z.coerce.bigint().gte(BigInt(0)).max(BigInt('9223372036854775807'), { error: 'Invalid value: Expected int64 to be <= 9223372036854775807' }),
+    sourceCount: z.int().gte(1),
+    completeSourceCount: z.int().gte(0),
+    sources: z.array(zAcquisitionSource).min(1)
+});
+
+export const zSoulseekSearch = z.object({
+    searchId: z.guid(),
+    query: z.string(),
+    scope: zAcquisitionScope,
+    state: z.enum(['searching', 'complete']),
+    versions: z.array(zAcquisitionVersion)
+});
+
+export const zAcquisitionSourceReference = z.object({
+    sourceId: z.string(),
+    username: z.string(),
+    folder: z.string()
+});
+
+export const zSoulseekAcquisitionCreate = z.object({
+    searchId: z.guid(),
+    versionKey: z.string(),
+    sourceId: z.string().optional()
+});
+
+export const zSoulseekAcquisitionFile = z.object({
+    filename: z.string(),
+    state: z.enum([
+        'queued',
+        'downloading',
+        'downloaded',
+        'staged',
+        'failed'
+    ]),
+    bytesTransferred: z.coerce.bigint().gte(BigInt(0)).max(BigInt('9223372036854775807'), { error: 'Invalid value: Expected int64 to be <= 9223372036854775807' }),
+    totalBytes: z.coerce.bigint().gte(BigInt(0)).max(BigInt('9223372036854775807'), { error: 'Invalid value: Expected int64 to be <= 9223372036854775807' }),
+    jobId: z.guid().optional()
+});
+
+export const zSoulseekAcquisition = z.object({
+    acquisitionId: z.guid(),
+    query: z.string(),
+    scope: zAcquisitionScope,
+    versionKey: z.string(),
+    quality: zAcquisitionQuality,
+    state: z.enum([
+        'downloading',
+        'importing',
+        'review',
+        'completed',
+        'failed',
+        'cancelled'
+    ]),
+    batchId: z.guid().optional(),
+    currentSource: zAcquisitionSourceReference.optional(),
+    sourcesTried: z.int().gte(0),
+    sourceCount: z.int().gte(1),
+    files: z.array(zSoulseekAcquisitionFile),
+    failureReason: z.string().optional(),
+    createdAt: z.iso.datetime({ offset: true }),
+    updatedAt: z.iso.datetime({ offset: true })
+});
+
+export const zSoulseekAcquisitionList = z.object({
+    items: z.array(zSoulseekAcquisition)
+});
+
 export const zPlaylist = z.object({
     id: z.guid(),
     name: z.string(),
@@ -1003,6 +1133,13 @@ export const zStationId = z.guid();
 export const zExternalTrackId = z.string().max(2048).regex(/^[A-Za-z0-9_.-]+$/);
 
 /**
+ * slskd's search id from startSoulseekSearch
+ */
+export const zSearchId = z.guid();
+
+export const zAcquisitionId = z.guid();
+
+/**
  * Service is healthy
  */
 export const zGetHealthResponse = zHealthResponse;
@@ -1351,3 +1488,38 @@ export const zGetExternalTrackResourceResponse = z.string();
  * Cover image
  */
 export const zGetExternalTrackArtworkResponse = z.string();
+
+/**
+ * Current slskd, Soulseek and sharing state
+ */
+export const zGetSoulseekStatusResponse = zSoulseekStatus;
+
+/**
+ * Search started
+ */
+export const zStartSoulseekSearchResponse = zSoulseekSearchStarted;
+
+/**
+ * Search state and Acquisition Versions
+ */
+export const zGetSoulseekSearchResponse = zSoulseekSearch;
+
+/**
+ * Soulseek Acquisitions
+ */
+export const zListSoulseekAcquisitionsResponse = zSoulseekAcquisitionList;
+
+/**
+ * The active acquisition of the same query, scope and version
+ */
+export const zStartSoulseekAcquisitionResponse = zSoulseekAcquisition;
+
+/**
+ * Acquisition cancelled and its files removed
+ */
+export const zCancelSoulseekAcquisitionResponse = z.void();
+
+/**
+ * Current acquisition
+ */
+export const zGetSoulseekAcquisitionResponse = zSoulseekAcquisition;

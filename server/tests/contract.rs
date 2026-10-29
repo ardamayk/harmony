@@ -148,6 +148,7 @@ async fn advertises_only_documented_capabilities() {
     for capability in advertised.iter().copied().chain([
         earthly_music_server::api::TRACK_WAVEFORM_CAPABILITY,
         earthly_music_server::api::EXTERNAL_SOURCE_CAPABILITY,
+        earthly_music_server::api::SOULSEEK_ACQUISITION_CAPABILITY,
     ]) {
         assert!(
             documentation.contains(capability),
