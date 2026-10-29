@@ -5,6 +5,7 @@
 import { stat } from "node:fs/promises";
 import { extname, join, normalize, sep } from "node:path";
 import { pathToFileURL } from "node:url";
+import * as z from "zod";
 import { CONTENT_SECURITY_POLICY, RENDERER_HOST } from "./security";
 
 /**
@@ -52,12 +53,15 @@ export async function rendererFile(
 	return join(root, "index.html");
 }
 
+/** The bundle is read-only: anything but GET and HEAD is refused. */
+const rendererMethod = z.enum(["GET", "HEAD"]);
+
 export function createRendererHandler(
 	root: string,
 	fetchFile: (url: string) => Promise<Response>,
 ) {
 	return async (request: Request): Promise<Response> => {
-		if (request.method !== "GET" && request.method !== "HEAD") {
+		if (!rendererMethod.safeParse(request.method).success) {
 			return new Response(null, { status: 405 });
 		}
 		const file = await rendererFile(root, request.url);

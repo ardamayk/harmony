@@ -12,11 +12,18 @@ _.path = ["{{config_root}}/node_modules/.bin"]
 
 [tasks.dev]
 description = "Run the Music Server and Web Client in development mode"
-run = "./scripts/run-with-music-server.sh development pnpm --dir web run dev"
+# The Music Server serves Scalar's API reference bundle at /api/docs.
+run = [
+	"bash scripts/sync-static.sh api-reference",
+	"./scripts/run-with-music-server.sh development pnpm --dir web run dev",
+]
 
 [tasks."desktop:dev"]
 description = "Run the Music Server and Desktop Client in development mode"
-run = "./scripts/run-with-music-server.sh development pnpm --dir desktop run dev"
+run = [
+	"bash scripts/sync-static.sh api-reference",
+	"./scripts/run-with-music-server.sh development pnpm --dir desktop run dev",
+]
 
 [tasks.start]
 description = "Run the built Music Server and release Desktop Client"
@@ -141,7 +148,11 @@ run = "vp run --filter web --filter @repo/ui --filter @repo/api-client test"
 
 [tasks."server:test"]
 description = "Run Music Server tests"
-run = "cargo test -p earthly-music-server"
+# The contract tests check that /api/docs serves Scalar's bundle (needs pnpm install).
+run = [
+	"bash scripts/sync-static.sh api-reference",
+	"cargo test -p earthly-music-server",
+]
 
 [tasks."server:prepare"]
 description = "Regenerate server/.sqlx after adding or changing a sqlx query (needs sqlx-cli)"
@@ -159,9 +170,14 @@ run = [
 
 [tasks."web:test:e2e"]
 description = "Run Web Client Playwright tests"
-# The Music Server embeds the product docs from server/static, which git ignores.
+# The Music Server embeds the product docs and Scalar's API reference bundle
+# from server/static, which git ignores.
 depends = ["docs:build"]
-run = ["bash scripts/sync-static.sh docs", "pnpm --dir web run test:e2e"]
+run = [
+	"bash scripts/sync-static.sh docs",
+	"bash scripts/sync-static.sh api-reference",
+	"pnpm --dir web run test:e2e",
+]
 
 [tasks."server:test:hls"]
 description = "Run the Music Server HLS browser integration test (needs Playwright's Chromium)"

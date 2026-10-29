@@ -29,7 +29,7 @@ For **Figma**, **Google Stitch**, or visual design work, start here:
 | Web | React 19, TanStack Router, Vite, Tailwind 4, shadcn |
 | Monorepo | Node, pnpm workspaces, Vite+ (`vp`: Oxlint, Oxfmt, Vitest, task runner), mise |
 | API | OpenAPI spec-first (`packages/contracts`) |
-| Docs | MDX (`packages/docs`) + Swagger UI (`/api/docs`) |
+| Docs | MDX (`packages/docs`) + Scalar API reference (`/api/docs`) |
 
 ## Quick start
 

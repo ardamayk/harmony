@@ -8,7 +8,7 @@ import {
 
 const albumSource: QueueItemSource = {
 	kind: "album",
-	albumId: "album-1",
+	albumId: "00000000-0000-4000-8000-000000000004",
 	albumTitle: "Album",
 	artistName: "Artist",
 };
@@ -18,15 +18,15 @@ function queueResponse(source?: QueueItemSource) {
 		revision: "2",
 		items: [
 			{
-				id: "item-1",
-				trackId: "track-1",
+				id: "00000000-0000-4000-8000-000000000006",
+				trackId: "00000000-0000-4000-8000-000000000001",
 				position: 0,
 				source,
 				track: {
-					id: "track-1",
+					id: "00000000-0000-4000-8000-000000000001",
 					title: "Track",
 					artistName: "Artist",
-					albumId: "album-1",
+					albumId: "00000000-0000-4000-8000-000000000004",
 					durationMs: 1000,
 					format: "flac",
 				},
@@ -59,22 +59,22 @@ describe("queue sources", () => {
 		);
 		const client = createApiClient({ baseUrl: "", transport });
 		const replaced = await client.replacePlaybackQueue(
-			["track-1"],
+			["00000000-0000-4000-8000-000000000001"],
 			"1",
 			albumSource,
 		);
 		const appended = await client.appendPlaybackQueueItem(
-			"track-1",
+			"00000000-0000-4000-8000-000000000001",
 			"2",
 			albumSource,
 		);
 		expect(JSON.parse(String(transport.mock.calls[0]?.[1]?.body))).toEqual({
-			trackIds: ["track-1"],
+			trackIds: ["00000000-0000-4000-8000-000000000001"],
 			revision: "1",
 			source: albumSource,
 		});
 		expect(JSON.parse(String(transport.mock.calls[1]?.[1]?.body))).toEqual({
-			trackId: "track-1",
+			trackId: "00000000-0000-4000-8000-000000000001",
 			revision: "2",
 			source: albumSource,
 		});
@@ -85,9 +85,19 @@ describe("queue sources", () => {
 	it.each<QueueItemSource | undefined>([
 		undefined,
 		albumSource,
-		{ kind: "playlist", playlistId: "playlist-1", name: "Playlist" },
+		{
+			kind: "playlist",
+			playlistId: "00000000-0000-4000-8000-000000000012",
+			name: "Playlist",
+		},
 		{ kind: "user" },
-		{ kind: "suggestion", basedOn: ["seed-1", "seed-2"] },
+		{
+			kind: "suggestion",
+			basedOn: [
+				"00000000-0000-4000-8000-000000000010",
+				"00000000-0000-4000-8000-000000000011",
+			],
+		},
 		{ kind: "suggestion", basedOn: [] },
 	])(
 		"normalizes reads and conflict snapshots with source %j",
@@ -110,7 +120,10 @@ describe("queue sources", () => {
 			const queue = await client.getPlaybackQueue();
 			expect(queue.items[0]?.source).toEqual(source ?? { kind: "user" });
 			try {
-				await client.appendPlaybackQueueItem("track-1", "0");
+				await client.appendPlaybackQueueItem(
+					"00000000-0000-4000-8000-000000000001",
+					"0",
+				);
 				expect.fail("Expected revision conflict");
 			} catch (error) {
 				expect(error).toBeInstanceOf(ApiError);

@@ -1,6 +1,7 @@
 import {
 	ApiError,
 	type ExternalTrack,
+	type ExternalTrackPlayback,
 	type QueueEvent,
 	type RadioSearchResult,
 	type RadioStation,
@@ -568,6 +569,137 @@ describe("PlaybackProvider", () => {
 		expect(onRejected).toHaveBeenCalledWith(failure);
 		expect(engine.getState().source).toBeNull();
 		warn.mockRestore();
+	});
+
+	describe("a choice made while an External Track resolves", () => {
+		const otherExternalTrack: ExternalTrack = {
+			...externalTrack,
+			id: "external-2",
+			title: "Other External Song",
+		};
+
+		/** Resolves each External Track only when the test says so. */
+		function renderWithSlowResolves() {
+			const api = createApi();
+			const resolvers = new Map<
+				string,
+				{ resolve: () => void; reject: (error: Error) => void }
+			>();
+			api.getExternalTrackPlayback = vi.fn(
+				(externalTrackId: string) =>
+					new Promise<ExternalTrackPlayback>((resolve, reject) => {
+						resolvers.set(externalTrackId, {
+							resolve: () =>
+								resolve({
+									format: "hls" as const,
+									streamPath: `/api/v1/external/tracks/${externalTrackId}/playlist.m3u8`,
+								}),
+							reject,
+						});
+					}),
+			);
+			const onRejected = vi.fn();
+			function Trigger() {
+				const playback = usePlayback();
+				return (
+					<div>
+						<button
+							type="button"
+							onClick={() =>
+								void playback.playExternalTrack(externalTrack).catch(onRejected)
+							}
+						>
+							External 1
+						</button>
+						<button
+							type="button"
+							onClick={() =>
+								void playback
+									.playExternalTrack(otherExternalTrack)
+									.catch(onRejected)
+							}
+						>
+							External 2
+						</button>
+						<button
+							type="button"
+							onClick={() => void playback.playTrack(track.id)}
+						>
+							Track
+						</button>
+						<button type="button" onClick={playback.stopPlayback}>
+							Stop
+						</button>
+					</div>
+				);
+			}
+			const engine = new InMemoryPlaybackEngine();
+			render(
+				<PlaybackProvider api={api} engine={engine}>
+					<Trigger />
+				</PlaybackProvider>,
+			);
+			const click = (name: string) =>
+				act(async () => screen.getByRole("button", { name }).click());
+			const settle = (externalTrackId: string, error?: Error) =>
+				act(async () => {
+					const resolver = resolvers.get(externalTrackId);
+					if (error) resolver?.reject(error);
+					else resolver?.resolve();
+				});
+			return { engine, onRejected, click, settle };
+		}
+
+		it("keeps a Track chosen after the External Track", async () => {
+			const { engine, onRejected, click, settle } = renderWithSlowResolves();
+			await act(async () => {});
+			const play = vi.spyOn(engine, "play");
+			await click("External 1");
+			await click("Track");
+			await settle("external-1");
+
+			expect(engine.getState().source).toMatchObject({
+				type: "track",
+				track: { id: track.id },
+			});
+			expect(play).toHaveBeenCalledTimes(1);
+			expect(onRejected).not.toHaveBeenCalled();
+		});
+
+		it("plays the newer External Track whichever resolves first", async () => {
+			for (const order of [
+				["external-2", "external-1"],
+				["external-1", "external-2"],
+			]) {
+				const { engine, click, settle } = renderWithSlowResolves();
+				await click("External 1");
+				await click("External 2");
+				for (const externalTrackId of order) await settle(externalTrackId);
+
+				expect(engine.getState().source).toMatchObject({
+					type: "external-track",
+					externalTrack: { id: "external-2" },
+				});
+				cleanup();
+			}
+		});
+
+		it("stays stopped after Stop, and drops a late failure", async () => {
+			const { engine, onRejected, click, settle } = renderWithSlowResolves();
+			const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+			await click("External 1");
+			await click("Stop");
+			await settle("external-1");
+			expect(engine.getState().source).toBeNull();
+
+			await click("External 2");
+			await click("Stop");
+			await settle("external-2", new Error("unplayable"));
+			expect(engine.getState().source).toBeNull();
+			expect(onRejected).not.toHaveBeenCalled();
+			expect(warn).not.toHaveBeenCalled();
+			warn.mockRestore();
+		});
 	});
 
 	it("exposes an active reconnecting Radio Station session", async () => {

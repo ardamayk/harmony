@@ -1,4 +1,5 @@
 import {
+	ApiError,
 	EXTERNAL_SOURCE_CAPABILITY,
 	type ExternalTrack,
 	type LibrarySearchResult,
@@ -58,6 +59,19 @@ const RESULTS_PER_GROUP = 5;
 const SEARCH_DEBOUNCE_MS = 200;
 /** Each yt-dlp search takes about a second, so typing waits longer for one. */
 const EXTERNAL_SEARCH_DEBOUNCE_MS = 500;
+
+/** A short reason for a failed External Track play, from the Music Server's error code. */
+function externalPlaybackFailureMessage(error: unknown): string {
+	const code = error instanceof ApiError ? error.body.code : undefined;
+	switch (code) {
+		case "external_track_unplayable":
+			return "This track can't be played here";
+		case "external_source_timeout":
+			return "The External Source took too long";
+		default:
+			return "Couldn't play this track";
+	}
+}
 /** A pointer resting this long on an External row prefetches its playback. */
 const EXTERNAL_PREFETCH_HOVER_MS = 250;
 /**
@@ -395,7 +409,11 @@ export function LibrarySearchDialog({
 				if (prefetchingExternalId.current === track.id) {
 					prefetchingExternalId.current = null;
 				}
-				void playExternalTrack(track);
+				// The dialog closes at once; a failed resolve reports through the
+				// app-wide toaster, which outlives the dialog.
+				playExternalTrack(track).catch((error: unknown) => {
+					toast.error(externalPlaybackFailureMessage(error));
+				});
 				close();
 			},
 		}));

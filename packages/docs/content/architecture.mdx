@@ -34,7 +34,7 @@ The Music Server is written in Rust (axum, sqlx on SQLite). Domain routes live i
 - `playlists`: playlists and the default Favorites playlist
 - `preferences`: theme, layout, and playback preferences
 - `radio`: saved stations, Radio Browser search, stream proxy
-- `docs`: MDX docs, Swagger UI, OpenAPI YAML
+- `docs`: MDX docs, Scalar API reference, OpenAPI YAML
 
 Inside a module, `mod.rs` wires it together, `handlers.rs` handles HTTP, `service.rs` owns the domain rules, and `repository.rs` is the only database access, with queries checked against the schema at compile time.
 

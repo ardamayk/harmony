@@ -2860,6 +2860,10 @@ fn is_live_source(source: &Value) -> bool {
     )
 }
 
+fn is_external_track_source(source: &Value) -> bool {
+    source.get("type").and_then(Value::as_str) == Some("external-track")
+}
+
 fn apply_adaptive_decoder_rate(
     state: &Arc<Mutex<PlaybackSessionState>>,
     listener: &StateListener,
@@ -3750,11 +3754,15 @@ fn handle_ended_event(
     queue: &Arc<Mutex<PlaybackQueueContext>>,
     adaptive_system_rate: Option<&Mutex<AdaptiveSystemRateController>>,
 ) -> Result<PlaybackSessionState, PlaybackCommandError> {
-    let (repeat_mode, stop_after_current) = {
+    let (repeat_mode, stop_after_current, is_external_track) = {
         let state = state
             .lock()
             .map_err(|_| PlaybackCommandError::new("Native playback state is unavailable."))?;
-        (state.repeat_mode.clone(), state.stop_after_current)
+        (
+            state.repeat_mode.clone(),
+            state.stop_after_current,
+            state.source.as_ref().is_some_and(is_external_track_source),
+        )
     };
     // shortcut: an entry appended before a late Queue change plays for the few
     // milliseconds until it is stopped or replaced below.
@@ -3769,7 +3777,9 @@ fn handle_ended_event(
             state.status = PlaybackStatus::Ended;
         });
     }
-    if repeat_mode == RepeatMode::Once {
+    // An External Track never repeats; the stored repeat mode stays for the
+    // next Track. It sits outside the Queue, so Loop finds no next source.
+    if repeat_mode == RepeatMode::Once && !is_external_track {
         return repeat_current_source(process, state, queue, adaptive_system_rate);
     }
     let next_source = queue
@@ -6378,6 +6388,45 @@ mod tests {
         assert_eq!(repeated.status, PlaybackStatus::Playing);
         assert_eq!(repeated.current_time, 0.0);
         assert_eq!(repeated.repeat_mode, super::RepeatMode::Off);
+    }
+
+    #[test]
+    fn external_tracks_end_instead_of_repeating_and_keep_the_repeat_mode() {
+        for (cycles, repeat_mode) in [(1, super::RepeatMode::Once), (2, super::RepeatMode::Loop)] {
+            let (event_sender, event_receiver) = std::sync::mpsc::channel();
+            let loaded_url = Arc::new(Mutex::new(None));
+            let process = FakeMpvProcess {
+                loaded_url: loaded_url.clone(),
+                is_shutdown: Arc::new(AtomicBool::new(false)),
+                load_error: None,
+            };
+            let controller = PlaybackController::start(Box::new(process), event_receiver, |_| {});
+            let source = json!({
+                "type": "external-track",
+                "externalTrack": {
+                    "id": "eyJ1Ijoi.c2ln",
+                    "title": "Around the World",
+                    "durationMs": 120000,
+                    "extractor": "Soundcloud"
+                },
+                "playbackUrl": "http://127.0.0.1:43129/token/api/v1/external/tracks/eyJ1Ijoi.c2ln/stream",
+                "sourceUrl": "http://music.example/api/v1/external/tracks/eyJ1Ijoi.c2ln/stream"
+            });
+
+            controller.play(Some(source)).expect("play External Track");
+            for _ in 0..cycles {
+                controller.cycle_repeat_mode().expect("cycle repeat mode");
+            }
+            *loaded_url.lock().expect("loaded URL") = None;
+            event_sender.send(MpvEvent::Ended).expect("ended event");
+            let ended = wait_for_state(&controller, |state| {
+                state.status == PlaybackStatus::Ended || state.status == PlaybackStatus::Error
+            });
+
+            assert_eq!(ended.status, PlaybackStatus::Ended);
+            assert_eq!(ended.repeat_mode, repeat_mode);
+            assert_eq!(loaded_url.lock().expect("loaded URL").as_deref(), None);
+        }
     }
 
     #[test]

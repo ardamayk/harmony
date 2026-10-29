@@ -1,5 +1,6 @@
 // Test double for `window.earthlyDesktop`, standing in for the Electron
-// preload in jsdom tests.
+// preload in jsdom tests. Like the main process, it refuses invokes whose
+// arguments do not match the command's schema.
 
 import type {
 	DesktopCommand,
@@ -7,6 +8,7 @@ import type {
 	DesktopWindowApi,
 	EarthlyDesktopBridge,
 } from "@repo/desktop-bridge";
+import { parseInvoke } from "@repo/desktop-bridge/schemas";
 
 type CommandHandler = (
 	command: DesktopCommand,
@@ -34,7 +36,11 @@ export function installDesktopBridge(
 		invoke: async <T>(
 			command: DesktopCommand,
 			args?: Record<string, unknown>,
-		) => (await handle(command, args)) as T,
+		) => {
+			const parsed = parseInvoke(command, args);
+			if (!parsed.ok) throw parsed.error;
+			return (await handle(command, args)) as T;
+		},
 		listen: <T>(event: DesktopEvent, listener: (payload: T) => void) => {
 			const set = listeners.get(event) ?? new Set();
 			const wrapped = listener as (payload: unknown) => void;

@@ -215,7 +215,10 @@ export async function desktopFetch(
 		init?.signal ?? (input instanceof Request ? input.signal : undefined);
 	if (!signal) {
 		return bridgeResponse(
-			await invoke<BridgeHttpResponse>("desktop_http_request", { request }),
+			await invoke<BridgeHttpResponse, "desktop_http_request">(
+				"desktop_http_request",
+				{ request },
+			),
 		);
 	}
 	signal.throwIfAborted();
@@ -223,10 +226,13 @@ export async function desktopFetch(
 	// Like fetch, an abort rejects at once; the cancel makes the core drop its
 	// connection, so the Music Server stops work nobody is waiting for.
 	const requestId = crypto.randomUUID();
-	const pending = invoke<BridgeHttpResponse>("desktop_http_request", {
-		request,
-		requestId,
-	});
+	const pending = invoke<BridgeHttpResponse, "desktop_http_request">(
+		"desktop_http_request",
+		{
+			request,
+			requestId,
+		},
+	);
 	let handleAbort = () => {};
 	const aborted = new Promise<never>((_, reject) => {
 		handleAbort = () => {

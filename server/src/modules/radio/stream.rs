@@ -28,7 +28,7 @@ use url::{Host, Url};
 const NOW_PLAYING_STALE_AFTER: Duration = Duration::from_secs(60);
 pub const HLS_CONTENT_TYPE: &str = "application/vnd.apple.mpegurl";
 pub const MAX_HLS_PLAYLIST_BYTES: usize = 1 << 20;
-const HLS_RESOURCE_TOKEN_TTL_SECONDS: i64 = 3600;
+pub const HLS_RESOURCE_TOKEN_TTL_SECONDS: i64 = 3600;
 const UNSAFE: &str = "unsafe stream URL";
 
 /// Refuses anything but public HTTP(S) hosts.
@@ -626,10 +626,19 @@ pub fn copy_stream_headers(from: &HeaderMap, keep_content_length: bool) -> Heade
 }
 
 pub fn is_hls_playlist(response: &UpstreamResponse) -> bool {
-    let content_type = response
-        .headers
-        .get(header::CONTENT_TYPE)
-        .and_then(|value| value.to_str().ok())
+    is_hls_content(
+        response
+            .headers
+            .get(header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok()),
+        &response.url,
+    )
+}
+
+/// Whether a response of `content_type` from `url` (after redirects) is an
+/// HLS playlist.
+pub fn is_hls_content(content_type: Option<&str>, url: &Url) -> bool {
+    let content_type = content_type
         .unwrap_or_default()
         .split(';')
         .next()
@@ -639,7 +648,7 @@ pub fn is_hls_playlist(response: &UpstreamResponse) -> bool {
     matches!(
         content_type.as_str(),
         HLS_CONTENT_TYPE | "application/x-mpegurl" | "audio/mpegurl" | "audio/x-mpegurl"
-    ) || response.url.path().to_ascii_lowercase().ends_with(".m3u8")
+    ) || url.path().to_ascii_lowercase().ends_with(".m3u8")
 }
 
 impl StreamProxy {

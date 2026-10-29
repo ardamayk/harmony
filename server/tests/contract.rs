@@ -1,7 +1,8 @@
 //! The assembled router against packages/contracts/openapi.yaml (the Go
 //! server's contract tests): every documented operation is mounted, the
 //! health response advertises only documented capabilities, and CORS
-//! preflight allows every documented request header.
+//! preflight allows every documented request header. The API reference at
+//! /api/docs is served, with its scripts, by this server alone.
 
 use axum::body::Body;
 use axum::http::{Method, Request, StatusCode, header};
@@ -347,4 +348,69 @@ async fn writes_from_other_origins_are_refused() {
             "{origin:?}: {status}"
         );
     }
+}
+
+async fn get(router: &axum::Router, path: &str) -> (StatusCode, axum::http::HeaderMap, Vec<u8>) {
+    let request = Request::get(path)
+        .header(header::HOST, "127.0.0.1:8090")
+        .body(Body::empty())
+        .unwrap();
+    send(router, request).await
+}
+
+// Scalar's API reference (ADR 0035): the page and every script it loads come
+// from this server, and its Content-Security-Policy allows no other origin.
+#[tokio::test(flavor = "multi_thread")]
+async fn api_reference_is_served_with_its_scripts() {
+    let directory = tempfile::tempdir().unwrap();
+    let router = router(directory.path()).await;
+    let (status, headers, body) = get(&router, "/api/docs").await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(headers[header::CONTENT_TYPE], "text/html; charset=utf-8");
+    let html = String::from_utf8(body).unwrap();
+    assert!(html.contains(r#"<div id="app">"#), "{html}");
+    assert!(
+        !html.contains("https://"),
+        "the page links another host: {html}"
+    );
+
+    let policy = headers[header::CONTENT_SECURITY_POLICY].to_str().unwrap();
+    for directive in [
+        "default-src 'none'",
+        "script-src 'self'",
+        "connect-src 'self'",
+        "font-src 'self'",
+        "style-src 'self' 'unsafe-inline'",
+    ] {
+        assert!(
+            policy.split(';').any(|part| part.trim() == directive),
+            "{directive} missing from {policy}"
+        );
+    }
+    let scripts: Vec<String> = regex::Regex::new(r#"<script src="([^"]+)""#)
+        .unwrap()
+        .captures_iter(&html)
+        .map(|found| found[1].to_owned())
+        .collect();
+    assert!(
+        scripts.contains(&"/api/docs/scalar/standalone.js".to_owned()),
+        "{scripts:?}"
+    );
+    for script in scripts {
+        let (status, headers, body) = get(&router, &script).await;
+        assert_eq!(
+            status,
+            StatusCode::OK,
+            "{script}; run `bash scripts/sync-static.sh api-reference` (after pnpm install)"
+        );
+        let content_type = headers[header::CONTENT_TYPE].to_str().unwrap();
+        assert!(
+            content_type.starts_with("text/javascript")
+                || content_type.starts_with("application/javascript"),
+            "{script}: {content_type}"
+        );
+        assert!(!body.is_empty(), "{script} is empty");
+    }
+    let (status, _, _) = get(&router, "/api/docs/scalar/missing.js").await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
 }

@@ -27,7 +27,8 @@
     "electron-builder": "26.17.0",
     "vite": "catalog:",
     "vite-plus": "catalog:",
-    "web": "workspace:*"
+    "web": "workspace:*",
+    "zod": "^4.6.7"
   },
   "productName": "Earthly Audio"
 }

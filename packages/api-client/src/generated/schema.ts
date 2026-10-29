@@ -1022,7 +1022,7 @@ export interface paths {
         };
         /**
          * Get an HLS External Track's playlist through the Music Server
-         * @description The upstream HLS playlist, rewritten so every media playlist, segment, and key URL points back to this Music Server as a signed /resources/{resource} URL, like the radio HLS proxy. A progressive External Track answers 422; stream it from /stream instead.
+         * @description The upstream HLS playlist, rewritten so every media playlist, segment, and key URL points back to this Music Server as a signed /resources/{resource} URL, like the radio HLS proxy. A progressive External Track answers 422; stream it from /stream instead. A DRM-protected playlist answers 422 external_track_unplayable too, where the radio HLS proxy answers 415.
          */
         get: operations["getExternalTrackPlaylist"];
         put?: never;
@@ -1042,7 +1042,7 @@ export interface paths {
         };
         /**
          * Get one HLS media playlist, segment, or key of an External Track
-         * @description Only reachable through URLs emitted by a rewritten External Track playlist; the resource token is signed for this External Track and process. Nested media playlists are rewritten the same way.
+         * @description Only reachable through URLs emitted by a rewritten External Track playlist; the resource token is signed for this External Track and process. Nested media playlists are rewritten the same way; a DRM-protected one answers 422 external_track_unplayable.
          */
         get: operations["getExternalTrackResource"];
         put?: never;
@@ -1390,7 +1390,8 @@ export interface components {
             artists: string[];
             albumArtists: string[];
             album: string;
-            genres: string[];
+            /** @description Null when the file names no genre. */
+            genres: string[] | null;
             trackNo: number;
             trackTotal?: number;
             discNo: number;
@@ -4179,13 +4180,6 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             404: components["responses"]["ExternalSourceDisabled"];
-            /** @description DRM-protected HLS is unsupported */
-            415: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
             422: components["responses"]["ExternalTrackUnplayable"];
             502: components["responses"]["ExternalSourceFailed"];
             503: components["responses"]["ExternalSourceUnavailable"];
@@ -4231,13 +4225,7 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             404: components["responses"]["ExternalSourceDisabled"];
-            /** @description DRM-protected HLS is unsupported */
-            415: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
+            422: components["responses"]["ExternalTrackUnplayable"];
             502: components["responses"]["ExternalSourceFailed"];
         };
     };

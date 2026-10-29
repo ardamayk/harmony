@@ -10,7 +10,10 @@ import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
 import { apiClient } from "#/lib/api";
 import { radioQueryKeys } from "#/lib/radio-query-keys";
-import { parseStationTags } from "#/lib/radio-station-tags";
+import {
+	type RadioStationForm,
+	radioStationFormSchema,
+} from "#/lib/radio-station-form";
 import { isGone } from "#/lib/query-persistence";
 
 // Route components live outside the route file: with automatic code
@@ -33,7 +36,7 @@ export function RadioStationDetailContent({
 		queryKey: radioQueryKeys.detail(stationId),
 		queryFn: () => apiClient.getRadioStation(stationId),
 	});
-	const [form, setForm] = useState({
+	const [form, setForm] = useState<RadioStationForm>({
 		name: "",
 		streamUrl: "",
 		homepageUrl: "",
@@ -98,9 +101,8 @@ export function RadioStationDetailContent({
 	}
 
 	const data = station.data;
-	const canSave = form.name.trim() && form.streamUrl.trim();
+	const parsedForm = radioStationFormSchema.safeParse(form);
 	const isActive = currentRadioStation?.id === data.id;
-	const patch = stationPatchFromForm(form);
 
 	return (
 		<DetailPageShell
@@ -223,8 +225,10 @@ export function RadioStationDetailContent({
 				/>
 				<div className="flex items-end">
 					<Button
-						disabled={!canSave || updateStation.isPending}
-						onClick={() => updateStation.mutate(patch)}
+						disabled={!parsedForm.success || updateStation.isPending}
+						onClick={() => {
+							if (parsedForm.success) updateStation.mutate(parsedForm.data);
+						}}
 					>
 						Save metadata
 					</Button>
@@ -237,30 +241,6 @@ export function RadioStationDetailContent({
 			</section>
 		</DetailPageShell>
 	);
-}
-
-function stationPatchFromForm(form: {
-	name: string;
-	streamUrl: string;
-	homepageUrl: string;
-	faviconUrl: string;
-	country: string;
-	language: string;
-	tags: string;
-	codec: string;
-	bitrate: string;
-}): RadioStationPatch {
-	return {
-		name: form.name.trim(),
-		streamUrl: form.streamUrl.trim(),
-		homepageUrl: form.homepageUrl.trim(),
-		faviconUrl: form.faviconUrl.trim(),
-		country: form.country.trim(),
-		language: form.language.trim(),
-		tags: parseStationTags(form.tags),
-		codec: form.codec.trim(),
-		bitrate: form.bitrate.trim() ? Number.parseInt(form.bitrate, 10) : 0,
-	};
 }
 
 function MetadataField({

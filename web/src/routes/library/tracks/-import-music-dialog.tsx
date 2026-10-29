@@ -900,9 +900,10 @@ function ReplacementMetadataChanges({
 	] as const;
 	const read = (file: typeof current, field: string): string => {
 		const value = Reflect.get(file, field);
-		return Array.isArray(value)
+		// An untagged list arrives as null (genres) or empty: both read alike.
+		return Array.isArray(value) && value.length > 0
 			? value.join(", ")
-			: value == null || value === ""
+			: value == null || value === "" || Array.isArray(value)
 				? "Not tagged"
 				: String(value);
 	};
