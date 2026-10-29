@@ -72,6 +72,7 @@ const externalTrack: ExternalTrack = {
 	durationMs: 90000,
 	webpageUrl: "https://soundcloud.com/uploader/external-song",
 	extractor: "Soundcloud",
+	hasArtwork: true,
 };
 
 const queueItems = [
@@ -113,6 +114,8 @@ function createApi(items = queueItems): PlaybackApi {
 			streamPath: `/api/v1/external/tracks/${externalTrackId}/playlist.m3u8`,
 		})),
 		getExternalStreamUrl: (streamPath: string) => `/server${streamPath}`,
+		getExternalTrackArtworkUrl: (externalTrackId: string) =>
+			`/server/api/v1/external/tracks/${externalTrackId}/artwork`,
 		listPlaylists: vi.fn(async () => ({ items: [], total: 0 })),
 		getPlaylist: vi.fn(async (playlistId: string) => ({
 			id: playlistId,
@@ -510,6 +513,8 @@ describe("PlaybackProvider", () => {
 			externalTrack,
 			playbackUrl: streamUrl,
 			sourceUrl: streamUrl,
+			// OS media controls show the Music Server's copy of its cover.
+			artworkUrl: "/server/api/v1/external/tracks/external-1/artwork",
 		});
 		expect(engine.getState().duration).toBe(90);
 		expect(screen.getByTestId("external").textContent).toBe("External Song");

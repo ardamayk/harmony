@@ -54,6 +54,8 @@ type PlaybackControlsProps = {
 	hasCurrentTrack: boolean;
 	/** Seeking without Queue controls (an External Track); defaults to hasCurrentTrack. */
 	canSeek?: boolean;
+	/** Shuffle, Previous, Next and Repeat; an External Track plays outside the Queue, so it has none. */
+	showQueueControls?: boolean;
 	currentTime: number;
 	effectiveDuration: number;
 	bufferedEnd?: number | null;
@@ -90,6 +92,7 @@ function TransportControls({
 	isPlaying,
 	hasPlayableSource,
 	hasCurrentTrack,
+	showQueueControls = true,
 	shuffleEnabled,
 	repeatMode,
 	onTogglePlay,
@@ -98,6 +101,20 @@ function TransportControls({
 	onPrevious,
 	onNext,
 }: PlaybackControlsProps) {
+	const playButton = (
+		<PrimaryPlaybackButton
+			isPlaying={isPlaying}
+			disabled={!hasPlayableSource}
+			onClick={onTogglePlay}
+		/>
+	);
+	if (!showQueueControls) {
+		return (
+			<div className="flex items-center justify-center group-data-stage/controls:w-full">
+				{playButton}
+			</div>
+		);
+	}
 	return (
 		<div className="flex items-center gap-6 group-data-stage/controls:w-full group-data-stage/controls:justify-between group-data-stage/controls:gap-2">
 			<ShuffleButton
@@ -110,11 +127,7 @@ function TransportControls({
 				disabled={!hasCurrentTrack}
 				onPlay={onPrevious}
 			/>
-			<PrimaryPlaybackButton
-				isPlaying={isPlaying}
-				disabled={!hasPlayableSource}
-				onClick={onTogglePlay}
-			/>
+			{playButton}
 			<QueueNavigationButton
 				label="Next"
 				disabled={!hasCurrentTrack}

@@ -68,6 +68,8 @@ function createApi(
 			streamPath: `/api/v1/external/tracks/${externalTrackId}/stream`,
 		})),
 		getExternalStreamUrl: (streamPath: string) => `/server${streamPath}`,
+		getExternalTrackArtworkUrl: (externalTrackId: string) =>
+			`/server/api/v1/external/tracks/${externalTrackId}/artwork`,
 		listPlaylists: vi.fn(async () => ({ items: [], total: 0 })),
 		getPlaylist: vi.fn(async (playlistId: string) => ({
 			id: playlistId,

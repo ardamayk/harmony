@@ -49,6 +49,7 @@ const externalTrack: ExternalTrack = {
 	durationMs: 90000,
 	webpageUrl: "https://example.com/track",
 	extractor: "Soundcloud",
+	hasArtwork: false,
 };
 
 export type PlaybackEngineContractDriver = {

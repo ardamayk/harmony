@@ -94,6 +94,8 @@ export type ExternalSourcePlaybackApi = {
 		externalTrackId: string,
 	) => Promise<ExternalTrackPlayback>;
 	getExternalStreamUrl: (streamPath: string) => string;
+	/** The Music Server's copy of an External Track's cover (`hasArtwork`). */
+	getExternalTrackArtworkUrl: (externalTrackId: string) => string;
 };
 
 export type PlaybackApi = PlaybackQueueApi &
@@ -170,6 +172,8 @@ type PlaybackContextValue = {
 	refreshQueue: () => Promise<void>;
 	stopPlayback: () => void;
 	getAlbumCoverUrl: (albumId: string, size?: CoverSize) => string;
+	/** Null while the External Track has no artwork. */
+	getExternalTrackArtworkUrl: (track: ExternalTrack) => string | null;
 	getTrack: (trackId: string) => Promise<Track | null>;
 	/** Resolves null when the host exposes no lyrics endpoint. */
 	getTrackLyrics: (trackId: string) => Promise<{ lyrics: string } | null>;
@@ -605,6 +609,11 @@ export function PlaybackProvider({
 					externalTrack: track,
 					playbackUrl: streamUrl,
 					sourceUrl: streamUrl,
+					...(track.hasArtwork
+						? {
+								artworkUrl: apiRef.current.getExternalTrackArtworkUrl(track.id),
+							}
+						: {}),
 				});
 			} catch (error) {
 				console.warn("Failed to start External Track playback", {
@@ -732,6 +741,10 @@ export function PlaybackProvider({
 			stopPlayback: () => engine.stop(),
 			getAlbumCoverUrl: (albumId, size) =>
 				apiRef.current.getAlbumCoverUrl(albumId, size),
+			getExternalTrackArtworkUrl: (track) =>
+				track.hasArtwork
+					? apiRef.current.getExternalTrackArtworkUrl(track.id)
+					: null,
 			getTrack,
 			getTrackLyrics,
 			getTrackWaveform,

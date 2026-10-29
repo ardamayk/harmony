@@ -97,6 +97,8 @@ const api: PlaybackApi = {
 		streamPath: `/api/v1/external/tracks/${externalTrackId}/stream`,
 	})),
 	getExternalStreamUrl: (streamPath: string) => `/server${streamPath}`,
+	getExternalTrackArtworkUrl: (externalTrackId: string) =>
+		`/server/api/v1/external/tracks/${externalTrackId}/artwork`,
 	listPlaylists: vi.fn(async () => ({
 		items: [
 			{ id: "favorites", name: "Favorites", isDefault: true, trackCount: 0 },
@@ -157,6 +159,7 @@ function RadioStarter() {
 function renderPlayerBar(
 	onPlaylistMutated?: () => void,
 	engine = new InMemoryPlaybackEngine(),
+	props: Partial<Parameters<typeof PlayerBar>[0]> = {},
 ) {
 	const result = render(
 		<LayoutProvider initialPreferences={defaultPreferences}>
@@ -166,6 +169,7 @@ function renderPlayerBar(
 				<PlayerBar
 					onPlaylistMutated={onPlaylistMutated}
 					onToggleMiniPlayer={vi.fn()}
+					{...props}
 				/>
 			</PlaybackProvider>
 		</LayoutProvider>,
@@ -447,10 +451,14 @@ describe("PlayerBar", () => {
 		expect(screen.getByLabelText("Quality High Quality")).toBeTruthy();
 	});
 
-	it("shows an External Track with a label, seeking and no Queue controls", async () => {
+	it("shows an External Track with a label, seeking only, no favorite and no track actions", async () => {
 		vi.useFakeTimers();
 		try {
-			const { engine } = renderPlayerBar();
+			// The host wires favorites; an External Track still offers none.
+			const { engine } = renderPlayerBar(undefined, undefined, {
+				onToggleFavorite: vi.fn(),
+				onToggleStationFavorite: vi.fn(),
+			});
 			const externalTrack: ExternalTrack = {
 				id: "external-1",
 				title: "External Song",
@@ -458,6 +466,7 @@ describe("PlayerBar", () => {
 				durationMs: 90000,
 				webpageUrl: null,
 				extractor: "Soundcloud",
+				hasArtwork: true,
 			};
 			await act(async () => {
 				await engine.play({
@@ -474,15 +483,33 @@ describe("PlayerBar", () => {
 			expect(screen.getByText("External Song")).toBeTruthy();
 			expect(screen.getByText("Soundcloud")).toBeTruthy();
 			expect(screen.getByText("External")).toBeTruthy();
+			// Its cover, through the Music Server, like an Album cover.
+			expect(
+				screen
+					.getByRole("region", { name: "Now playing" })
+					.querySelector("img")
+					?.getAttribute("src"),
+			).toBe("/server/api/v1/external/tracks/external-1/artwork");
 			expect(screen.getByText("1:30")).toBeTruthy();
 			expect(screen.queryByText("LIVE")).toBeNull();
 			expect((screen.getByLabelText("Seek") as HTMLInputElement).disabled).toBe(
 				false,
 			);
-			for (const name of ["Previous", "Next", "Track actions"]) {
-				expect(
-					(screen.getByRole("button", { name }) as HTMLButtonElement).disabled,
-				).toBe(true);
+			// Not in the library and not in the Queue: no favorite, no track
+			// actions, no Queue controls; only Play/Pause and seeking.
+			for (const name of [
+				"Add to favorites",
+				"Remove from favorites",
+				"Track actions",
+				"Shuffle off",
+				"Shuffle on",
+				"Previous",
+				"Next",
+				"Repeat off",
+				"Repeat once",
+				"Repeat loop",
+			]) {
+				expect(screen.queryByRole("button", { name })).toBeNull();
 			}
 			expect(
 				(screen.getByRole("button", { name: "Pause" }) as HTMLButtonElement)

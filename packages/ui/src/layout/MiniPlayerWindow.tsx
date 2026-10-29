@@ -34,6 +34,7 @@ export function MiniPlayerWindow({
 		navigateNext,
 		seek,
 		getAlbumCoverUrl,
+		getExternalTrackArtworkUrl,
 	} = usePlayback();
 	const isRadioPlaying = Boolean(currentRadioStation);
 	const title =
@@ -49,7 +50,9 @@ export function MiniPlayerWindow({
 		(isRadioPlaying ? "Live radio" : "Select a track in the main window");
 	const artworkUrl = currentTrack
 		? getAlbumCoverUrl(currentTrack.albumId, 128)
-		: (currentRadioStation?.faviconUrl ?? null);
+		: currentExternalTrack
+			? getExternalTrackArtworkUrl(currentExternalTrack)
+			: (currentRadioStation?.faviconUrl ?? null);
 	const effectiveDuration =
 		duration > 0
 			? duration
@@ -125,6 +128,7 @@ export function MiniPlayerWindow({
 					)}
 					hasCurrentTrack={Boolean(currentTrack)}
 					canSeek={Boolean(currentTrack || currentExternalTrack)}
+					showQueueControls={!currentExternalTrack}
 					currentTime={currentTime}
 					effectiveDuration={effectiveDuration}
 					bufferedEnd={bufferedEnd}

@@ -48,6 +48,8 @@ export type PlaybackSource =
 			externalTrack: ExternalTrack;
 			playbackUrl: string;
 			sourceUrl: string;
+			/** Cover URL for OS media controls, when the Track has artwork. */
+			artworkUrl?: string;
 	  };
 
 export type PlaybackStatus =

@@ -53,6 +53,8 @@ const mockPlaybackApi = {
 		streamPath: `/api/v1/external/tracks/${externalTrackId}/stream`,
 	}),
 	getExternalStreamUrl: (streamPath: string) => `/server${streamPath}`,
+	getExternalTrackArtworkUrl: (externalTrackId: string) =>
+		`/server/api/v1/external/tracks/${externalTrackId}/artwork`,
 	listPlaylists: async () => ({ items: [], total: 0 }),
 	getPlaylist: async (playlistId: string) => ({
 		id: playlistId,

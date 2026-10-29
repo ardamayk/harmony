@@ -206,6 +206,7 @@ export function PlayerBar({
 		playbackTelemetry,
 		playbackSource,
 		getAlbumCoverUrl,
+		getExternalTrackArtworkUrl,
 		getTrackLyrics,
 		getTrackWaveform,
 	} = usePlayback();
@@ -427,9 +428,12 @@ export function PlayerBar({
 		? "External"
 		: (currentTrack?.albumTitle ?? null);
 	// The bar shows a 56–64px cover; the full-screen views get a large one.
+	// An External Track has one size, about 300px.
 	const artworkUrl = currentTrack
 		? getAlbumCoverUrl(currentTrack.albumId, 128)
-		: (currentRadioStation?.faviconUrl ?? null);
+		: currentExternalTrack
+			? getExternalTrackArtworkUrl(currentExternalTrack)
+			: (currentRadioStation?.faviconUrl ?? null);
 	const largeArtworkUrl = currentTrack
 		? getAlbumCoverUrl(currentTrack.albumId, 1024)
 		: (currentRadioStation?.faviconUrl ?? null);
@@ -736,7 +740,9 @@ export function PlayerBar({
 							>
 								{nowPlayingTitle}
 							</p>
-							{onToggleFavorite || onToggleStationFavorite ? (
+							{/* An External Track is not in the library: no favorite, no actions. */}
+							{(onToggleFavorite || onToggleStationFavorite) &&
+							!currentExternalTrack ? (
 								<button
 									type="button"
 									data-player-control
@@ -763,27 +769,29 @@ export function PlayerBar({
 									/>
 								</button>
 							) : null}
-							<button
-								ref={actionsButtonRef}
-								type="button"
-								data-player-control
-								className={cn(
-									"ml-1 inline-flex size-6 relative after:absolute after:-inset-1 after:content-empty shrink-0 items-center justify-center rounded-sm text-player-foreground hover:text-heading disabled:opacity-40",
-									actionsOpen && "text-player-control-primary",
-								)}
-								aria-label="Track actions"
-								aria-expanded={actionsOpen}
-								disabled={!currentTrack}
-								onClick={() => {
-									setActionsOpen((open) => {
-										const next = !open;
-										if (next) updateMenuPosition();
-										return next;
-									});
-								}}
-							>
-								<MoreVertical className="size-3.5" />
-							</button>
+							{currentExternalTrack ? null : (
+								<button
+									ref={actionsButtonRef}
+									type="button"
+									data-player-control
+									className={cn(
+										"ml-1 inline-flex size-6 relative after:absolute after:-inset-1 after:content-empty shrink-0 items-center justify-center rounded-sm text-player-foreground hover:text-heading disabled:opacity-40",
+										actionsOpen && "text-player-control-primary",
+									)}
+									aria-label="Track actions"
+									aria-expanded={actionsOpen}
+									disabled={!currentTrack}
+									onClick={() => {
+										setActionsOpen((open) => {
+											const next = !open;
+											if (next) updateMenuPosition();
+											return next;
+										});
+									}}
+								>
+									<MoreVertical className="size-3.5" />
+								</button>
+							)}
 						</div>
 						<p
 							className="truncate text-player-foreground text-xs sm:text-sm sm:leading-5"
@@ -954,6 +962,7 @@ export function PlayerBar({
 					hasPlayableSource={hasPlayableSource}
 					hasCurrentTrack={Boolean(currentTrack)}
 					canSeek={canSeek}
+					showQueueControls={!currentExternalTrack}
 					currentTime={currentTime}
 					effectiveDuration={effectiveDuration}
 					bufferedEnd={bufferedEnd}
