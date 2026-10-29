@@ -77,3 +77,12 @@ mise run desktop:windows:clean   # remove target/desktop-windows and the install
 `desktop:windows:dev` needs a previous `desktop:windows`. It replaces the shell bundle and the core inside the installed client and passes `EARTHLY_AUDIO_DEV_SERVER_URL` to it through `WSLENV`. Quit the client before rebuilding: Windows locks the files of a running program.
 
 Installers are not built yet; an electron-builder NSIS target would come later.
+
+## Sentry (optional)
+
+The core reports panics, mpv process failures and each Playback Source load (source type and trigger, never its URL) to your own Sentry only when `SENTRY_DSN` is set; `SENTRY_ENVIRONMENT` and `SENTRY_TRACES_SAMPLE_RATE` work as for the Music Server ([server/README.md](../server/README.md#sentry-optional), [ADR 0033](../docs/adr/0033-opt-in-sentry-for-the-rust-programs.md)). The shell starts the core with its own environment, unfiltered:
+
+- **Linux:** set them where the client starts, for example in `mise.local.toml` for `mise run desktop:dev`.
+- **Windows:** set them as user environment variables for the installed client (`mise run desktop:windows:start` passes none from WSL). `mise run desktop:windows:dev` forwards those set in WSL through `WSLENV`.
+
+An invalid value leaves Sentry off and the core running; it says so on stderr.
