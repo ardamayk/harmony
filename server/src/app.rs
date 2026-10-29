@@ -32,6 +32,7 @@ pub struct AppState {
     /// Shared with Managed Import, whose writes change queues too.
     pub queue_events: Arc<modules::playback::QueueEventBroker>,
     pub managed_import: Arc<modules::managed_import::ManagedImport>,
+    pub external_source: Arc<modules::external_source::ExternalSource>,
 }
 
 impl AppState {
@@ -58,6 +59,8 @@ impl AppState {
         let queue_events: Arc<modules::playback::QueueEventBroker> = Arc::default();
         let managed_import =
             modules::managed_import::ManagedImport::new(db.clone(), &config, queue_events.clone());
+        let external_source =
+            modules::external_source::ExternalSource::new(config.external_source.as_ref());
         Self {
             config: Arc::new(config),
             dependencies: Arc::new(dependencies),
@@ -69,6 +72,7 @@ impl AppState {
             lyrics: Arc::new(lyrics),
             queue_events,
             managed_import: Arc::new(managed_import),
+            external_source: Arc::new(external_source),
         }
     }
 }
@@ -89,6 +93,7 @@ pub fn router(state: AppState) -> Router {
         .merge(modules::radio::routes())
         .merge(modules::playback::routes())
         .merge(modules::managed_import::routes())
+        .merge(modules::external_source::routes())
         .fallback(static_assets::web)
         .layer(middleware::from_fn(stream_aware_timeout))
         .layer(middleware::from_fn(no_simple_writes))
@@ -131,6 +136,8 @@ fn cors(origins: &[String]) -> CorsLayer {
             Method::OPTIONS,
         ])
         .allow_headers(headers)
+        // Lets the clients read External Source timings.
+        .expose_headers([HeaderName::from_static("server-timing")])
         .allow_credentials(true)
         .max_age(Duration::from_secs(300))
 }
@@ -312,8 +319,32 @@ fn is_stream_path(path: &str) -> bool {
     if path.starts_with("/api/v1/imports/") && path.ends_with("/file") {
         return true;
     }
+    // External Track streams, playlists and segments, and resolving one,
+    // which yt-dlp bounds itself. Artwork is one small image, so it keeps
+    // the normal bound.
+    if path.starts_with("/api/v1/external/tracks/") && !path.ends_with("/artwork") {
+        return true;
+    }
     path.ends_with("/stream")
         && (path.starts_with("/api/v1/tracks/")
             || path.starts_with("/api/v1/radio/stations/")
             || path.starts_with("/api/v1/radio/preview/"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_stream_path;
+
+    #[test]
+    fn external_track_audio_is_unbounded_but_its_artwork_is_not() {
+        for path in [
+            "/api/v1/external/tracks/a.b/stream",
+            "/api/v1/external/tracks/a.b/playback",
+            "/api/v1/external/tracks/a.b/playlist.m3u8",
+            "/api/v1/external/tracks/a.b/resources/c.d",
+        ] {
+            assert!(is_stream_path(path), "{path}");
+        }
+        assert!(!is_stream_path("/api/v1/external/tracks/a.b/artwork"));
+    }
 }

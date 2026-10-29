@@ -24,6 +24,16 @@ RUN SQLX_OFFLINE=true cargo build --release -p earthly-music-server
 
 FROM alpine:3.21
 RUN apk add --no-cache ca-certificates ffmpeg
+# The External Source's yt-dlp (ADR 0032) is the operator's own install: only a
+# local build with --build-arg WITH_YT_DLP=true adds it, from PyPI. Published
+# images are built without it.
+ARG WITH_YT_DLP=false
+RUN if [ "$WITH_YT_DLP" = "true" ]; then \
+        apk add --no-cache python3 \
+        && python3 -m venv /opt/yt-dlp \
+        && /opt/yt-dlp/bin/pip install --no-cache-dir yt-dlp \
+        && ln -s /opt/yt-dlp/bin/yt-dlp /usr/local/bin/yt-dlp; \
+    fi
 WORKDIR /app
 COPY --from=builder /src/target/release/earthly-music-server /app/server
 COPY --from=builder /src/server/migrations /app/migrations

@@ -26,9 +26,9 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use url::{Host, Url};
 
 const NOW_PLAYING_STALE_AFTER: Duration = Duration::from_secs(60);
-const HLS_CONTENT_TYPE: &str = "application/vnd.apple.mpegurl";
-const MAX_HLS_PLAYLIST_BYTES: usize = 1 << 20;
-const HLS_RESOURCE_TOKEN_TTL_SECONDS: i64 = 3600;
+pub const HLS_CONTENT_TYPE: &str = "application/vnd.apple.mpegurl";
+pub const MAX_HLS_PLAYLIST_BYTES: usize = 1 << 20;
+pub const HLS_RESOURCE_TOKEN_TTL_SECONDS: i64 = 3600;
 const UNSAFE: &str = "unsafe stream URL";
 
 /// Refuses anything but public HTTP(S) hosts.
@@ -334,6 +334,21 @@ pub fn rewrite_playlist(
     station_id: &str,
     signer: &ResourceSigner,
 ) -> Result<String, RewriteError> {
+    rewrite_playlist_with(playlist, base, |resolved| {
+        format!(
+            "{proxy_path}?resource={}",
+            signer.sign(station_id, resolved)
+        )
+    })
+}
+
+/// Rewrites every URI of a playlist to the link `link` makes for its
+/// resolved, validated URL; DRM-protected playlists are refused.
+pub fn rewrite_playlist_with(
+    playlist: &str,
+    base: &Url,
+    link: impl Fn(&str) -> String,
+) -> Result<String, RewriteError> {
     if !playlist.trim().starts_with("#EXTM3U") {
         return Err(RewriteError::Invalid(
             "invalid HLS playlist: missing EXTM3U header".to_owned(),
@@ -345,10 +360,7 @@ pub fn rewrite_playlist(
             .map_err(|error| RewriteError::Invalid(format!("invalid HLS playlist URL: {error}")))?;
         validate_stream_url(resolved.as_str())
             .map_err(|error| RewriteError::Invalid(format!("invalid HLS playlist URL: {error}")))?;
-        Ok(format!(
-            "{proxy_path}?resource={}",
-            signer.sign(station_id, resolved.as_str())
-        ))
+        Ok(link(resolved.as_str()))
     };
     let mut lines: Vec<String> = Vec::new();
     for line in playlist.split('\n') {
@@ -404,6 +416,18 @@ pub trait Upstream: Send + Sync {
         url: Url,
         range: Option<HeaderValue>,
     ) -> BoxFuture<'static, Result<UpstreamResponse, String>>;
+
+    /// A GET with the request headers the source asks for (such as the
+    /// User-Agent yt-dlp resolved with) instead of the radio ones.
+    fn get_with_headers(
+        &self,
+        url: Url,
+        range: Option<HeaderValue>,
+        headers: HeaderMap,
+    ) -> BoxFuture<'static, Result<UpstreamResponse, String>> {
+        let _ = headers;
+        self.get(url, range)
+    }
 }
 
 /// Refuses names that resolve to a blocked address, checking every address
@@ -460,13 +484,14 @@ impl Default for SafeUpstream {
     }
 }
 
-impl Upstream for SafeUpstream {
-    fn get(
+impl SafeUpstream {
+    fn fetch(
         &self,
         url: Url,
         range: Option<HeaderValue>,
+        headers: HeaderMap,
     ) -> BoxFuture<'static, Result<UpstreamResponse, String>> {
-        let mut request = self.client.get(url.clone()).header("Icy-MetaData", "1");
+        let mut request = self.client.get(url.clone()).headers(headers);
         if let Some(range) = range {
             request = request.header(header::RANGE, range);
         }
@@ -485,6 +510,27 @@ impl Upstream for SafeUpstream {
                     .boxed(),
             })
         })
+    }
+}
+
+impl Upstream for SafeUpstream {
+    fn get(
+        &self,
+        url: Url,
+        range: Option<HeaderValue>,
+    ) -> BoxFuture<'static, Result<UpstreamResponse, String>> {
+        let mut headers = HeaderMap::new();
+        headers.insert("icy-metadata", HeaderValue::from_static("1"));
+        self.fetch(url, range, headers)
+    }
+
+    fn get_with_headers(
+        &self,
+        url: Url,
+        range: Option<HeaderValue>,
+        headers: HeaderMap,
+    ) -> BoxFuture<'static, Result<UpstreamResponse, String>> {
+        self.fetch(url, range, headers)
     }
 }
 
@@ -542,7 +588,9 @@ fn is_stream_content_type(value: &HeaderValue) -> bool {
         )
 }
 
-fn copy_stream_headers(from: &HeaderMap) -> HeaderMap {
+/// The upstream headers a proxied stream keeps. Radio leaves out
+/// Content-Length (ICY metadata changes it); a seekable source keeps it.
+pub fn copy_stream_headers(from: &HeaderMap, keep_content_length: bool) -> HeaderMap {
     let mut headers = HeaderMap::new();
     let content_type = from
         .get(header::CONTENT_TYPE)
@@ -571,14 +619,26 @@ fn copy_stream_headers(from: &HeaderMap) -> HeaderMap {
             headers.insert(name, value.clone());
         }
     }
+    if keep_content_length && let Some(value) = from.get(header::CONTENT_LENGTH) {
+        headers.insert(header::CONTENT_LENGTH, value.clone());
+    }
     headers
 }
 
-fn is_hls_playlist(response: &UpstreamResponse) -> bool {
-    let content_type = response
-        .headers
-        .get(header::CONTENT_TYPE)
-        .and_then(|value| value.to_str().ok())
+pub fn is_hls_playlist(response: &UpstreamResponse) -> bool {
+    is_hls_content(
+        response
+            .headers
+            .get(header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok()),
+        &response.url,
+    )
+}
+
+/// Whether a response of `content_type` from `url` (after redirects) is an
+/// HLS playlist.
+pub fn is_hls_content(content_type: Option<&str>, url: &Url) -> bool {
+    let content_type = content_type
         .unwrap_or_default()
         .split(';')
         .next()
@@ -588,7 +648,7 @@ fn is_hls_playlist(response: &UpstreamResponse) -> bool {
     matches!(
         content_type.as_str(),
         HLS_CONTENT_TYPE | "application/x-mpegurl" | "audio/mpegurl" | "audio/x-mpegurl"
-    ) || response.url.path().to_ascii_lowercase().ends_with(".m3u8")
+    ) || url.path().to_ascii_lowercase().ends_with(".m3u8")
 }
 
 impl StreamProxy {
@@ -650,7 +710,7 @@ impl StreamProxy {
         proxy_path: &str,
         station_id: &str,
     ) -> Response {
-        let mut headers = copy_stream_headers(&response.headers);
+        let mut headers = copy_stream_headers(&response.headers, false);
         // This server writes the rewritten playlist, so it names the type
         // itself; a .m3u8 served as text/plain upstream still plays.
         headers.insert(
@@ -694,7 +754,7 @@ impl StreamProxy {
     }
 
     fn audio(&self, response: UpstreamResponse, station_id: String, is_resource: bool) -> Response {
-        let headers = copy_stream_headers(&response.headers);
+        let headers = copy_stream_headers(&response.headers, false);
         let status = StatusCode::from_u16(response.status).unwrap_or(StatusCode::OK);
         let metaint = response
             .headers

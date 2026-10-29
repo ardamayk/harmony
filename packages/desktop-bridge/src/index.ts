@@ -35,6 +35,8 @@ export const CORE_COMMANDS = [
 	"test_server_connection",
 	"save_server_connection",
 	"desktop_http_request",
+	// Ends the in-flight `desktop_http_request` sent with the same `requestId`.
+	"desktop_cancel_http_request",
 	"desktop_upload_import_file",
 	"desktop_cancel_import_upload",
 	"desktop_release_import_selections",

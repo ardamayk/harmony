@@ -95,6 +95,7 @@ fn playback_source_path(source: &Value) -> Result<String, PlaybackLifecycleError
         Some("track") => ("/track/id", "api/v1/tracks"),
         Some("radio-station") => ("/station/id", "api/v1/radio/stations"),
         Some("catalog-preview") => ("/result/stationUuid", "api/v1/radio/preview"),
+        Some("external-track") => ("/externalTrack/id", "api/v1/external/tracks"),
         _ => return Err(invalid_source("Playback Source type is unsupported.")),
     };
     let identifier = source
@@ -102,7 +103,28 @@ fn playback_source_path(source: &Value) -> Result<String, PlaybackLifecycleError
         .and_then(Value::as_str)
         .filter(|value| is_safe_path_segment(value))
         .ok_or_else(|| invalid_source("Playback Source identifier is invalid."))?;
-    Ok(format!("{path_prefix}/{identifier}/stream"))
+    let resource = match source.get("type").and_then(Value::as_str) {
+        Some("external-track") => external_track_resource(source)?,
+        _ => "stream",
+    };
+    Ok(format!("{path_prefix}/{identifier}/{resource}"))
+}
+
+/// An External Track plays either the progressive stream or the HLS playlist,
+/// whichever the Music Server chose; the current playback URL keeps that choice.
+fn external_track_resource(source: &Value) -> Result<&'static str, PlaybackLifecycleError> {
+    let path = source
+        .get("playbackUrl")
+        .and_then(Value::as_str)
+        .map(|url| url.split(['?', '#']).next().unwrap_or_default())
+        .unwrap_or_default();
+    if path.ends_with("/playlist.m3u8") {
+        Ok("playlist.m3u8")
+    } else if path.ends_with("/stream") {
+        Ok("stream")
+    } else {
+        Err(invalid_source("External Track playback URL is invalid."))
+    }
 }
 
 fn is_safe_path_segment(value: &str) -> bool {

@@ -52,6 +52,10 @@ type PlaybackControlsProps = {
 	isPlaying: boolean;
 	hasPlayableSource: boolean;
 	hasCurrentTrack: boolean;
+	/** Seeking without Queue controls (an External Track); defaults to hasCurrentTrack. */
+	canSeek?: boolean;
+	/** Shuffle, Previous, Next and Repeat; an External Track plays outside the Queue, so it has none. */
+	showQueueControls?: boolean;
 	currentTime: number;
 	effectiveDuration: number;
 	bufferedEnd?: number | null;
@@ -88,6 +92,7 @@ function TransportControls({
 	isPlaying,
 	hasPlayableSource,
 	hasCurrentTrack,
+	showQueueControls = true,
 	shuffleEnabled,
 	repeatMode,
 	onTogglePlay,
@@ -96,6 +101,20 @@ function TransportControls({
 	onPrevious,
 	onNext,
 }: PlaybackControlsProps) {
+	const playButton = (
+		<PrimaryPlaybackButton
+			isPlaying={isPlaying}
+			disabled={!hasPlayableSource}
+			onClick={onTogglePlay}
+		/>
+	);
+	if (!showQueueControls) {
+		return (
+			<div className="flex items-center justify-center group-data-stage/controls:w-full">
+				{playButton}
+			</div>
+		);
+	}
 	return (
 		<div className="flex items-center gap-6 group-data-stage/controls:w-full group-data-stage/controls:justify-between group-data-stage/controls:gap-2">
 			<ShuffleButton
@@ -108,11 +127,7 @@ function TransportControls({
 				disabled={!hasCurrentTrack}
 				onPlay={onPrevious}
 			/>
-			<PrimaryPlaybackButton
-				isPlaying={isPlaying}
-				disabled={!hasPlayableSource}
-				onClick={onTogglePlay}
-			/>
+			{playButton}
 			<QueueNavigationButton
 				label="Next"
 				disabled={!hasCurrentTrack}
@@ -273,6 +288,7 @@ function RepeatButton({
 function PlaybackProgress({
 	isRadioPlaying,
 	hasCurrentTrack,
+	canSeek = hasCurrentTrack,
 	currentTime,
 	effectiveDuration,
 	bufferedEnd = null,
@@ -284,6 +300,7 @@ function PlaybackProgress({
 }: {
 	isRadioPlaying: boolean;
 	hasCurrentTrack: boolean;
+	canSeek?: boolean;
 	currentTime: number;
 	effectiveDuration: number;
 	bufferedEnd?: number | null;
@@ -304,7 +321,7 @@ function PlaybackProgress({
 				<button
 					type="button"
 					data-player-control
-					disabled={!hasCurrentTrack}
+					disabled={!canSeek}
 					title={showRemaining ? "Show elapsed time" : "Show remaining time"}
 					onClick={() => setShowRemaining((value) => !value)}
 					className="-my-2 w-10 shrink-0 cursor-pointer rounded-sm py-2 text-right whitespace-nowrap text-player-foreground hover:text-heading disabled:cursor-default disabled:opacity-40 group-data-stage/controls:w-14"
@@ -322,7 +339,7 @@ function PlaybackProgress({
 					duration={effectiveDuration}
 					bufferedEnd={bufferedEnd}
 					waveform={waveform}
-					disabled={!hasCurrentTrack}
+					disabled={!canSeek}
 					showHoverTimestamp={showHoverTimestamp}
 					keyboardStepSeconds={keyboardStepSeconds}
 					keyboardLargeStepSeconds={keyboardLargeStepSeconds}

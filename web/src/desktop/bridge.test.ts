@@ -196,6 +196,62 @@ describe("desktop bridge", () => {
 		});
 	});
 
+	it("cancels the core's HTTP request when the caller aborts", async () => {
+		let finishRequest: ((value: unknown) => void) | undefined;
+		invokeMock.mockImplementation((command: string) =>
+			command === "desktop_http_request"
+				? new Promise((resolve) => {
+						finishRequest = resolve;
+					})
+				: Promise.resolve(null),
+		);
+		const controller = new AbortController();
+
+		const response = desktopFetch("/api/v1/external/search?q=a", {
+			signal: controller.signal,
+		});
+		await vi.waitFor(() =>
+			expect(invokeMock).toHaveBeenCalledWith(
+				"desktop_http_request",
+				expect.objectContaining({ requestId: expect.any(String) }),
+			),
+		);
+		const { requestId } = invokeMock.mock.calls[0][1] as {
+			requestId: string;
+		};
+		controller.abort();
+
+		await expect(response).rejects.toMatchObject({ name: "AbortError" });
+		expect(invokeMock).toHaveBeenCalledWith("desktop_cancel_http_request", {
+			requestId,
+		});
+		finishRequest?.({ status: 200, headers: {}, body: [] });
+	});
+
+	it("does not send a request whose signal is already aborted", async () => {
+		const controller = new AbortController();
+		controller.abort();
+
+		await expect(
+			desktopFetch("/api/v1/health", { signal: controller.signal }),
+		).rejects.toMatchObject({ name: "AbortError" });
+		expect(invokeMock).not.toHaveBeenCalled();
+	});
+
+	it("does not cancel a request that already finished", async () => {
+		invokeMock.mockResolvedValue({ status: 204, headers: {}, body: [] });
+		const controller = new AbortController();
+
+		await desktopFetch("/api/v1/health", { signal: controller.signal });
+		controller.abort();
+
+		expect(invokeMock).toHaveBeenCalledTimes(1);
+		expect(invokeMock).toHaveBeenCalledWith("desktop_http_request", {
+			request: expect.objectContaining({ url: "/api/v1/health" }),
+			requestId: expect.any(String),
+		});
+	});
+
 	it("sends the body of a Request object", async () => {
 		invokeMock.mockResolvedValue({ status: 204, headers: {}, body: [] });
 
@@ -211,6 +267,7 @@ describe("desktop bridge", () => {
 				method: "POST",
 				body: Array.from(new TextEncoder().encode("hi")),
 			}),
+			requestId: expect.any(String),
 		});
 	});
 

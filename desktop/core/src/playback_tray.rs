@@ -195,6 +195,9 @@ impl PlaybackTrayView {
 fn artist_label(source: &Value) -> Option<&str> {
     match source.get("type").and_then(Value::as_str) {
         Some("track") => source.pointer("/track/artistName").and_then(Value::as_str),
+        Some("external-track") => source
+            .pointer("/externalTrack/artistName")
+            .and_then(Value::as_str),
         _ => None,
     }
 }
@@ -204,6 +207,9 @@ fn source_label(source: &Value) -> Option<&str> {
         Some("track") => source.pointer("/track/title").and_then(Value::as_str),
         Some("radio-station") => source.pointer("/station/name").and_then(Value::as_str),
         Some("catalog-preview") => source.pointer("/result/name").and_then(Value::as_str),
+        Some("external-track") => source
+            .pointer("/externalTrack/title")
+            .and_then(Value::as_str),
         _ => None,
     }
 }
@@ -250,6 +256,18 @@ mod tests {
         assert_eq!(
             PlaybackTrayView::from_playback(None, false).window_title(),
             "Earthly Audio"
+        );
+    }
+
+    #[test]
+    fn external_tracks_name_their_title_and_artist() {
+        let external = json!({
+            "type": "external-track",
+            "externalTrack": { "id": "token.signature", "title": "Around the World", "artistName": "Daft Punk" }
+        });
+        assert_eq!(
+            PlaybackTrayView::from_playback(Some(&external), true).window_title(),
+            "Around the World – Daft Punk · Earthly Audio"
         );
     }
 

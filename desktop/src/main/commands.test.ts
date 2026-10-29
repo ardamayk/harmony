@@ -71,6 +71,39 @@ describe("handleInvoke", () => {
 		});
 	});
 
+	it("forwards an HTTP cancel to the core while the request is in flight", async () => {
+		let finishRequest: ((value: unknown) => void) | undefined;
+		const requestCore = vi
+			.fn<CommandDeps["requestCore"]>()
+			.mockImplementation((method) =>
+				method === "desktop_http_request"
+					? new Promise((resolve) => {
+							finishRequest = resolve;
+						})
+					: Promise.resolve(null),
+			);
+		const shell = deps({ requestCore });
+		const request = { method: "GET", url: "/api/v1/external/search?q=a" };
+
+		const pending = handleInvoke(shell, "desktop_http_request", {
+			request,
+			requestId: "r1",
+		});
+		const cancel = await handleInvoke(shell, "desktop_cancel_http_request", {
+			requestId: "r1",
+		});
+
+		expect(cancel).toEqual({ ok: true, value: null });
+		// Sent in this order, so the core has registered the request when the
+		// cancel arrives.
+		expect(requestCore.mock.calls).toEqual([
+			["desktop_http_request", { request, requestId: "r1" }],
+			["desktop_cancel_http_request", { requestId: "r1" }],
+		]);
+		finishRequest?.(null);
+		await pending;
+	});
+
 	it("registers picked import paths with the core and returns its selections", async () => {
 		const requestCore = vi
 			.fn<CommandDeps["requestCore"]>()

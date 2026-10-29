@@ -1,4 +1,4 @@
-import type { RadioStation } from "@repo/api-client";
+import type { ExternalTrack, RadioStation } from "@repo/api-client";
 import {
 	act,
 	cleanup,
@@ -92,6 +92,13 @@ const api: PlaybackApi = {
 	getRadioCatalogPreviewStreamUrl: (stationUuid) =>
 		`/radio/preview/${stationUuid}`,
 	getRadioNowPlaying: vi.fn(async () => ({})),
+	getExternalTrackPlayback: vi.fn(async (externalTrackId: string) => ({
+		format: "progressive" as const,
+		streamPath: `/api/v1/external/tracks/${externalTrackId}/stream`,
+	})),
+	getExternalStreamUrl: (streamPath: string) => `/server${streamPath}`,
+	getExternalTrackArtworkUrl: (externalTrackId: string) =>
+		`/server/api/v1/external/tracks/${externalTrackId}/artwork`,
 	listPlaylists: vi.fn(async () => ({
 		items: [
 			{ id: "favorites", name: "Favorites", isDefault: true, trackCount: 0 },
@@ -152,6 +159,7 @@ function RadioStarter() {
 function renderPlayerBar(
 	onPlaylistMutated?: () => void,
 	engine = new InMemoryPlaybackEngine(),
+	props: Partial<Parameters<typeof PlayerBar>[0]> = {},
 ) {
 	const result = render(
 		<LayoutProvider initialPreferences={defaultPreferences}>
@@ -161,6 +169,7 @@ function renderPlayerBar(
 				<PlayerBar
 					onPlaylistMutated={onPlaylistMutated}
 					onToggleMiniPlayer={vi.fn()}
+					{...props}
 				/>
 			</PlaybackProvider>
 		</LayoutProvider>,
@@ -440,6 +449,78 @@ describe("PlayerBar", () => {
 		expect(screen.queryByText("0:00")).toBeNull();
 		expect(screen.queryByLabelText("Seek")).toBeNull();
 		expect(screen.getByLabelText("Quality High Quality")).toBeTruthy();
+	});
+
+	it("shows an External Track with a label, seeking only, no favorite and no track actions", async () => {
+		vi.useFakeTimers();
+		try {
+			// The host wires favorites; an External Track still offers none.
+			const { engine } = renderPlayerBar(undefined, undefined, {
+				onToggleFavorite: vi.fn(),
+				onToggleStationFavorite: vi.fn(),
+			});
+			const externalTrack: ExternalTrack = {
+				id: "external-1",
+				title: "External Song",
+				artistName: null,
+				durationMs: 90000,
+				webpageUrl: null,
+				extractor: "Soundcloud",
+				hasArtwork: true,
+			};
+			await act(async () => {
+				await engine.play({
+					type: "external-track",
+					externalTrack,
+					playbackUrl: "/api/v1/external/tracks/external-1/stream",
+					sourceUrl: "/api/v1/external/tracks/external-1/stream",
+				});
+			});
+			act(() => {
+				vi.advanceTimersByTime(500);
+			});
+
+			expect(screen.getByText("External Song")).toBeTruthy();
+			expect(screen.getByText("Soundcloud")).toBeTruthy();
+			expect(screen.getByText("External")).toBeTruthy();
+			// Its cover, through the Music Server, like an Album cover.
+			expect(
+				screen
+					.getByRole("region", { name: "Now playing" })
+					.querySelector("img")
+					?.getAttribute("src"),
+			).toBe("/server/api/v1/external/tracks/external-1/artwork");
+			expect(screen.getByText("1:30")).toBeTruthy();
+			expect(screen.queryByText("LIVE")).toBeNull();
+			expect((screen.getByLabelText("Seek") as HTMLInputElement).disabled).toBe(
+				false,
+			);
+			// Not in the library and not in the Queue: no favorite, no track
+			// actions, no Queue controls; only Play/Pause and seeking.
+			for (const name of [
+				"Add to favorites",
+				"Remove from favorites",
+				"Track actions",
+				"Shuffle off",
+				"Shuffle on",
+				"Previous",
+				"Next",
+				"Repeat off",
+				"Repeat once",
+				"Repeat loop",
+			]) {
+				expect(screen.queryByRole("button", { name })).toBeNull();
+			}
+			expect(
+				(screen.getByRole("button", { name: "Pause" }) as HTMLButtonElement)
+					.disabled,
+			).toBe(false);
+			expect(screen.getByTestId("now-playing-announcer").textContent).toBe(
+				"Now playing: External Song",
+			);
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 
 	it("shows an inline error banner with Retry and Skip after a failed Track", async () => {

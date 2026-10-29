@@ -13,18 +13,22 @@ pub(crate) async fn load_saved_playback(
     let Some(snapshot) = store.load()? else {
         return Ok(None);
     };
+    if snapshot
+        .source()
+        .is_some_and(|source| source["type"] == "external-track")
+    {
+        // External Track identifiers are signed per Music Server process, so they
+        // never survive a relaunch.
+        let cleared = cleared_snapshot(&snapshot)?;
+        store.save(&cleared)?;
+        return Ok(Some(cleared));
+    }
     let Some(origin) = origin else {
         return Ok(Some(snapshot));
     };
     match is_saved_track_missing(&snapshot, bridge, origin).await {
         Ok(true) => {
-            let cleared = PlaybackSessionSnapshot::new(
-                None,
-                0.0,
-                snapshot.volume(),
-                snapshot.is_shuffle_enabled(),
-                snapshot.repeat_mode(),
-            )?;
+            let cleared = cleared_snapshot(&snapshot)?;
             store.save(&cleared)?;
             eprintln!(
                 "Saved playback track no longer exists on the Music Server; cleared its source and playhead."
@@ -37,6 +41,18 @@ pub(crate) async fn load_saved_playback(
             Ok(Some(snapshot))
         }
     }
+}
+
+fn cleared_snapshot(
+    snapshot: &PlaybackSessionSnapshot,
+) -> Result<PlaybackSessionSnapshot, PlaybackLifecycleError> {
+    PlaybackSessionSnapshot::new(
+        None,
+        0.0,
+        snapshot.volume(),
+        snapshot.is_shuffle_enabled(),
+        snapshot.repeat_mode(),
+    )
 }
 
 async fn is_saved_track_missing(
@@ -150,6 +166,35 @@ mod tests {
         assert_eq!(restored.repeat_mode(), "loop");
         assert_eq!(store.load().unwrap(), Some(restored));
         server.abort();
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[tokio::test]
+    async fn saved_external_track_is_cleared_without_a_server_check() {
+        let directory =
+            std::env::temp_dir().join(format!("playback-restore-{}", uuid::Uuid::new_v4()));
+        let store = PlaybackSnapshotStore::new(directory.join("playback-session.json"));
+        let snapshot = PlaybackSessionSnapshot::new(
+            Some(json!({
+                "type": "external-track",
+                "externalTrack": { "id": "token.signature", "title": "Around the World" },
+                "playbackUrl": "http://127.0.0.1:43129/token/api/v1/external/tracks/token.signature/stream"
+            })),
+            42.5,
+            0.65,
+            true,
+            "loop",
+        )
+        .unwrap();
+        store.save(&snapshot).unwrap();
+        let restored = load_saved_playback(&store, &HttpBridge::new().unwrap(), None)
+            .await
+            .unwrap()
+            .expect("snapshot");
+        assert!(restored.source().is_none());
+        assert_eq!(restored.playhead_seconds(), 0.0);
+        assert_eq!(restored.volume(), 0.65);
+        assert_eq!(store.load().unwrap(), Some(restored));
         std::fs::remove_dir_all(directory).unwrap();
     }
 

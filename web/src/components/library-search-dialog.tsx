@@ -1,12 +1,22 @@
-import type { LibrarySearchResult } from "@repo/api-client";
-import { AlbumArt, toast, usePlayback } from "@repo/ui";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import {
+	ApiError,
+	EXTERNAL_SOURCE_CAPABILITY,
+	type ExternalTrack,
+	type LibrarySearchResult,
+} from "@repo/api-client";
+import { AlbumArt, startTiming, toast, usePlayback } from "@repo/ui";
+import {
+	keepPreviousData,
+	useQuery,
+	useQueryClient,
+} from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import {
 	ArrowDown,
 	ArrowUp,
 	CornerDownLeft,
 	Disc3,
+	Globe,
 	ListMusic,
 	ListPlus,
 	LoaderCircle,
@@ -32,13 +42,43 @@ import {
 } from "#/components/ui/dialog";
 import { useDebouncedValue } from "#/hooks/use-debounced-value";
 import { useReturnFocus } from "#/hooks/use-return-focus";
+import {
+	useExternalSourceName,
+	useServerCapability,
+} from "#/hooks/use-server-capability";
 import { apiClient } from "#/lib/api";
+import {
+	EXTERNAL_PLAYBACK_STALE_MS,
+	externalPlaybackQueryOptions,
+} from "#/lib/external-playback-query";
 import { getTrackArtistName } from "#/lib/library-display";
 import { libraryQueryKeys } from "#/lib/library-query-keys";
 import { cn } from "#/lib/utils";
 
 const RESULTS_PER_GROUP = 5;
 const SEARCH_DEBOUNCE_MS = 200;
+/** Each yt-dlp search takes about a second, so typing waits longer for one. */
+const EXTERNAL_SEARCH_DEBOUNCE_MS = 500;
+
+/** A short reason for a failed External Track play, from the Music Server's error code. */
+function externalPlaybackFailureMessage(error: unknown): string {
+	const code = error instanceof ApiError ? error.body.code : undefined;
+	switch (code) {
+		case "external_track_unplayable":
+			return "This track can't be played here";
+		case "external_source_timeout":
+			return "The External Source took too long";
+		default:
+			return "Couldn't play this track";
+	}
+}
+/** A pointer resting this long on an External row prefetches its playback. */
+const EXTERNAL_PREFETCH_HOVER_MS = 250;
+/**
+ * Experiment: once External results arrive, prefetch the first one's playback
+ * as if it were hovered. Turn off to measure without it.
+ */
+const PREFETCH_FIRST_EXTERNAL_RESULT = true;
 
 type SearchResult = {
 	/** Unique across groups; also the option's DOM id suffix. */
@@ -47,8 +87,27 @@ type SearchResult = {
 	subtitle?: string;
 	albumId?: string;
 	trackId?: string;
+	/** Choosing it opens a page instead of playing; the row says "Open". */
+	opensPage?: boolean;
+	/** Shown for External Tracks, which have no library page to open. */
+	duration?: string;
+	/** An External Track's cover, through the Music Server. */
+	artworkUrl?: string;
+	/** Set on External rows: the track whose playback can be prefetched. */
+	externalTrackId?: string;
 	action: () => void;
 };
+
+/** m:ss, or h:mm:ss from one hour. */
+function formatDuration(ms: number): string {
+	const total = Math.max(0, Math.round(ms / 1000));
+	const hours = Math.floor(total / 3600);
+	const minutes = Math.floor((total % 3600) / 60);
+	const seconds = (total % 60).toString().padStart(2, "0");
+	return hours > 0
+		? `${hours}:${minutes.toString().padStart(2, "0")}:${seconds}`
+		: `${minutes}:${seconds}`;
+}
 
 type SearchGroup = {
 	label: string;
@@ -68,14 +127,19 @@ function subscribeToNothing(): () => void {
 /**
  * Searches every library surface at once: Tracks, Albums, Artists, Genres and
  * Playlists. Results are grouped under "From Your Library"; choosing a track
- * plays it, anything else opens its page.
+ * plays it, anything else opens its page. When the Music Server offers the
+ * External Source, its results follow in their own "External" group, which
+ * loads and fails on its own.
  */
 export function LibrarySearchDialog({
 	open,
 	onOpenChange,
+	prefetchFirstExternalResult = PREFETCH_FIRST_EXTERNAL_RESULT,
 }: {
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
+	/** Defaults to PREFETCH_FIRST_EXTERNAL_RESULT; tests turn it off. */
+	prefetchFirstExternalResult?: boolean;
 }) {
 	const portalContainer = useSyncExternalStore(
 		subscribeToNothing,
@@ -106,7 +170,25 @@ export function LibrarySearchDialog({
 	const listboxRef = useRef<HTMLDivElement>(null);
 	const returnFocus = useReturnFocus();
 	const navigate = useNavigate();
-	const { playTrack, addToQueue } = usePlayback();
+	const { playTrack, addToQueue, playExternalTrack } = usePlayback();
+	const hasExternalSource = useServerCapability(EXTERNAL_SOURCE_CAPABILITY);
+	const externalSourceName = useExternalSourceName();
+	const searchLabel =
+		hasExternalSource && externalSourceName
+			? `Search your library and ${externalSourceName}`
+			: "Search your library";
+	// The External group shows with the library results; its own query waits
+	// for the longer debounce so typing does not start a yt-dlp search per pause.
+	const showExternalGroup = canShowResults && hasExternalSource;
+	const externalQuery = useDebouncedValue(
+		query.trim(),
+		EXTERNAL_SEARCH_DEBOUNCE_MS,
+	);
+	const isDebouncingExternal = query.trim() !== externalQuery;
+	const canShowExternal = showExternalGroup && !isDebouncingExternal;
+	const queryClient = useQueryClient();
+	const prefetchingExternalId = useRef<string | null>(null);
+	const hoverPrefetchTimer = useRef<number | undefined>(undefined);
 	const listboxId = useId();
 	const measureResults = useCallback((content: HTMLDivElement | null) => {
 		if (!content) return;
@@ -149,6 +231,87 @@ export function LibrarySearchDialog({
 		retry: false,
 	});
 
+	// No placeholder data: yt-dlp takes seconds, and the previous query's
+	// External Tracks would sit under the new query for that long. The signal
+	// aborts a superseded search, which ends its yt-dlp process on the server.
+	const externalSearch = useQuery({
+		queryKey: ["external-search", externalQuery],
+		queryFn: async ({ signal }) => {
+			const stopSearch = startTiming("external:search");
+			const results = await apiClient.searchExternalSource(
+				externalQuery,
+				undefined,
+				signal,
+			);
+			stopSearch({ results: results.items.length });
+			return results;
+		},
+		enabled: canShowExternal,
+		retry: false,
+	});
+
+	/** One prefetch at a time: a newer External row replaces the older one. */
+	const prefetchExternalPlayback = useCallback(
+		(externalTrackId: string) => {
+			const previous = prefetchingExternalId.current;
+			if (previous === externalTrackId) return;
+			if (previous) {
+				void queryClient.cancelQueries({
+					queryKey: externalPlaybackQueryOptions(previous).queryKey,
+					exact: true,
+				});
+			}
+			prefetchingExternalId.current = externalTrackId;
+			void queryClient
+				.prefetchQuery(externalPlaybackQueryOptions(externalTrackId))
+				.finally(() => {
+					if (prefetchingExternalId.current === externalTrackId) {
+						prefetchingExternalId.current = null;
+					}
+				});
+		},
+		[queryClient],
+	);
+	const cancelHoverPrefetch = useCallback(() => {
+		window.clearTimeout(hoverPrefetchTimer.current);
+		hoverPrefetchTimer.current = undefined;
+	}, []);
+
+	// Closing ends a pending search and hover; an in-flight prefetch is kept,
+	// since playing the track may be waiting on it.
+	useEffect(() => {
+		if (open) return;
+		cancelHoverPrefetch();
+		void queryClient.cancelQueries({ queryKey: ["external-search"] });
+	}, [open, queryClient, cancelHoverPrefetch]);
+	useEffect(() => cancelHoverPrefetch, [cancelHoverPrefetch]);
+
+	// The External debounce already waited for typing to stop, so the first
+	// result is the likeliest pick: resolve it ahead through the same single
+	// prefetch, which a hover or keyboard highlight then replaces.
+	const firstExternalTrackId =
+		open && canShowExternal && externalSearch.isSuccess
+			? externalSearch.data.items[0]?.id
+			: undefined;
+	useEffect(() => {
+		if (!prefetchFirstExternalResult || !firstExternalTrackId) return;
+		const cached = queryClient.getQueryState(
+			externalPlaybackQueryOptions(firstExternalTrackId).queryKey,
+		);
+		if (
+			cached?.data !== undefined &&
+			Date.now() - cached.dataUpdatedAt < EXTERNAL_PLAYBACK_STALE_MS
+		) {
+			return;
+		}
+		prefetchExternalPlayback(firstExternalTrackId);
+	}, [
+		prefetchFirstExternalResult,
+		firstExternalTrackId,
+		queryClient,
+		prefetchExternalPlayback,
+	]);
+
 	const close = useCallback(() => onOpenChange(false), [onOpenChange]);
 
 	const groups = useMemo<SearchGroup[]>(() => {
@@ -161,6 +324,7 @@ export function LibrarySearchDialog({
 			title: result.name,
 			albumId: result.type === "album" ? result.id : result.album?.id,
 			trackId: result.type === "track" ? result.id : undefined,
+			opensPage: result.type !== "track",
 			subtitle: [
 				getTrackArtistName({ artists: result.artists ?? [], artistName: "" }),
 				result.album?.name,
@@ -228,16 +392,51 @@ export function LibrarySearchDialog({
 		].filter((group) => group.results.length > 0);
 	}, [canShowResults, search.data, navigate, playTrack, close, showAll]);
 
-	const flatResults = useMemo(
+	const externalResults = useMemo<SearchResult[]>(() => {
+		if (!canShowExternal || !externalSearch.data) return [];
+		return externalSearch.data.items.map((track: ExternalTrack) => ({
+			key: `external:${track.id}`,
+			title: track.title,
+			subtitle: track.artistName ?? undefined,
+			duration:
+				track.durationMs != null ? formatDuration(track.durationMs) : undefined,
+			artworkUrl: track.hasArtwork
+				? apiClient.getExternalTrackArtworkUrl(track.id)
+				: undefined,
+			externalTrackId: track.id,
+			action: () => {
+				// The play path reads this prefetch; a later one must not cancel it.
+				if (prefetchingExternalId.current === track.id) {
+					prefetchingExternalId.current = null;
+				}
+				// The dialog closes at once; a failed resolve reports through the
+				// app-wide toaster, which outlives the dialog.
+				playExternalTrack(track).catch((error: unknown) => {
+					toast.error(externalPlaybackFailureMessage(error));
+				});
+				close();
+			},
+		}));
+	}, [canShowExternal, externalSearch.data, playExternalTrack, close]);
+
+	const libraryResults = useMemo(
 		() => groups.flatMap((group) => group.results),
 		[groups],
+	);
+	// Keyboard order follows the screen: library groups, then External.
+	const flatResults = useMemo(
+		() => [...libraryResults, ...externalResults],
+		[libraryResults, externalResults],
 	);
 	const activeResult =
 		flatResults.find((result) => result.key === activeKey) ?? flatResults[0];
 	const failed = canShowResults && search.isError;
 	const isSearching = hasQuery && (isDebouncing || search.isFetching);
 	const showEmpty =
-		canShowResults && !isSearching && !failed && flatResults.length === 0;
+		canShowResults && !isSearching && !failed && libraryResults.length === 0;
+	const externalFailed = canShowExternal && externalSearch.isError;
+	const isSearchingExternal =
+		showExternalGroup && (isDebouncingExternal || externalSearch.isFetching);
 
 	const resultCount =
 		canShowResults && search.data
@@ -292,27 +491,128 @@ export function LibrarySearchDialog({
 
 	const onInputKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
 		if (event.nativeEvent.isComposing || flatResults.length === 0) return;
-		if (event.key === "ArrowDown") {
+		if (event.key === "ArrowDown" || event.key === "ArrowUp") {
 			event.preventDefault();
-			setActiveKey(
+			const step = event.key === "ArrowDown" ? 1 : -1;
+			const next =
 				flatResults[
-					(flatResults.indexOf(activeResult) + 1) % flatResults.length
-				].key,
-			);
-		} else if (event.key === "ArrowUp") {
-			event.preventDefault();
-			setActiveKey(
-				flatResults[
-					(flatResults.indexOf(activeResult) - 1 + flatResults.length) %
+					(flatResults.indexOf(activeResult) + step + flatResults.length) %
 						flatResults.length
-				].key,
-			);
+				];
+			setActiveKey(next.key);
+			if (next.externalTrackId) prefetchExternalPlayback(next.externalTrackId);
 		} else if (event.key === "Enter") {
 			event.preventDefault();
 			if (event.repeat) return;
 			if (event.shiftKey) void queueResult(activeResult);
 			else activeResult.action();
 		}
+	};
+
+	const renderOption = (result: SearchResult, Icon: typeof Music2) => {
+		const isActive = activeResult?.key === result.key;
+		return (
+			<li
+				key={result.key}
+				className={cn(
+					"flex items-center rounded-md pr-2 transition-colors motion-reduce:transition-none",
+					// The keyboard's row looks like the hovered one: the hover step, never the accent.
+					isActive && "bg-muted",
+				)}
+			>
+				<button
+					type="button"
+					id={optionId(listboxId, result.key)}
+					role="option"
+					aria-selected={isActive}
+					tabIndex={-1}
+					className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-left outline-none"
+					onMouseEnter={() => {
+						setActiveKey(result.key);
+						cancelHoverPrefetch();
+						const { externalTrackId } = result;
+						if (!externalTrackId) return;
+						hoverPrefetchTimer.current = window.setTimeout(
+							() => prefetchExternalPlayback(externalTrackId),
+							EXTERNAL_PREFETCH_HOVER_MS,
+						);
+					}}
+					onMouseLeave={cancelHoverPrefetch}
+					onMouseDown={(event) => event.preventDefault()}
+					onClick={result.action}
+				>
+					{result.albumId ? (
+						<AlbumArt
+							coverUrl={apiClient.getAlbumCoverUrl(result.albumId, 128)}
+							title={result.title}
+							className="size-10 shrink-0 rounded-sm"
+						/>
+					) : result.artworkUrl ? (
+						// The icon stays the placeholder if the cover fails to load.
+						<AlbumArt
+							coverUrl={result.artworkUrl}
+							title={result.title}
+							className="size-10 shrink-0 rounded-sm bg-muted/50"
+							fallback={<Icon className="size-4" />}
+						/>
+					) : (
+						<span className="flex size-10 shrink-0 items-center justify-center rounded-sm bg-muted/50 text-caption">
+							<Icon className="size-4" />
+						</span>
+					)}
+					<span className="min-w-0 flex-1">
+						<span
+							className={cn(
+								"block truncate text-sm",
+								isActive && "text-heading",
+							)}
+						>
+							{result.title}
+						</span>
+						{result.subtitle ? (
+							<span className="mt-0.5 block truncate text-caption text-xs">
+								{result.subtitle}
+							</span>
+						) : null}
+					</span>
+					{result.duration ? (
+						<span className="shrink-0 text-caption text-xs tabular-nums">
+							{result.duration}
+						</span>
+					) : null}
+					<span
+						aria-hidden
+						className="flex shrink-0 items-center gap-2 text-caption text-xs"
+					>
+						{result.opensPage ? (
+							<span className="hidden sm:inline">Open</span>
+						) : null}
+						<CornerDownLeft
+							className={cn("size-4", !isActive && "invisible")}
+						/>
+					</span>
+				</button>
+				{result.trackId ? (
+					<button
+						type="button"
+						aria-label={`Add ${result.title} to queue`}
+						title="Add to queue (Shift+Enter)"
+						aria-disabled={pendingTracks.has(result.trackId)}
+						onFocus={() => setActiveKey(result.key)}
+						onClick={() => {
+							void queueResult(result);
+						}}
+						className="flex size-10 shrink-0 items-center justify-center rounded-md text-caption outline-none hover:bg-foreground/10 hover:text-heading focus-visible:bg-foreground/10 focus-visible:text-heading aria-disabled:opacity-50"
+					>
+						{pendingTracks.has(result.trackId) ? (
+							<LoaderCircle className="size-4 motion-safe:animate-spin" />
+						) : (
+							<ListPlus className="size-4" />
+						)}
+					</button>
+				) : null}
+			</li>
+		);
 	};
 
 	return (
@@ -336,9 +636,10 @@ export function LibrarySearchDialog({
 				finalFocus={() => returnFocus.restore()}
 				className="library-search-card top-[var(--library-search-top)] left-[var(--library-search-center,50%)] flex max-w-(--library-search-width,36rem) translate-y-0 flex-col overflow-hidden p-0"
 			>
-				<DialogTitle className="sr-only">Search your library</DialogTitle>
-				{/* Lines up with the top bar's search field it opens over. */}
-				<div className="flex shrink-0 items-center gap-3 border-border border-b px-4">
+				<DialogTitle className="sr-only">{searchLabel}</DialogTitle>
+				{/* Covers the top bar's search field it opens over; its bottom
+				    border lies on the top bar's (library-search-row in styles.css). */}
+				<div className="library-search-row flex shrink-0 items-center gap-3 border-border border-b px-4">
 					<Search className="size-5 shrink-0 text-caption" />
 					<input
 						ref={inputRef}
@@ -350,9 +651,9 @@ export function LibrarySearchDialog({
 							activeResult ? optionId(listboxId, activeResult.key) : undefined
 						}
 						aria-autocomplete="list"
-						aria-label="Search your library"
+						aria-label={searchLabel}
 						maxLength={200}
-						placeholder="Search your library"
+						placeholder={searchLabel}
 						value={query}
 						onChange={(event) => {
 							setQuery(event.target.value);
@@ -360,7 +661,7 @@ export function LibrarySearchDialog({
 							setShowAll(false);
 						}}
 						onKeyDown={onInputKeyDown}
-						className="h-12 min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-muted-foreground [&::-webkit-search-cancel-button]:appearance-none"
+						className="min-w-0 flex-1 self-stretch bg-transparent text-base outline-none placeholder:text-muted-foreground [&::-webkit-search-cancel-button]:appearance-none"
 					/>
 					{resultCount !== undefined ? (
 						<output className="flex h-8 shrink-0 items-center rounded-sm border border-border px-3 text-caption text-xs">
@@ -376,22 +677,21 @@ export function LibrarySearchDialog({
 				</div>
 				<div
 					id={listboxId}
-					aria-busy={isSearching}
+					aria-busy={isSearching || isSearchingExternal}
 					ref={listboxRef}
 					role="listbox"
 					aria-label="Search results"
 					className="min-h-0 flex-1 overflow-y-auto"
 				>
-					<div ref={measureResults} className="flow-root p-3 sm:p-4">
-						{!hasQuery ? (
-							<p className="px-3 py-6 text-center text-caption text-sm">
-								Type to search your library.
-							</p>
-						) : null}
+					{/* No query, no body: just the input row and the footer. */}
+					<div
+						ref={measureResults}
+						className={cn("flow-root", hasQuery && "p-3 sm:p-4")}
+					>
 						{failed ? (
 							<div role="alert" className="px-3 py-3 text-sm">
 								<p>
-									{flatResults.length > 0
+									{libraryResults.length > 0
 										? "Search results could not be refreshed."
 										: "Search results could not be loaded."}
 								</p>
@@ -412,7 +712,7 @@ export function LibrarySearchDialog({
 								Nothing in your library matches “{debouncedQuery}”.
 							</p>
 						) : null}
-						{isSearching && flatResults.length === 0 ? (
+						{isSearching && libraryResults.length === 0 ? (
 							<p className="px-3 py-6 text-center text-caption text-sm">
 								Searching…
 							</p>
@@ -433,100 +733,50 @@ export function LibrarySearchDialog({
 											{group.label}
 										</p>
 										<ul className="flex flex-col">
-											{group.results.map((result) => {
-												const isActive = activeResult?.key === result.key;
-												return (
-													<li
-														key={result.key}
-														className={cn(
-															"flex items-center rounded-md pr-2 transition-colors motion-reduce:transition-none",
-															// The keyboard's row looks like the hovered one: the hover step, never the accent.
-															isActive && "bg-muted",
-														)}
-													>
-														<button
-															type="button"
-															id={optionId(listboxId, result.key)}
-															role="option"
-															aria-selected={isActive}
-															tabIndex={-1}
-															className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-left outline-none"
-															onMouseEnter={() => setActiveKey(result.key)}
-															onMouseDown={(event) => event.preventDefault()}
-															onClick={result.action}
-														>
-															{result.albumId ? (
-																<AlbumArt
-																	coverUrl={apiClient.getAlbumCoverUrl(
-																		result.albumId,
-																		128,
-																	)}
-																	title={result.title}
-																	className="size-10 shrink-0 rounded-sm"
-																/>
-															) : (
-																<span className="flex size-10 shrink-0 items-center justify-center rounded-sm bg-muted/50 text-caption">
-																	<group.icon className="size-4" />
-																</span>
-															)}
-															<span className="min-w-0 flex-1">
-																<span
-																	className={cn(
-																		"block truncate text-sm",
-																		isActive && "text-heading",
-																	)}
-																>
-																	{result.title}
-																</span>
-																{result.subtitle ? (
-																	<span className="mt-0.5 block truncate text-caption text-xs">
-																		{result.subtitle}
-																	</span>
-																) : null}
-															</span>
-															<span
-																aria-hidden
-																className="flex shrink-0 items-center gap-2 text-caption text-xs"
-															>
-																{!result.trackId ? (
-																	<span className="hidden sm:inline">Open</span>
-																) : null}
-																<CornerDownLeft
-																	className={cn(
-																		"size-4",
-																		!isActive && "invisible",
-																	)}
-																/>
-															</span>
-														</button>
-														{result.trackId ? (
-															<button
-																type="button"
-																aria-label={`Add ${result.title} to queue`}
-																title="Add to queue (Shift+Enter)"
-																aria-disabled={pendingTracks.has(
-																	result.trackId,
-																)}
-																onFocus={() => setActiveKey(result.key)}
-																onClick={() => {
-																	void queueResult(result);
-																}}
-																className="flex size-10 shrink-0 items-center justify-center rounded-md text-caption outline-none hover:bg-foreground/10 hover:text-heading focus-visible:bg-foreground/10 focus-visible:text-heading aria-disabled:opacity-50"
-															>
-																{pendingTracks.has(result.trackId) ? (
-																	<LoaderCircle className="size-4 motion-safe:animate-spin" />
-																) : (
-																	<ListPlus className="size-4" />
-																)}
-															</button>
-														) : null}
-													</li>
-												);
-											})}
+											{group.results.map((result) =>
+												renderOption(result, group.icon),
+											)}
 										</ul>
 									</div>
 								))}
 							</section>
+						) : null}
+						{showExternalGroup ? (
+							// biome-ignore lint/a11y/useSemanticElements: listbox option groups are not form fieldsets.
+							<div role="group" aria-label="External" className="pt-3">
+								<p className="flex items-center gap-2 px-3 py-2 font-medium text-caption text-xs uppercase tracking-wider">
+									<Globe className="size-3.5" />
+									External
+								</p>
+								{externalResults.length > 0 ? (
+									<ul className="flex flex-col">
+										{externalResults.map((result) =>
+											renderOption(result, Globe),
+										)}
+									</ul>
+								) : null}
+								{externalFailed ? (
+									<div role="alert" className="px-3 py-2 text-sm">
+										<p>External results could not be loaded.</p>
+										<button
+											type="button"
+											className="mt-2 underline"
+											disabled={isSearchingExternal}
+											onClick={() => {
+												void externalSearch.refetch();
+											}}
+										>
+											Retry
+										</button>
+									</div>
+								) : isSearchingExternal && externalResults.length === 0 ? (
+									<p className="px-3 py-2 text-caption text-sm">Searching…</p>
+								) : externalSearch.isSuccess && externalResults.length === 0 ? (
+									<p className="px-3 py-2 text-caption text-sm">
+										No External results for “{externalQuery}”.
+									</p>
+								) : null}
+							</div>
 						) : null}
 					</div>
 				</div>

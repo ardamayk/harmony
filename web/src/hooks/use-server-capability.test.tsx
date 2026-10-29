@@ -3,6 +3,7 @@ import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import {
+	useExternalSourceName,
 	useServerCapability,
 	useServerCapabilityState,
 } from "./use-server-capability";
@@ -53,6 +54,34 @@ describe("useServerCapability", () => {
 		expect(result.current.missing).toBe("missing");
 		expect(result.current.unknown).toBe(true);
 		expect(getHealth).toHaveBeenCalledTimes(1);
+	});
+
+	it("names the External Source only while it is advertised", async () => {
+		getHealth.mockResolvedValue({
+			status: "ok",
+			version: "test",
+			capabilities: ["api.v1", "external-source.v1"],
+			dependencies: [],
+			externalSource: { name: "SoundCloud" },
+		});
+		const advertised = renderHook(() => useExternalSourceName(), {
+			wrapper: createWrapper(),
+		});
+		expect(advertised.result.current).toBeUndefined();
+		await waitFor(() => expect(advertised.result.current).toBe("SoundCloud"));
+
+		getHealth.mockResolvedValue({
+			status: "ok",
+			version: "test",
+			capabilities: ["api.v1"],
+			dependencies: [],
+			externalSource: { name: "SoundCloud" },
+		});
+		const unadvertised = renderHook(() => useExternalSourceName(), {
+			wrapper: createWrapper(),
+		});
+		await waitFor(() => expect(getHealth).toHaveBeenCalledTimes(2));
+		expect(unadvertised.result.current).toBeUndefined();
 	});
 
 	it("stays unknown instead of missing while the health request fails", async () => {

@@ -9,6 +9,7 @@ use std::time::Duration;
 
 pub const FFMPEG: &str = "ffmpeg";
 pub const FFPROBE: &str = "ffprobe";
+pub const YT_DLP: &str = "yt-dlp";
 const VERSION_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// One probed program. `version` is empty when the program is missing or
@@ -60,6 +61,42 @@ pub async fn probe_system() -> Report {
         report.push(dependency);
     }
     Report(report)
+}
+
+/// Probes the operator's yt-dlp, the optional dependency of the External
+/// Source: `binary` is a name on PATH or a path to the program.
+pub async fn probe_yt_dlp(binary: &str) -> Dependency {
+    let mut dependency = Dependency {
+        name: YT_DLP.to_owned(),
+        required: false,
+        available: false,
+        version: String::new(),
+    };
+    let path = if binary.contains('/') {
+        Some(PathBuf::from(binary)).filter(|path| is_executable(path))
+    } else {
+        look_path(binary)
+    };
+    if let Some(path) = path {
+        dependency.available = true;
+        if let Some(output) = run_version(&path, &["--version"]).await {
+            dependency.version = parse_yt_dlp_version(&output);
+        }
+    }
+    dependency
+}
+
+static YT_DLP_VERSION_PATTERN: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^\d{4}\.\d{2}\.\d{2}(\.\d+)?$").expect("yt-dlp version pattern"));
+
+/// yt-dlp prints only its version, such as `2026.10.26` (`.N` for nightlies).
+pub fn parse_yt_dlp_version(output: &str) -> String {
+    let first_line = output.trim().lines().next().unwrap_or_default().trim();
+    if YT_DLP_VERSION_PATTERN.is_match(first_line) {
+        first_line.to_owned()
+    } else {
+        String::new()
+    }
 }
 
 fn look_path(name: &str) -> Option<PathBuf> {
@@ -121,6 +158,42 @@ mod tests {
         );
         assert_eq!(parse_version("ffprobe", "ffmpeg version n9.0.2"), "");
         assert_eq!(parse_version("ffmpeg", "garbage"), "");
+    }
+
+    #[test]
+    fn parses_bare_yt_dlp_versions() {
+        assert_eq!(parse_yt_dlp_version("2026.10.26\n"), "2026.10.26");
+        assert_eq!(
+            parse_yt_dlp_version("2026.10.26.232912\n"),
+            "2026.10.26.232912"
+        );
+        assert_eq!(parse_yt_dlp_version("yt-dlp 2026.10.26"), "");
+        assert_eq!(parse_yt_dlp_version(""), "");
+    }
+
+    #[tokio::test]
+    async fn probes_yt_dlp_as_an_optional_dependency() {
+        let missing = probe_yt_dlp("/nonexistent/yt-dlp").await;
+        assert_eq!(
+            missing,
+            Dependency {
+                name: YT_DLP.to_owned(),
+                required: false,
+                available: false,
+                version: String::new(),
+            }
+        );
+        let directory = tempfile::tempdir().expect("tempdir");
+        let binary = directory.path().join("yt-dlp");
+        std::fs::write(&binary, "#!/bin/sh\necho 2026.10.26\n").expect("write");
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o755))
+                .expect("chmod");
+        }
+        let found = probe_yt_dlp(binary.to_str().expect("path")).await;
+        assert!(found.available && !found.required);
+        assert_eq!(found.version, "2026.10.26");
     }
 
     #[test]

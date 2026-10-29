@@ -56,7 +56,7 @@ Managed Import uses file tags locally. TITLE, ARTIST, ALBUMARTIST, ALBUM, and TR
 
 ## External services
 
-The Music Server calls these services itself, so clients never contact them directly. Artist info, play counts and lyrics are looked up when a client first asks for them and then stored; a library is never crawled. Only Last.fm needs a key.
+The Music Server calls these services itself, so clients never contact them directly. Artist info, play counts and lyrics are looked up when a client first asks for them and then stored; a library is never crawled. Only Last.fm needs a key. yt-dlp is not a web service: it is a program you install yourself (see below).
 
 | Service | Key | Used for | Switch |
 |---------|-----|----------|--------|
@@ -65,6 +65,7 @@ The Music Server calls these services itself, so clients never contact them dire
 | [Last.fm](https://www.last.fm/api) | `LASTFM_API_KEY` | Track play counts | off without a key |
 | [LRCLIB](https://lrclib.net) | no | Lyrics for Tracks whose files have none | `LYRICS_LOOKUP_ENABLED=false` |
 | [Radio Browser](https://www.radio-browser.info) | no | Radio station catalog | `RADIO_BROWSER_BASE_URL` |
+| [yt-dlp](https://github.com/yt-dlp/yt-dlp) (a program you install) | no | External Source: search and play Tracks from a site you choose | off unless `EXTERNAL_SOURCE_SEARCH` is set |
 | Radio stations | no | Streams, through the Music Server's proxy | play no radio |
 
 Two more are reached by the clients rather than the server:
@@ -72,9 +73,11 @@ Two more are reached by the clients rather than the server:
 - **Radio station icons** load in the Web Client straight from each station's own `faviconUrl`.
 - **Google Fonts** serves the Web Client's fonts (`web/src/styles.css`).
 
+The External Source runs yt-dlp on the Music Server's host. You install yt-dlp and you choose the site (for example `EXTERNAL_SOURCE_SEARCH=scsearch`); you are responsible for that source and for the site's terms. Nothing is bundled or enabled by default. See [server/README.md](server/README.md#external-source-yt-dlp).
+
 The album and artist links to Spotify, Qobuz, Last.fm and ListenBrainz are plain links; nothing is sent to these services until you click one.
 
-ADRs: [0003](docs/adr/0003-radio-browser-catalog-and-health.md) (Radio Browser), [0027](docs/adr/0027-artist-photos-from-deezer-biographies-from-wikipedia.md) (Deezer, Wikipedia), [0029](docs/adr/0029-lyrics-from-lrclib.md) (LRCLIB), [0030](docs/adr/0030-play-counts-from-lastfm-with-an-operator-key.md) (Last.fm).
+ADRs: [0003](docs/adr/0003-radio-browser-catalog-and-health.md) (Radio Browser), [0027](docs/adr/0027-artist-photos-from-deezer-biographies-from-wikipedia.md) (Deezer, Wikipedia), [0029](docs/adr/0029-lyrics-from-lrclib.md) (LRCLIB), [0030](docs/adr/0030-play-counts-from-lastfm-with-an-operator-key.md) (Last.fm), [0032](docs/adr/0032-external-source-through-an-operator-installed-yt-dlp.md) (External Source, yt-dlp).
 
 ## Configuration
 
@@ -92,6 +95,10 @@ The Music Server reads its settings from environment variables only; it does not
 | `ARTIST_INFO_LANGUAGE` | `en` | Wikipedia language for biographies (a language code such as `tr`); falls back to English. |
 | `LYRICS_LOOKUP_ENABLED` | `true` | `false` or `0` stops LRCLIB lookups. |
 | `LASTFM_API_KEY` | none | Your own Last.fm API key; turns on Track play counts. |
+| `EXTERNAL_SOURCE_SEARCH` | none | A yt-dlp search prefix such as `scsearch`; turns on the External Source. |
+| `YT_DLP` | `yt-dlp` | The yt-dlp binary, when it is not on `PATH`. |
+| `EXTERNAL_SOURCE_EXTRACTOR_ARGS` | none | yt-dlp extractor arguments such as `youtube:skip=hls,dash`; separate several with spaces. |
+| `EXTERNAL_SOURCE_NAME` | from the prefix, else `External` | The site's name in the clients' search, such as `Internet Archive`; up to 40 characters. |
 | `RADIO_BROWSER_BASE_URL` | `https://de1.api.radio-browser.info` | Radio Browser mirror for the station catalog. |
 | `APP_VERSION` | `0.1.0` | Version shown in the health response and Settings. |
 
@@ -112,13 +119,13 @@ Appearance and playback preferences (theme, layout, seek steps, transition fade)
 
 ## Docker
 
-`docker-compose.yml` builds the Music Server image (with FFmpeg) and serves the Web Client from it:
+`docker-compose.yml` builds the Music Server image from `server/Dockerfile` (with FFmpeg) and serves the Web Client from it:
 
 ```bash
 docker compose up -d --build
 ```
 
-Open http://localhost:8090. The container uses the host's network and binds to `127.0.0.1:8090`, because the server accepts only loopback addresses. The database and imported music live in the `app-data` volume (`/data`); add any variable from [Configuration](#configuration) under `environment:`. Docker Compose runs only the Music Server; the Desktop Client runs on the host and connects to it.
+Open http://localhost:8090. The container uses the host's network and binds to `127.0.0.1:8090`, because the server accepts only loopback addresses. The database and imported music live in the `app-data` volume (`/data`); add any variable from [Configuration](#configuration) under `environment:`. The image has no yt-dlp by default; to use the External Source, set the `WITH_YT_DLP` build argument to `true` (in Compose: `build.args`) and rebuild, see [server/README.md](server/README.md#external-source-yt-dlp). Docker Compose runs only the Music Server; the Desktop Client runs on the host and connects to it.
 
 ## Build
 

@@ -4,7 +4,6 @@ import {
 	defaultPlayback,
 	defaultPreferences,
 	LayoutProvider,
-	type PlaybackApi,
 	PlaybackProvider,
 	PlayerBar,
 	QueueRowMenuProvider,
@@ -18,7 +17,7 @@ import {
 	useNavigate,
 	useRouterState,
 } from "@tanstack/react-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ImportSessionProvider } from "#/components/import-session-provider";
 import { LibrarySearchDialog } from "#/components/library-search-dialog";
 import { QueueTrackMenu } from "#/components/queue-track-menu";
@@ -34,43 +33,9 @@ import { useFavoriteTracks } from "#/hooks/use-favorite-tracks";
 import { useServerCapability } from "#/hooks/use-server-capability";
 import { apiClient } from "#/lib/api";
 import { isMiniPlayerRoute } from "#/lib/mini-player-route";
+import { createPlaybackApi } from "#/lib/playback-api";
 import { invalidatePlaylistCache } from "#/lib/playlist-query-cache";
 import { getSharedPlaybackEngine } from "#/playback/shared-playback-engine";
-
-const playbackApi: PlaybackApi = {
-	getQueue: () => apiClient.getPlaybackQueue(),
-	replaceQueue: (trackIds, revision, source) =>
-		apiClient.replacePlaybackQueue(trackIds, revision, source),
-	reorderQueue: (itemIds, revision) =>
-		apiClient.reorderPlaybackQueue(itemIds, revision),
-	appendQueueItem: (trackId, revision, source) =>
-		apiClient.appendPlaybackQueueItem(trackId, revision, source),
-	removeQueueItem: (itemId, revision) =>
-		apiClient.removePlaybackQueueItem(itemId, revision),
-	clearQueue: (afterItemId, revision) =>
-		apiClient.clearPlaybackQueue(afterItemId, revision),
-	subscribeQueueEvents: (onEvent, onError) =>
-		apiClient.subscribePlaybackQueueEvents(onEvent, onError),
-	getStreamUrl: (trackId) => apiClient.getTrackStreamUrl(trackId),
-	headTrackStream: (trackId) => apiClient.headTrackStream(trackId),
-	getAlbumCoverUrl: (albumId, size) =>
-		apiClient.getAlbumCoverUrl(albumId, size),
-	getTrack: (trackId) => apiClient.getTrack(trackId),
-	getTrackLyrics: (trackId) => apiClient.getTrackLyrics(trackId),
-	getTrackWaveform: (trackId) => apiClient.getTrackWaveform(trackId),
-	getRadioStationStreamUrl: (stationId) =>
-		apiClient.getRadioStationStreamUrl(stationId),
-	getRadioCatalogPreviewStreamUrl: (stationUuid) =>
-		apiClient.getRadioCatalogPreviewStreamUrl(stationUuid),
-	getRadioNowPlaying: (stationId) => apiClient.getRadioNowPlaying(stationId),
-	listPlaylists: () => apiClient.listPlaylists(),
-	getPlaylist: (playlistId) => apiClient.getPlaylist(playlistId),
-	createPlaylist: (name) => apiClient.createPlaylist({ name }),
-	addPlaylistTrack: (playlistId, trackId) =>
-		apiClient.addPlaylistTrack(playlistId, trackId),
-	removePlaylistTrack: (playlistId, trackId) =>
-		apiClient.removePlaylistTrack(playlistId, trackId),
-};
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 	{
@@ -123,6 +88,7 @@ function ConnectedRootLayout() {
 	const navigate = useNavigate();
 	const queryClient = useQueryClient();
 	const [searchOpen, setSearchOpen] = useState(false);
+	const api = useMemo(() => createPlaybackApi(queryClient), [queryClient]);
 	const playbackEngine = getSharedPlaybackEngine();
 	const isMiniPlayer = useRouterState({
 		select: (state) => isMiniPlayerRoute(state.location.pathname),
@@ -155,7 +121,7 @@ function ConnectedRootLayout() {
 			<div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
 				<ThemeSync />
 				<PlaybackProvider
-					api={playbackApi}
+					api={api}
 					engine={playbackEngine}
 					shouldCoordinateQueue={!isMiniPlayer}
 					autoSkipOnErrorSeconds={
