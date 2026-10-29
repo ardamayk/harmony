@@ -29,6 +29,20 @@ const VALIDATION_CLEANUP_TIMEOUT: Duration = Duration::from_secs(5);
 /// The least advance between two persisted validation progress values.
 const VALIDATION_PROGRESS_PERSIST_STEP_PERCENT: i64 = 5;
 
+/// Where an Import Batch is in its life, as [`Service::batch_progress`]
+/// reports it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BatchProgress {
+    /// Files may still be added; not yet confirmed.
+    Open,
+    /// The listener confirmed it and its files are being committed.
+    Confirming,
+    /// Committed.
+    Completed,
+    /// Cancelled, or never existed.
+    Gone,
+}
+
 struct ActiveUpload {
     cancel: CancellationToken,
     done: CancellationToken,
@@ -360,12 +374,24 @@ impl Service {
         self.repo.create_batch(true).await
     }
 
-    /// The batch's status, or `None` once it is cancelled.
-    pub async fn batch_status(&self, batch_id: &str) -> Result<Option<String>> {
+    /// Where the batch is in its life, for a module that fills a batch
+    /// itself.
+    pub async fn batch_progress(&self, batch_id: &str) -> Result<BatchProgress> {
         match self.repo.get_batch_status(batch_id).await {
-            Ok(status) => Ok(Some(status)),
-            Err(error) if error.is(Sentinel::NotFound) => Ok(None),
+            Ok(status) if status == BATCH_STATUS_COMPLETED => Ok(BatchProgress::Completed),
+            Ok(status) if status == BATCH_STATUS_CONFIRMING => Ok(BatchProgress::Confirming),
+            Ok(_) => Ok(BatchProgress::Open),
+            Err(error) if error.is(Sentinel::NotFound) => Ok(BatchProgress::Gone),
             Err(error) => Err(error),
+        }
+    }
+
+    /// Cancels a batch unless it is already confirmed; a confirmed or gone
+    /// batch is left as it is.
+    pub async fn cancel_unconfirmed_batch(&self, batch_id: &str) -> Result<()> {
+        match self.cancel_batch(batch_id).await {
+            Err(error) if error.is(Sentinel::InvalidState) => Ok(()),
+            other => other,
         }
     }
 

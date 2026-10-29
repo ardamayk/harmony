@@ -5,7 +5,7 @@
 use super::errors::{Error, Sentinel};
 use super::model::*;
 use super::repository::Repository;
-use super::service::{Hook, Service};
+use super::service::{BatchProgress, Hook, Service};
 use super::storage::{Limits, Storage};
 use bytes::Bytes;
 use sqlx::SqlitePool;
@@ -275,6 +275,16 @@ async fn confirms_a_batch_with_album_previews() {
         .await
         .unwrap();
     assert_eq!(retried.status, BATCH_STATUS_COMPLETED);
+    // A confirmed batch is beyond cancelling, which is no error.
+    assert_eq!(
+        h.service.batch_progress(&batch.id).await.unwrap(),
+        BatchProgress::Completed
+    );
+    h.service.cancel_unconfirmed_batch(&batch.id).await.unwrap();
+    assert_eq!(
+        h.service.batch_progress(&batch.id).await.unwrap(),
+        BatchProgress::Completed
+    );
     let history = h.service.list_history().await.unwrap();
     assert_eq!(history.items[0].import_id, batch.id);
     assert_eq!(history.items[0].files[0].file_id, client_file_id);
@@ -331,16 +341,12 @@ async fn a_server_fed_file_previews_like_the_same_uploaded_bytes() {
     h.service.cleanup_inactive(later).await.unwrap();
     h.service.cleanup_restart().await.unwrap();
     assert_eq!(
-        h.service
-            .batch_status(&fed_batch.id)
-            .await
-            .unwrap()
-            .as_deref(),
-        Some(BATCH_STATUS_UPLOADING)
+        h.service.batch_progress(&fed_batch.id).await.unwrap(),
+        BatchProgress::Open
     );
     assert_eq!(
-        h.service.batch_status(&uploaded_batch.id).await.unwrap(),
-        None
+        h.service.batch_progress(&uploaded_batch.id).await.unwrap(),
+        BatchProgress::Gone
     );
     assert_eq!(h.staged_files(), 1, "the server-owned file stays staged");
 }

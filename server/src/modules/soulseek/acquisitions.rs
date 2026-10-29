@@ -13,8 +13,7 @@ use super::service::{Soulseek, SoulseekError};
 use super::slskd::{SlskdError, TransferState};
 use super::versions::{Quality, RemoteFile, Scope};
 use crate::auth::DEFAULT_USER_ID;
-use crate::modules::managed_import::errors::Sentinel;
-use crate::modules::managed_import::model::{BATCH_STATUS_COMPLETED, BATCH_STATUS_CONFIRMING};
+use crate::modules::managed_import::service::BatchProgress;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
@@ -360,11 +359,11 @@ impl Soulseek {
         ) {
             return acquisition;
         }
-        match self.batch_status(&acquisition).await {
-            Ok(Some(status)) if status == BATCH_STATUS_COMPLETED => {
+        match self.batch_progress(&acquisition).await {
+            Ok(BatchProgress::Completed) => {
                 acquisition.state = AcquisitionState::Completed;
             }
-            Ok(None) if acquisition.state != AcquisitionState::Failed => {
+            Ok(BatchProgress::Gone) if acquisition.state != AcquisitionState::Failed => {
                 acquisition.state = AcquisitionState::Cancelled;
             }
             _ => {}
@@ -372,16 +371,16 @@ impl Soulseek {
         acquisition
     }
 
-    /// The acquisition's batch status; `None` once the batch is gone.
-    async fn batch_status(
+    /// Where the acquisition's batch is; `Gone` without a batch.
+    async fn batch_progress(
         &self,
         acquisition: &Acquisition,
-    ) -> Result<Option<String>, SoulseekError> {
+    ) -> Result<BatchProgress, SoulseekError> {
         let Some(batch_id) = &acquisition.batch_id else {
-            return Ok(None);
+            return Ok(BatchProgress::Gone);
         };
         self.managed_import()
-            .batch_status(batch_id)
+            .batch_progress(batch_id)
             .await
             .map_err(internal)
     }
@@ -392,8 +391,10 @@ impl Soulseek {
         let Some(batch_id) = &acquisition.batch_id else {
             return;
         };
-        if let Err(error) = self.managed_import().cancel_batch(batch_id).await
-            && !error.is(Sentinel::InvalidState)
+        if let Err(error) = self
+            .managed_import()
+            .cancel_unconfirmed_batch(batch_id)
+            .await
         {
             tracing::warn!(%error, acquisition = %acquisition.id, "cancel the acquisition's Import Batch failed");
         }
@@ -413,15 +414,15 @@ impl Soulseek {
             .await
             .map_err(internal)?
             .ok_or(SoulseekError::AcquisitionNotFound)?;
-        let batch_status = self.batch_status(&acquisition).await?;
-        if batch_status.as_deref() == Some(BATCH_STATUS_CONFIRMING) {
+        let progress = self.batch_progress(&acquisition).await?;
+        if progress == BatchProgress::Confirming {
             return Err(SoulseekError::Conflict(
                 "the acquisition's Import Batch is being committed".to_owned(),
             ));
         }
         let mut acquisition = self.observe(acquisition).await;
         self.discard_downloads(&mut acquisition).await;
-        if batch_status.is_some_and(|status| status != BATCH_STATUS_COMPLETED) {
+        if progress == BatchProgress::Open {
             self.cancel_batch(&acquisition).await;
         }
         match acquisition.state {
@@ -562,22 +563,22 @@ impl Soulseek {
     async fn step(&self, acquisition: &mut Acquisition, timing: WorkerTiming) {
         // The listener may confirm or cancel the batch at any time through
         // the import-batches routes.
-        match self.batch_status(acquisition).await {
+        match self.batch_progress(acquisition).await {
             Err(error) => {
                 tracing::error!(%error, acquisition = %acquisition.id, "read the acquisition's Import Batch failed");
                 return;
             }
-            Ok(Some(status)) if status == BATCH_STATUS_COMPLETED => {
+            Ok(BatchProgress::Completed) => {
                 self.discard_downloads(acquisition).await;
                 acquisition.state = AcquisitionState::Completed;
                 return;
             }
-            Ok(None) => {
+            Ok(BatchProgress::Gone) => {
                 self.discard_downloads(acquisition).await;
                 acquisition.state = AcquisitionState::Cancelled;
                 return;
             }
-            Ok(Some(_)) => {}
+            Ok(BatchProgress::Open | BatchProgress::Confirming) => {}
         }
         if acquisition.state.is_downloading() {
             self.download(acquisition, timing).await;
