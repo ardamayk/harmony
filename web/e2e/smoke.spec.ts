@@ -89,12 +89,32 @@ test("product docs load through server module", async ({ page }) => {
 	await expect(page.getByRole("link", { name: "API Reference" })).toBeVisible();
 });
 
-test("swagger reference loads through docs module", async ({ page }) => {
+// Scalar is self-hosted (ADR 0035): the reference renders the spec, and
+// nothing it loads leaves the page's origin (no CDN, fonts or telemetry).
+test("API reference loads through docs module without leaving the origin", async ({
+	page,
+	baseURL,
+}) => {
+	const origin = new URL(baseURL ?? "http://localhost:3000").origin;
+	const foreign: string[] = [];
+	page.on("request", (request) => {
+		const url = new URL(request.url());
+		if (
+			url.protocol !== "data:" &&
+			url.protocol !== "blob:" &&
+			url.origin !== origin
+		) {
+			foreign.push(request.url());
+		}
+	});
 	await page.goto("/api/docs");
+	await expect(page).toHaveTitle("Earthly Audio API Reference");
 	await expect(
-		page.getByRole("heading", { name: "Earthly Audio API Reference" }),
+		page.getByRole("heading", { level: 1, name: "Navidrome Replacement API" }),
 	).toBeVisible();
-	await expect(page.locator("#swagger-ui")).toBeVisible();
+	await expect(page.getByText("/api/v1/health").first()).toBeVisible();
+	await page.waitForLoadState("networkidle");
+	expect(foreign).toEqual([]);
 });
 
 // The page makes room for the pinned Queue Drawer at every desktop width,
