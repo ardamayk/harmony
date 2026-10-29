@@ -8,6 +8,7 @@
 //! only from the HTTPS URL the search signed into the id, through the same
 //! guards, and is never logged either.
 
+use super::timing::{CacheUse, ResolveTiming, RunTiming, StreamTiming};
 use super::token::{TokenSigner, TrackRef, fingerprint, is_artwork_url};
 use super::yt_dlp::{MAX_SEARCH_RESULTS, ResolvedFormat, YtDlp};
 use crate::config::ExternalSourceConfig;
@@ -23,6 +24,7 @@ use futures_util::future::{BoxFuture, Shared};
 use futures_util::stream::BoxStream;
 use serde::Serialize;
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use url::Url;
@@ -109,6 +111,15 @@ pub struct SearchResults {
 pub enum PlaybackFormat {
     Progressive,
     Hls,
+}
+
+impl PlaybackFormat {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Progressive => "progressive",
+            Self::Hls => "hls",
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -225,7 +236,9 @@ fn unix_now() -> i64 {
         .unwrap_or(0)
 }
 
-type Resolution = Shared<BoxFuture<'static, Result<Arc<Resolved>, ExternalError>>>;
+/// A yt-dlp resolution and how long its run took, shared by every request
+/// waiting for it.
+type Resolution = Shared<BoxFuture<'static, (Result<Arc<Resolved>, ExternalError>, RunTiming)>>;
 
 /// A cached resolution, when it is stale, and when it was made.
 type CacheEntry = (Arc<Resolved>, Instant, Instant);
@@ -338,7 +351,13 @@ impl ExternalSource {
         self.search_prefix.as_deref().ok_or(ExternalError::Disabled)
     }
 
-    pub async fn search(&self, query: &str, limit: usize) -> Result<SearchResults, ExternalError> {
+    /// `timing` gets the yt-dlp run's timings.
+    pub async fn search(
+        &self,
+        query: &str,
+        limit: usize,
+        timing: &mut RunTiming,
+    ) -> Result<SearchResults, ExternalError> {
         let prefix = self.ensure_enabled()?;
         let query: String = query
             .chars()
@@ -357,7 +376,7 @@ impl ExternalSource {
         }
         let items = self
             .yt_dlp
-            .search(prefix, query, limit)
+            .search(prefix, query, limit, timing)
             .await
             .inspect_err(|error| tracing::warn!(%error, "External Source search failed"))?;
         let items = items
@@ -391,8 +410,12 @@ impl ExternalSource {
     }
 
     /// How a client plays the Track: its stream or its HLS playlist.
-    pub async fn playback(&self, id: &str) -> Result<Playback, ExternalError> {
-        let resolved = self.resolve(id).await?;
+    pub async fn playback(
+        &self,
+        id: &str,
+        timing: &mut ResolveTiming,
+    ) -> Result<Playback, ExternalError> {
+        let resolved = self.resolve(id, timing).await?;
         Ok(Playback {
             format: resolved.format,
             stream_path: match resolved.format {
@@ -404,14 +427,16 @@ impl ExternalSource {
 
     /// The upstream response for a progressive Track, `range` passed on.
     /// With `head`, a chunked Track is answered from a 1-byte probe and
-    /// without a body.
+    /// without a body. `timing` gets the resolve, the wait for the first
+    /// upstream response and the number of upstream requests.
     pub async fn open_stream(
         &self,
         id: &str,
         range: Option<HeaderValue>,
         head: bool,
+        timing: &mut StreamTiming,
     ) -> Result<UpstreamResponse, ExternalError> {
-        let resolved = self.resolve(id).await?;
+        let resolved = self.resolve(id, &mut timing.resolve).await?;
         if resolved.format != PlaybackFormat::Progressive {
             return Err(ExternalError::Unplayable(
                 "the External Track plays as HLS; use its playlist".to_owned(),
@@ -421,34 +446,42 @@ impl ExternalSource {
             None => Some((0, None)),
             Some(value) => parse_range(value),
         };
-        let (Some(chunk_size), Some((start, end))) = (resolved.chunk_size, requested) else {
-            return self
-                .fetch(id, &resolved.url, resolved.headers.clone(), range)
-                .await;
+        let requested_at = Instant::now();
+        timing.chunks.fetch_add(1, Ordering::Relaxed);
+        let response = match (resolved.chunk_size, requested) {
+            (Some(chunk_size), Some((start, end))) => {
+                self.fetch_in_chunks(
+                    id,
+                    &resolved,
+                    chunk_size,
+                    (start, end),
+                    (range.is_some(), head),
+                    timing.chunks.clone(),
+                )
+                .await
+            }
+            _ => {
+                self.fetch(id, &resolved.url, resolved.headers.clone(), range)
+                    .await
+            }
         };
-        self.fetch_in_chunks(
-            id,
-            &resolved,
-            chunk_size,
-            (start, end),
-            range.is_some(),
-            head,
-        )
-        .await
+        timing.upstream_ttfb = Some(requested_at.elapsed());
+        response
     }
 
     /// Serves `start..=end` (to the end of the file without `end`) as one
     /// response from upstream ranges of at most `chunk_size` bytes, fetched
     /// one after another as the client reads, the way yt-dlp downloads such
-    /// a file. With `head` only `start` is fetched, for the headers.
+    /// a file. With `head` only `start` is fetched, for the headers. Each
+    /// later chunk's request is counted in `chunks`.
     async fn fetch_in_chunks(
         &self,
         id: &str,
         resolved: &Resolved,
         chunk_size: u64,
         (start, end): (u64, Option<u64>),
-        ranged: bool,
-        head: bool,
+        (ranged, head): (bool, bool),
+        chunks: Arc<AtomicU64>,
     ) -> Result<UpstreamResponse, ExternalError> {
         use axum::http::header::{ACCEPT_RANGES, CONTENT_LENGTH, CONTENT_RANGE};
         let chunk_last = if head {
@@ -507,10 +540,12 @@ impl ExternalSource {
             let url = url.clone();
             let request_headers = request_headers.clone();
             let track_hash = track_hash.clone();
+            let chunks = chunks.clone();
             async move {
                 if next > last {
                     return None;
                 }
+                chunks.fetch_add(1, Ordering::Relaxed);
                 let chunk_last = next.saturating_add(chunk_size - 1).min(last);
                 // The body ends here; the URL is never logged.
                 let failed = |message: String| {
@@ -550,7 +585,7 @@ impl ExternalSource {
     /// The HLS playlist of an HLS Track, every URI rewritten to a signed
     /// resource of this Track.
     pub async fn playlist(&self, id: &str) -> Result<String, ExternalError> {
-        let resolved = self.resolve(id).await?;
+        let resolved = self.resolve(id, &mut ResolveTiming::default()).await?;
         if resolved.format != PlaybackFormat::Hls {
             return Err(ExternalError::Unplayable(
                 "the External Track plays progressively; use its stream".to_owned(),
@@ -675,30 +710,55 @@ impl ExternalSource {
         })
     }
 
-    async fn resolve(&self, id: &str) -> Result<Arc<Resolved>, ExternalError> {
+    /// The Track's resolved audio; `timing` gets where it came from and how
+    /// long it took.
+    async fn resolve(
+        &self,
+        id: &str,
+        timing: &mut ResolveTiming,
+    ) -> Result<Arc<Resolved>, ExternalError> {
+        let started = Instant::now();
         self.ensure_enabled()?;
         let track = self.tracks.verify(id).map_err(ExternalError::BadRequest)?;
-        if let Some(resolved) = self.cache.get(id) {
-            return Ok(resolved);
-        }
-        self.resolution(id, track).await
+        timing.extractor = Some(track.extractor.clone());
+        let result = match self.cache.get(id) {
+            Some(resolved) => {
+                timing.cache = Some(CacheUse::Hit);
+                Ok(resolved)
+            }
+            None => {
+                let (resolution, cache) = self.resolution(id, track);
+                timing.cache = Some(cache);
+                let (result, run) = resolution.await;
+                timing.run = run;
+                result
+            }
+        };
+        timing.total = Some(started.elapsed());
+        timing.format = result
+            .as_ref()
+            .ok()
+            .map(|resolved| resolved.format.as_str());
+        result
     }
 
-    /// The resolution running for `id`, starting one if none is. It runs on
-    /// its own task, so it finishes (and is cached) for the next caller even
-    /// when the request that started it goes away.
-    fn resolution(&self, id: &str, track: TrackRef) -> Resolution {
+    /// The resolution running for `id`, starting one if none is, and which
+    /// of the two it was. It runs on its own task, so it finishes (and is
+    /// cached) for the next caller even when the request that started it
+    /// goes away.
+    fn resolution(&self, id: &str, track: TrackRef) -> (Resolution, CacheUse) {
         let mut in_flight = self.cache.in_flight.lock().expect("resolutions lock");
         if let Some(existing) = in_flight.get(id) {
-            return existing.clone();
+            return (existing.clone(), CacheUse::Joined);
         }
         let yt_dlp = self.yt_dlp.clone();
         let cache = self.cache.clone();
         let key = id.to_owned();
         let task = tokio::spawn(async move {
             let track_hash = fingerprint(&key);
+            let mut run = RunTiming::default();
             let result = yt_dlp
-                .resolve(&track.url, &track.extractor)
+                .resolve(&track.url, &track.extractor, &mut run)
                 .await
                 .map(|format| Arc::new(Resolved::from(format)));
             match &result {
@@ -719,19 +779,22 @@ impl ExternalSource {
                 .lock()
                 .expect("resolutions lock")
                 .remove(&key);
-            result
+            (result, run)
         });
         let shared = async move {
             task.await.unwrap_or_else(|error| {
-                Err(ExternalError::Failed(format!(
-                    "External Track resolution stopped: {error}"
-                )))
+                (
+                    Err(ExternalError::Failed(format!(
+                        "External Track resolution stopped: {error}"
+                    ))),
+                    RunTiming::default(),
+                )
             })
         }
         .boxed()
         .shared();
         in_flight.insert(id.to_owned(), shared.clone());
-        shared
+        (shared, CacheUse::Miss)
     }
 
     /// GETs a public HTTP(S) URL through the SSRF-guarded client. A
@@ -928,13 +991,21 @@ mod tests {
             "https://media.example/a.m4a",
             PlaybackFormat::Progressive,
         );
-        let playback = source.playback(&id).await.expect("playback");
+        let playback = source
+            .playback(&id, &mut ResolveTiming::default())
+            .await
+            .expect("playback");
         assert_eq!(
             playback.stream_path,
             format!("/api/v1/external/tracks/{id}/stream")
         );
         let upstream = source
-            .open_stream(&id, Some(HeaderValue::from_static("bytes=0-1")), false)
+            .open_stream(
+                &id,
+                Some(HeaderValue::from_static("bytes=0-1")),
+                false,
+                &mut StreamTiming::default(),
+            )
             .await
             .expect("stream");
         assert_eq!(upstream.status, 206);
@@ -982,7 +1053,10 @@ mod tests {
             chunk(4, 7, b"4567"),
             chunk(8, 9, b"89"),
         ]);
-        let whole = source.open_stream(&id, None, false).await.expect("stream");
+        let whole = source
+            .open_stream(&id, None, false, &mut StreamTiming::default())
+            .await
+            .expect("stream");
         assert_eq!(whole.status, 200);
         assert_eq!(whole.headers[axum::http::header::CONTENT_LENGTH], "10");
         assert!(
@@ -1001,7 +1075,12 @@ mod tests {
             chunk(2, 3, b"23"),
         ]);
         let tail = source
-            .open_stream(&id, Some(HeaderValue::from_static("bytes=5-")), false)
+            .open_stream(
+                &id,
+                Some(HeaderValue::from_static("bytes=5-")),
+                false,
+                &mut StreamTiming::default(),
+            )
             .await
             .expect("stream");
         assert_eq!(tail.status, 206);
@@ -1012,7 +1091,12 @@ mod tests {
         assert_eq!(tail.headers[axum::http::header::CONTENT_LENGTH], "5");
         assert_eq!(text(tail).await, "56789");
         let part = source
-            .open_stream(&id, Some(HeaderValue::from_static("bytes=2-3")), false)
+            .open_stream(
+                &id,
+                Some(HeaderValue::from_static("bytes=2-3")),
+                false,
+                &mut StreamTiming::default(),
+            )
             .await
             .expect("stream");
         assert_eq!(
@@ -1030,7 +1114,12 @@ mod tests {
             b"",
         ));
         let past = source
-            .open_stream(&id, Some(HeaderValue::from_static("bytes=20-")), false)
+            .open_stream(
+                &id,
+                Some(HeaderValue::from_static("bytes=20-")),
+                false,
+                &mut StreamTiming::default(),
+            )
             .await
             .expect("stream");
         assert_eq!(past.status, 416);
@@ -1060,7 +1149,12 @@ mod tests {
             chunk(9, 9, b"9"),
         ]);
         let open = source
-            .open_stream(&id, Some(HeaderValue::from_static("bytes=1-")), false)
+            .open_stream(
+                &id,
+                Some(HeaderValue::from_static("bytes=1-")),
+                false,
+                &mut StreamTiming::default(),
+            )
             .await
             .expect("stream");
         assert_eq!(open.status, 206);
@@ -1086,7 +1180,12 @@ mod tests {
             .expect("lock")
             .extend([chunk(2, 5, b"2345"), chunk(6, 6, b"6")]);
         let bounded = source
-            .open_stream(&id, Some(HeaderValue::from_static("bytes=2-6")), false)
+            .open_stream(
+                &id,
+                Some(HeaderValue::from_static("bytes=2-6")),
+                false,
+                &mut StreamTiming::default(),
+            )
             .await
             .expect("stream");
         assert_eq!(bounded.status, 206);
@@ -1112,7 +1211,10 @@ mod tests {
             .lock()
             .expect("lock")
             .extend([chunk(0, 0, b"0"), chunk(4, 4, b"4")]);
-        let head = source.open_stream(&id, None, true).await.expect("head");
+        let head = source
+            .open_stream(&id, None, true, &mut StreamTiming::default())
+            .await
+            .expect("head");
         assert_eq!(head.status, 200);
         assert_eq!(head.headers[axum::http::header::CONTENT_LENGTH], "10");
         assert_eq!(head.headers[axum::http::header::ACCEPT_RANGES], "bytes");
@@ -1124,7 +1226,12 @@ mod tests {
         );
         assert_eq!(text(head).await, "");
         let ranged = source
-            .open_stream(&id, Some(HeaderValue::from_static("bytes=4-")), true)
+            .open_stream(
+                &id,
+                Some(HeaderValue::from_static("bytes=4-")),
+                true,
+                &mut StreamTiming::default(),
+            )
             .await
             .expect("head");
         assert_eq!(ranged.status, 206);
@@ -1150,7 +1257,10 @@ mod tests {
             chunk(0, 3, b"0123"),
             response(403, "https://media.example/a.webm", &[], b""),
         ]);
-        let whole = source.open_stream(&id, None, false).await.expect("stream");
+        let whole = source
+            .open_stream(&id, None, false, &mut StreamTiming::default())
+            .await
+            .expect("stream");
         assert_eq!(whole.status, 200);
         let body = chunks(whole).await;
         assert_eq!(body.len(), 2, "{body:?}");
@@ -1165,7 +1275,10 @@ mod tests {
             .lock()
             .expect("lock")
             .extend([chunk(0, 3, b"0123"), chunk(0, 3, b"0123")]);
-        let whole = source.open_stream(&id, None, false).await.expect("stream");
+        let whole = source
+            .open_stream(&id, None, false, &mut StreamTiming::default())
+            .await
+            .expect("stream");
         let body = chunks(whole).await;
         assert_eq!(body.len(), 2, "{body:?}");
         assert!(body[1].is_err());
@@ -1193,7 +1306,7 @@ mod tests {
         for url in ["http://10.0.0.1/a.mp3", "http://localhost/a.mp3"] {
             let (source, id) = resolved_source(fake.clone(), url, PlaybackFormat::Progressive);
             assert!(matches!(
-                source.open_stream(&id, None, false).await,
+                source.open_stream(&id, None, false, &mut StreamTiming::default()).await,
                 Err(ExternalError::Failed(message)) if message.contains("unsafe stream URL")
             ));
         }
@@ -1209,11 +1322,16 @@ mod tests {
             PlaybackFormat::Hls,
         );
         assert!(matches!(
-            source.open_stream(&id, None, false).await,
+            source
+                .open_stream(&id, None, false, &mut StreamTiming::default())
+                .await,
             Err(ExternalError::Unplayable(_))
         ));
         assert_eq!(
-            source.playback(&id).await.expect("playback"),
+            source
+                .playback(&id, &mut ResolveTiming::default())
+                .await
+                .expect("playback"),
             Playback {
                 format: PlaybackFormat::Hls,
                 stream_path: format!("/api/v1/external/tracks/{id}/playlist.m3u8"),
@@ -1343,13 +1461,13 @@ mod tests {
             PlaybackFormat::Progressive,
         );
         assert!(matches!(
-            source.open_stream(&id, None, false).await,
+            source.open_stream(&id, None, false, &mut StreamTiming::default()).await,
             Err(ExternalError::Failed(message)) if message.contains("403")
         ));
         assert!(source.cache.get(&id).is_none());
         // The next request runs yt-dlp, which this test has not installed.
         assert!(matches!(
-            source.playback(&id).await,
+            source.playback(&id, &mut ResolveTiming::default()).await,
             Err(ExternalError::Unavailable(_))
         ));
     }
@@ -1372,7 +1490,12 @@ mod tests {
         );
         let resolved = source.cache.get(&id).expect("cached");
         source.cache.insert(&id, resolved, CACHE_TTL);
-        assert!(source.open_stream(&id, None, false).await.is_err());
+        assert!(
+            source
+                .open_stream(&id, None, false, &mut StreamTiming::default())
+                .await
+                .is_err()
+        );
         assert!(source.cache.get(&id).is_some());
     }
 
@@ -1381,10 +1504,15 @@ mod tests {
         let source = ExternalSource::with_upstream(None, Arc::new(Fake::default()));
         assert!(!source.is_enabled());
         assert_eq!(
-            source.search("daft punk", 10).await,
+            source
+                .search("daft punk", 10, &mut RunTiming::default())
+                .await,
             Err(ExternalError::Disabled)
         );
-        assert_eq!(source.playback("x").await, Err(ExternalError::Disabled));
+        assert_eq!(
+            source.playback("x", &mut ResolveTiming::default()).await,
+            Err(ExternalError::Disabled)
+        );
         assert!(matches!(
             source.resource("x", "y", None).await,
             Err(ExternalError::Disabled)
@@ -1488,14 +1616,16 @@ mod tests {
         ] {
             assert!(
                 matches!(
-                    source.search(query, limit).await,
+                    source.search(query, limit, &mut RunTiming::default()).await,
                     Err(ExternalError::BadRequest(_))
                 ),
                 "{query:?} {limit}"
             );
         }
         assert!(matches!(
-            source.playback("not-an-id").await,
+            source
+                .playback("not-an-id", &mut ResolveTiming::default())
+                .await,
             Err(ExternalError::BadRequest(_))
         ));
     }

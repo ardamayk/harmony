@@ -5,6 +5,7 @@
 
 mod handlers;
 mod service;
+mod timing;
 mod token;
 mod yt_dlp;
 

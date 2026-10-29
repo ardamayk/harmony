@@ -4,12 +4,13 @@
 //! capped, and the process killed when the request goes away.
 
 use super::service::ExternalError;
+use super::timing::RunTiming;
 use super::token::{is_artwork_url, is_extractor_key};
 use crate::modules::radio::validate_stream_url;
 use serde_json::Value;
 use std::process::Stdio;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::io::{AsyncRead, AsyncReadExt};
 use tokio::sync::Semaphore;
 
@@ -82,44 +83,58 @@ impl YtDlp {
         prefix: &str,
         query: &str,
         limit: usize,
+        timing: &mut RunTiming,
     ) -> Result<Vec<SearchItem>, ExternalError> {
         let limit = limit.clamp(1, MAX_SEARCH_RESULTS);
         let args = search_args(prefix, query, limit);
         let output = self
-            .run(args, self.search_timeout, SEARCH_OUTPUT_LIMIT_BYTES)
+            .run(args, self.search_timeout, SEARCH_OUTPUT_LIMIT_BYTES, timing)
             .await?;
-        parse_search(&output, limit)
+        let parsing = Instant::now();
+        let items = parse_search(&output, limit);
+        timing.parse = Some(parsing.elapsed());
+        items
     }
 
     pub async fn resolve(
         &self,
         url: &str,
         extractor: &str,
+        timing: &mut RunTiming,
     ) -> Result<ResolvedFormat, ExternalError> {
         let output = self
             .run(
                 resolve_args(url, extractor),
                 self.resolve_timeout,
                 RESOLVE_OUTPUT_LIMIT_BYTES,
+                timing,
             )
             .await?;
-        parse_resolved(&output)
+        let parsing = Instant::now();
+        let resolved = parse_resolved(&output);
+        timing.parse = Some(parsing.elapsed());
+        resolved
     }
 
     /// Runs yt-dlp with at most [`CONCURRENCY`] runs at a time; waiting for
-    /// a turn counts toward the timeout.
+    /// a turn counts toward the timeout. `timing` gets the wait for a turn
+    /// and the run from spawn to exit, as far as they got.
     async fn run(
         &self,
         args: Vec<String>,
         timeout: Duration,
         output_limit: usize,
+        timing: &mut RunTiming,
     ) -> Result<Vec<u8>, ExternalError> {
         let work = async {
+            let queued = Instant::now();
             let _permit = self
                 .permits
                 .acquire()
                 .await
                 .map_err(|error| ExternalError::Failed(error.to_string()))?;
+            timing.queue = Some(queued.elapsed());
+            let spawned = Instant::now();
             let mut child = tokio::process::Command::new(&self.binary)
                 .args(&args)
                 .stdin(Stdio::null())
@@ -149,6 +164,7 @@ impl YtDlp {
                 .wait()
                 .await
                 .map_err(|error| ExternalError::Failed(format!("yt-dlp failed: {error}")))?;
+            timing.run = Some(spawned.elapsed());
             if !status.success() {
                 return Err(ExternalError::Failed(
                     last_error_line(&errors).unwrap_or_else(|| format!("yt-dlp {status}")),

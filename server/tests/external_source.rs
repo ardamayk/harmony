@@ -288,6 +288,51 @@ async fn playback_resolves_once_with_the_extractor_pinned() {
     assert_eq!(fake.runs().len(), 2);
 }
 
+/// The `Server-Timing` header of a GET, and its status.
+async fn server_timing(router: &axum::Router, uri: &str) -> (StatusCode, String) {
+    let response = router
+        .clone()
+        .oneshot(Request::get(uri).body(Body::empty()).unwrap())
+        .await
+        .expect("response");
+    let timing = response
+        .headers()
+        .get("server-timing")
+        .map(|value| value.to_str().expect("text").to_owned())
+        .unwrap_or_default();
+    (response.status(), timing)
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn searches_and_playback_answer_with_server_timing() {
+    let directory = tempfile::tempdir().unwrap();
+    let fake = FakeYtDlp::printing(SEARCH_OUTPUT, PROGRESSIVE_OUTPUT);
+    let router = router(directory.path(), Some(&fake.binary()), TIMEOUT).await;
+    let (status, timing) = server_timing(&router, "/api/v1/external/search?q=daft+punk").await;
+    assert_eq!(status, StatusCode::OK);
+    let names: Vec<_> = timing
+        .split(", ")
+        .map(|metric| metric.split_once(";dur=").expect("a duration").0)
+        .collect();
+    assert_eq!(names, ["queue", "ytdlp", "parse", "total"], "{timing}");
+
+    let (_, body) = get(&router, "/api/v1/external/search?q=daft+punk").await;
+    let id = body["items"][0]["id"].as_str().unwrap().to_owned();
+    let playback = format!("/api/v1/external/tracks/{id}/playback");
+    let (status, timing) = server_timing(&router, &playback).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        timing.starts_with("cache;desc=miss, queue;dur=") && timing.contains(", total;dur="),
+        "{timing}"
+    );
+    let (_, timing) = server_timing(&router, &playback).await;
+    assert!(timing.starts_with("cache;desc=hit, total;dur="), "{timing}");
+    // Failures answer without it.
+    let (status, timing) =
+        server_timing(&router, &format!("/api/v1/external/tracks/{id}/stream")).await;
+    assert_eq!((status, timing.as_str()), (StatusCode::BAD_GATEWAY, ""));
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn hls_tracks_play_through_their_playlist() {
     let directory = tempfile::tempdir().unwrap();

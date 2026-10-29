@@ -1,10 +1,12 @@
 //! HTTP for the External Source: parse the request, call the service,
 //! respond. Every route answers 404 `external_source_disabled` while the
-//! source is not configured.
+//! source is not configured. Search, playback, stream and artwork requests
+//! each write one timing line and answer with `Server-Timing`.
 
 use super::service::{
     Artwork, DEFAULT_SEARCH_LIMIT, ExternalError, Playback, Resource, SearchResults,
 };
+use super::timing::{ArtworkLog, End, ResolveLog, SearchLog, StreamLog};
 use crate::app::AppState;
 use crate::modules::radio::{HLS_CONTENT_TYPE, UpstreamResponse, copy_stream_headers};
 use crate::query::GoQuery;
@@ -13,7 +15,7 @@ use axum::Json;
 use axum::Router;
 use axum::body::Body;
 use axum::extract::{Path, State};
-use axum::http::{HeaderMap, HeaderValue, Method, StatusCode, header};
+use axum::http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 
@@ -66,7 +68,24 @@ impl From<ExternalError> for ApiError {
     }
 }
 
-async fn search(State(state): State<AppState>, query: GoQuery) -> ApiResult<Json<SearchResults>> {
+const SERVER_TIMING: HeaderName = HeaderName::from_static("server-timing");
+
+/// Records the failure on the request's timing line, answered as usual.
+fn refuse(end: &mut End, error: ExternalError) -> ApiError {
+    let answer = ApiError::from(error.clone());
+    end.fail(&error, answer.status.as_u16());
+    answer
+}
+
+fn timed(response: impl IntoResponse, timing: Option<HeaderValue>) -> Response {
+    let mut response = response.into_response();
+    if let Some(timing) = timing {
+        response.headers_mut().insert(SERVER_TIMING, timing);
+    }
+    response
+}
+
+async fn search(State(state): State<AppState>, query: GoQuery) -> ApiResult<Response> {
     let source = &state.external_source;
     source.ensure_enabled()?;
     let limit = match query.get("limit") {
@@ -75,14 +94,24 @@ async fn search(State(state): State<AppState>, query: GoQuery) -> ApiResult<Json
             ApiError::bad_request("limit must be between 1 and 20").with_field("limit")
         })?,
     };
-    Ok(Json(source.search(query.get("q"), limit).await?))
+    let mut log = SearchLog::start(query.get("q"));
+    let results: SearchResults = source
+        .search(query.get("q"), limit, &mut log.run)
+        .await
+        .map_err(|error| refuse(&mut log.end, error))?;
+    log.found(results.items.len());
+    Ok(timed(Json(results), log.server_timing()))
 }
 
-async fn playback(
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-) -> ApiResult<Json<Playback>> {
-    Ok(Json(state.external_source.playback(&id).await?))
+async fn playback(State(state): State<AppState>, Path(id): Path<String>) -> ApiResult<Response> {
+    let mut log = ResolveLog::start(&id);
+    let playback: Playback = state
+        .external_source
+        .playback(&id, &mut log.timing)
+        .await
+        .map_err(|error| refuse(&mut log.end, error))?;
+    log.end.ok(StatusCode::OK.as_u16());
+    Ok(timed(Json(playback), log.server_timing()))
 }
 
 async fn stream(
@@ -93,8 +122,15 @@ async fn stream(
 ) -> ApiResult<Response> {
     let range = headers.get(header::RANGE).cloned();
     let head = method == Method::HEAD;
-    let response = state.external_source.open_stream(&id, range, head).await?;
-    Ok(media(response))
+    let mut log = StreamLog::start(&id, range.as_ref(), head);
+    let mut response = state
+        .external_source
+        .open_stream(&id, range, head, &mut log.timing)
+        .await
+        .map_err(|error| refuse(&mut log.end, error))?;
+    let timing = log.server_timing();
+    response.body = log.watch(response.status, response.body);
+    Ok(timed(media(response), timing))
 }
 
 async fn playlist(State(state): State<AppState>, Path(id): Path<String>) -> ApiResult<Response> {
@@ -120,7 +156,14 @@ async fn resource(
 }
 
 async fn artwork(State(state): State<AppState>, Path(id): Path<String>) -> ApiResult<Response> {
-    Ok(image(state.external_source.artwork(&id).await?))
+    let mut log = ArtworkLog::start(&id);
+    let artwork = state
+        .external_source
+        .artwork(&id)
+        .await
+        .map_err(|error| refuse(&mut log.end, error))?;
+    log.served(artwork.data.len());
+    Ok(timed(image(artwork), log.server_timing()))
 }
 
 /// The cover as the image type it was checked to be, kept private to the

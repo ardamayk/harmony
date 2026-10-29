@@ -136,6 +136,8 @@ fn cors(origins: &[String]) -> CorsLayer {
             Method::OPTIONS,
         ])
         .allow_headers(headers)
+        // Lets the clients read External Source timings.
+        .expose_headers([HeaderName::from_static("server-timing")])
         .allow_credentials(true)
         .max_age(Duration::from_secs(300))
 }
