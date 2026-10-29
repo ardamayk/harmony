@@ -131,7 +131,7 @@ describe("formatAcquisitionQuality", () => {
 				bitrateKbps: 245,
 				variableBitrate: true,
 			}),
-		).toBe("MP3 VBR 245 kbps");
+		).toBe("MP3 VBR ~245 kbps");
 	});
 
 	it("says unknown instead of guessing missing attributes", () => {
@@ -148,5 +148,12 @@ describe("formatAcquisitionQuality", () => {
 		expect(formatAcquisitionQuality({ format: "mp3", lossless: false })).toBe(
 			"MP3, bitrate unknown",
 		);
+		expect(
+			formatAcquisitionQuality({
+				format: "mp3",
+				lossless: false,
+				variableBitrate: true,
+			}),
+		).toBe("MP3 VBR, bitrate unknown");
 	});
 });

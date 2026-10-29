@@ -61,7 +61,9 @@ function formatSampleRate(hz: number): string {
 
 /**
  * The quality an Acquisition Version claims, as its sources report it;
- * anything missing reads "unknown" and is never guessed.
+ * anything missing reads "unknown" and is never guessed. A variable
+ * bitrate reads as the level the server grouped the sources by, such as
+ * "MP3 VBR ~245 kbps".
  */
 export function formatAcquisitionQuality(quality: AcquisitionQuality): string {
 	const format = quality.format.toUpperCase();
@@ -78,8 +80,12 @@ export function formatAcquisitionQuality(quality: AcquisitionQuality): string {
 				: "unknown sample rate";
 		return `${format} ${depth} / ${rate}`;
 	}
-	if (quality.bitrateKbps == null) return `${format}, bitrate unknown`;
-	return `${format} ${quality.variableBitrate ? "VBR " : ""}${quality.bitrateKbps} kbps`;
+	const kind = quality.variableBitrate ? `${format} VBR` : format;
+	if (quality.bitrateKbps == null) return `${kind}, bitrate unknown`;
+	// A variable bitrate is the level of the sources' average, hence "~".
+	return quality.variableBitrate
+		? `${kind} ~${quality.bitrateKbps} kbps`
+		: `${kind} ${quality.bitrateKbps} kbps`;
 }
 
 const BYTES_PER_KIB = 1024;
