@@ -139,9 +139,8 @@ fn absolute(path: &str) -> PathBuf {
     let mut clean = PathBuf::from("/");
     for component in joined.components() {
         match component {
-            Component::ParentDir => {
-                clean.pop();
-            }
+            // Keep `..` so a symlinked parent resolves the way the OS does.
+            Component::ParentDir => clean.push(".."),
             Component::Normal(part) => clean.push(part),
             _ => {}
         }

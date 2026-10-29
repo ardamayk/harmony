@@ -290,7 +290,7 @@ impl RadioBrowserClient {
                 total: 0,
             });
         }
-        let end = (offset + limit as usize).min(all.len());
+        let end = (offset + limit as usize).min(all.len() - 1);
         let items: Vec<SearchResult> = all.drain(offset..end).collect();
         Ok(List {
             total: items.len(),
