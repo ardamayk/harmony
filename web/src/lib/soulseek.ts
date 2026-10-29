@@ -1,5 +1,6 @@
 import {
 	type AcquisitionQuality,
+	type AcquisitionScope,
 	ApiError,
 	type ExternalTrack,
 	type SoulseekAcquisition,
@@ -23,24 +24,34 @@ function cleanArtistName(name: string): string {
 		.trim();
 }
 
-/**
- * The Soulseek query for an External Track: artist and title, without the
- * decorations a video title carries such as "(Official Video)". An External
- * Track names no Album, so both scopes start from the same words; the
- * listener edits the query before searching.
- */
-export function buildSoulseekQuery(track: ExternalTrack): string {
+/** Query words without decorations, separators or extra spaces. */
+function cleanQueryWords(words: string): string {
 	// A lone dash would read as Soulseek's exclusion operator.
-	const title = track.title
+	return words
 		.replace(TITLE_NOISE, "")
 		.replace(/\s+[-–—|]\s+/g, " ")
 		.replace(/\s+/g, " ")
 		.trim();
+}
+
+/**
+ * The Soulseek query for an External Track, without the decorations a video
+ * title carries such as "(Official Video)". The Album scope searches artist
+ * and Album when the site reports the Album; otherwise, and for the Track
+ * scope, artist and title. The listener edits the query before searching.
+ */
+export function buildSoulseekQuery(
+	track: ExternalTrack,
+	scope: AcquisitionScope = "track",
+): string {
+	const album =
+		scope === "album" && track.album ? cleanQueryWords(track.album) : "";
+	const name = album || cleanQueryWords(track.title);
 	const artist = track.artistName ? cleanArtistName(track.artistName) : "";
 	// Video titles often read "Artist - Title" already.
-	if (!artist || title.toLowerCase().startsWith(artist.toLowerCase()))
-		return title;
-	return `${artist} ${title}`;
+	if (!artist || name.toLowerCase().startsWith(artist.toLowerCase()))
+		return name;
+	return `${artist} ${name}`;
 }
 
 function formatSampleRate(hz: number): string {

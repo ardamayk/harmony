@@ -64,6 +64,35 @@ describe("buildSoulseekQuery", () => {
 			"Untitled",
 		);
 	});
+
+	it("searches artist and Album for the Album scope when the site reports one", () => {
+		const track = {
+			...externalTrack("One More Time (Official Video)", "Daft Punk - Topic"),
+			album: " Discovery ",
+		};
+		expect(buildSoulseekQuery(track, "album")).toBe("Daft Punk Discovery");
+		expect(buildSoulseekQuery({ ...track, artistName: null }, "album")).toBe(
+			"Discovery",
+		);
+	});
+
+	it("keeps artist and title for the Track scope and without an Album", () => {
+		const title = "One More Time (Official Video)";
+		expect(
+			buildSoulseekQuery(
+				{ ...externalTrack(title, "Daft Punk"), album: "Discovery" },
+				"track",
+			),
+		).toBe("Daft Punk One More Time");
+		for (const album of [undefined, null, ""]) {
+			expect(
+				buildSoulseekQuery(
+					{ ...externalTrack(title, "Daft Punk"), album },
+					"album",
+				),
+			).toBe("Daft Punk One More Time");
+		}
+	});
 });
 
 describe("formatAcquisitionQuality", () => {

@@ -404,7 +404,9 @@ export function LibrarySearchDialog({
 		return externalSearch.data.items.map((track: ExternalTrack) => ({
 			key: `external:${track.id}`,
 			title: track.title,
-			subtitle: track.artistName ?? undefined,
+			subtitle:
+				[track.artistName, track.album].filter(Boolean).join(" · ") ||
+				undefined,
 			duration:
 				track.durationMs != null ? formatDuration(track.durationMs) : undefined,
 			artworkUrl: track.hasArtwork

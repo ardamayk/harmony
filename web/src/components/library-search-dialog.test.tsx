@@ -158,6 +158,7 @@ describe("LibrarySearchDialog", () => {
 			id: "token.signature",
 			title: "Around the World",
 			artistName: "Daft Punk",
+			album: "Homework",
 			durationMs: 429_000,
 			webpageUrl: "https://soundcloud.com/daftpunk/around-the-world",
 			extractor: "Soundcloud",
@@ -222,7 +223,7 @@ describe("LibrarySearchDialog", () => {
 			const option = await within(external).findByRole("option", {
 				name: /^Around the World/,
 			});
-			expect(option.textContent).toContain("Daft Punk");
+			expect(option.textContent).toContain("Daft Punk · Homework");
 			expect(option.textContent).toContain("7:09");
 			expect(option.textContent).not.toContain("Open");
 			expect(mocks.searchExternalSource).toHaveBeenCalledWith(

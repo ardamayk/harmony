@@ -60,7 +60,9 @@ export function SoulseekInstallDialog({
 	const queryClient = useQueryClient();
 	const importSession = useContext(ImportSessionContext);
 	const [scope, setScope] = useState<AcquisitionScope>("album");
-	const [query, setQuery] = useState(() => buildSoulseekQuery(track));
+	const [query, setQuery] = useState(() => buildSoulseekQuery(track, "album"));
+	// The query follows the scope until the listener edits it.
+	const [queryEdited, setQueryEdited] = useState(false);
 	const queryId = useId();
 
 	const startSearch = useMutation({
@@ -142,7 +144,11 @@ export function SoulseekInstallDialog({
 						<RadioGroup
 							aria-label="What to install"
 							value={scope}
-							onValueChange={(value) => setScope(value as AcquisitionScope)}
+							onValueChange={(value) => {
+								const next = value as AcquisitionScope;
+								setScope(next);
+								if (!queryEdited) setQuery(buildSoulseekQuery(track, next));
+							}}
 						>
 							{scopeOptions.map((option) => (
 								<Label key={option.value} className="font-normal">
@@ -159,7 +165,10 @@ export function SoulseekInstallDialog({
 								id={queryId}
 								value={query}
 								maxLength={200}
-								onChange={(event) => setQuery(event.target.value)}
+								onChange={(event) => {
+									setQuery(event.target.value);
+									setQueryEdited(true);
+								}}
 							/>
 							<Button
 								type="submit"

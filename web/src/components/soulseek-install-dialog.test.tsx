@@ -133,14 +133,18 @@ function searchResponse(
 	};
 }
 
-function renderDialog(onOpenChange = vi.fn()) {
+function renderDialog(onOpenChange = vi.fn(), external = track) {
 	const client = new QueryClient({
 		defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
 	});
 	render(
 		<QueryClientProvider client={client}>
 			<ImportSessionContext.Provider value={{ open: mocks.openImport }}>
-				<SoulseekInstallDialog track={track} open onOpenChange={onOpenChange} />
+				<SoulseekInstallDialog
+					track={external}
+					open
+					onOpenChange={onOpenChange}
+				/>
 			</ImportSessionContext.Provider>
 		</QueryClientProvider>,
 	);
@@ -177,6 +181,26 @@ describe("SoulseekInstallDialog", () => {
 			screen.getByRole("radio", { name: "Track" }).getAttribute("aria-checked"),
 		).toBe("false");
 		expect(mocks.startSoulseekSearch).not.toHaveBeenCalled();
+	});
+
+	it("prefills the Album scope with the reported Album and the Track scope with the title", () => {
+		renderDialog(vi.fn(), { ...track, album: "Discovery" });
+		const query = screen.getByLabelText("Soulseek query") as HTMLInputElement;
+
+		expect(query.value).toBe("Daft Punk Discovery");
+		fireEvent.click(screen.getByRole("radio", { name: "Track" }));
+		expect(query.value).toBe("Daft Punk One More Time");
+		fireEvent.click(screen.getByRole("radio", { name: "Album" }));
+		expect(query.value).toBe("Daft Punk Discovery");
+	});
+
+	it("keeps an edited query when the scope changes", () => {
+		renderDialog(vi.fn(), { ...track, album: "Discovery" });
+		const query = screen.getByLabelText("Soulseek query") as HTMLInputElement;
+		fireEvent.change(query, { target: { value: "Daft Punk Alive 2007" } });
+		fireEvent.click(screen.getByRole("radio", { name: "Track" }));
+
+		expect(query.value).toBe("Daft Punk Alive 2007");
 	});
 
 	it("searches the edited query and scope", async () => {
