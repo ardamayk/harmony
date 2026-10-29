@@ -114,6 +114,9 @@ function AcquisitionRow({
 	});
 	const canCancel =
 		state === "downloading" || state === "importing" || state === "review";
+	// A failed acquisition's batch holds the files that did arrive; confirming
+	// it imports them and the server then reads the acquisition as completed.
+	const canReview = (state === "review" || state === "failed") && batchId;
 	return (
 		<li
 			aria-label={acquisition.query}
@@ -134,7 +137,7 @@ function AcquisitionRow({
 					<AcquisitionStatus acquisition={acquisition} />
 				</div>
 				<div className="flex shrink-0 items-center gap-2">
-					{state === "review" && batchId ? (
+					{canReview ? (
 						<Button
 							type="button"
 							variant="outline"
@@ -218,7 +221,9 @@ function AcquisitionStatus({
 				<p className="text-destructive text-xs">
 					Failed:{" "}
 					{acquisition.failureReason ?? "no source of this version is left."}{" "}
-					Choose another version with Install.
+					{acquisition.batchId
+						? "Review the files that arrived, or choose another version with Install."
+						: "Choose another version with Install."}
 				</p>
 			);
 		default:

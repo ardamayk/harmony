@@ -212,6 +212,10 @@ describe("Soulseek Acquisitions in Import Music", () => {
 			"Failed: No source of this version is left.",
 		);
 		expect(within(row).queryByRole("button", { name: /Cancel/ })).toBeNull();
+		// Nothing arrived, so there is nothing to review.
+		expect(
+			within(row).queryByRole("button", { name: "Review import" }),
+		).toBeNull();
 		expect(screen.queryByText("Done")).toBeNull();
 		expect(screen.queryByText("Gone")).toBeNull();
 	});
@@ -367,6 +371,67 @@ describe("Soulseek Acquisitions in Import Music", () => {
 			);
 			expect(mocks.cancelManagedImportBatch).not.toHaveBeenCalled();
 			await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+		});
+	});
+
+	describe("review of a failed acquisition", () => {
+		beforeEach(() => {
+			mocks.listSoulseekAcquisitions.mockResolvedValue({
+				items: [
+					acquisition({
+						state: "failed",
+						batchId: BATCH_ID,
+						failureReason:
+							"No source of this version is left: 1 of 2 files did not arrive.",
+					}),
+				],
+			});
+			mocks.getManagedImportBatch.mockResolvedValue(reviewBatch);
+			mocks.confirmManagedImportBatch.mockReturnValue(new Promise(() => {}));
+		});
+
+		it("offers to review the files that arrived, or dismiss them", async () => {
+			renderImportDialog();
+
+			const row = await screen.findByRole("listitem", {
+				name: "Daft Punk Discovery",
+			});
+			expect(row.textContent).toContain("1 of 2 files did not arrive.");
+			expect(row.textContent).toContain(
+				"Review the files that arrived, or choose another version with Install.",
+			);
+			expect(
+				within(row).getByRole("button", { name: "Review import" }),
+			).toBeTruthy();
+			expect(
+				within(row).getByRole("button", {
+					name: "Dismiss Daft Punk Discovery",
+				}),
+			).toBeTruthy();
+		});
+
+		it("confirms the arrived files through the Import Preview", async () => {
+			renderImportDialog();
+			fireEvent.click(
+				await screen.findByRole("button", { name: "Review import" }),
+			);
+			const preview = await screen.findByRole("region", {
+				name: "Import Preview",
+			});
+			expect(mocks.getManagedImportBatch).toHaveBeenCalledWith(BATCH_ID);
+			expect(within(preview).getByText("One More Time")).toBeTruthy();
+
+			fireEvent.click(screen.getByRole("button", { name: "Confirm Import" }));
+
+			await waitFor(() =>
+				expect(mocks.confirmManagedImportBatch).toHaveBeenCalledWith(
+					BATCH_ID,
+					3,
+					["job-1"],
+					undefined,
+					undefined,
+				),
+			);
 		});
 	});
 });
