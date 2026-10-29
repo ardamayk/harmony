@@ -22,6 +22,8 @@ import { ImportSessionProvider } from "#/components/import-session-provider";
 import { LibrarySearchDialog } from "#/components/library-search-dialog";
 import { QueueTrackMenu } from "#/components/queue-track-menu";
 import { RootErrorComponent } from "#/components/root-error";
+import { useSoulseekInstall } from "#/components/soulseek-install-context";
+import { SoulseekInstallProvider } from "#/components/soulseek-install-provider";
 import { ThemeSync } from "#/components/theme-sync";
 import { isDesktopClient } from "#/desktop/bridge";
 import { DesktopConnectionGate } from "#/desktop/DesktopConnectionGate";
@@ -55,6 +57,7 @@ function PlayerBarWithSync() {
 		useFavoriteRadioStations();
 	const canShowWaveform = useServerCapability(TRACK_WAVEFORM_CAPABILITY);
 	const externalSourceName = useExternalSourceName();
+	const { canInstall, openInstall } = useSoulseekInstall();
 	return (
 		<PlayerBar
 			onPlaylistMutated={() => {
@@ -74,6 +77,7 @@ function PlayerBarWithSync() {
 			windowControls={isDesktopClient() ? desktopWindowControls : undefined}
 			canShowWaveform={canShowWaveform}
 			externalSourceName={externalSourceName}
+			onInstallExternalTrack={canInstall ? openInstall : undefined}
 		/>
 	);
 }
@@ -140,31 +144,33 @@ function ConnectedRootLayout() {
 						<Outlet />
 					) : (
 						<ImportSessionProvider>
-							<QueueRowMenuProvider
-								menu={QueueTrackMenu}
-								onNavigate={(href) => {
-									void navigate({ to: href }).catch((error) =>
-										console.warn("Failed to navigate from queue", {
-											href,
-											error,
-										}),
-									);
-								}}
-							>
-								<AppShell
-									bottom={<PlayerBarWithSync />}
-									onSearch={() => setSearchOpen(true)}
-									windowControls={
-										isDesktopClient() ? desktopWindowControls : undefined
-									}
+							<SoulseekInstallProvider>
+								<QueueRowMenuProvider
+									menu={QueueTrackMenu}
+									onNavigate={(href) => {
+										void navigate({ to: href }).catch((error) =>
+											console.warn("Failed to navigate from queue", {
+												href,
+												error,
+											}),
+										);
+									}}
 								>
-									<Outlet />
-									<LibrarySearchDialog
-										open={searchOpen}
-										onOpenChange={setSearchOpen}
-									/>
-								</AppShell>
-							</QueueRowMenuProvider>
+									<AppShell
+										bottom={<PlayerBarWithSync />}
+										onSearch={() => setSearchOpen(true)}
+										windowControls={
+											isDesktopClient() ? desktopWindowControls : undefined
+										}
+									>
+										<Outlet />
+										<LibrarySearchDialog
+											open={searchOpen}
+											onOpenChange={setSearchOpen}
+										/>
+									</AppShell>
+								</QueueRowMenuProvider>
+							</SoulseekInstallProvider>
 						</ImportSessionProvider>
 					)}
 				</PlaybackProvider>

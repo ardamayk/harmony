@@ -1,4 +1,9 @@
-import type { Playlist, RadioStation, Track } from "@repo/api-client";
+import type {
+	ExternalTrack,
+	Playlist,
+	RadioStation,
+	Track,
+} from "@repo/api-client";
 import { useNavigate } from "@tanstack/react-router";
 import {
 	Check,
@@ -129,6 +134,7 @@ export function PlayerBar({
 	windowControls,
 	canShowWaveform = false,
 	externalSourceName,
+	onInstallExternalTrack,
 }: {
 	onPlaylistMutated?: () => void;
 	/** Favorite state of the current Track; the host app owns the Favorites playlist. */
@@ -145,6 +151,8 @@ export function PlayerBar({
 	canShowWaveform?: boolean;
 	/** The External Source's site, such as YouTube, shown next to "External". */
 	externalSourceName?: string;
+	/** Set only when the Music Server offers Soulseek Acquisition; shows Install for an External Track. */
+	onInstallExternalTrack?: (track: ExternalTrack) => void;
 } = {}) {
 	const navigate = useNavigate();
 	const actionsButtonRef = useRef<HTMLButtonElement>(null);
@@ -770,6 +778,18 @@ export function PlayerBar({
 											favoriteTarget?.isFavorite && "fill-current",
 										)}
 									/>
+								</button>
+							) : null}
+							{currentExternalTrack && onInstallExternalTrack ? (
+								<button
+									type="button"
+									data-player-control
+									className="ml-2 inline-flex size-6 relative after:absolute after:-inset-1 after:content-empty shrink-0 items-center justify-center rounded-sm text-player-foreground hover:text-heading"
+									aria-label="Install"
+									title="Install from Soulseek"
+									onClick={() => onInstallExternalTrack(currentExternalTrack)}
+								>
+									<Download className="size-3.5" />
 								</button>
 							) : null}
 							{currentExternalTrack ? null : (

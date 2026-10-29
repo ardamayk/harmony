@@ -24,6 +24,7 @@ import {
 } from "vite-plus/test";
 import { invalidatePlaylistCache } from "#/lib/playlist-query-cache";
 import { LibrarySearchDialog } from "./library-search-dialog";
+import { SoulseekInstallContext } from "./soulseek-install-context";
 
 const mocks = vi.hoisted(() => ({
 	searchLibrary: vi.fn(),
@@ -239,6 +240,52 @@ describe("LibrarySearchDialog", () => {
 			expect(
 				within(external).queryByRole("button", { name: /to queue/ }),
 			).toBeNull();
+		});
+
+		it("offers Install on External rows only when Soulseek Acquisition is offered", async () => {
+			mocks.hasExternalSource = true;
+			const { unmount } = renderDialog();
+			fireEvent.change(screen.getByRole("combobox"), {
+				target: { value: "ne" },
+			});
+			const external = await screen.findByRole("group", { name: "SoundCloud" });
+			await within(external).findByRole("option", {
+				name: /^Around the World/,
+			});
+			expect(screen.queryByRole("button", { name: /^Install/ })).toBeNull();
+			unmount();
+
+			const openInstall = vi.fn();
+			const onOpenChange = vi.fn();
+			const client = new QueryClient({
+				defaultOptions: { queries: { retry: false } },
+			});
+			render(
+				<QueryClientProvider client={client}>
+					<SoulseekInstallContext.Provider
+						value={{ canInstall: true, openInstall }}
+					>
+						<LibrarySearchDialog
+							open
+							onOpenChange={onOpenChange}
+							prefetchFirstExternalResult={false}
+						/>
+					</SoulseekInstallContext.Provider>
+				</QueryClientProvider>,
+			);
+			fireEvent.change(screen.getByRole("combobox"), {
+				target: { value: "ne" },
+			});
+			const install = await screen.findByRole("button", {
+				name: "Install Around the World",
+			});
+			// Library Tracks are already installed.
+			expect(screen.queryByRole("button", { name: "Install Nemo" })).toBeNull();
+			fireEvent.click(install);
+
+			expect(openInstall).toHaveBeenCalledWith(daftPunk);
+			expect(onOpenChange).toHaveBeenCalledWith(false);
+			expect(mocks.playExternalTrack).not.toHaveBeenCalled();
 		});
 
 		it("shows External artwork, with the globe when there is none or it fails", async () => {

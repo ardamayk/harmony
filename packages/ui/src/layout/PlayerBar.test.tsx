@@ -547,6 +547,46 @@ describe("PlayerBar", () => {
 		}
 	});
 
+	it("offers Install for an External Track only when the host wires it", async () => {
+		const externalTrack: ExternalTrack = {
+			id: "external-3",
+			title: "Installable Song",
+			artistName: "Artist",
+			durationMs: 90000,
+			webpageUrl: null,
+			extractor: "Youtube",
+			hasArtwork: false,
+		};
+		const playExternal = (engine: InMemoryPlaybackEngine) =>
+			act(async () => {
+				await engine.play({
+					type: "external-track",
+					externalTrack,
+					playbackUrl: "/api/v1/external/tracks/external-3/stream",
+					sourceUrl: "/api/v1/external/tracks/external-3/stream",
+				});
+			});
+
+		const first = renderPlayerBar();
+		await playExternal(first.engine);
+		expect(screen.queryByRole("button", { name: "Install" })).toBeNull();
+		first.unmount();
+
+		const onInstallExternalTrack = vi.fn();
+		const { engine } = renderPlayerBar(undefined, undefined, {
+			onInstallExternalTrack,
+		});
+		// A library Track is already installed.
+		await act(async () => {
+			screen.getByRole("button", { name: "Start track" }).click();
+		});
+		expect(screen.queryByRole("button", { name: "Install" })).toBeNull();
+
+		await playExternal(engine);
+		fireEvent.click(screen.getByRole("button", { name: "Install" }));
+		expect(onInstallExternalTrack).toHaveBeenCalledWith(externalTrack);
+	});
+
 	it("shows an inline error banner with Retry and Skip after a failed Track", async () => {
 		const { engine } = renderPlayerBar();
 		await act(async () => {

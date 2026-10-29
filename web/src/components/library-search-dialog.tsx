@@ -16,6 +16,7 @@ import {
 	ArrowUp,
 	CornerDownLeft,
 	Disc3,
+	Download,
 	Globe,
 	Library,
 	ListMusic,
@@ -41,6 +42,7 @@ import {
 	DialogContent,
 	DialogTitle,
 } from "#/components/ui/dialog";
+import { useSoulseekInstall } from "#/components/soulseek-install-context";
 import { useDebouncedValue } from "#/hooks/use-debounced-value";
 import { useReturnFocus } from "#/hooks/use-return-focus";
 import {
@@ -96,6 +98,8 @@ type SearchResult = {
 	artworkUrl?: string;
 	/** Set on External rows: the track whose playback can be prefetched. */
 	externalTrackId?: string;
+	/** Set on External rows when the Music Server offers Soulseek Acquisition. */
+	onInstall?: () => void;
 	action: () => void;
 };
 
@@ -175,6 +179,7 @@ export function LibrarySearchDialog({
 	const { playTrack, addToQueue, playExternalTrack } = usePlayback();
 	const hasExternalSource = useServerCapability(EXTERNAL_SOURCE_CAPABILITY);
 	const externalSourceName = useExternalSourceName();
+	const { canInstall, openInstall } = useSoulseekInstall();
 	const searchLabel =
 		hasExternalSource && externalSourceName
 			? `Search your library and ${externalSourceName}`
@@ -418,8 +423,21 @@ export function LibrarySearchDialog({
 				});
 				close();
 			},
+			onInstall: canInstall
+				? () => {
+						close();
+						openInstall(track);
+					}
+				: undefined,
 		}));
-	}, [canShowExternal, externalSearch.data, playExternalTrack, close]);
+	}, [
+		canShowExternal,
+		externalSearch.data,
+		playExternalTrack,
+		close,
+		canInstall,
+		openInstall,
+	]);
 
 	const libraryResults = useMemo(
 		() => groups.flatMap((group) => group.results),
@@ -619,6 +637,18 @@ export function LibrarySearchDialog({
 						) : (
 							<ListPlus className="size-4" />
 						)}
+					</button>
+				) : null}
+				{result.onInstall ? (
+					<button
+						type="button"
+						aria-label={`Install ${result.title}`}
+						title="Install from Soulseek"
+						onFocus={() => setActiveKey(result.key)}
+						onClick={result.onInstall}
+						className="flex size-10 shrink-0 items-center justify-center rounded-md text-caption outline-none hover:bg-foreground/10 hover:text-heading focus-visible:bg-foreground/10 focus-visible:text-heading"
+					>
+						<Download className="size-4" />
 					</button>
 				) : null}
 			</li>
