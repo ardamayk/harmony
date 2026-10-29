@@ -562,6 +562,7 @@ export const zExternalTrack = z.object({
     id: z.string().max(2048),
     title: z.string(),
     artistName: z.string().nullable(),
+    album: z.string().nullish(),
     durationMs: z.int().gte(0).nullable(),
     webpageUrl: z.string().nullable(),
     extractor: z.string(),

@@ -3644,6 +3644,12 @@ components:
           type: string
           nullable: true
           description: yt-dlp's artist, else uploader, else channel
+        album:
+          type: string
+          nullable: true
+          description: >-
+            The Album name the site reports for the External Track; null when
+            it reports none.
         durationMs:
           type: integer
           minimum: 0

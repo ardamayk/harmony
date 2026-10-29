@@ -89,6 +89,8 @@ pub struct ExternalTrack {
     pub id: String,
     pub title: String,
     pub artist_name: Option<String>,
+    /// The Album name the site reports, when it reports one.
+    pub album: Option<String>,
     pub duration_ms: Option<i64>,
     pub webpage_url: Option<String>,
     pub extractor: String,
@@ -505,6 +507,7 @@ impl ExternalSource {
                     id,
                     title: item.title,
                     artist_name: item.artist_name,
+                    album: item.album,
                     duration_ms: item.duration_ms,
                     webpage_url: Some(item.webpage_url),
                     extractor: item.extractor,

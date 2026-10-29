@@ -16,7 +16,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tower::ServiceExt;
 
-const SEARCH_OUTPUT: &str = r#"{"_type": "url", "ie_key": "Soundcloud", "id": "254112221", "url": "https://api.soundcloud.com/tracks/soundcloud%3Atracks%3A254112221", "webpage_url": "https://soundcloud.com/daftpunkofficialmusic/around-the-world", "title": "Around the World", "duration": 30.0, "uploader": "Daft Punk", "artist": "Daft Punk", "thumbnail": null, "thumbnails": [{"id": "large", "url": "https://i1.sndcdn.com/artworks-x-large.jpg", "width": 100, "height": 100}, {"id": "t300x300", "url": "https://i1.sndcdn.com/artworks-x-t300x300.jpg", "width": 300, "height": 300}, {"id": "original", "url": "https://i1.sndcdn.com/artworks-x-original.jpg"}]}
+const SEARCH_OUTPUT: &str = r#"{"_type": "url", "ie_key": "Soundcloud", "id": "254112221", "url": "https://api.soundcloud.com/tracks/soundcloud%3Atracks%3A254112221", "webpage_url": "https://soundcloud.com/daftpunkofficialmusic/around-the-world", "title": "Around the World", "duration": 30.0, "uploader": "Daft Punk", "artist": "Daft Punk", "album": "Homework", "thumbnail": null, "thumbnails": [{"id": "large", "url": "https://i1.sndcdn.com/artworks-x-large.jpg", "width": 100, "height": 100}, {"id": "t300x300", "url": "https://i1.sndcdn.com/artworks-x-t300x300.jpg", "width": 300, "height": 300}, {"id": "original", "url": "https://i1.sndcdn.com/artworks-x-original.jpg"}]}
 {"_type": "url", "ie_key": "Soundcloud", "id": "88335161", "url": "https://api.soundcloud.com/tracks/soundcloud%3Atracks%3A88335161", "webpage_url": "https://soundcloud.com/eldjkb/get-lucky-original-version", "title": "Get Lucky", "duration": 246.381, "uploader": "DJ KB"}
 {"_type": "url", "ie_key": "Soundcloud", "webpage_url": "https://soundcloud.com/a/third", "title": "Third"}
 "#;
@@ -170,6 +170,7 @@ async fn search_passes_the_query_as_one_argument_after_the_end_of_options() {
     assert_eq!(items.len(), 2);
     assert_eq!(items[0]["title"], "Around the World");
     assert_eq!(items[0]["artistName"], "Daft Punk");
+    assert_eq!(items[0]["album"], "Homework");
     assert_eq!(items[0]["durationMs"], 30_000);
     assert_eq!(
         items[0]["webpageUrl"],
@@ -178,6 +179,7 @@ async fn search_passes_the_query_as_one_argument_after_the_end_of_options() {
     assert_eq!(items[0]["extractor"], "Soundcloud");
     assert_eq!(items[0]["hasArtwork"], true);
     assert_eq!(items[1]["artistName"], "DJ KB");
+    assert_eq!(items[1].get("album"), Some(&Value::Null));
     assert_eq!(items[1]["hasArtwork"], false);
     assert_eq!(items[1]["durationMs"], 246_381);
     let id = items[0]["id"].as_str().unwrap();

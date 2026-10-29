@@ -43,6 +43,8 @@ pub struct SearchItem {
     pub extractor: String,
     pub title: String,
     pub artist_name: Option<String>,
+    /// yt-dlp's `album`; flat search lists it only for some extractors.
+    pub album: Option<String>,
     pub duration_ms: Option<i64>,
     /// One public HTTPS cover image, chosen by [`pick_artwork`].
     pub artwork_url: Option<String>,
@@ -313,6 +315,7 @@ pub fn parse_search(output: &[u8], limit: usize) -> Result<Vec<SearchItem>, Exte
                 artist_name: ["artist", "uploader", "channel"]
                     .iter()
                     .find_map(|key| text(entry, key)),
+                album: text(entry, "album"),
                 webpage_url,
                 extractor,
                 duration_ms,
@@ -511,7 +514,8 @@ mod tests {
 {"_type": "url", "ie_key": "Generic", "url": "https://example.com/x", "title": "generic"}
 {"_type": "url", "ie_key": "Soundcloud", "webpage_url": "http://127.0.0.1/x", "title": "private"}
 {"_type": "url", "url": "https://example.com/y", "title": "no extractor"}
-{"_type": "url", "ie_key": "Soundcloud", "webpage_url": "https://soundcloud.com/a/b", "duration": 246.381}
+{"_type": "url", "ie_key": "Soundcloud", "webpage_url": "https://soundcloud.com/a/b", "duration": 246.381, "album": "  Homework  "}
+{"_type": "url", "ie_key": "Soundcloud", "webpage_url": "https://soundcloud.com/a/c", "album": " "}
 "#;
         let items = parse_search(output, 10).expect("items");
         assert_eq!(
@@ -523,6 +527,7 @@ mod tests {
                     extractor: "Soundcloud".to_owned(),
                     title: "Around the World".to_owned(),
                     artist_name: Some("Daft Punk".to_owned()),
+                    album: None,
                     duration_ms: Some(30_000),
                     artwork_url: None,
                 },
@@ -531,6 +536,7 @@ mod tests {
                     extractor: "Youtube".to_owned(),
                     title: "Veridis Quo".to_owned(),
                     artist_name: Some("Daft Punk".to_owned()),
+                    album: None,
                     duration_ms: Some(346_000),
                     artwork_url: None,
                 },
@@ -539,7 +545,17 @@ mod tests {
                     extractor: "Soundcloud".to_owned(),
                     title: "https://soundcloud.com/a/b".to_owned(),
                     artist_name: None,
+                    album: Some("Homework".to_owned()),
                     duration_ms: Some(246_381),
+                    artwork_url: None,
+                },
+                SearchItem {
+                    webpage_url: "https://soundcloud.com/a/c".to_owned(),
+                    extractor: "Soundcloud".to_owned(),
+                    title: "https://soundcloud.com/a/c".to_owned(),
+                    artist_name: None,
+                    album: None,
+                    duration_ms: None,
                     artwork_url: None,
                 },
             ]

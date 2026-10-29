@@ -1819,6 +1819,8 @@ export interface components {
             title: string;
             /** @description yt-dlp's artist, else uploader, else channel */
             artistName: string | null;
+            /** @description The Album name the site reports for the External Track; null when it reports none. */
+            album?: string | null;
             durationMs: number | null;
             /** @description The External Track's page on its site, for attribution */
             webpageUrl: string | null;
