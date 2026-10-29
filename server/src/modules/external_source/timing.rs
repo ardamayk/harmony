@@ -76,15 +76,28 @@ impl CacheUse {
     }
 }
 
-/// One resolve. `run` is the yt-dlp run it waited for, also one it joined;
+/// One resolve. `run` is the yt-dlp run it started; one that joined
+/// another request's run has only `wait`, how long it waited for that run.
 /// `total` stays `None` until it finishes.
 #[derive(Clone, Debug, Default)]
 pub struct ResolveTiming {
     pub cache: Option<CacheUse>,
     pub run: RunTiming,
+    pub wait: Option<Duration>,
     pub total: Option<Duration>,
     pub format: Option<&'static str>,
     pub extractor: Option<String>,
+}
+
+impl ResolveTiming {
+    /// Its child spans: the yt-dlp run it started, or its wait for the run
+    /// it joined.
+    fn steps(&self) -> Vec<observability::Step> {
+        match self.cache {
+            Some(CacheUse::Joined) => sequential(&[("external_source.resolve.wait", self.wait)]),
+            _ => self.run.steps(),
+        }
+    }
 }
 
 /// One stream request: its resolve, the wait for the first upstream
@@ -266,6 +279,7 @@ impl ResolveLog {
             .desc("cache", self.timing.cache.map(CacheUse::as_str))
             .dur("queue", self.timing.run.queue)
             .dur("ytdlp", self.timing.run.run)
+            .dur("wait", self.timing.wait)
             .dur("total", Some(self.end.total()))
             .header()
     }
@@ -281,6 +295,7 @@ impl Drop for ResolveLog {
             cache = self.timing.cache.map(CacheUse::as_str),
             queue_ms = self.timing.run.queue.map(ms),
             yt_dlp_ms = self.timing.run.run.map(ms),
+            wait_ms = self.timing.wait.map(ms),
             total_ms,
             format = self.timing.format,
             extractor = self.timing.extractor.as_deref(),
@@ -300,7 +315,7 @@ impl Drop for ResolveLog {
                 ("format", self.timing.format.into()),
                 ("extractor", self.timing.extractor.clone().into()),
             ],
-            &self.timing.run.steps(),
+            &self.timing.steps(),
         );
         observability::distribution_ms(
             "external_source.resolve.duration",
@@ -715,6 +730,106 @@ mod tests {
             (&lines[2]["range"], &lines[2]["outcome"]),
             (&Value::from("head"), &Value::from("ok"))
         );
+    }
+
+    /// What one resolve's log guard sends to Sentry inside a request: the
+    /// spans under the request and the serialized envelopes.
+    fn traced_resolve(timing: ResolveTiming) -> (Vec<sentry::protocol::Span>, String) {
+        let config = crate::config::SentryConfig {
+            dsn: "https://public@sentry.example/1".parse().expect("dsn"),
+            environment: "test".to_owned(),
+            traces_sample_rate: 1.0,
+        };
+        let envelopes = sentry::test::with_captured_envelopes_options(
+            || {
+                let transaction = sentry::start_transaction(sentry::TransactionContext::new(
+                    "GET /api/v1/external/tracks/{external_track_id}/playback",
+                    "http.server",
+                ));
+                sentry::configure_scope(|scope| {
+                    scope.set_span(Some(transaction.clone().into()));
+                });
+                let mut log = ResolveLog::start("id");
+                log.end.started -= Duration::from_millis(50);
+                log.timing = timing;
+                log.end.ok(200);
+                drop(log);
+                transaction.finish();
+            },
+            observability::client_options(&config, "9.9.9"),
+        );
+        let mut sent = String::new();
+        let mut spans = Vec::new();
+        for envelope in &envelopes {
+            let mut bytes = Vec::new();
+            envelope.to_writer(&mut bytes).expect("serialize");
+            sent.push_str(&String::from_utf8_lossy(&bytes));
+            for item in envelope.items() {
+                if let sentry::protocol::EnvelopeItem::Transaction(transaction) = item {
+                    spans.extend(transaction.spans.iter().cloned());
+                }
+            }
+        }
+        (spans, sent)
+    }
+
+    fn span<'a>(spans: &'a [sentry::protocol::Span], op: &str) -> &'a sentry::protocol::Span {
+        spans
+            .iter()
+            .find(|span| span.op.as_deref() == Some(op))
+            .unwrap_or_else(|| panic!("no {op} span"))
+    }
+
+    fn length(span: &sentry::protocol::Span) -> Duration {
+        span.timestamp
+            .expect("finished")
+            .duration_since(span.start_timestamp)
+            .expect("ends after it starts")
+    }
+
+    #[test]
+    fn a_joined_resolve_traces_its_wait_and_not_the_shared_run() {
+        let (spans, sent) = traced_resolve(ResolveTiming {
+            cache: Some(CacheUse::Joined),
+            wait: Some(Duration::from_millis(40)),
+            total: Some(Duration::from_millis(41)),
+            ..ResolveTiming::default()
+        });
+        let ops: Vec<_> = spans.iter().filter_map(|span| span.op.clone()).collect();
+        assert_eq!(ops.len(), 2, "{ops:?}");
+        let resolve = span(&spans, "external_source.resolve");
+        let wait = span(&spans, "external_source.resolve.wait");
+        assert_eq!(wait.parent_span_id, Some(resolve.span_id));
+        assert_eq!(length(wait), Duration::from_millis(40));
+        assert!(length(wait) <= length(resolve));
+        assert!(!sent.contains("external_source.yt_dlp"), "{sent}");
+    }
+
+    #[test]
+    fn a_resolve_that_ran_yt_dlp_traces_and_reports_the_run() {
+        let (spans, sent) = traced_resolve(ResolveTiming {
+            cache: Some(CacheUse::Miss),
+            run: RunTiming {
+                queue: Some(Duration::from_millis(5)),
+                run: Some(Duration::from_millis(30)),
+                parse: Some(Duration::from_millis(1)),
+            },
+            total: Some(Duration::from_millis(40)),
+            ..ResolveTiming::default()
+        });
+        for op in [
+            "external_source.queue",
+            "external_source.yt_dlp",
+            "external_source.parse",
+        ] {
+            span(&spans, op);
+        }
+        assert!(
+            !spans
+                .iter()
+                .any(|span| span.op.as_deref() == Some("external_source.resolve.wait"))
+        );
+        assert!(sent.contains("external_source.yt_dlp.duration"), "{sent}");
     }
 
     #[test]

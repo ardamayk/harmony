@@ -27,6 +27,59 @@ const SERVER_NAME: &str = "music-server";
 const URL: &str = "<url>";
 const PATH: &str = "<path>";
 const REDACTED: &str = "<redacted>";
+/// What replaces a path segment of an `/api/` path that is not a route word.
+const ID: &str = "<id>";
+
+/// The fixed words of the API's paths (packages/contracts/openapi.yaml).
+/// Any other segment of an `/api/` path is an id, a token or a name: an
+/// External Track id or an HLS resource token decodes to page and media
+/// URLs, and an album key can spell out the album.
+const ROUTE_WORDS: &[&str] = &[
+    "albums",
+    "api",
+    "artists",
+    "artwork",
+    "biography",
+    "catalog",
+    "confirm",
+    "countries",
+    "cover",
+    "deletion",
+    "events",
+    "external",
+    "file",
+    "health",
+    "heartbeat",
+    "import",
+    "import-batches",
+    "import-history",
+    "imports",
+    "items",
+    "library",
+    "lyrics",
+    "me",
+    "now-playing",
+    "online-genres",
+    "photo",
+    "play-counts",
+    "playback",
+    "playlist.m3u8",
+    "playlists",
+    "popular-tracks",
+    "preferences",
+    "preview",
+    "queue",
+    "radio",
+    "replacement",
+    "resources",
+    "search",
+    "stations",
+    "stream",
+    "tags",
+    "tracks",
+    "v1",
+    "waveform",
+];
 
 /// The client options for `config`; tests swap in a test transport.
 pub fn client_options(config: &SentryConfig, version: &str) -> sentry::ClientOptions {
@@ -311,24 +364,44 @@ fn scrub_string(text: &mut String) {
     }
 }
 
-/// `text` with each URL replaced by `<url>` and each file path (any word
-/// holding a `/` or `\`) by `<path>`. An API path keeps its route but
-/// loses its query.
+/// `text` with each URL replaced by `<url>` and each file path by
+/// `<path>`. A file path is any word holding a `/` or `\`, together with
+/// the words after it up to the last such word, since a path can hold
+/// spaces (`C:\Users\Jane Mary Smith\...`); prose with a slash may lose a
+/// few words with it. An API path keeps its route words, every other
+/// segment becomes `<id>`, and it loses its query.
 pub fn scrub_text(text: &str) -> Cow<'_, str> {
     if !text.contains(['/', '\\']) {
         return Cow::Borrowed(text);
     }
+    let rest = text.trim_start();
     let mut scrubbed = String::with_capacity(text.len());
-    let mut rest = text;
-    while !rest.is_empty() {
-        let word_end = rest.find(char::is_whitespace).unwrap_or(rest.len());
-        let (word, after) = rest.split_at(word_end);
-        scrubbed.push_str(&scrub_word(word));
-        let space_end = after
-            .find(|c: char| !c.is_whitespace())
-            .unwrap_or(after.len());
-        scrubbed.push_str(&after[..space_end]);
-        rest = &after[space_end..];
+    scrubbed.push_str(&text[..text.len() - rest.len()]);
+    let words = words(rest);
+    let mut index = 0;
+    while index < words.len() {
+        let (word, space) = words[index];
+        let kind = Word::of(word);
+        let Word::Path { prefix, lead } = kind else {
+            scrubbed.push_str(&kind.scrubbed(word));
+            scrubbed.push_str(space);
+            index += 1;
+            continue;
+        };
+        // The path runs on to the last word holding a separator before a
+        // URL or an API path, which are not part of it.
+        let mut last = index;
+        for (next, (word, _)) in words.iter().enumerate().skip(index + 1) {
+            match Word::of(word) {
+                Word::Path { .. } => last = next,
+                Word::Url { .. } | Word::Api { .. } => break,
+                Word::Plain => {}
+            }
+        }
+        let (word, space) = words[last];
+        scrubbed.push_str(&format!("{prefix}{lead}{PATH}{}", suffix(word)));
+        scrubbed.push_str(space);
+        index = last + 1;
     }
     if scrubbed == text {
         Cow::Borrowed(text)
@@ -337,33 +410,137 @@ pub fn scrub_text(text: &str) -> Cow<'_, str> {
     }
 }
 
-fn scrub_word(word: &str) -> Cow<'_, str> {
-    if !word.contains(['/', '\\']) {
-        return Cow::Borrowed(word);
+/// `text`'s words, each with the whitespace after it.
+fn words(text: &str) -> Vec<(&str, &str)> {
+    let mut words = Vec::new();
+    let mut rest = text;
+    while !rest.is_empty() {
+        let word_end = rest.find(char::is_whitespace).unwrap_or(rest.len());
+        let (word, after) = rest.split_at(word_end);
+        let space_end = after
+            .find(|c: char| !c.is_whitespace())
+            .unwrap_or(after.len());
+        words.push((word, &after[..space_end]));
+        rest = &after[space_end..];
     }
+    words
+}
+
+/// A word's opening punctuation and what follows it, without its closing
+/// punctuation.
+fn trim(word: &str) -> (&str, &str) {
     const OPENING: &[char] = &['(', '[', '{', '<', '"', '\'', '`'];
     const CLOSING: &[char] = &[')', ']', '}', '>', '"', '\'', '`', ',', '.', ';', ':', '!'];
     let core = word.trim_start_matches(OPENING);
     let prefix = &word[..word.len() - core.len()];
-    let core = core.trim_end_matches(CLOSING);
-    let suffix = &word[prefix.len() + core.len()..];
-    if let Some(scheme) = core.find("://") {
-        let start = core[..scheme]
-            .rfind(|c: char| !(c.is_ascii_alphanumeric() || matches!(c, '+' | '.' | '-')))
-            .map_or(0, |index| index + 1);
-        return Cow::Owned(format!("{prefix}{}{URL}{suffix}", &core[..start]));
+    (prefix, core.trim_end_matches(CLOSING))
+}
+
+/// A route template's parameter, such as `{external_track_id}`.
+fn is_route_parameter(segment: &str) -> bool {
+    // At the end of a word, `}` is trimmed as closing punctuation.
+    segment
+        .strip_prefix('{')
+        .map(|name| name.strip_suffix('}').unwrap_or(name))
+        .is_some_and(|name| {
+            !name.is_empty() && name.chars().all(|c| c.is_ascii_alphabetic() || c == '_')
+        })
+}
+
+/// A word's closing punctuation.
+fn suffix(word: &str) -> &str {
+    let (prefix, core) = trim(word);
+    &word[prefix.len() + core.len()..]
+}
+
+/// What one word of free text is.
+enum Word<'a> {
+    Plain,
+    /// `before` is what precedes the URL's scheme in the word.
+    Url {
+        prefix: &'a str,
+        before: &'a str,
+    },
+    Api {
+        prefix: &'a str,
+        lead: &'a str,
+        route: &'a str,
+    },
+    /// `lead` is a `key=` before the path, which stays.
+    Path {
+        prefix: &'a str,
+        lead: &'a str,
+    },
+}
+
+impl<'a> Word<'a> {
+    fn of(word: &'a str) -> Self {
+        if !word.contains(['/', '\\']) {
+            return Self::Plain;
+        }
+        let (prefix, core) = trim(word);
+        if let Some(scheme) = core.find("://") {
+            // The scheme's own letters go with the URL; `char_indices`
+            // keeps the cut on a character boundary.
+            let start = core[..scheme]
+                .char_indices()
+                .rev()
+                .find(|(_, c)| !(c.is_ascii_alphanumeric() || matches!(c, '+' | '.' | '-')))
+                .map_or(0, |(index, c)| index + c.len_utf8());
+            return Self::Url {
+                prefix,
+                before: &core[..start],
+            };
+        }
+        let path_start = core.find(['/', '\\', '~']).unwrap_or(0);
+        let (lead, path) = core.split_at(path_start);
+        // `name=/x/y` or `C:\x`: what precedes a path stays only if it is a key.
+        let lead = if lead.ends_with('=') { lead } else { "" };
+        if let Some(api) = path.strip_prefix("/api/") {
+            let route = api.split(['?', '#']).next().unwrap_or_default();
+            if !route.contains('\\') {
+                return Self::Api {
+                    prefix,
+                    lead,
+                    route,
+                };
+            }
+        }
+        Self::Path { prefix, lead }
     }
-    let path_start = core.find(['/', '\\', '~']).unwrap_or(0);
-    let (lead, path) = core.split_at(path_start);
-    // `name=/x/y` or `C:\x`: what precedes a path stays only if it is a key.
-    let lead = if lead.ends_with('=') { lead } else { "" };
-    if let Some(api) = path.strip_prefix("/api/") {
-        let route = api.split(['?', '#']).next().unwrap_or_default();
-        if !route.contains('\\') {
-            return Cow::Owned(format!("{prefix}{lead}/api/{route}{suffix}"));
+
+    /// `word` scrubbed, when it stands alone.
+    fn scrubbed(&self, word: &'a str) -> Cow<'a, str> {
+        let suffix = suffix(word);
+        match self {
+            Self::Plain => Cow::Borrowed(word),
+            Self::Url { prefix, before } => Cow::Owned(format!("{prefix}{before}{URL}{suffix}")),
+            Self::Api {
+                prefix,
+                lead,
+                route,
+            } => {
+                let route: Vec<&str> = route
+                    .split('/')
+                    .map(|segment| {
+                        // `<id` is an earlier `<id>` whose `>` was trimmed;
+                        // `{external_track_id}` is a route template's.
+                        if segment.is_empty()
+                            || ROUTE_WORDS.contains(&segment)
+                            || segment == "<id"
+                            || is_route_parameter(segment)
+                        {
+                            segment
+                        } else {
+                            ID
+                        }
+                    })
+                    .collect();
+                Cow::Owned(format!("{prefix}{lead}/api/{}{suffix}", route.join("/")))
+            }
+            Self::Path { prefix, lead } => Cow::Owned(format!("{prefix}{lead}{PATH}{suffix}")),
         }
     }
-    Cow::Owned(format!("{prefix}{lead}{PATH}{suffix}"))
 }
 
 #[cfg(test)]
@@ -408,13 +585,127 @@ mod tests {
         );
         assert_eq!(scrub_text("path=/srv/music/a.flac."), "path=<path>.");
         assert_eq!(scrub_text(r"C:\Users\me\Music\a.flac"), "<path>");
-        assert_eq!(scrub_text("~/Music/a b/c.flac"), "<path> <path>");
+        assert_eq!(scrub_text("~/Music/a b/c.flac"), "<path>");
         assert_eq!(
             scrub_text("GET /api/v1/library/tracks/7/stream?token=x failed"),
-            "GET /api/v1/library/tracks/7/stream failed"
+            "GET /api/v1/library/tracks/<id>/stream failed"
         );
         assert_eq!(scrub_text("\"hls+https://a.example/x\""), "\"<url>\"");
         assert_eq!(scrub_text("url=https://a.example/x"), "url=<url>");
+    }
+
+    #[test]
+    fn api_paths_keep_only_their_route_words() {
+        assert_eq!(
+            scrub_text(
+                "GET /api/v1/playlists/0b8f7c1e-5d2a-4e6b-9c3d-2f1a7b6e8d90/items/42 failed"
+            ),
+            "GET /api/v1/playlists/<id>/items/<id> failed"
+        );
+        assert_eq!(
+            scrub_text("(/api/v1/albums/daft-punk-discovery/cover?size=1)."),
+            "(/api/v1/albums/<id>/cover)."
+        );
+        assert_eq!(
+            scrub_text(
+                "/api/v1/external/tracks/eyJ1IjoiaHR0cHM6Ly9hLmV4YW1wbGUvYiJ9.c2ln/playlist.m3u8"
+            ),
+            "/api/v1/external/tracks/<id>/playlist.m3u8"
+        );
+        // A route template stays as it is.
+        for template in [
+            "/api/v1/external/tracks/{external_track_id}/stream",
+            "/api/v1/external/tracks/{external_track_id}/resources/{resource}",
+        ] {
+            assert_eq!(scrub_text(template), template);
+        }
+        // Scrubbing twice changes nothing.
+        let once = scrub_text("/api/v1/library/tracks/7/stream").into_owned();
+        assert_eq!(once, "/api/v1/library/tracks/<id>/stream");
+        assert_eq!(scrub_text(&once), once);
+    }
+
+    /// Every fixed word of the contract's paths is a route word, so a route
+    /// keeps its shape; a word missing here would only read `<id>`.
+    #[test]
+    fn route_words_cover_the_contract() {
+        let contract = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../packages/contracts/openapi.yaml"
+        ))
+        .expect("openapi.yaml");
+        let mut checked = 0;
+        for line in contract.lines() {
+            let Some(path) = line
+                .strip_prefix("  /api/")
+                .and_then(|path| path.strip_suffix(':'))
+            else {
+                continue;
+            };
+            for segment in path.split('/') {
+                if !segment.starts_with('{') {
+                    assert!(ROUTE_WORDS.contains(&segment), "{segment} in /api/{path}");
+                }
+            }
+            checked += 1;
+        }
+        assert!(checked > 10, "{checked} paths");
+    }
+
+    #[test]
+    fn non_ascii_before_a_url_does_not_panic() {
+        for (text, scrubbed) in [
+            ("‘https://cdn.example/a.mp3’", "‘<url>"),
+            ("url：https://cdn.example/a.mp3", "url：<url>"),
+            ("取得https://cdn.example/a.mp3", "取得<url>"),
+            ("échec«https://cdn.example/a.mp3»", "échec«<url>"),
+            ("Ünïcödé https://cdn.example/a.mp3 ok", "Ünïcödé <url> ok"),
+        ] {
+            assert_eq!(scrub_text(text), scrubbed, "{text}");
+        }
+    }
+
+    #[test]
+    fn scrubbing_any_text_does_not_panic() {
+        let pieces = [
+            "‘", "’", "：", "取得", "é", "🎵", "\u{200b}", "\u{301}", "://", "/", "\\", "~", "=",
+            "C:", "/api/", "x", " ", "\t", "(", ")", ".", "<", ">", "?", "#",
+        ];
+        // Every run of three pieces, then each with a URL after it.
+        for a in pieces {
+            for b in pieces {
+                for c in pieces {
+                    let text = format!("{a}{b}{c}");
+                    scrub_text(&text);
+                    let text = format!("{text}https://cdn.example/a.mp3");
+                    assert!(!scrub_text(&text).contains("cdn.example"), "{text}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn paths_with_spaces_are_redacted_whole() {
+        assert_eq!(
+            scrub_text(r"open C:\Users\Jane Mary Smith\AppData\Roaming\a.json: denied"),
+            "open <path>: denied"
+        );
+        assert_eq!(
+            scrub_text("read /home/jane/Music/Jane Mary Smith/Best Of/a.flac failed"),
+            "read <path> failed"
+        );
+        assert_eq!(scrub_text(r"\\nas\Music\Jane Mary Smith\a.flac"), "<path>");
+        // Prose with a slash: over-redacting it is acceptable.
+        assert_eq!(
+            scrub_text("the a/b ratio is high"),
+            "the <path> ratio is high"
+        );
+        assert_eq!(scrub_text("a/b and c/d"), "<path>");
+        // A URL or an API route after a path is not part of it.
+        assert_eq!(
+            scrub_text("read /srv/a b/c.flac for https://a.example/x and /api/v1/search"),
+            "read <path> for <url> and /api/v1/search"
+        );
     }
 
     #[test]

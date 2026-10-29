@@ -21,7 +21,7 @@ fn main() {
     };
     if let Err(error) = earthly_audio_core::run(&config_directory) {
         eprintln!("Earthly Audio core failed: {error}");
-        observability::core_failed(&error);
+        observability::core_failed(&error, &config_directory);
         // Sends what is queued before exiting.
         drop(sentry);
         std::process::exit(1);
