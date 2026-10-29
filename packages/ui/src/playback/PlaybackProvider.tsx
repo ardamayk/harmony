@@ -24,6 +24,7 @@ import {
 	useState,
 	useSyncExternalStore,
 } from "react";
+import { startTiming } from "../lib/dev-timing";
 import type {
 	PlaybackEngine,
 	PlaybackError,
@@ -196,6 +197,49 @@ const PREVIOUS_RESTARTS_AFTER_SECONDS = 30;
 
 const PlaybackContext = createContext<PlaybackContextValue | null>(null);
 const PlaylistLibraryContext = createContext<PlaylistLibraryApi | null>(null);
+
+/** An External Track playing this long without progress stops being watched. */
+const EXTERNAL_START_WATCH_MS = 60_000;
+
+/**
+ * Calls `onPlaying` once `engine` plays the External Track with progress:
+ * both engines report "playing" as soon as they are asked to, so the first
+ * advancing playhead marks audio actually playing. Gives up when the Track
+ * fails, ends or is replaced first.
+ */
+function whenExternalTrackPlays(
+	engine: PlaybackEngine,
+	externalTrackId: string,
+	onPlaying: () => void,
+) {
+	let hasStarted = false;
+	let isDone = false;
+	const finish = () => {
+		isDone = true;
+		window.clearTimeout(timeout);
+		unsubscribe();
+	};
+	const check = (state: PlaybackSessionState) => {
+		if (isDone) return;
+		const isThisTrack =
+			state.source?.type === "external-track" &&
+			state.source.externalTrack.id === externalTrackId;
+		if (!isThisTrack) {
+			if (hasStarted) finish();
+			return;
+		}
+		hasStarted = true;
+		if (state.status === "error" || state.status === "ended") {
+			finish();
+		} else if (state.status === "playing" && state.currentTime > 0) {
+			finish();
+			onPlaying();
+		}
+	};
+	const timeout = window.setTimeout(finish, EXTERNAL_START_WATCH_MS);
+	const unsubscribe = engine.subscribe(check);
+	check(engine.getState());
+}
 
 export function PlaybackProvider({
 	children,
@@ -597,10 +641,13 @@ export function PlaybackProvider({
 	const playExternalTrack = useCallback(
 		async (track: ExternalTrack) => {
 			setRadioNowPlaying(null);
+			const stopClickToPlaying = startTiming("external:click-to-playing");
 			try {
+				const stopResolve = startTiming("external:resolve");
 				const playback = await apiRef.current.getExternalTrackPlayback(
 					track.id,
 				);
+				stopResolve();
 				const streamUrl = apiRef.current.getExternalStreamUrl(
 					playback.streamPath,
 				);
@@ -615,6 +662,7 @@ export function PlaybackProvider({
 							}
 						: {}),
 				});
+				whenExternalTrackPlays(engine, track.id, () => stopClickToPlaying());
 			} catch (error) {
 				console.warn("Failed to start External Track playback", {
 					extractor: track.extractor,

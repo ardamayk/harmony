@@ -3,7 +3,7 @@ import {
 	type ExternalTrack,
 	type LibrarySearchResult,
 } from "@repo/api-client";
-import { AlbumArt, toast, usePlayback } from "@repo/ui";
+import { AlbumArt, startTiming, toast, usePlayback } from "@repo/ui";
 import {
 	keepPreviousData,
 	useQuery,
@@ -203,8 +203,16 @@ export function LibrarySearchDialog({
 	// aborts a superseded search, which ends its yt-dlp process on the server.
 	const externalSearch = useQuery({
 		queryKey: ["external-search", externalQuery],
-		queryFn: ({ signal }) =>
-			apiClient.searchExternalSource(externalQuery, undefined, signal),
+		queryFn: async ({ signal }) => {
+			const stopSearch = startTiming("external:search");
+			const results = await apiClient.searchExternalSource(
+				externalQuery,
+				undefined,
+				signal,
+			);
+			stopSearch({ results: results.items.length });
+			return results;
+		},
 		enabled: canShowExternal,
 		retry: false,
 	});

@@ -8,6 +8,7 @@ export {
 	extractAccent,
 } from "./lib/cover-accent";
 export { focusableElements, useFocusTrap } from "./lib/use-focus-trap";
+export { type StopTiming, startTiming } from "./lib/dev-timing";
 export { cn } from "./lib/utils";
 export { formatReplayGainAvailability } from "./playback/format-replay-gain";
 export { NowPlayingAnnouncer } from "./playback/NowPlayingAnnouncer";
