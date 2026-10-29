@@ -43,10 +43,15 @@ impl Scope {
     }
 }
 
+/// LAME's typical average bitrates for its VBR presets V0 to V9 (kbps).
+const MP3_VBR_LEVELS: [u32; 10] = [245, 225, 190, 175, 165, 130, 115, 100, 85, 65];
+/// Other formats' variable bitrates are rounded to a multiple of this.
+const VBR_STEP_KBPS: u32 = 32;
+
 /// The quality a file reports. Lossless files carry bit depth and sample
 /// rate; lossy files carry bitrate and whether it is variable. A variable
-/// bitrate is an average that differs per file, so it is not part of the
-/// quality.
+/// bitrate is an average that differs per file, so a source's level is
+/// the mean of its files' bitrates, rounded by [`vbr_level`].
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Quality {
     pub format: String,
@@ -57,7 +62,23 @@ pub struct Quality {
     pub variable_bitrate: Option<bool>,
 }
 
+/// The level a variable bitrate is grouped by, so that one encoder setting
+/// forms one version while its files' averages differ: an MP3 goes to the
+/// nearest LAME preset average (V0 ~245, V2 ~190 kbps; a tie goes to the
+/// higher), any other format to the nearest multiple of 32 kbps.
+fn vbr_level(format: &str, mean_kbps: u32) -> u32 {
+    if format == "mp3" {
+        return MP3_VBR_LEVELS
+            .into_iter()
+            .min_by_key(|level| level.abs_diff(mean_kbps))
+            .unwrap_or(mean_kbps);
+    }
+    ((mean_kbps + VBR_STEP_KBPS / 2) / VBR_STEP_KBPS * VBR_STEP_KBPS).max(VBR_STEP_KBPS)
+}
+
 impl Quality {
+    /// A file's quality; for a variable bitrate without the bitrate, which
+    /// the source's files give together (see [`vbr_level`]).
     fn of(format: &str, file: &SearchFile) -> Self {
         let reported = |value: Option<u32>| value.filter(|value| *value > 0);
         if LOSSLESS_FORMATS.contains(&format) {
@@ -86,7 +107,8 @@ impl Quality {
     }
 
     /// The version key: stable for the same quality in any search, such as
-    /// `flac-24-48000`, `flac-x-x` (unknown), `mp3-320-cbr` or `mp3-vbr`.
+    /// `flac-24-48000`, `flac-x-x` (unknown), `mp3-320-cbr`, `mp3-vbr-245`
+    /// or `mp3-vbr-x` (variable, no bitrate reported).
     pub fn key(&self) -> String {
         let known =
             |value: Option<u32>| value.map_or_else(|| "x".to_owned(), |value| value.to_string());
@@ -99,7 +121,7 @@ impl Quality {
             );
         }
         match self.variable_bitrate {
-            Some(true) => format!("{}-vbr", self.format),
+            Some(true) => format!("{}-vbr-{}", self.format, known(self.bitrate_kbps)),
             Some(false) => format!("{}-{}-cbr", self.format, known(self.bitrate_kbps)),
             None => format!("{}-{}-x", self.format, known(self.bitrate_kbps)),
         }
@@ -153,8 +175,8 @@ pub struct Version {
 /// count, then source count.
 pub fn group(scope: Scope, responses: &[SearchResponse]) -> Vec<Version> {
     let mut by_key: BTreeMap<String, (Quality, Vec<Source>)> = BTreeMap::new();
-    for (username, peer) in by_user(responses) {
-        for (quality, source) in sources(scope, &username, &peer) {
+    for (username, user) in by_user(responses) {
+        for (quality, source) in sources(scope, &username, &user) {
             by_key
                 .entry(quality.key())
                 .or_insert_with(|| (quality, Vec::new()))
@@ -177,38 +199,48 @@ pub fn group(scope: Scope, responses: &[SearchResponse]) -> Vec<Version> {
 }
 
 /// One user's files across their responses, without repeats.
-struct Peer<'a> {
+struct UserFiles<'a> {
     has_free_upload_slot: bool,
     queue_length: u64,
     upload_speed: u64,
     files: BTreeMap<&'a str, &'a SearchFile>,
 }
 
-fn by_user(responses: &[SearchResponse]) -> BTreeMap<String, Peer<'_>> {
-    let mut users: BTreeMap<String, Peer<'_>> = BTreeMap::new();
+fn by_user(responses: &[SearchResponse]) -> BTreeMap<String, UserFiles<'_>> {
+    let mut users: BTreeMap<String, UserFiles<'_>> = BTreeMap::new();
     for response in responses {
-        let peer = users
+        let user = users
             .entry(response.username.clone())
-            .or_insert_with(|| Peer {
+            .or_insert_with(|| UserFiles {
                 has_free_upload_slot: response.has_free_upload_slot,
                 queue_length: response.queue_length,
                 upload_speed: response.upload_speed,
                 files: BTreeMap::new(),
             });
         for file in &response.files {
-            peer.files.entry(file.filename.as_str()).or_insert(file);
+            user.files.entry(file.filename.as_str()).or_insert(file);
         }
     }
     users
 }
 
+/// Files of one source being gathered: their quality without a variable
+/// bitrate's level, and the bitrates the files report.
+struct Gathered {
+    quality: Quality,
+    files: Vec<RemoteFile>,
+    bitrates: Vec<u32>,
+}
+
 /// A user's sources: audio files grouped by folder (or one per file) and
-/// quality, with the folder's cover images.
-fn sources(scope: Scope, username: &str, peer: &Peer<'_>) -> Vec<(Quality, Source)> {
+/// quality, with the folder's cover images. A variable bitrate's level is
+/// the source's, from the mean of its files' bitrates, so one folder is
+/// never split by the bitrate each file happens to average.
+fn sources(scope: Scope, username: &str, user: &UserFiles<'_>) -> Vec<(Quality, Source)> {
     let mut artwork: BTreeMap<&str, Vec<RemoteFile>> = BTreeMap::new();
     // (quality key, folder, file for Track scope) -> files
-    let mut groups: BTreeMap<(String, &str, &str), (Quality, Vec<RemoteFile>)> = BTreeMap::new();
-    for (filename, file) in &peer.files {
+    let mut groups: BTreeMap<(String, &str, &str), Gathered> = BTreeMap::new();
+    for (filename, file) in &user.files {
         let (folder, name) = split_path(filename);
         let Some(extension) = extension(name) else {
             continue;
@@ -229,15 +261,31 @@ fn sources(scope: Scope, username: &str, peer: &Peer<'_>) -> Vec<(Quality, Sourc
             Scope::Album => "",
             Scope::Track => filename,
         };
-        groups
+        let bitrate = file.bit_rate.filter(|bitrate| *bitrate > 0);
+        let gathered = groups
             .entry((quality.key(), folder, item))
-            .or_insert_with(|| (quality, Vec::new()))
-            .1
-            .push(remote);
+            .or_insert_with(|| Gathered {
+                quality,
+                files: Vec::new(),
+                bitrates: Vec::new(),
+            });
+        gathered.files.push(remote);
+        gathered.bitrates.extend(bitrate);
     }
     groups
         .into_iter()
-        .map(|((_, folder, item), (quality, files))| {
+        .map(|((_, folder, item), gathered)| {
+            let Gathered {
+                mut quality,
+                files,
+                bitrates,
+            } = gathered;
+            if quality.variable_bitrate == Some(true) && !bitrates.is_empty() {
+                let count = bitrates.len() as u64;
+                let sum: u64 = bitrates.iter().copied().map(u64::from).sum();
+                let mean = u32::try_from((sum + count / 2) / count).unwrap_or(u32::MAX);
+                quality.bitrate_kbps = Some(vbr_level(&quality.format, mean));
+            }
             let path = if item.is_empty() { folder } else { item };
             let source = Source {
                 id: source_id(username, path),
@@ -247,9 +295,9 @@ fn sources(scope: Scope, username: &str, peer: &Peer<'_>) -> Vec<(Quality, Sourc
                 files,
                 artwork: artwork.get(folder).cloned().unwrap_or_default(),
                 complete: true,
-                has_free_upload_slot: peer.has_free_upload_slot,
-                queue_length: peer.queue_length,
-                upload_speed: peer.upload_speed,
+                has_free_upload_slot: user.has_free_upload_slot,
+                queue_length: user.queue_length,
+                upload_speed: user.upload_speed,
             };
             (quality, source)
         })
@@ -408,14 +456,14 @@ mod tests {
                 "flac-x-x",
                 "mp3-320-cbr",
                 "mp3-320-x",
-                "mp3-vbr",
+                "mp3-vbr-245",
                 "mp3-x-cbr",
                 "wav-16-44100",
             ]
         );
         let vbr = versions
             .iter()
-            .find(|version| version.key == "mp3-vbr")
+            .find(|version| version.key == "mp3-vbr-245")
             .unwrap();
         assert_eq!(vbr.sources.len(), 1);
         assert_eq!(vbr.sources[0].files.len(), 2);
@@ -426,7 +474,7 @@ mod tests {
                 lossless: false,
                 bit_depth: None,
                 sample_rate_hz: None,
-                bitrate_kbps: None,
+                bitrate_kbps: Some(245),
                 variable_bitrate: Some(true),
             }
         );
@@ -438,6 +486,58 @@ mod tests {
             (unknown.quality.bit_depth, unknown.quality.sample_rate_hz),
             (None, None)
         );
+    }
+
+    #[test]
+    fn variable_bitrates_group_by_the_source_average_level() {
+        let versions = group(
+            Scope::Album,
+            &responses(
+                r#"[
+                {"username": "v0", "files": [
+                    {"filename": "A\\V0\\1.mp3", "size": 1, "bitRate": 228, "isVariableBitRate": true},
+                    {"filename": "A\\V0\\2.mp3", "size": 1, "bitRate": 262, "isVariableBitRate": true}]},
+                {"username": "v0b", "files": [
+                    {"filename": "B\\V0\\1.mp3", "size": 1, "bitRate": 251, "isVariableBitRate": true},
+                    {"filename": "B\\V0\\2.mp3", "size": 1, "isVariableBitRate": true}]},
+                {"username": "v2", "files": [
+                    {"filename": "C\\V2\\1.mp3", "size": 1, "bitRate": 181, "isVariableBitRate": true},
+                    {"filename": "C\\V2\\2.mp3", "size": 1, "bitRate": 203, "isVariableBitRate": true}]},
+                {"username": "unknown", "files": [
+                    {"filename": "D\\X\\1.mp3", "size": 1, "isVariableBitRate": true}]},
+                {"username": "vorbis", "files": [
+                    {"filename": "E\\Q5\\1.ogg", "size": 1, "bitRate": 150, "isVariableBitRate": true},
+                    {"filename": "E\\Q5\\2.ogg", "size": 1, "bitRate": 170, "isVariableBitRate": true}]}
+            ]"#,
+            ),
+        );
+        let mut found = keys(&versions);
+        found.sort_unstable();
+        assert_eq!(
+            found,
+            ["mp3-vbr-190", "mp3-vbr-245", "mp3-vbr-x", "ogg-vbr-160"]
+        );
+        // One folder is one source, however much its files' averages differ.
+        let v0 = versions
+            .iter()
+            .find(|version| version.key == "mp3-vbr-245")
+            .unwrap();
+        let users: Vec<&str> = v0
+            .sources
+            .iter()
+            .map(|source| source.username.as_str())
+            .collect();
+        assert_eq!(users, ["v0", "v0b"]);
+        assert!(v0.sources.iter().all(|source| source.files.len() == 2));
+        assert_eq!(v0.quality.bitrate_kbps, Some(245));
+        let unknown = versions
+            .iter()
+            .find(|version| version.key == "mp3-vbr-x")
+            .unwrap();
+        assert_eq!(unknown.quality.bitrate_kbps, None);
+        assert_eq!(vbr_level("mp3", 300), 245);
+        assert_eq!(vbr_level("mp3", 235), 245, "a tie goes to the higher level");
+        assert_eq!(vbr_level("opus", 10), 32);
     }
 
     #[test]

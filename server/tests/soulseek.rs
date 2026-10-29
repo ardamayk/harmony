@@ -1079,10 +1079,11 @@ async fn track_sources_are_single_files_and_a_finished_search_is_complete() {
     let versions = body["versions"].as_array().unwrap();
     assert_eq!(versions.len(), 1, "{body}");
     let version = &versions[0];
-    assert_eq!(version["versionKey"], "mp3-vbr");
+    // Each file is its own source; both average to LAME's V0 level.
+    assert_eq!(version["versionKey"], "mp3-vbr-245");
     assert_eq!(
         version["quality"],
-        json!({"format": "mp3", "lossless": false, "variableBitrate": true})
+        json!({"format": "mp3", "lossless": false, "bitrateKbps": 245, "variableBitrate": true})
     );
     assert_eq!(version["fileCount"], 1);
     assert_eq!(version["totalBytes"], 9);
