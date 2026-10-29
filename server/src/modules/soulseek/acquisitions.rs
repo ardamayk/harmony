@@ -586,6 +586,10 @@ impl Soulseek {
         }
         if acquisition.state.is_downloading() {
             self.download(acquisition, timing).await;
+            // Feeding saves the acquisition after every file it hands over,
+            // which can take minutes: it reads importing as soon as every
+            // audio file arrived, not once Managed Import has them all.
+            self.settle(acquisition);
             self.feed(acquisition).await;
         }
         self.settle(acquisition);

@@ -51,6 +51,8 @@ struct FakeState {
     contents: HashMap<String, Vec<u8>>,
     /// slskd's download directory.
     downloads: Option<PathBuf>,
+    /// While set, removing a download waits until it is closed.
+    removal_gate: Option<Arc<tokio::sync::Semaphore>>,
 }
 
 /// What the fake does with a queued download.
@@ -195,6 +197,18 @@ impl FakeSlskd {
         self.state.lock().unwrap().transfers.clone()
     }
 
+    /// Makes every request to remove a download wait until
+    /// [`FakeSlskd::release_removals`].
+    fn hold_removals(&self) {
+        self.state.lock().unwrap().removal_gate = Some(Arc::new(tokio::sync::Semaphore::new(0)));
+    }
+
+    fn release_removals(&self) {
+        if let Some(gate) = self.state.lock().unwrap().removal_gate.take() {
+            gate.close();
+        }
+    }
+
     /// Completes every held download and writes its file.
     fn finish_held(&self) {
         let mut state = self.state.lock().unwrap();
@@ -238,6 +252,13 @@ async fn answer(
     headers: HeaderMap,
     body: Bytes,
 ) -> Response {
+    let gate = (method == Method::DELETE)
+        .then(|| state.lock().unwrap().removal_gate.clone())
+        .flatten();
+    if let Some(gate) = gate {
+        // Closed on release; the request is recorded after it.
+        let _ = gate.acquire().await;
+    }
     let mut state = state.lock().unwrap();
     state.requests.push(Recorded {
         method: method.clone(),
@@ -1861,6 +1882,13 @@ fn strict_album_response(username: &str, folder: &str) -> Value {
 
 /// Acquires the fixture Album from frank and waits for its review.
 async fn reviewed_strict_album(slskd: &FakeSlskd) -> (Harness, String, Value) {
+    let (harness, id) = strict_album_acquisition(slskd).await;
+    let review = wait_for(&harness, &id, "review", |body| body["state"] == "review").await;
+    (harness, id, review)
+}
+
+/// Starts acquiring the fixture Album from frank.
+async fn strict_album_acquisition(slskd: &FakeSlskd) -> (Harness, String) {
     slskd.content("03 Inspection Fixture.flac", FLAC);
     slskd.content("04 Broken.flac", NOT_AUDIO);
     slskd.content("cover.png", COVER);
@@ -1886,8 +1914,33 @@ async fn reviewed_strict_album(slskd: &FakeSlskd) -> (Harness, String, Value) {
     .await;
     assert_eq!(status, StatusCode::CREATED, "{started}");
     let id = started["acquisitionId"].as_str().unwrap().to_owned();
-    let review = wait_for(&harness, &id, "review", |body| body["state"] == "review").await;
-    (harness, id, review)
+    (harness, id)
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn an_acquisition_reads_importing_while_managed_import_takes_its_files() {
+    let slskd = FakeSlskd::start().await;
+    // Handing a staged file over removes its slskd transfer; holding that
+    // removal keeps the worker inside Managed Import's intake.
+    slskd.hold_removals();
+    let (harness, id) = strict_album_acquisition(&slskd).await;
+    let taking = wait_for(&harness, &id, "Managed Import to take a file", |body| {
+        body["files"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|file| file["jobId"].as_str().is_some())
+    })
+    .await;
+    assert!(
+        states(&taking)
+            .iter()
+            .all(|state| state != "queued" && state != "downloading"),
+        "every audio file arrived: {taking:#}"
+    );
+    assert_eq!(taking["state"], "importing", "{taking:#}");
+    slskd.release_removals();
+    wait_for(&harness, &id, "review", |body| body["state"] == "review").await;
 }
 
 async fn get_raw(router: &axum::Router, uri: &str) -> (StatusCode, Bytes) {
