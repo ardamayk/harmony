@@ -246,6 +246,46 @@ describe("createApiClient", () => {
 		);
 	});
 
+	it("starts and reads Soulseek searches and acquisitions on the Soulseek routes", async () => {
+		const searchId = "00000000-0000-4000-8000-0000000000aa";
+		const acquisitionId = "00000000-0000-4000-8000-0000000000bb";
+		const transport = vi
+			.fn<typeof fetch>()
+			.mockResolvedValueOnce(Response.json({ searchId }, { status: 201 }))
+			.mockResolvedValueOnce(
+				Response.json({
+					searchId,
+					query: "Daft Punk Discovery",
+					scope: "album",
+					state: "searching",
+					versions: [],
+				}),
+			)
+			.mockResolvedValueOnce(new Response(null, { status: 204 }));
+		const client = createApiClient({ baseUrl: "http://music.test", transport });
+
+		await expect(
+			client.startSoulseekSearch("Daft Punk Discovery", "album"),
+		).resolves.toEqual({ searchId });
+		await client.getSoulseekSearch(searchId);
+		await client.cancelSoulseekAcquisition(acquisitionId);
+
+		expect(
+			transport.mock.calls.map(([input, init]) => [input, init?.method]),
+		).toEqual([
+			["http://music.test/api/v1/soulseek/searches", "POST"],
+			[`http://music.test/api/v1/soulseek/searches/${searchId}`, undefined],
+			[
+				`http://music.test/api/v1/soulseek/acquisitions/${acquisitionId}`,
+				"DELETE",
+			],
+		]);
+		expect(JSON.parse(String(transport.mock.calls[0]?.[1]?.body))).toEqual({
+			query: "Daft Punk Discovery",
+			scope: "album",
+		});
+	});
+
 	it("passes an AbortSignal to External Source search and playback requests", async () => {
 		const transport = vi
 			.fn<typeof fetch>()

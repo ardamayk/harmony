@@ -23,6 +23,11 @@ export const TRACK_WAVEFORM_CAPABILITY = "track-waveform.v1";
  * advertised when the operator configured EXTERNAL_SOURCE_SEARCH.
  */
 export const EXTERNAL_SOURCE_CAPABILITY = "external-source.v1";
+/**
+ * Soulseek Acquisition through the operator's slskd (ADR 0036); only
+ * advertised when SLSKD_URL, SLSKD_API_KEY and SLSKD_DOWNLOADS_PATH are set.
+ */
+export const SOULSEEK_ACQUISITION_CAPABILITY = "soulseek-acquisition.v1";
 
 export type ServerCapabilities =
 	| HealthResponse

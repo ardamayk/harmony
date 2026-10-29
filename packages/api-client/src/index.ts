@@ -157,6 +157,17 @@ export type RadioImportRequest = Schemas["RadioImportRequest"];
 export type ExternalTrack = Schemas["ExternalTrack"];
 export type ExternalSearchResponse = Schemas["ExternalSearchResponse"];
 export type ExternalTrackPlayback = Schemas["ExternalTrackPlayback"];
+export type SoulseekStatus = Schemas["SoulseekStatus"];
+export type AcquisitionScope = Schemas["AcquisitionScope"];
+export type SoulseekSearchStarted = Schemas["SoulseekSearchStarted"];
+export type SoulseekSearch = Schemas["SoulseekSearch"];
+export type AcquisitionQuality = Schemas["AcquisitionQuality"];
+export type AcquisitionVersion = Schemas["AcquisitionVersion"];
+export type AcquisitionSource = Schemas["AcquisitionSource"];
+export type SoulseekAcquisitionCreate = Schemas["SoulseekAcquisitionCreate"];
+export type SoulseekAcquisitionList = Schemas["SoulseekAcquisitionList"];
+export type SoulseekAcquisition = Schemas["SoulseekAcquisition"];
+export type SoulseekAcquisitionFile = Schemas["SoulseekAcquisitionFile"];
 
 export class ApiError extends Error {
 	constructor(
@@ -837,6 +848,44 @@ export function createApiClient(config: ApiClientConfig) {
 				"getExternalTrackPlayback",
 				`/api/v1/external/tracks/${encodeURIComponent(externalTrackId)}/playback`,
 				{ signal },
+			),
+		getSoulseekStatus: () =>
+			request<SoulseekStatus>("getSoulseekStatus", "/api/v1/soulseek/status"),
+		startSoulseekSearch: (query: string, scope: AcquisitionScope) =>
+			request<SoulseekSearchStarted>(
+				"startSoulseekSearch",
+				"/api/v1/soulseek/searches",
+				{ method: "POST", body: JSON.stringify({ query, scope }) },
+			),
+		/** Poll while `state` is searching; versions grow as results arrive. */
+		getSoulseekSearch: (searchId: string) =>
+			request<SoulseekSearch>(
+				"getSoulseekSearch",
+				`/api/v1/soulseek/searches/${encodeURIComponent(searchId)}`,
+			),
+		listSoulseekAcquisitions: () =>
+			request<SoulseekAcquisitionList>(
+				"listSoulseekAcquisitions",
+				"/api/v1/soulseek/acquisitions",
+			),
+		/** Starts an acquisition, or returns the active one for the same version. */
+		startSoulseekAcquisition: (body: SoulseekAcquisitionCreate) =>
+			request<SoulseekAcquisition>(
+				"startSoulseekAcquisition",
+				"/api/v1/soulseek/acquisitions",
+				{ method: "POST", body: JSON.stringify(body) },
+			),
+		getSoulseekAcquisition: (acquisitionId: string) =>
+			request<SoulseekAcquisition>(
+				"getSoulseekAcquisition",
+				`/api/v1/soulseek/acquisitions/${encodeURIComponent(acquisitionId)}`,
+			),
+		/** Rejected with 409 while its Import Batch is committing. */
+		cancelSoulseekAcquisition: (acquisitionId: string) =>
+			request<void>(
+				"cancelSoulseekAcquisition",
+				`/api/v1/soulseek/acquisitions/${encodeURIComponent(acquisitionId)}`,
+				{ method: "DELETE" },
 			),
 		/** `streamPath` is an ExternalTrackPlayback's server path; keeps `.m3u8` for HLS detection. */
 		getExternalStreamUrl: (streamPath: string) =>
