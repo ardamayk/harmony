@@ -56,7 +56,7 @@ Managed Import uses file tags locally. TITLE, ARTIST, ALBUMARTIST, ALBUM, and TR
 
 ## External services
 
-The Music Server calls these services itself, so clients never contact them directly. Artist info, play counts and lyrics are looked up when a client first asks for them and then stored; a library is never crawled. Only Last.fm needs a key. yt-dlp is not a web service: it is a program you install yourself (see below).
+The Music Server calls these services itself, so clients never contact them directly. Artist info, play counts and lyrics are looked up when a client first asks for them and then stored; a library is never crawled. Only Last.fm needs a key, and Sentry your own DSN (the Desktop core reports to it too). yt-dlp is not a web service: it is a program you install yourself (see below).
 
 | Service | Key | Used for | Switch |
 |---------|-----|----------|--------|
@@ -67,6 +67,7 @@ The Music Server calls these services itself, so clients never contact them dire
 | [Radio Browser](https://www.radio-browser.info) | no | Radio station catalog | `RADIO_BROWSER_BASE_URL` |
 | [yt-dlp](https://github.com/yt-dlp/yt-dlp) (a program you install) | no | External Source: search and play Tracks from a site you choose | off unless `EXTERNAL_SOURCE_SEARCH` is set |
 | Radio stations | no | Streams, through the Music Server's proxy | play no radio |
+| Your own [Sentry](https://sentry.io) | `SENTRY_DSN` | Errors, traces, logs and metrics from the Music Server and Desktop core | off without a DSN |
 
 Two more are reached by the clients rather than the server:
 
@@ -77,7 +78,7 @@ The External Source runs yt-dlp on the Music Server's host. You install yt-dlp a
 
 The album and artist links to Spotify, Qobuz, Last.fm and ListenBrainz are plain links; nothing is sent to these services until you click one.
 
-ADRs: [0003](docs/adr/0003-radio-browser-catalog-and-health.md) (Radio Browser), [0027](docs/adr/0027-artist-photos-from-deezer-biographies-from-wikipedia.md) (Deezer, Wikipedia), [0029](docs/adr/0029-lyrics-from-lrclib.md) (LRCLIB), [0030](docs/adr/0030-play-counts-from-lastfm-with-an-operator-key.md) (Last.fm), [0032](docs/adr/0032-external-source-through-an-operator-installed-yt-dlp.md) (External Source, yt-dlp).
+ADRs: [0003](docs/adr/0003-radio-browser-catalog-and-health.md) (Radio Browser), [0027](docs/adr/0027-artist-photos-from-deezer-biographies-from-wikipedia.md) (Deezer, Wikipedia), [0029](docs/adr/0029-lyrics-from-lrclib.md) (LRCLIB), [0030](docs/adr/0030-play-counts-from-lastfm-with-an-operator-key.md) (Last.fm), [0032](docs/adr/0032-external-source-through-an-operator-installed-yt-dlp.md) (External Source, yt-dlp), [0033](docs/adr/0033-opt-in-sentry-for-the-rust-programs.md) (Sentry).
 
 ## Configuration
 
@@ -101,6 +102,9 @@ The Music Server reads its settings from environment variables only; it does not
 | `EXTERNAL_SOURCE_NAME` | from the prefix, else `External` | The site's name in the clients' search, such as `Internet Archive`; up to 40 characters. |
 | `RADIO_BROWSER_BASE_URL` | `https://de1.api.radio-browser.info` | Radio Browser mirror for the station catalog. |
 | `APP_VERSION` | `0.1.0` | Version shown in the health response and Settings. |
+| `SENTRY_DSN` | none | Your own Sentry project's DSN; turns on error, trace, log and metric reporting for the Music Server and the Desktop core. See [server/README.md](server/README.md#sentry-optional). |
+| `SENTRY_ENVIRONMENT` | `development` (debug build), `production` (release build) | Sentry environment name. |
+| `SENTRY_TRACES_SAMPLE_RATE` | `1.0` | Share of transactions sent to Sentry, 0 to 1. |
 
 Where to set them:
 

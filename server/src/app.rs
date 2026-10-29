@@ -4,7 +4,7 @@
 use crate::config::Config;
 use crate::dependencies::Report;
 use crate::respond::ApiError;
-use crate::{api, modules, static_assets};
+use crate::{api, modules, observability, static_assets};
 use axum::Router;
 use axum::extract::Request;
 use axum::http::{HeaderMap, HeaderName, Method, StatusCode, header};
@@ -104,6 +104,9 @@ pub fn router(state: AppState) -> Router {
         .layer(middleware::from_fn(loopback_host))
         .layer(cors)
         .layer(CatchPanicLayer::new())
+        // Outermost, so the request's transaction covers the other layers
+        // and a caught panic is reported within it. A no-op without Sentry.
+        .layer(middleware::from_fn(observability::http_transaction))
         .with_state(state)
 }
 

@@ -28,6 +28,41 @@ pub struct Config {
     pub lastfm_api_key: Option<String>,
     /// The operator's yt-dlp search, off when unset (ADR 0032).
     pub external_source: Option<ExternalSourceConfig>,
+    /// The owner's own Sentry, off when `SENTRY_DSN` is unset (ADR 0033).
+    pub sentry: Option<SentryConfig>,
+}
+
+/// Where and how the Music Server reports to the owner's Sentry.
+#[derive(Clone, PartialEq)]
+pub struct SentryConfig {
+    pub dsn: sentry::types::Dsn,
+    /// `SENTRY_ENVIRONMENT`, else "development" for a debug build and
+    /// "production" for a release build.
+    pub environment: String,
+    /// `SENTRY_TRACES_SAMPLE_RATE`: the share of requests sent as
+    /// transactions, 1.0 unless set.
+    pub traces_sample_rate: f32,
+}
+
+/// Leaves the DSN's key out of debug output.
+impl std::fmt::Debug for SentryConfig {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("SentryConfig")
+            .field("dsn", &"<set>")
+            .field("environment", &self.environment)
+            .field("traces_sample_rate", &self.traces_sample_rate)
+            .finish()
+    }
+}
+
+/// The environment a build reports when `SENTRY_ENVIRONMENT` is unset.
+pub fn default_sentry_environment() -> &'static str {
+    if cfg!(debug_assertions) {
+        "development"
+    } else {
+        "production"
+    }
 }
 
 /// The External Source: which yt-dlp search runs, and with which binary.
@@ -80,6 +115,17 @@ pub enum ConfigError {
     InvalidExternalSourceExtractorArgs(String),
     #[error("EXTERNAL_SOURCE_NAME {0:?} must be 1 to 40 printable characters such as SoundCloud")]
     InvalidExternalSourceName(String),
+    // The DSN holds the project's key, so the message does not repeat it.
+    #[error(
+        "SENTRY_DSN must be a Sentry DSN such as https://<public-key>@<your-sentry-host>/<project-id>"
+    )]
+    InvalidSentryDsn,
+    #[error(
+        "SENTRY_ENVIRONMENT {0:?} must be 1 to 64 letters, digits, '.', '_' or '-' such as production"
+    )]
+    InvalidSentryEnvironment(String),
+    #[error("SENTRY_TRACES_SAMPLE_RATE {0:?} must be a number from 0 to 1 such as 0.25")]
+    InvalidSentryTracesSampleRate(String),
 }
 
 impl Config {
@@ -161,6 +207,7 @@ impl Config {
                 external_source_search,
             ));
         };
+        let sentry = sentry_config(&lookup)?;
         Ok(Self {
             addr: get("SERVER_ADDR", "127.0.0.1:8090"),
             database_path: get("DATABASE_PATH", "./data/app.db"),
@@ -209,8 +256,54 @@ impl Config {
             lastfm_api_key: Some(get("LASTFM_API_KEY", "").trim().to_owned())
                 .filter(|key| !key.is_empty()),
             external_source,
+            sentry,
         })
     }
+}
+
+/// Sentry is on only with `SENTRY_DSN`; there is no default DSN. The
+/// environment and sample rate are checked even while it is off, like the
+/// External Source's extractor arguments.
+fn sentry_config(
+    lookup: &impl Fn(&str) -> Option<String>,
+) -> Result<Option<SentryConfig>, ConfigError> {
+    let value = |key: &str| {
+        lookup(key)
+            .map(|value| value.trim().to_owned())
+            .filter(|value| !value.is_empty())
+    };
+    let environment = value("SENTRY_ENVIRONMENT");
+    if let Some(environment) = &environment
+        && !is_sentry_environment(environment)
+    {
+        return Err(ConfigError::InvalidSentryEnvironment(environment.clone()));
+    }
+    let traces_sample_rate = match value("SENTRY_TRACES_SAMPLE_RATE") {
+        None => 1.0,
+        Some(raw) => match raw.parse::<f32>() {
+            Ok(rate) if (0.0..=1.0).contains(&rate) => rate,
+            _ => return Err(ConfigError::InvalidSentryTracesSampleRate(raw)),
+        },
+    };
+    let Some(dsn) = value("SENTRY_DSN") else {
+        return Ok(None);
+    };
+    let dsn = dsn
+        .parse::<sentry::types::Dsn>()
+        .map_err(|_| ConfigError::InvalidSentryDsn)?;
+    Ok(Some(SentryConfig {
+        dsn,
+        environment: environment.unwrap_or_else(|| default_sentry_environment().to_owned()),
+        traces_sample_rate,
+    }))
+}
+
+/// Sentry's environment names: one short word without spaces or slashes.
+fn is_sentry_environment(value: &str) -> bool {
+    value.len() <= 64
+        && value
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
 }
 
 /// One yt-dlp `--extractor-args` value: an extractor key, a colon, then
@@ -314,6 +407,7 @@ mod tests {
         assert!(config.lyrics_lookup_enabled);
         assert_eq!(config.lastfm_api_key, None);
         assert_eq!(config.external_source, None);
+        assert_eq!(config.sentry, None);
         // Writes through the dev and preview proxies keep the browser's
         // Origin, which the origin check accepts only from this list.
         for origin in ["http://localhost:3000", "http://localhost:4173"] {
@@ -498,6 +592,66 @@ mod tests {
                 "-x".to_owned()
             ))
         );
+    }
+
+    #[test]
+    fn sentry_is_off_without_a_dsn_and_never_has_a_default_one() {
+        let off = config(&[]).expect("defaults");
+        assert_eq!(off.sentry, None);
+        assert_eq!(
+            config(&[("SENTRY_DSN", "  "), ("SENTRY_ENVIRONMENT", "staging")])
+                .expect("config")
+                .sentry,
+            None
+        );
+        let on = config(&[("SENTRY_DSN", " https://public@sentry.example/42 ")])
+            .expect("config")
+            .sentry
+            .expect("on");
+        assert_eq!(on.dsn.project_id().to_string(), "42");
+        assert_eq!(on.environment, default_sentry_environment());
+        assert_eq!(on.traces_sample_rate, 1.0);
+        // The key stays out of debug output.
+        assert!(!format!("{on:?}").contains("public"));
+        let tuned = config(&[
+            ("SENTRY_DSN", "https://public@sentry.example/42"),
+            ("SENTRY_ENVIRONMENT", "production"),
+            ("SENTRY_TRACES_SAMPLE_RATE", "0.25"),
+        ])
+        .expect("config")
+        .sentry
+        .expect("on");
+        assert_eq!(tuned.environment, "production");
+        assert_eq!(tuned.traces_sample_rate, 0.25);
+    }
+
+    #[test]
+    fn sentry_settings_are_checked_even_while_it_is_off() {
+        for invalid in ["not a dsn", "https://sentry.example/42", "sentry.example"] {
+            let error = config(&[("SENTRY_DSN", invalid)]).err();
+            assert_eq!(error, Some(ConfigError::InvalidSentryDsn), "{invalid}");
+            // The message never repeats the value.
+            assert!(!error.expect("error").to_string().contains(invalid));
+        }
+        for invalid in ["prod uction", "a/b", "é", &"a".repeat(65)] {
+            assert_eq!(
+                config(&[("SENTRY_ENVIRONMENT", invalid)]).err(),
+                Some(ConfigError::InvalidSentryEnvironment(invalid.to_owned())),
+                "{invalid}"
+            );
+        }
+        for invalid in ["1.5", "-0.1", "half", "NaN", "inf"] {
+            assert_eq!(
+                config(&[("SENTRY_TRACES_SAMPLE_RATE", invalid)]).err(),
+                Some(ConfigError::InvalidSentryTracesSampleRate(
+                    invalid.to_owned()
+                )),
+                "{invalid}"
+            );
+        }
+        for valid in ["0", "1", "0.05"] {
+            assert!(config(&[("SENTRY_TRACES_SAMPLE_RATE", valid)]).is_ok());
+        }
     }
 
     #[test]

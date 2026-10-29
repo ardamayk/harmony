@@ -839,8 +839,15 @@ impl ExternalSource {
             None => {
                 let (resolution, cache) = self.resolution(id, track);
                 timing.cache = Some(cache);
+                let waiting = Instant::now();
                 let (result, run) = resolution.await;
-                timing.run = run;
+                // A joined run started before this request and is recorded
+                // by the one that started it; this one only waited.
+                if cache == CacheUse::Joined {
+                    timing.wait = Some(waiting.elapsed());
+                } else {
+                    timing.run = run;
+                }
                 result
             }
         };
@@ -1879,6 +1886,85 @@ mod tests {
                 .await,
             Err(ExternalError::BadRequest(_))
         ));
+    }
+
+    /// External Track ids and resource tokens decode to page and media
+    /// URLs, so text sent to Sentry keeps only the route around them.
+    #[test]
+    fn ids_and_resource_tokens_do_not_reach_sentry() {
+        let (source, id) = artwork_source(Arc::new(Fake::default()), Some(ARTWORK));
+        let resource = source.resources.sign(
+            &fingerprint(&id),
+            "https://media.example/seg-1.aac?sig=secret",
+        );
+        for (path, route) in [
+            (stream_path(&id), "/api/v1/external/tracks/<id>/stream"),
+            (
+                playlist_path(&id),
+                "/api/v1/external/tracks/<id>/playlist.m3u8",
+            ),
+            (
+                resource_path(&id, &resource),
+                "/api/v1/external/tracks/<id>/resources/<id>",
+            ),
+            (
+                format!("{TRACKS_PATH}/{id}/artwork"),
+                "/api/v1/external/tracks/<id>/artwork",
+            ),
+        ] {
+            assert_eq!(
+                crate::observability::scrub_text(&format!("GET {path}?range=1 failed")),
+                format!("GET {route} failed")
+            );
+        }
+    }
+
+    /// A resolution another request started, with a long yt-dlp run.
+    fn in_flight(source: &ExternalSource, id: &str, run: RunTiming) {
+        let resolution = async move {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+            (Err(ExternalError::Failed("upstream".to_owned())), run)
+        }
+        .boxed()
+        .shared();
+        source
+            .cache
+            .in_flight
+            .lock()
+            .expect("lock")
+            .insert(id.to_owned(), resolution);
+    }
+
+    #[tokio::test]
+    async fn a_joined_resolve_records_its_wait_not_the_shared_run() {
+        let (source, id) = artwork_source(Arc::new(Fake::default()), None);
+        in_flight(
+            &source,
+            &id,
+            RunTiming {
+                queue: Some(Duration::from_secs(5)),
+                run: Some(Duration::from_secs(10)),
+                parse: Some(Duration::from_millis(1)),
+            },
+        );
+        let mut timing = ResolveTiming::default();
+        assert!(source.playback(&id, &mut timing).await.is_err());
+        assert_eq!(timing.cache, Some(CacheUse::Joined));
+        assert_eq!(timing.run, RunTiming::default());
+        let wait = timing.wait.expect("wait");
+        assert!(wait >= Duration::from_millis(15), "{wait:?}");
+        assert!(wait <= timing.total.expect("total"));
+    }
+
+    #[tokio::test]
+    async fn a_resolve_that_runs_yt_dlp_records_the_run() {
+        let (source, id) = artwork_source(Arc::new(Fake::default()), None);
+        let mut timing = ResolveTiming::default();
+        // yt-dlp is not installed here: the run fails after its turn.
+        assert!(source.playback(&id, &mut timing).await.is_err());
+        assert_eq!(timing.cache, Some(CacheUse::Miss));
+        assert_eq!(timing.wait, None);
+        assert!(timing.run.queue.is_some(), "{:?}", timing.run);
     }
 
     #[test]
