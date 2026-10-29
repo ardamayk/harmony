@@ -18,6 +18,22 @@ _Avoid_: YouTube search, online library, catalog
 A result of the External Source that is not in the library. It can be played in full through the Music Server, but it is never stored, and adding it to the library is the listener's own import.
 _Avoid_: Library Track, preview clip, download
 
+**Soulseek Acquisition**:
+An optional, operator-configured way for the listener to find a Track or a whole Album on the Soulseek network and bring it into the library. The downloaded files enter the library only through a Managed Import that the listener confirms in its Import Preview. It is off unless the operator configures it.
+_Avoid_: download manager, automatic import, External Track
+
+**Acquisition Version**:
+The Acquisition Sources for one Soulseek Acquisition that offer the same audio quality: format, bit depth, and sample rate. The listener chooses a version, never ranked or chosen automatically; any source in it may supply the files.
+_Avoid_: best quality, automatic pick, Release
+
+**Acquisition Source**:
+One Soulseek user's folder offering the Track or Album, with its file count and availability. An Album source missing some Tracks is incomplete and is still offered.
+_Avoid_: peer, mirror, Acquisition Version
+
+**Soulseek Sharing**:
+Offering the Managed Storage, read-only, to other Soulseek users. It is off by default and is the operator's choice; the listener can see whether it is on.
+_Avoid_: upload, seeding, sync
+
 **Best Match**:
 The single library result highlighted above search groups because it strongly matches the query directly. It also appears first in its own category, counting toward that category's five-result limit. A result found only through typo correction is not a Best Match.
 _Avoid_: First Track, most popular result, related result
