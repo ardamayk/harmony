@@ -22,6 +22,9 @@ import sys
 from pathlib import Path
 
 DUPLICATE_LINE_DISTANCE = 3
+# The account this workflow posts as. Only its comments count as already
+# posted: a finder can point at another bot's comment on the same problem.
+OWN_LOGIN = "github-actions[bot]"
 
 
 def load_outputs(directory, key):
@@ -70,10 +73,28 @@ def gh(*args):
     return subprocess.run(["gh", *args], capture_output=True).returncode == 0
 
 
+def own_comment_ids(repo, pr):
+    if os.environ.get("DRY_RUN"):
+        return None
+    result = subprocess.run(
+        [
+            "gh", "api", "--paginate", f"repos/{repo}/pulls/{pr}/comments",
+            "--jq", f'.[] | select(.user.login == "{OWN_LOGIN}") | .id',
+        ],
+        capture_output=True, text=True, check=True,
+    )
+    return {int(line) for line in result.stdout.split()}
+
+
 def post(found, candidate_count, env):
     repo, pr, label = env["REPO"], env["PR"], env["PASS_LABEL"]
     voters = env.get("VOTERS", "3")
-    new = [f for f in found if not f.get("previous_comment_id")]
+    own = own_comment_ids(repo, pr)
+    new = [
+        f for f in found
+        if not f.get("previous_comment_id")
+        or (own is not None and f["previous_comment_id"] not in own)
+    ]
     for finding in new:
         body = f"**{finding['title']}**\n\n{finding['detail']}\n\n_{label}: {finding['votes']} of {voters} voters agreed._"
         inline = gh(

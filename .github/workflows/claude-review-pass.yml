@@ -22,6 +22,8 @@ on:
 
 env:
   REVIEW_MODEL: claude-sonnet-5-5
+  # A finder took 30-60 turns on a 2,400-line PR; the cap bounds a runaway session.
+  MAX_TURNS: 80
   ROUND_LIMIT: 3
   ROUND_OVERRIDE: review-more-rounds
   VOTES_NEEDED: 2
@@ -130,6 +132,7 @@ jobs:
             --allowedTools "${{ env.READ_TOOLS }}"
             --json-schema '${{ env.FINDER_SCHEMA }}'
             --model ${{ env.REVIEW_MODEL }}
+            --max-turns ${{ env.MAX_TURNS }}
       - name: Save candidates
         env:
           RESULT: ${{ steps.claude.outputs.structured_output }}
@@ -182,6 +185,7 @@ jobs:
             --allowedTools "${{ env.READ_TOOLS }}"
             --json-schema '${{ env.VOTER_SCHEMA }}'
             --model ${{ env.REVIEW_MODEL }}
+            --max-turns ${{ env.MAX_TURNS }}
       - name: Save votes
         env:
           COUNT: ${{ steps.merge.outputs.count }}

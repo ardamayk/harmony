@@ -53,6 +53,8 @@ jobs:
             target
           key: cargo-server-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
           restore-keys: cargo-server-${{ runner.os }}-
+      # server:test copies Scalar's API reference bundle from node_modules.
+      - run: pnpm install --frozen-lockfile
       - run: mise run server:check
       - run: mise run server:test
 
