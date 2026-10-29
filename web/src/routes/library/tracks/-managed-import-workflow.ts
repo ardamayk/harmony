@@ -220,8 +220,10 @@ export function useManagedImportWorkflow({
 		isCompleted,
 		isConfirming,
 		canConfirm,
+		isAcquisitionReview: Boolean(state.acquisitionId),
 		handleFiles: createFileHandler(state),
 		handleDesktopSelection: createDesktopSelectionHandler(state),
+		handleAcquisitionReview: createAcquisitionReviewHandler(state),
 		handleConfirm: createConfirmHandler(state, canConfirm, onCommitted),
 		handleRetry: createRetryHandler(state),
 		canRetry:
@@ -242,6 +244,12 @@ function useImportWorkflowState() {
 	>({});
 	const [entries, setEntries] = useState<ImportFileEntry[]>([]);
 	const [errorMessage, setErrorMessage] = useState("");
+	/**
+	 * Set while the open batch is a Soulseek Acquisition's server-owned batch
+	 * (ADR 0036): closing the dialog leaves it alone, cancelling cancels the
+	 * acquisition, and no client liveness is reported for it.
+	 */
+	const [acquisitionId, setAcquisitionId] = useState<string>();
 	const activeUploadController = useRef<AbortController | undefined>(undefined);
 	const isDesktopSelectionPending = useRef(false);
 	// Stable identity lets memoized rows skip re-rendering when a sibling's
@@ -261,12 +269,15 @@ function useImportWorkflowState() {
 		setAlbumDecisions({});
 		setEntries([]);
 		setErrorMessage("");
+		setAcquisitionId(undefined);
 	}
 	return {
 		importState,
 		setImportState,
 		batch,
 		setBatch,
+		acquisitionId,
+		setAcquisitionId,
 		albumDecisions,
 		setAlbumDecisions,
 		artworkUploads,
@@ -354,6 +365,53 @@ function createDesktopSelectionHandler(state: WorkflowState) {
 			state.setImportState("idle");
 		}
 	};
+}
+
+/**
+ * Opens a Soulseek Acquisition's server-fed batch in the Import Preview. Its
+ * files arrived from slskd, not from this client, so each row stands for a
+ * batch file by its job id.
+ */
+function createAcquisitionReviewHandler(state: WorkflowState) {
+	return async (acquisitionId: string, batchId: string) => {
+		if (state.entries.length > 0 || state.batch || state.importState !== "idle")
+			return;
+		state.setImportState("uploading");
+		state.setErrorMessage("");
+		try {
+			const batch = await apiClient.getManagedImportBatch(batchId);
+			state.setAcquisitionId(acquisitionId);
+			state.setBatch(batch);
+			state.setEntries(createServerBatchEntries(batch.files));
+		} catch (error) {
+			state.setErrorMessage(importErrorMessage(error));
+		} finally {
+			state.setImportState("idle");
+		}
+	};
+}
+
+function createServerBatchEntries(
+	files: ManagedImportBatchFile[],
+): ImportFileEntry[] {
+	return mergeBatchFiles(
+		files.map((file) => ({
+			key: file.jobId,
+			jobId: file.jobId,
+			file: new File([], file.originalFilename ?? "Downloaded file"),
+			progress: 100,
+			phase: file.phase,
+			state: "unresolved",
+			selected: false,
+			hasSelectionOverride: false,
+		})),
+		files,
+	).map((entry) =>
+		// As for an upload, an Exact Duplicate is never offered for import.
+		entry.preview?.duplicateClassification === "exact_duplicate"
+			? { ...entry, state: "rejected", selected: false }
+			: entry,
+	);
 }
 
 function isSupportedVisibleAudioFile(
@@ -535,6 +593,12 @@ function createOpenHandler(
 		}
 		if (nextIsOpen) {
 			onOpenChange(true);
+			return;
+		}
+		// Closing never cancels an acquisition; its review waits on the server.
+		if (state.acquisitionId) {
+			state.reset();
+			onOpenChange(false);
 			return;
 		}
 		await createCancelHandler(state, onOpenChange)();
@@ -1053,6 +1117,10 @@ function createCancelHandler(
 			state.batch?.status === "confirming"
 		)
 			return;
+		if (state.acquisitionId) {
+			await cancelAcquisitionReview(state, state.acquisitionId, onOpenChange);
+			return;
+		}
 		if (
 			state.batch &&
 			hasUncommittedImportWork(state) &&
@@ -1077,12 +1145,34 @@ function createCancelHandler(
 	};
 }
 
+export const CANCEL_ACQUISITION_PROMPT =
+	"Cancel this acquisition and delete its downloaded files?";
+
+async function cancelAcquisitionReview(
+	state: WorkflowState,
+	acquisitionId: string,
+	onOpenChange: (isOpen: boolean) => void,
+) {
+	if (!window.confirm(CANCEL_ACQUISITION_PROMPT)) return;
+	try {
+		await apiClient.cancelSoulseekAcquisition(acquisitionId);
+	} catch (error) {
+		if (!(error instanceof ApiError && error.status === 404)) {
+			state.setErrorMessage(importErrorMessage(error));
+			return;
+		}
+	}
+	state.reset();
+	onOpenChange(false);
+}
+
 function useImportSessionActivity(
 	state: WorkflowState,
 	onCommitted: () => Promise<void>,
 ) {
 	useImportSessionLifecycle({
 		batch: state.batch,
+		isServerOwned: Boolean(state.acquisitionId),
 		isProcessing: state.importState !== "idle",
 		onBatch: (batch) => handleLiveBatch(state, batch, onCommitted),
 		onError: (error) =>
@@ -1091,7 +1181,8 @@ function useImportSessionActivity(
 			),
 		onExit: () => {
 			state.activeUploadController.current?.abort();
-			if (state.batch?.status === "uploading") {
+			// A server-owned batch outlives this client (ADR 0036).
+			if (state.batch?.status === "uploading" && !state.acquisitionId) {
 				void apiClient
 					.cancelManagedImportBatch(state.batch.id, true)
 					.catch((error) => console.error("Import exit cleanup failed", error));

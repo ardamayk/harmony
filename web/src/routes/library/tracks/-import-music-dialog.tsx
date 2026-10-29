@@ -8,7 +8,7 @@ import {
 	LoaderCircle,
 	X,
 } from "lucide-react";
-import { type CSSProperties, memo, useId, useState } from "react";
+import { memo, useId, useState } from "react";
 import { Button } from "#/components/ui/button";
 import { Checkbox } from "#/components/ui/checkbox";
 import {
@@ -28,7 +28,12 @@ import {
 	ImportFileAlternatives,
 } from "./-import-album-review";
 import { ImportErrors } from "./-import-errors";
-import { ImportTransferDetails, importPhaseLabel } from "./-import-progress";
+import {
+	ImportTransferDetails,
+	importPhaseLabel,
+	ProgressBar,
+} from "./-import-progress";
+import { SoulseekAcquisitions } from "./-soulseek-acquisitions";
 import { normalizeImportTitle } from "./-import-review";
 import {
 	type DuplicateDecision,
@@ -96,6 +101,15 @@ export function ImportMusicDialog({
 							onFiles={workflow.handleFiles}
 							onDesktopSelection={workflow.handleDesktopSelection}
 						/>
+						{/* Unmounted while a batch is open, so it reloads on return. */}
+						{isOpen && workflow.entries.length === 0 ? (
+							<SoulseekAcquisitions
+								isBusy={workflow.isPickerLocked}
+								onReview={(acquisitionId, batchId) =>
+									void workflow.handleAcquisitionReview(acquisitionId, batchId)
+								}
+							/>
+						) : null}
 					</div>
 					<ImportActivity errorMessage={workflow.errorMessage} />
 					<ImportSummary
@@ -361,40 +375,6 @@ function ImportSummary({
 				className="h-1"
 			/>
 		</section>
-	);
-}
-
-function ProgressBar({
-	label,
-	percent,
-	isIndeterminate = false,
-	className,
-}: {
-	label: string;
-	percent: number;
-	isIndeterminate?: boolean;
-	className?: string;
-}) {
-	return (
-		<div
-			className={cn(
-				"h-2 overflow-hidden rounded-full bg-primary/15",
-				className,
-			)}
-			role="progressbar"
-			aria-label={label}
-			aria-valuenow={percent}
-			aria-valuemin={0}
-			aria-valuemax={100}
-		>
-			<div
-				className={cn(
-					"h-full w-(--progress) rounded-full bg-primary",
-					isIndeterminate && "opacity-60",
-				)}
-				style={{ "--progress": `${percent}%` } as CSSProperties}
-			/>
-		</div>
 	);
 }
 

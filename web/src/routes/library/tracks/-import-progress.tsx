@@ -1,5 +1,40 @@
-import { useEffect, useState } from "react";
+import { type CSSProperties, useEffect, useState } from "react";
+import { cn } from "#/lib/utils";
 import type { ImportFileEntry } from "./-managed-import-workflow";
+
+export function ProgressBar({
+	label,
+	percent,
+	isIndeterminate = false,
+	className,
+}: {
+	label: string;
+	percent: number;
+	isIndeterminate?: boolean;
+	className?: string;
+}) {
+	return (
+		<div
+			className={cn(
+				"h-2 overflow-hidden rounded-full bg-primary/15",
+				className,
+			)}
+			role="progressbar"
+			aria-label={label}
+			aria-valuenow={percent}
+			aria-valuemin={0}
+			aria-valuemax={100}
+		>
+			<div
+				className={cn(
+					"h-full w-(--progress) rounded-full bg-primary",
+					isIndeterminate && "opacity-60",
+				)}
+				style={{ "--progress": `${percent}%` } as CSSProperties}
+			/>
+		</div>
+	);
+}
 
 const BYTES_PER_MIB = 1024 * 1024;
 const PROGRESS_CLOCK_INTERVAL_MS = 1000;

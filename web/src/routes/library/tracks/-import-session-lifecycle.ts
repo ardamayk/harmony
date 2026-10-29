@@ -7,6 +7,8 @@ const HEARTBEAT_INTERVAL_MS = 30000;
 
 type ImportSessionObserver = {
 	batch?: ManagedImportBatch;
+	/** A Soulseek Acquisition's batch: exempt from client liveness (ADR 0036). */
+	isServerOwned?: boolean;
 	isProcessing: boolean;
 	onBatch: (batch: ManagedImportBatch) => Promise<void>;
 	onError: (error: unknown) => void;
@@ -56,7 +58,7 @@ function observeImport(batchId: string, current: () => ImportSessionObserver) {
 		if (isPolling || isDisposed) return;
 		isPolling = true;
 		try {
-			void heartbeat();
+			if (!current().isServerOwned) void heartbeat();
 			if (current().isProcessing || current().batch?.status === "confirming") {
 				const batch = await apiClient.getManagedImportBatch(batchId);
 				if (!isDisposed) await current().onBatch(batch);

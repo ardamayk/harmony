@@ -9,6 +9,7 @@ import { cn } from "#/lib/utils";
 import { themePresetOptions } from "#/themes/presets";
 import { PlaybackSettingsSection } from "./-playback-settings";
 import { ServerDependenciesSection } from "./-server-dependencies";
+import { SoulseekSettingsSection } from "./-soulseek-settings";
 
 const themeModes: ThemePreferences["mode"][] = ["light", "dark", "system"];
 
@@ -102,6 +103,8 @@ export function SettingsPage() {
 			</section>
 
 			<PlaybackSettingsSection />
+
+			<SoulseekSettingsSection />
 
 			<ServerDependenciesSection
 				health={health.data}
