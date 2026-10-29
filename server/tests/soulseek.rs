@@ -61,7 +61,7 @@ enum Behavior {
     /// Completes with slskd's `Errored` flag.
     Fail,
     /// Stays queued at the remote user.
-    Stall,
+    Queue,
     /// Stays in progress with some bytes until [`FakeSlskd::finish_held`].
     Hold,
     /// slskd refuses to queue it (the user is offline).
@@ -283,7 +283,7 @@ fn transfers(state: &mut FakeState, method: &Method, rest: &str, body: &[u8]) ->
                         ("Completed, Succeeded", size)
                     }
                     Behavior::Fail => ("Completed, Errored", 0),
-                    Behavior::Stall => ("Queued, Remotely", 0),
+                    Behavior::Queue => ("Queued, Remotely", 0),
                     Behavior::Hold => ("InProgress", size / 2),
                     Behavior::Offline => unreachable!(),
                 };
@@ -1645,7 +1645,8 @@ async fn deleting_a_failed_acquisition_dismisses_it() {
 #[tokio::test(flavor = "multi_thread")]
 async fn a_stalled_source_falls_over() {
     let slskd = FakeSlskd::start().await;
-    slskd.user_behaves("alice", Behavior::Stall);
+    // alice's transfers start and then move no bytes.
+    slskd.user_behaves("alice", Behavior::Hold);
     slskd.user_behaves("erin", Behavior::Hold);
     let (harness, search_id) = acquiring(&slskd, Duration::from_millis(400)).await;
     let id = acquire_hi_res(&harness, &search_id).await;
@@ -1660,6 +1661,36 @@ async fn a_stalled_source_falls_over() {
             .iter()
             .all(|transfer| transfer.username != "alice"),
         "the stalled source's transfers are removed"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn waiting_in_a_remote_queue_is_not_a_stall() {
+    let slskd = FakeSlskd::start().await;
+    slskd.user_behaves("alice", Behavior::Queue);
+    let stall = Duration::from_millis(300);
+    let (harness, search_id) = acquiring(&slskd, stall).await;
+    let id = acquire_hi_res(&harness, &search_id).await;
+    wait_for(&harness, &id, "alice's queued transfers", |_| {
+        slskd
+            .transfers()
+            .iter()
+            .filter(|transfer| transfer.username == "alice")
+            .count()
+            >= 2
+    })
+    .await;
+    // Several stall intervals pass while alice's upload queue holds the files.
+    tokio::time::sleep(stall * 5).await;
+    let body = acquisition(&harness, &id).await;
+    assert_eq!(body["state"], "downloading", "{body}");
+    assert_eq!(body["currentSource"]["username"], "alice", "{body}");
+    assert_eq!(body["sourcesTried"], 1, "{body}");
+    assert!(
+        slskd
+            .requests_to(Method::POST, "/api/v0/transfers/downloads/erin")
+            .is_empty(),
+        "no other source is tried"
     );
 }
 

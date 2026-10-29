@@ -19,8 +19,9 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use tokio_util::sync::CancellationToken;
 
-/// How often the worker polls slskd, and how long a source may make no
-/// progress before the next source is tried. Tests shorten both.
+/// How often the worker polls slskd, and how long a source's transfer in
+/// progress may move no bytes before the next source is tried. Time spent
+/// queued is not counted. Tests shorten both.
 #[derive(Clone, Copy, Debug)]
 pub struct WorkerTiming {
     pub poll_interval: Duration,
@@ -729,6 +730,10 @@ impl Soulseek {
                 }
             };
             let mut progressed = false;
+            // Bytes are moving, or should be, for some file of the source.
+            let mut transferring = false;
+            // An audio file waits in slskd's or the user's upload queue.
+            let mut queued_audio = false;
             let mut failure: Option<String> = None;
             let mut unlisted: Vec<usize> = Vec::new();
             let pending: Vec<usize> = acquisition.pending().map(|(index, _)| index).collect();
@@ -751,8 +756,12 @@ impl Soulseek {
                 file.transfer_id = Some(transfer.id.clone());
                 let before = (file.state, file.bytes_transferred);
                 match &transfer.state {
-                    TransferState::Queued => file.state = FileState::Queued,
+                    TransferState::Queued => {
+                        file.state = FileState::Queued;
+                        queued_audio |= file.kind == FileKind::Audio;
+                    }
                     TransferState::InProgress => {
+                        transferring = true;
                         file.state = FileState::Downloading;
                         file.bytes_transferred = transfer.bytes_transferred;
                     }
@@ -796,7 +805,11 @@ impl Soulseek {
                 }
             }
             let now = now_ms();
-            if progressed {
+            // Waiting in a queue (requested, queued locally or remotely,
+            // initializing) is not a stall: the stall clock runs only while
+            // a transfer is in progress, or while nothing of the source is
+            // queued at all. A remote rejection still fails the source.
+            if progressed || (queued_audio && !transferring) {
                 acquisition.progress_at_ms = now;
             }
             let stalled = now - acquisition.progress_at_ms
