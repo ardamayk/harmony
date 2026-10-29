@@ -91,10 +91,85 @@ Soulseek Acquisition downloads a chosen Acquisition Version through the operator
 | Variable | Meaning |
 | --- | --- |
 | `SLSKD_URL` | slskd's http or https address, for example `http://127.0.0.1:5030`. |
-| `SLSKD_API_KEY` | An slskd API key with the `ReadWrite` role (searches, transfers, share rescan). |
+| `SLSKD_API_KEY` | An slskd API key with the `ReadWrite` role (searches and transfers; the status route also reads slskd's shares). |
 | `SLSKD_DOWNLOADS_PATH` | slskd's completed downloads directory as the Music Server sees it. |
 
 Set all three to turn the feature on, or none to leave it off; the server refuses to start with only some of them, or when `SLSKD_DOWNLOADS_PATH` is missing or unreadable.
+
+### Running slskd
+
+1. Install and run slskd yourself, following [its documentation](https://github.com/slskd/slskd) (a release binary or the `slskd/slskd` image). Put your Soulseek user name and password in slskd's configuration (`soulseek.username`, `soulseek.password`). The Music Server never sees them; it only asks slskd whether it is logged in.
+2. Give the Music Server an API key with the `ReadWrite` role: add one under `web.authentication.api_keys` in `slskd.yml`, or start slskd with `--api-key`. Set the same key as `SLSKD_API_KEY`, and slskd's web address as `SLSKD_URL`.
+3. Set `SLSKD_DOWNLOADS_PATH` to slskd's downloads directory (`directories.downloads`) as the Music Server sees it: the same directory on the same host, or one volume mounted into both containers. The Music Server reads finished files from there and deletes each copy once Managed Import has it, or when the acquisition is cancelled, so its user needs write access too.
+4. Settings › Soulseek shows whether slskd is reachable and logged in.
+
+The Music Server expects each finished file at `<downloads>/<last folder of the remote path>/<file name>`, slskd's default download layout (`${SOURCE_DIRECTORY}`). If you change slskd's download subdirectory setting, or slskd renames a file because one with the same name is already there, the server cannot find the file: that source then counts as stalled after two minutes without progress, and the acquisition moves on to the next source. Partial files stay in slskd's incomplete directory (`directories.incomplete`); slskd manages them, the Music Server does not touch them.
+
+### Soulseek Sharing
+
+The Music Server does not share anything itself. To share your library on Soulseek, give slskd read-only access to Managed Storage (`MANAGED_STORAGE_PATH`) at the same absolute path the Music Server uses, and list that path, or a directory above it, in slskd's `shares.directories`. The server compares slskd's shares with that path, so a different mount point reads as not shared, and a share of only a subdirectory does not count. slskd shares newly imported Tracks after its next share scan. Settings › Soulseek only shows the state; there is no switch.
+
+### Docker Compose
+
+slskd runs beside the Music Server as its own service. A sketch for the root `docker-compose.yml`, with slskd's downloads in a volume both services mount and Managed Storage (`/data/managed` in the `app-data` volume) mounted read-only into slskd at the same path. The `subpath` option needs Docker Engine 26 or later; on older engines bind-mount a host directory into both services instead.
+
+```yaml
+services:
+  server:
+    # ...as in docker-compose.yml, plus:
+    environment:
+      SLSKD_URL: http://127.0.0.1:5030
+      SLSKD_API_KEY: ${SLSKD_API_KEY}
+      SLSKD_DOWNLOADS_PATH: /downloads
+    volumes:
+      - app-data:/data
+      - slskd-downloads:/downloads # read and write: the server deletes imported copies
+
+  slskd:
+    image: slskd/slskd
+    ports:
+      - "127.0.0.1:5030:5030" # web UI and API, reached by the server on the host network
+      - "50300:50300" # Soulseek listen port
+    volumes:
+      - slskd-app:/app # slskd.yml: Soulseek account, API key, shares
+      - slskd-downloads:/downloads
+      - type: volume # optional, for Soulseek Sharing
+        source: app-data
+        target: /data/managed
+        read_only: true
+        volume:
+          subpath: managed
+
+volumes:
+  app-data:
+  slskd-app:
+  slskd-downloads:
+```
+
+and in slskd's `slskd.yml` (in the `slskd-app` volume):
+
+```yaml
+soulseek:
+  username: your-soulseek-user
+  password: your-soulseek-password
+directories:
+  downloads: /downloads
+shares:
+  directories:
+    - /data/managed # only to share Managed Storage
+web:
+  authentication:
+    api_keys:
+      earthly_music_server:
+        key: a-long-random-string # the same value as SLSKD_API_KEY
+        role: readwrite
+```
+
+Both services must be able to write to the downloads volume; if slskd and the Music Server run as different users, give that directory to a group both belong to.
+
+### Responsibility
+
+Downloading or sharing copyrighted music without the rights holder's permission is unlawful in many places. You run slskd, you choose what it downloads and shares, and you are responsible for both; the project ships no slskd and enables nothing by default.
 
 ## Sentry (optional)
 

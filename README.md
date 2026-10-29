@@ -56,7 +56,7 @@ Managed Import uses file tags locally. TITLE, ARTIST, ALBUMARTIST, ALBUM, and TR
 
 ## External services
 
-The Music Server calls these services itself, so clients never contact them directly. Artist info, play counts and lyrics are looked up when a client first asks for them and then stored; a library is never crawled. Only Last.fm needs a key, and Sentry your own DSN (the Desktop core reports to it too). yt-dlp is not a web service: it is a program you install yourself (see below).
+The Music Server calls these services itself, so clients never contact them directly. Artist info, play counts and lyrics are looked up when a client first asks for them and then stored; a library is never crawled. Only Last.fm needs a key, Sentry your own DSN (the Desktop core reports to it too), and slskd the API key you give it. yt-dlp is not a web service: it is a program you install yourself, and slskd one you run yourself (see below).
 
 | Service | Key | Used for | Switch |
 |---------|-----|----------|--------|
@@ -66,6 +66,7 @@ The Music Server calls these services itself, so clients never contact them dire
 | [LRCLIB](https://lrclib.net) | no | Lyrics for Tracks whose files have none | `LYRICS_LOOKUP_ENABLED=false` |
 | [Radio Browser](https://www.radio-browser.info) | no | Radio station catalog | `RADIO_BROWSER_BASE_URL` |
 | [yt-dlp](https://github.com/yt-dlp/yt-dlp) (a program you install) | no | External Source: search and play Tracks from a site you choose | off unless `EXTERNAL_SOURCE_SEARCH` is set |
+| Your own [slskd](https://github.com/slskd/slskd) (a Soulseek client you run) | `SLSKD_API_KEY` | Soulseek Acquisition: download a chosen version of an External Track into Managed Import | off unless `SLSKD_URL`, `SLSKD_API_KEY` and `SLSKD_DOWNLOADS_PATH` are set |
 | Radio stations | no | Streams, through the Music Server's proxy | play no radio |
 | Your own [Sentry](https://sentry.io) | `SENTRY_DSN` | Errors, traces, logs and metrics from the Music Server and Desktop core | off without a DSN |
 
@@ -76,9 +77,11 @@ Two more are reached by the clients rather than the server:
 
 The External Source runs yt-dlp on the Music Server's host. You install yt-dlp and you choose the site (for example `EXTERNAL_SOURCE_SEARCH=scsearch`); you are responsible for that source and for the site's terms. Nothing is bundled or enabled by default. See [server/README.md](server/README.md#external-source-yt-dlp).
 
+Soulseek Acquisition goes through an slskd you install and run with your own Soulseek account; the project never ships or installs it. slskd's downloads directory must be reachable by the Music Server, and slskd shares Managed Storage only if you give it read-only access and list it in its shares. Downloading or sharing copyrighted music without permission is unlawful in many places: you are responsible for what slskd downloads and shares. See [server/README.md](server/README.md#soulseek-acquisition-slskd).
+
 The album and artist links to Spotify, Qobuz, Last.fm and ListenBrainz are plain links; nothing is sent to these services until you click one.
 
-ADRs: [0003](docs/adr/0003-radio-browser-catalog-and-health.md) (Radio Browser), [0027](docs/adr/0027-artist-photos-from-deezer-biographies-from-wikipedia.md) (Deezer, Wikipedia), [0029](docs/adr/0029-lyrics-from-lrclib.md) (LRCLIB), [0030](docs/adr/0030-play-counts-from-lastfm-with-an-operator-key.md) (Last.fm), [0032](docs/adr/0032-external-source-through-an-operator-installed-yt-dlp.md) (External Source, yt-dlp), [0033](docs/adr/0033-opt-in-sentry-for-the-rust-programs.md) (Sentry).
+ADRs: [0003](docs/adr/0003-radio-browser-catalog-and-health.md) (Radio Browser), [0027](docs/adr/0027-artist-photos-from-deezer-biographies-from-wikipedia.md) (Deezer, Wikipedia), [0029](docs/adr/0029-lyrics-from-lrclib.md) (LRCLIB), [0030](docs/adr/0030-play-counts-from-lastfm-with-an-operator-key.md) (Last.fm), [0032](docs/adr/0032-external-source-through-an-operator-installed-yt-dlp.md) (External Source, yt-dlp), [0033](docs/adr/0033-opt-in-sentry-for-the-rust-programs.md) (Sentry), [0036](docs/adr/0036-soulseek-acquisition-through-an-operator-run-slskd.md) (Soulseek Acquisition, slskd).
 
 ## Configuration
 
@@ -101,8 +104,8 @@ The Music Server reads its settings from environment variables only; it does not
 | `EXTERNAL_SOURCE_EXTRACTOR_ARGS` | none | yt-dlp extractor arguments such as `youtube:skip=hls,dash`; separate several with spaces. |
 | `EXTERNAL_SOURCE_NAME` | from the prefix, else `External` | The site's name in the clients' search, such as `Internet Archive`; up to 40 characters. |
 | `SLSKD_URL` | none | Your slskd's address, such as `http://127.0.0.1:5030`. With the next two, turns on Soulseek Acquisition. |
-| `SLSKD_API_KEY` | none | An slskd API key with the `ReadWrite` role. |
-| `SLSKD_DOWNLOADS_PATH` | none | slskd's completed downloads directory as the Music Server sees it; must exist and be readable. |
+| `SLSKD_API_KEY` | none | An slskd API key with the `ReadWrite` role (`web.authentication.api_keys` in `slskd.yml`, or `--api-key`). |
+| `SLSKD_DOWNLOADS_PATH` | none | slskd's downloads directory as the Music Server sees it (same host or a shared volume); must exist and be readable, and writable so imported copies can be deleted. See [server/README.md](server/README.md#soulseek-acquisition-slskd). |
 | `RADIO_BROWSER_BASE_URL` | `https://de1.api.radio-browser.info` | Radio Browser mirror for the station catalog. |
 | `APP_VERSION` | `0.1.0` | Version shown in the health response and Settings. |
 | `SENTRY_DSN` | none | Your own Sentry project's DSN; turns on error, trace, log and metric reporting for the Music Server and the Desktop core. See [server/README.md](server/README.md#sentry-optional). |
@@ -132,7 +135,7 @@ Appearance and playback preferences (theme, layout, seek steps, transition fade)
 docker compose up -d --build
 ```
 
-Open http://localhost:8090. The container uses the host's network and binds to `127.0.0.1:8090`, because the server accepts only loopback addresses. The database and imported music live in the `app-data` volume (`/data`); add any variable from [Configuration](#configuration) under `environment:`. The image has no yt-dlp by default; to use the External Source, set the `WITH_YT_DLP` build argument to `true` (in Compose: `build.args`) and rebuild, see [server/README.md](server/README.md#external-source-yt-dlp). Docker Compose runs only the Music Server; the Desktop Client runs on the host and connects to it.
+Open http://localhost:8090. The container uses the host's network and binds to `127.0.0.1:8090`, because the server accepts only loopback addresses. The database and imported music live in the `app-data` volume (`/data`); add any variable from [Configuration](#configuration) under `environment:`. The image has no yt-dlp by default; to use the External Source, set the `WITH_YT_DLP` build argument to `true` (in Compose: `build.args`) and rebuild, see [server/README.md](server/README.md#external-source-yt-dlp). For Soulseek Acquisition, add your own slskd service with a downloads volume shared with the Music Server, see [server/README.md](server/README.md#docker-compose). Docker Compose runs only the Music Server; the Desktop Client runs on the host and connects to it.
 
 ## Build
 
