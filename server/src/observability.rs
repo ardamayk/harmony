@@ -365,12 +365,14 @@ fn scrub_string(text: &mut String) {
 }
 
 /// `text` with each URL replaced by `<url>` and each file path by
-/// `<path>`. A file path is any word holding a `/` or `\`, together with
-/// the words after it up to the last such word, since a path can hold
-/// spaces (`C:\Users\Jane Mary Smith\...`), and then the words after that
-/// up to the end of the clause, since a file name can too
-/// (`Jane Smith - Song.flac`). Prose after a path may be lost with it. An API path keeps its route words, every other
-/// segment becomes `<id>`, and it loses its query.
+/// `<path>`. A file path starts at any word holding a `/` or `\` and
+/// runs to the end of the text, since its directories and its file name
+/// can hold spaces and punctuation (`Smith, Jane - Guns N' Roses.flac`)
+/// and no word tells where it ends; it stops only before a URL or an API
+/// path, which are scrubbed on their own. Whatever follows a path in
+/// the same text is lost with it.
+/// An API path keeps its route words, every other segment becomes
+/// `<id>`, and it loses its query.
 pub fn scrub_text(text: &str) -> Cow<'_, str> {
     if !text.contains(['/', '\\']) {
         return Cow::Borrowed(text);
@@ -389,30 +391,12 @@ pub fn scrub_text(text: &str) -> Cow<'_, str> {
             index += 1;
             continue;
         };
-        // The path runs on to the last word holding a separator before a
-        // URL or an API path, which are not part of it.
         let mut last = index;
         for (next, (word, _)) in words.iter().enumerate().skip(index + 1) {
-            match Word::of(word) {
-                Word::Path { .. } => last = next,
-                Word::Url { .. } | Word::Api { .. } => break,
-                Word::Plain => {}
+            if matches!(Word::of(word), Word::Url { .. } | Word::Api { .. }) {
+                break;
             }
-        }
-        // A file name after the last separator can hold spaces as well, so
-        // the path also takes the plain words up to the end of the clause: a
-        // word ending in `:`, `;`, `,` or a closing bracket or quote, or the
-        // end of the text.
-        if !ends_clause(words[last].0) {
-            for (next, (word, _)) in words.iter().enumerate().skip(last + 1) {
-                if !matches!(Word::of(word), Word::Plain) {
-                    break;
-                }
-                last = next;
-                if ends_clause(word) {
-                    break;
-                }
-            }
+            last = next;
         }
         let (word, space) = words[last];
         scrubbed.push_str(&format!("{prefix}{lead}{PATH}{}", suffix(word)));
@@ -461,13 +445,6 @@ fn is_route_parameter(segment: &str) -> bool {
         .is_some_and(|name| {
             !name.is_empty() && name.chars().all(|c| c.is_ascii_alphabetic() || c == '_')
         })
-}
-
-/// Whether `word` closes a clause, ending a path that runs through it.
-fn ends_clause(word: &str) -> bool {
-    word.ends_with([
-        ':', ';', ',', ')', ']', '}', '"', '\'', '\u{2019}', '\u{201d}',
-    ])
 }
 
 /// A word's closing punctuation.
@@ -604,7 +581,7 @@ mod tests {
         );
         assert_eq!(
             scrub_text("open /home/me/Music/Artist/a.flac: denied"),
-            "open <path>: denied"
+            "open <path>"
         );
         assert_eq!(scrub_text("path=/srv/music/a.flac."), "path=<path>.");
         assert_eq!(scrub_text(r"C:\Users\me\Music\a.flac"), "<path>");
@@ -711,7 +688,7 @@ mod tests {
     fn paths_with_spaces_are_redacted_whole() {
         assert_eq!(
             scrub_text(r"open C:\Users\Jane Mary Smith\AppData\Roaming\a.json: denied"),
-            "open <path>: denied"
+            "open <path>"
         );
         assert_eq!(
             scrub_text("read /home/jane/Music/Jane Mary Smith/Best Of/a.flac failed"),
@@ -725,9 +702,18 @@ mod tests {
         );
         assert_eq!(
             scrub_text("open /music/Jane Smith - Song Title.flac: denied, retrying"),
-            "open <path>: denied, retrying"
+            "open <path>"
         );
         assert_eq!(scrub_text(r"\\nas\Music\Jane Mary Smith\a.flac"), "<path>");
+        // Punctuation inside a file name does not end the path either.
+        assert_eq!(
+            scrub_text("read /music/Smith, Jane - Song.flac failed"),
+            "read <path>"
+        );
+        assert_eq!(
+            scrub_text("read /music/Guns N' Roses: Live.flac failed"),
+            "read <path>"
+        );
         // Prose with a slash: over-redacting it is acceptable.
         assert_eq!(scrub_text("the a/b ratio is high"), "the <path>");
         assert_eq!(scrub_text("a/b and c/d"), "<path>");
