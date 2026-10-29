@@ -4,6 +4,7 @@
 //! `EXTERNAL_SOURCE_SEARCH` is configured.
 
 mod handlers;
+mod http;
 mod service;
 mod timing;
 mod token;

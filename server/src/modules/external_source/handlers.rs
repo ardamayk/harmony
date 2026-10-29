@@ -3,12 +3,14 @@
 //! source is not configured. Search, playback, stream and artwork requests
 //! each write one timing line and answer with `Server-Timing`.
 
+use super::http::header_map;
 use super::service::{
-    Artwork, DEFAULT_SEARCH_LIMIT, ExternalError, Playback, Resource, SearchResults,
+    Artwork, DEFAULT_SEARCH_LIMIT, ExternalError, Media, MediaStatus, Playback, RangeRequest,
+    Resource, SearchResults,
 };
 use super::timing::{ArtworkLog, End, ResolveLog, SearchLog, StreamLog};
 use crate::app::AppState;
-use crate::modules::radio::{HLS_CONTENT_TYPE, UpstreamResponse, copy_stream_headers};
+use crate::modules::radio::{HLS_CONTENT_TYPE, copy_stream_headers};
 use crate::query::GoQuery;
 use crate::respond::{ApiError, ApiResult};
 use axum::Json;
@@ -18,6 +20,7 @@ use axum::extract::{Path, State};
 use axum::http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
+use bytes::Bytes;
 
 pub fn routes() -> Router<AppState> {
     // `get` also answers HEAD, without the body.
@@ -85,6 +88,38 @@ fn timed(response: impl IntoResponse, timing: Option<HeaderValue>) -> Response {
     response
 }
 
+/// The client's `Range`: a single `bytes=<start>-[<end>]` range is read;
+/// anything else (suffix and multiple ranges) is passed on as it is.
+fn range_request(value: Option<&HeaderValue>) -> RangeRequest {
+    let Some(value) = value else {
+        return RangeRequest::Whole;
+    };
+    match parse_range(value) {
+        Some((start, end)) => RangeRequest::Single { start, end },
+        None => RangeRequest::Other(Bytes::copy_from_slice(value.as_bytes())),
+    }
+}
+
+/// A single `bytes=<start>-[<end>]` range; `None` for anything else.
+fn parse_range(value: &HeaderValue) -> Option<(u64, Option<u64>)> {
+    let spec = value.to_str().ok()?.trim().strip_prefix("bytes=")?;
+    let (start, end) = spec.split_once('-')?;
+    let start = start.trim().parse().ok()?;
+    let end = match end.trim() {
+        "" => None,
+        end => Some(end.parse().ok()?),
+    };
+    (end.is_none_or(|end| end >= start)).then_some((start, end))
+}
+
+fn status(status: MediaStatus) -> StatusCode {
+    match status {
+        MediaStatus::Full => StatusCode::OK,
+        MediaStatus::Partial => StatusCode::PARTIAL_CONTENT,
+        MediaStatus::Unsatisfiable => StatusCode::RANGE_NOT_SATISFIABLE,
+    }
+}
+
 async fn search(State(state): State<AppState>, query: GoQuery) -> ApiResult<Response> {
     let source = &state.external_source;
     source.ensure_enabled()?;
@@ -120,16 +155,16 @@ async fn stream(
     method: Method,
     headers: HeaderMap,
 ) -> ApiResult<Response> {
-    let range = headers.get(header::RANGE).cloned();
+    let range = headers.get(header::RANGE);
     let head = method == Method::HEAD;
-    let mut log = StreamLog::start(&id, range.as_ref(), head);
+    let mut log = StreamLog::start(&id, range, head);
     let mut response = state
         .external_source
-        .open_stream(&id, range, head, &mut log.timing)
+        .open_stream(&id, range_request(range), head, &mut log.timing)
         .await
         .map_err(|error| refuse(&mut log.end, error))?;
     let timing = log.server_timing();
-    response.body = log.watch(response.status, response.body);
+    response.body = log.watch(status(response.status).as_u16(), response.body);
     Ok(timed(media(response), timing))
 }
 
@@ -142,7 +177,7 @@ async fn resource(
     Path((id, resource)): Path<(String, String)>,
     headers: HeaderMap,
 ) -> ApiResult<Response> {
-    let range = headers.get(header::RANGE).cloned();
+    let range = range_request(headers.get(header::RANGE));
     Ok(
         match state
             .external_source
@@ -183,10 +218,9 @@ fn image(artwork: Artwork) -> Response {
 
 /// The upstream audio with its status (200, 206 or 416), length and range,
 /// served as a media type only (never a page on this origin).
-fn media(response: UpstreamResponse) -> Response {
-    let status = StatusCode::from_u16(response.status).unwrap_or(StatusCode::OK);
-    let headers = copy_stream_headers(&response.headers, true);
-    (status, headers, Body::from_stream(response.body)).into_response()
+fn media(media: Media) -> Response {
+    let headers = copy_stream_headers(&header_map(&media.headers), true);
+    (status(media.status), headers, Body::from_stream(media.body)).into_response()
 }
 
 fn hls(playlist: String) -> Response {
@@ -202,19 +236,18 @@ fn hls(playlist: String) -> Response {
 
 #[cfg(test)]
 mod tests {
+    use super::super::http::media_headers;
     use super::*;
-    use bytes::Bytes;
     use futures_util::StreamExt;
 
-    fn upstream(status: u16, headers: &[(&'static str, &'static str)]) -> UpstreamResponse {
+    fn upstream(status: MediaStatus, headers: &[(&'static str, &'static str)]) -> Media {
         let mut map = HeaderMap::new();
         for (name, value) in headers {
             map.insert(*name, HeaderValue::from_static(value));
         }
-        UpstreamResponse {
+        Media {
             status,
-            headers: map,
-            url: url::Url::parse("https://media.example/a").expect("url"),
+            headers: media_headers(&map),
             body: futures_util::stream::iter([Ok(Bytes::from_static(b"ab"))]).boxed(),
         }
     }
@@ -222,7 +255,7 @@ mod tests {
     #[test]
     fn media_keeps_ranges_and_lengths_but_never_serves_a_page() {
         let response = media(upstream(
-            206,
+            MediaStatus::Partial,
             &[
                 ("content-type", "audio/mp4"),
                 ("content-range", "bytes 0-1/10"),
@@ -238,7 +271,11 @@ mod tests {
         assert_eq!(headers[header::CONTENT_LENGTH], "2");
         assert_eq!(headers[header::ACCEPT_RANGES], "bytes");
         assert!(headers.get(header::SET_COOKIE).is_none());
-        let response = media(upstream(200, &[("content-type", "text/html")]));
+        let response = media(upstream(
+            MediaStatus::Full,
+            &[("content-type", "text/html")],
+        ));
+        assert_eq!(response.status(), StatusCode::OK);
         assert_eq!(
             response.headers()[header::CONTENT_TYPE],
             "application/octet-stream"
@@ -246,6 +283,40 @@ mod tests {
         assert_eq!(
             response.headers()[header::CONTENT_SECURITY_POLICY],
             "sandbox"
+        );
+        let response = media(upstream(MediaStatus::Unsatisfiable, &[]));
+        assert_eq!(response.status(), StatusCode::RANGE_NOT_SATISFIABLE);
+    }
+
+    #[test]
+    fn reads_single_byte_ranges_only() {
+        let range = |value: &'static str| parse_range(&HeaderValue::from_static(value));
+        assert_eq!(range("bytes=0-"), Some((0, None)));
+        assert_eq!(range("bytes=5-9"), Some((5, Some(9))));
+        for other in [
+            "bytes=-500",
+            "bytes=0-1,4-5",
+            "bytes=9-5",
+            "items=0-1",
+            "bytes=a-",
+        ] {
+            assert_eq!(range(other), None, "{other}");
+        }
+    }
+
+    #[test]
+    fn other_ranges_are_passed_on_as_they_are() {
+        assert_eq!(range_request(None), RangeRequest::Whole);
+        assert_eq!(
+            range_request(Some(&HeaderValue::from_static("bytes=5-"))),
+            RangeRequest::Single {
+                start: 5,
+                end: None
+            }
+        );
+        assert_eq!(
+            range_request(Some(&HeaderValue::from_static("bytes=0-1,4-5"))),
+            RangeRequest::Other(Bytes::from_static(b"bytes=0-1,4-5"))
         );
     }
 

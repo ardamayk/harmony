@@ -22,9 +22,9 @@ use types::NowPlaying;
 // The External Source proxies its streams with the same SSRF guards and HLS
 // rewriting.
 pub(crate) use stream::{
-    HLS_CONTENT_TYPE, MAX_HLS_PLAYLIST_BYTES, ResourceSigner, RewriteError, SafeUpstream, Upstream,
-    UpstreamResponse, copy_stream_headers, is_hls_playlist, rewrite_playlist_with,
-    validate_stream_url,
+    HLS_CONTENT_TYPE, HLS_RESOURCE_TOKEN_TTL_SECONDS, MAX_HLS_PLAYLIST_BYTES, ResourceSigner,
+    RewriteError, SafeUpstream, Upstream, UpstreamResponse, copy_stream_headers, is_hls_content,
+    rewrite_playlist_with, validate_stream_url,
 };
 
 pub const RADIO_BROWSER_SOURCE: &str = "radio-browser";

@@ -6,17 +6,18 @@
 //! HTTP(S) address. Resolved URLs are signed and expire, so they are never
 //! logged; logs name the id's fingerprint and the extractor. Artwork comes
 //! only from the HTTPS URL the search signed into the id, through the same
-//! guards, and is never logged either.
+//! guards, and is never logged either. No HTTP types: the handlers read
+//! requests into [`RangeRequest`] and answer [`Media`], and `http.rs`
+//! adapts the [`Fetcher`] to the radio proxy's client.
 
 use super::timing::{CacheUse, ResolveTiming, RunTiming, StreamTiming};
 use super::token::{TokenSigner, TrackRef, fingerprint, is_artwork_url};
 use super::yt_dlp::{MAX_SEARCH_RESULTS, ResolvedFormat, YtDlp};
 use crate::config::ExternalSourceConfig;
 use crate::modules::radio::{
-    MAX_HLS_PLAYLIST_BYTES, ResourceSigner, RewriteError, SafeUpstream, Upstream, UpstreamResponse,
-    is_hls_playlist, rewrite_playlist_with, validate_stream_url,
+    HLS_RESOURCE_TOKEN_TTL_SECONDS, MAX_HLS_PLAYLIST_BYTES, ResourceSigner, RewriteError,
+    is_hls_content, rewrite_playlist_with, validate_stream_url,
 };
-use axum::http::{HeaderMap, HeaderName, HeaderValue};
 use bytes::Bytes;
 use futures_util::FutureExt;
 use futures_util::StreamExt;
@@ -34,6 +35,8 @@ const MAX_QUERY_CHARS: usize = 200;
 const TRACKS_PATH: &str = "/api/v1/external/tracks";
 const CACHE_TTL: Duration = Duration::from_secs(600);
 const CACHE_CAPACITY: usize = 64;
+/// How many HLS Tracks keep their request headers (see [`HlsHeaders`]).
+const HLS_HEADERS_CAPACITY: usize = 256;
 /// A resolved URL is dropped this long before its own `expire` time.
 const EXPIRY_MARGIN_SECONDS: i64 = 30;
 /// A URL refused within this long of its resolution is kept: running
@@ -129,11 +132,94 @@ pub struct Playback {
     pub stream_path: String,
 }
 
+/// A body as it arrives; an `Err` ends it early.
+pub type ByteStream = BoxStream<'static, Result<Bytes, String>>;
+
+/// Request headers for the site's servers, as `(lowercase name, value)`
+/// pairs; a later value of a name replaces an earlier one.
+pub type RequestHeaders = Vec<(String, String)>;
+
+/// The part of a file a client asked for.
+#[derive(Clone, Debug, PartialEq)]
+pub enum RangeRequest {
+    /// No range: the whole file.
+    Whole,
+    /// One `bytes=<start>-[<end>]` range.
+    Single { start: u64, end: Option<u64> },
+    /// Any other range (suffix or multiple ranges), passed on as written.
+    Other(Bytes),
+}
+
+/// The headers of an upstream media response this module reads or passes
+/// on, as text.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct MediaHeaders {
+    pub content_type: Option<String>,
+    pub content_length: Option<String>,
+    /// `bytes <first>-<last>/<total>`.
+    pub content_range: Option<String>,
+    pub accept_ranges: Option<String>,
+    pub cache_control: Option<String>,
+}
+
+/// One upstream GET and its response, final URL included (after redirects).
+pub struct Fetched {
+    pub status: u16,
+    pub url: Url,
+    pub headers: MediaHeaders,
+    pub body: ByteStream,
+}
+
+/// GETs public URLs for the External Source. The production one goes
+/// through the radio proxy's SSRF-guarded client (`http.rs`); tests
+/// substitute their own.
+pub trait Fetcher: Send + Sync {
+    fn fetch(
+        &self,
+        url: Url,
+        range: RangeRequest,
+        headers: RequestHeaders,
+    ) -> BoxFuture<'static, Result<Fetched, String>>;
+}
+
+/// How much of the file a [`Media`] answer is.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum MediaStatus {
+    /// The whole file.
+    Full,
+    /// The range asked for; `content_range` says which.
+    Partial,
+    /// The range asked for starts past the end of the file.
+    Unsatisfiable,
+}
+
+/// Audio, an HLS segment or a key, as the client gets it.
+pub struct Media {
+    pub status: MediaStatus,
+    pub headers: MediaHeaders,
+    pub body: ByteStream,
+}
+
+impl From<Fetched> for Media {
+    /// An upstream answer passed on as it is.
+    fn from(response: Fetched) -> Self {
+        Self {
+            status: match response.status {
+                206 => MediaStatus::Partial,
+                416 => MediaStatus::Unsatisfiable,
+                _ => MediaStatus::Full,
+            },
+            headers: response.headers,
+            body: response.body,
+        }
+    }
+}
+
 /// What an HLS resource turned out to be.
 pub enum Resource {
     /// A nested playlist, already rewritten.
     Playlist(String),
-    Media(UpstreamResponse),
+    Media(Media),
 }
 
 pub fn stream_path(id: &str) -> String {
@@ -153,24 +239,18 @@ fn resource_path(id: &str, resource: &str) -> String {
 struct Resolved {
     url: String,
     format: PlaybackFormat,
-    headers: HeaderMap,
+    headers: RequestHeaders,
     chunk_size: Option<u64>,
 }
 
 impl From<ResolvedFormat> for Resolved {
     fn from(resolved: ResolvedFormat) -> Self {
-        let mut headers = HeaderMap::new();
-        for (name, value) in resolved.headers {
-            let Ok(name) = HeaderName::from_bytes(name.to_ascii_lowercase().as_bytes()) else {
-                continue;
-            };
-            if !FORWARDED_HEADERS.contains(&name.as_str()) {
-                continue;
-            }
-            if let Ok(value) = HeaderValue::from_str(&value) {
-                headers.insert(name, value);
-            }
-        }
+        let headers = resolved
+            .headers
+            .into_iter()
+            .map(|(name, value)| (name.to_ascii_lowercase(), value))
+            .filter(|(name, _)| FORWARDED_HEADERS.contains(&name.as_str()))
+            .collect();
         Self {
             url: resolved.url,
             format: if resolved.hls {
@@ -184,32 +264,19 @@ impl From<ResolvedFormat> for Resolved {
     }
 }
 
-/// A single `bytes=<start>-[<end>]` range; `None` for anything else
-/// (suffix and multiple ranges), which is passed on as it is.
-fn parse_range(value: &HeaderValue) -> Option<(u64, Option<u64>)> {
-    let spec = value.to_str().ok()?.trim().strip_prefix("bytes=")?;
-    let (start, end) = spec.split_once('-')?;
-    let start = start.trim().parse().ok()?;
-    let end = match end.trim() {
-        "" => None,
-        end => Some(end.parse().ok()?),
-    };
-    (end.is_none_or(|end| end >= start)).then_some((start, end))
-}
-
-/// `Content-Range: bytes <first>-<last>/<total>`.
-fn parse_content_range(headers: &HeaderMap) -> Option<(u64, u64, u64)> {
-    let value = headers
-        .get(axum::http::header::CONTENT_RANGE)?
-        .to_str()
-        .ok()?;
+/// `bytes <first>-<last>/<total>`.
+fn parse_content_range(headers: &MediaHeaders) -> Option<(u64, u64, u64)> {
+    let value = headers.content_range.as_deref()?;
     let (span, total) = value.trim().strip_prefix("bytes ")?.split_once('/')?;
     let (first, last) = span.split_once('-')?;
     Some((first.parse().ok()?, last.parse().ok()?, total.parse().ok()?))
 }
 
-fn byte_range(first: u64, last: u64) -> HeaderValue {
-    HeaderValue::from_str(&format!("bytes={first}-{last}")).expect("range header")
+fn byte_range(first: u64, last: u64) -> RangeRequest {
+    RangeRequest::Single {
+        start: first,
+        end: Some(last),
+    }
 }
 
 /// How long a resolved URL may be reused: ten minutes, or less when its
@@ -260,8 +327,8 @@ impl ResolveCache {
     }
 
     /// The request headers the Track resolved with, even after its URL is
-    /// stale: HLS segments signed earlier still need them.
-    fn headers(&self, id: &str) -> HeaderMap {
+    /// stale, while it is still cached.
+    fn headers(&self, id: &str) -> RequestHeaders {
         let entries = self.entries.lock().expect("resolve cache lock");
         entries
             .get(id)
@@ -307,24 +374,61 @@ impl ResolveCache {
     }
 }
 
+/// The request headers each HLS Track's playlist was fetched with, kept as
+/// long as the resource tokens issued in it are valid: its segments still
+/// need them after the Track's URL leaves the [`ResolveCache`].
+#[derive(Default)]
+struct HlsHeaders {
+    entries: Mutex<HashMap<String, (RequestHeaders, Instant)>>,
+}
+
+impl HlsHeaders {
+    /// Keeps `headers` for the resource tokens just issued for `id`.
+    fn keep(&self, id: &str, headers: RequestHeaders) {
+        let lifetime = Duration::from_secs(HLS_RESOURCE_TOKEN_TTL_SECONDS.unsigned_abs());
+        self.keep_until(id, headers, Instant::now() + lifetime);
+    }
+
+    fn keep_until(&self, id: &str, headers: RequestHeaders, until: Instant) {
+        let mut entries = self.entries.lock().expect("HLS headers lock");
+        let now = Instant::now();
+        entries.retain(|_, (_, until)| *until > now);
+        if !entries.contains_key(id)
+            && entries.len() >= HLS_HEADERS_CAPACITY
+            && let Some(oldest) = entries
+                .iter()
+                .min_by_key(|(_, (_, until))| *until)
+                .map(|(id, _)| id.clone())
+        {
+            entries.remove(&oldest);
+        }
+        entries.insert(id.to_owned(), (headers, until));
+    }
+
+    fn get(&self, id: &str) -> Option<RequestHeaders> {
+        let entries = self.entries.lock().expect("HLS headers lock");
+        entries
+            .get(id)
+            .filter(|(_, until)| *until > Instant::now())
+            .map(|(headers, _)| headers.clone())
+    }
+}
+
 pub struct ExternalSource {
     /// `None` while the External Source is not configured.
     search_prefix: Option<String>,
     yt_dlp: YtDlp,
     tracks: TokenSigner,
     resources: ResourceSigner,
-    upstream: Arc<dyn Upstream>,
+    fetcher: Arc<dyn Fetcher>,
     cache: Arc<ResolveCache>,
+    hls_headers: HlsHeaders,
 }
 
 impl ExternalSource {
-    pub fn new(config: Option<&ExternalSourceConfig>) -> Self {
-        Self::with_upstream(config, Arc::new(SafeUpstream::new()))
-    }
-
-    pub(crate) fn with_upstream(
+    pub(crate) fn with_fetcher(
         config: Option<&ExternalSourceConfig>,
-        upstream: Arc<dyn Upstream>,
+        fetcher: Arc<dyn Fetcher>,
     ) -> Self {
         Self {
             search_prefix: config.map(|config| config.search_prefix.clone()),
@@ -334,8 +438,9 @@ impl ExternalSource {
             ),
             tracks: TokenSigner::new(),
             resources: ResourceSigner::new(),
-            upstream,
+            fetcher,
             cache: Arc::default(),
+            hls_headers: HlsHeaders::default(),
         }
     }
 
@@ -428,17 +533,17 @@ impl ExternalSource {
         })
     }
 
-    /// The upstream response for a progressive Track, `range` passed on.
-    /// With `head`, a chunked Track is answered from a 1-byte probe and
-    /// without a body. `timing` gets the resolve, the wait for the first
-    /// upstream response and the number of upstream requests.
+    /// A progressive Track's audio, `range` passed on. With `head`, a
+    /// chunked Track is answered from a 1-byte probe and without a body.
+    /// `timing` gets the resolve, the wait for the first upstream response
+    /// and the number of upstream requests.
     pub async fn open_stream(
         &self,
         id: &str,
-        range: Option<HeaderValue>,
+        range: RangeRequest,
         head: bool,
         timing: &mut StreamTiming,
-    ) -> Result<UpstreamResponse, ExternalError> {
+    ) -> Result<Media, ExternalError> {
         let resolved = self.resolve(id, &mut timing.resolve).await?;
         if resolved.format != PlaybackFormat::Progressive {
             return Err(ExternalError::Unplayable(
@@ -446,9 +551,11 @@ impl ExternalSource {
             ));
         }
         let requested = match &range {
-            None => Some((0, None)),
-            Some(value) => parse_range(value),
+            RangeRequest::Whole => Some((0, None)),
+            RangeRequest::Single { start, end } => Some((*start, *end)),
+            RangeRequest::Other(_) => None,
         };
+        let ranged = range != RangeRequest::Whole;
         let requested_at = Instant::now();
         timing.chunks.fetch_add(1, Ordering::Relaxed);
         let response = match (resolved.chunk_size, requested) {
@@ -458,15 +565,15 @@ impl ExternalSource {
                     &resolved,
                     chunk_size,
                     (start, end),
-                    (range.is_some(), head),
+                    (ranged, head),
                     timing.chunks.clone(),
                 )
                 .await
             }
-            _ => {
-                self.fetch(id, &resolved.url, resolved.headers.clone(), range)
-                    .await
-            }
+            _ => self
+                .fetch(id, &resolved.url, resolved.headers.clone(), range)
+                .await
+                .map(Media::from),
         };
         timing.upstream_ttfb = Some(requested_at.elapsed());
         response
@@ -485,8 +592,7 @@ impl ExternalSource {
         (start, end): (u64, Option<u64>),
         (ranged, head): (bool, bool),
         chunks: Arc<AtomicU64>,
-    ) -> Result<UpstreamResponse, ExternalError> {
-        use axum::http::header::{ACCEPT_RANGES, CONTENT_LENGTH, CONTENT_RANGE};
+    ) -> Result<Media, ExternalError> {
         let chunk_last = if head {
             start
         } else {
@@ -497,49 +603,41 @@ impl ExternalSource {
                 id,
                 &resolved.url,
                 resolved.headers.clone(),
-                Some(byte_range(
-                    start,
-                    end.map_or(chunk_last, |end| end.min(chunk_last)),
-                )),
+                byte_range(start, end.map_or(chunk_last, |end| end.min(chunk_last))),
             )
             .await?;
         let Some((_, served_last, total)) =
             parse_content_range(&first.headers).filter(|_| first.status == 206)
         else {
             // A 416, or a server that ignored the range: passed on as it is.
-            return Ok(first);
+            return Ok(first.into());
         };
         validate_stream_url(first.url.as_str()).map_err(ExternalError::Failed)?;
         let file_last = total.saturating_sub(1);
         let last = end.map_or(file_last, |end| end.min(file_last));
         let mut headers = first.headers.clone();
-        headers.insert(CONTENT_LENGTH, HeaderValue::from(last + 1 - start));
-        headers.insert(ACCEPT_RANGES, HeaderValue::from_static("bytes"));
+        headers.content_length = Some((last + 1 - start).to_string());
+        headers.accept_ranges = Some("bytes".to_owned());
         let status = if ranged {
-            let range = format!("bytes {start}-{last}/{total}");
-            headers.insert(
-                CONTENT_RANGE,
-                HeaderValue::from_str(&range).expect("content range"),
-            );
-            206
+            headers.content_range = Some(format!("bytes {start}-{last}/{total}"));
+            MediaStatus::Partial
         } else {
-            headers.remove(CONTENT_RANGE);
-            200
+            headers.content_range = None;
+            MediaStatus::Full
         };
         if head {
-            return Ok(UpstreamResponse {
+            return Ok(Media {
                 status,
                 headers,
-                url: first.url,
                 body: futures_util::stream::empty().boxed(),
             });
         }
-        let upstream = self.upstream.clone();
+        let fetcher = self.fetcher.clone();
         let url = first.url.clone();
         let request_headers = resolved.headers.clone();
         let track_hash = fingerprint(id);
         let rest = futures_util::stream::unfold(served_last + 1, move |next| {
-            let upstream = upstream.clone();
+            let fetcher = fetcher.clone();
             let url = url.clone();
             let request_headers = request_headers.clone();
             let track_hash = track_hash.clone();
@@ -553,12 +651,11 @@ impl ExternalSource {
                 // The body ends here; the URL is never logged.
                 let failed = |message: String| {
                     tracing::warn!(track = %track_hash, error = %message, "External Track stream ended early");
-                    let body: BoxStream<'static, Result<Bytes, String>> =
-                        futures_util::stream::iter([Err(message)]).boxed();
+                    let body: ByteStream = futures_util::stream::iter([Err(message)]).boxed();
                     Some((body, u64::MAX))
                 };
-                match upstream
-                    .get_with_headers(url, Some(byte_range(next, chunk_last)), request_headers)
+                match fetcher
+                    .fetch(url, byte_range(next, chunk_last), request_headers)
                     .await
                 {
                     Ok(response)
@@ -577,10 +674,9 @@ impl ExternalSource {
             }
         })
         .flatten();
-        Ok(UpstreamResponse {
+        Ok(Media {
             status,
             headers,
-            url: first.url,
             body: first.body.chain(rest).boxed(),
         })
     }
@@ -595,18 +691,24 @@ impl ExternalSource {
             ));
         }
         let response = self
-            .fetch(id, &resolved.url, resolved.headers.clone(), None)
+            .fetch(
+                id,
+                &resolved.url,
+                resolved.headers.clone(),
+                RangeRequest::Whole,
+            )
             .await?;
-        self.rewrite(id, response).await
+        self.rewrite(id, resolved.headers.clone(), response).await
     }
 
     /// One URI of a rewritten playlist: a nested playlist (rewritten too),
-    /// a segment or a key.
+    /// a segment or a key, fetched with the request headers its playlist
+    /// was.
     pub async fn resource(
         &self,
         id: &str,
         resource: &str,
-        range: Option<HeaderValue>,
+        range: RangeRequest,
     ) -> Result<Resource, ExternalError> {
         self.ensure_enabled()?;
         self.tracks.verify(id).map_err(ExternalError::BadRequest)?;
@@ -614,11 +716,17 @@ impl ExternalSource {
             .resources
             .verify(resource, &fingerprint(id))
             .map_err(ExternalError::BadRequest)?;
-        let response = self.fetch(id, &url, self.cache.headers(id), range).await?;
-        if is_hls_playlist(&response) {
-            return Ok(Resource::Playlist(self.rewrite(id, response).await?));
+        let headers = self
+            .hls_headers
+            .get(id)
+            .unwrap_or_else(|| self.cache.headers(id));
+        let response = self.fetch(id, &url, headers.clone(), range).await?;
+        if is_hls_content(response.headers.content_type.as_deref(), &response.url) {
+            return Ok(Resource::Playlist(
+                self.rewrite(id, headers, response).await?,
+            ));
         }
-        Ok(Resource::Media(response))
+        Ok(Resource::Media(response.into()))
     }
 
     /// The cover the search chose for the Track, fetched whole through the
@@ -638,7 +746,6 @@ impl ExternalSource {
     }
 
     async fn fetch_artwork(&self, id: &str, url: &str) -> Result<Artwork, ExternalError> {
-        use axum::http::header::{ACCEPT, CONTENT_LENGTH, CONTENT_TYPE};
         let failed = |message: String| {
             tracing::warn!(track = %fingerprint(id), error = %message, "External Track artwork failed");
             ExternalError::Failed(message)
@@ -647,14 +754,13 @@ impl ExternalSource {
             return Err(failed("unsafe artwork URL".to_owned()));
         }
         let parsed = Url::parse(url).map_err(|error| failed(error.to_string()))?;
-        let mut headers = HeaderMap::new();
-        headers.insert(
-            ACCEPT,
-            HeaderValue::from_static("image/jpeg, image/png, image/webp"),
-        );
+        let headers = vec![(
+            "accept".to_owned(),
+            "image/jpeg, image/png, image/webp".to_owned(),
+        )];
         let response = self
-            .upstream
-            .get_with_headers(parsed, None, headers)
+            .fetcher
+            .fetch(parsed, RangeRequest::Whole, headers)
             .await
             .map_err(|error| {
                 // The client's error names the URL; only its cause is kept.
@@ -671,8 +777,8 @@ impl ExternalSource {
         }
         let media_type = response
             .headers
-            .get(CONTENT_TYPE)
-            .and_then(|value| value.to_str().ok())
+            .content_type
+            .as_deref()
             .map(|value| {
                 value
                     .split(';')
@@ -691,8 +797,9 @@ impl ExternalSource {
         let too_large = || failed("the External Track's artwork exceeds 2 MiB".to_owned());
         if response
             .headers
-            .get(CONTENT_LENGTH)
-            .and_then(|value| value.to_str().ok()?.parse::<u64>().ok())
+            .content_length
+            .as_deref()
+            .and_then(|value| value.parse::<u64>().ok())
             .is_some_and(|length| length > ARTWORK_MAX_BYTES as u64)
         {
             return Err(too_large());
@@ -807,14 +914,14 @@ impl ExternalSource {
         &self,
         id: &str,
         url: &str,
-        headers: HeaderMap,
-        range: Option<HeaderValue>,
-    ) -> Result<UpstreamResponse, ExternalError> {
+        headers: RequestHeaders,
+        range: RangeRequest,
+    ) -> Result<Fetched, ExternalError> {
         validate_stream_url(url).map_err(ExternalError::Failed)?;
         let parsed = Url::parse(url).map_err(|error| ExternalError::Failed(error.to_string()))?;
         let response = self
-            .upstream
-            .get_with_headers(parsed, range, headers)
+            .fetcher
+            .fetch(parsed, range, headers)
             .await
             .map_err(|error| {
                 // The client's error names the URL; only its cause is kept.
@@ -837,7 +944,14 @@ impl ExternalSource {
         }
     }
 
-    async fn rewrite(&self, id: &str, response: UpstreamResponse) -> Result<String, ExternalError> {
+    /// The playlist in `response` with every URI signed as a resource of
+    /// the Track; those resources are later fetched with `headers`.
+    async fn rewrite(
+        &self,
+        id: &str,
+        headers: RequestHeaders,
+        response: Fetched,
+    ) -> Result<String, ExternalError> {
         if !(200..300).contains(&response.status) {
             return Err(ExternalError::Failed(format!(
                 "the External Track's playlist answered {}",
@@ -858,13 +972,15 @@ impl ExternalSource {
             }
         }
         let scope = fingerprint(id);
-        rewrite_playlist_with(&String::from_utf8_lossy(&playlist), &base, |url| {
+        let rewritten = rewrite_playlist_with(&String::from_utf8_lossy(&playlist), &base, |url| {
             resource_path(id, &self.resources.sign(&scope, url))
         })
         .map_err(|error| match error {
             RewriteError::Drm => ExternalError::Unplayable(error.to_string()),
             RewriteError::Invalid(message) => ExternalError::Failed(message),
-        })
+        })?;
+        self.hls_headers.keep(id, headers);
+        Ok(rewritten)
     }
 }
 
@@ -874,25 +990,17 @@ mod tests {
 
     #[derive(Default)]
     struct Fake {
-        responses: Mutex<Vec<UpstreamResponse>>,
-        fetched: Mutex<Vec<(String, Option<HeaderValue>, HeaderMap)>>,
+        responses: Mutex<Vec<Fetched>>,
+        fetched: Mutex<Vec<(String, RangeRequest, RequestHeaders)>>,
     }
 
-    impl Upstream for Fake {
-        fn get(
-            &self,
-            _: Url,
-            _: Option<HeaderValue>,
-        ) -> BoxFuture<'static, Result<UpstreamResponse, String>> {
-            panic!("the External Source sends its own headers")
-        }
-
-        fn get_with_headers(
+    impl Fetcher for Fake {
+        fn fetch(
             &self,
             url: Url,
-            range: Option<HeaderValue>,
-            headers: HeaderMap,
-        ) -> BoxFuture<'static, Result<UpstreamResponse, String>> {
+            range: RangeRequest,
+            headers: RequestHeaders,
+        ) -> BoxFuture<'static, Result<Fetched, String>> {
             self.fetched
                 .lock()
                 .expect("lock")
@@ -902,22 +1010,30 @@ mod tests {
         }
     }
 
-    fn response(
-        status: u16,
-        url: &str,
-        headers: &[(&str, &str)],
-        body: &'static [u8],
-    ) -> UpstreamResponse {
-        let mut map = HeaderMap::new();
+    /// The value a request header was sent with.
+    fn header<'a>(headers: &'a RequestHeaders, name: &str) -> Option<&'a str> {
+        headers
+            .iter()
+            .rev()
+            .find(|(sent, _)| sent == name)
+            .map(|(_, value)| value.as_str())
+    }
+
+    fn response(status: u16, url: &str, headers: &[(&str, &str)], body: &'static [u8]) -> Fetched {
+        let mut map = MediaHeaders::default();
         for (name, value) in headers {
-            map.insert(
-                HeaderName::from_bytes(name.as_bytes()).expect("name"),
-                HeaderValue::from_str(value).expect("value"),
-            );
+            let value = Some((*value).to_owned());
+            match *name {
+                "content-type" => map.content_type = value,
+                "content-length" => map.content_length = value,
+                "content-range" => map.content_range = value,
+                "accept-ranges" => map.accept_ranges = value,
+                "cache-control" => map.cache_control = value,
+                other => panic!("not a media header: {other}"),
+            }
         }
-        let body: BoxStream<'static, Result<Bytes, String>> =
-            futures_util::stream::iter([Ok(Bytes::from_static(body))]).boxed();
-        UpstreamResponse {
+        let body: ByteStream = futures_util::stream::iter([Ok(Bytes::from_static(body))]).boxed();
+        Fetched {
             status,
             headers: map,
             url: Url::parse(url).expect("url"),
@@ -935,6 +1051,10 @@ mod tests {
         }
     }
 
+    fn agent(value: &str) -> RequestHeaders {
+        vec![("user-agent".to_owned(), value.to_owned())]
+    }
+
     /// A source whose one Track already resolved to `url`.
     fn resolved_source(
         fake: Arc<Fake>,
@@ -950,20 +1070,18 @@ mod tests {
         format: PlaybackFormat,
         chunk_size: Option<u64>,
     ) -> (ExternalSource, String) {
-        let source = ExternalSource::with_upstream(Some(&config()), fake);
+        let source = ExternalSource::with_fetcher(Some(&config()), fake);
         let id = source
             .tracks
             .sign(&TrackRef::new("https://soundcloud.com/a/b", "Soundcloud"))
             .expect("id");
-        let mut headers = HeaderMap::new();
-        headers.insert("user-agent", HeaderValue::from_static("yt-dlp-agent"));
         // Resolved a while ago, so a refusal now means the URL went stale.
         source.cache.insert_resolved_at(
             &id,
             Arc::new(Resolved {
                 url: url.to_owned(),
                 format,
-                headers,
+                headers: agent("yt-dlp-agent"),
                 chunk_size,
             }),
             CACHE_TTL,
@@ -974,8 +1092,12 @@ mod tests {
         (source, id)
     }
 
-    async fn text(response: UpstreamResponse) -> String {
-        let chunks: Vec<_> = response.body.collect().await;
+    fn bytes(start: u64, end: Option<u64>) -> RangeRequest {
+        RangeRequest::Single { start, end }
+    }
+
+    async fn text(body: ByteStream) -> String {
+        let chunks: Vec<_> = body.collect().await;
         chunks
             .into_iter()
             .map(|chunk| String::from_utf8(chunk.expect("chunk").to_vec()).expect("utf-8"))
@@ -1005,23 +1127,50 @@ mod tests {
             format!("/api/v1/external/tracks/{id}/stream")
         );
         let upstream = source
-            .open_stream(
-                &id,
-                Some(HeaderValue::from_static("bytes=0-1")),
-                false,
-                &mut StreamTiming::default(),
-            )
+            .open_stream(&id, bytes(0, Some(1)), false, &mut StreamTiming::default())
             .await
             .expect("stream");
-        assert_eq!(upstream.status, 206);
-        assert_eq!(text(upstream).await, "ab");
+        assert_eq!(upstream.status, MediaStatus::Partial);
+        assert_eq!(
+            upstream.headers.content_range.as_deref(),
+            Some("bytes 0-1/10")
+        );
+        assert_eq!(text(upstream.body).await, "ab");
         let fetched = fake.fetched.lock().expect("lock");
         assert_eq!(fetched[0].0, "https://media.example/a.m4a");
-        assert_eq!(fetched[0].1.as_ref().expect("range"), "bytes=0-1");
-        assert_eq!(fetched[0].2["user-agent"], "yt-dlp-agent");
+        assert_eq!(fetched[0].1, bytes(0, Some(1)));
+        assert_eq!(header(&fetched[0].2, "user-agent"), Some("yt-dlp-agent"));
     }
 
-    fn chunk(first: u64, last: u64, body: &'static [u8]) -> UpstreamResponse {
+    #[tokio::test]
+    async fn other_ranges_and_upstream_statuses_are_passed_on() {
+        let fake = Arc::new(Fake::default());
+        fake.responses.lock().expect("lock").extend([
+            response(200, "https://media.example/a.m4a", &[], b"ab"),
+            response(416, "https://media.example/a.m4a", &[], b""),
+        ]);
+        let (source, id) = resolved_source(
+            fake.clone(),
+            "https://media.example/a.m4a",
+            PlaybackFormat::Progressive,
+        );
+        let suffix = RangeRequest::Other(Bytes::from_static(b"bytes=-500"));
+        let whole = source
+            .open_stream(&id, suffix.clone(), false, &mut StreamTiming::default())
+            .await
+            .expect("stream");
+        assert_eq!(whole.status, MediaStatus::Full);
+        let past = source
+            .open_stream(&id, bytes(20, None), false, &mut StreamTiming::default())
+            .await
+            .expect("stream");
+        assert_eq!(past.status, MediaStatus::Unsatisfiable);
+        let fetched = fake.fetched.lock().expect("lock");
+        assert_eq!(fetched[0].1, suffix);
+        assert_eq!(fetched[1].1, bytes(20, None));
+    }
+
+    fn chunk(first: u64, last: u64, body: &'static [u8]) -> Fetched {
         response(
             206,
             "https://media.example/a.webm",
@@ -1038,7 +1187,13 @@ mod tests {
             .lock()
             .expect("lock")
             .drain(..)
-            .map(|(_, range, _)| range.expect("range").to_str().expect("text").to_owned())
+            .map(|(_, range, _)| match range {
+                RangeRequest::Single {
+                    start,
+                    end: Some(end),
+                } => format!("bytes={start}-{end}"),
+                other => panic!("not a bounded range: {other:?}"),
+            })
             .collect()
     }
 
@@ -1059,18 +1214,18 @@ mod tests {
             chunk(8, 9, b"89"),
         ]);
         let whole = source
-            .open_stream(&id, None, false, &mut StreamTiming::default())
+            .open_stream(
+                &id,
+                RangeRequest::Whole,
+                false,
+                &mut StreamTiming::default(),
+            )
             .await
             .expect("stream");
-        assert_eq!(whole.status, 200);
-        assert_eq!(whole.headers[axum::http::header::CONTENT_LENGTH], "10");
-        assert!(
-            whole
-                .headers
-                .get(axum::http::header::CONTENT_RANGE)
-                .is_none()
-        );
-        assert_eq!(text(whole).await, "0123456789");
+        assert_eq!(whole.status, MediaStatus::Full);
+        assert_eq!(whole.headers.content_length.as_deref(), Some("10"));
+        assert!(whole.headers.content_range.is_none());
+        assert_eq!(text(whole.body).await, "0123456789");
         assert_eq!(ranges(&fake), ["bytes=0-3", "bytes=4-7", "bytes=8-9"]);
 
         // A browser's open-ended range, and a bounded one inside a chunk.
@@ -1080,35 +1235,19 @@ mod tests {
             chunk(2, 3, b"23"),
         ]);
         let tail = source
-            .open_stream(
-                &id,
-                Some(HeaderValue::from_static("bytes=5-")),
-                false,
-                &mut StreamTiming::default(),
-            )
+            .open_stream(&id, bytes(5, None), false, &mut StreamTiming::default())
             .await
             .expect("stream");
-        assert_eq!(tail.status, 206);
-        assert_eq!(
-            tail.headers[axum::http::header::CONTENT_RANGE],
-            "bytes 5-9/10"
-        );
-        assert_eq!(tail.headers[axum::http::header::CONTENT_LENGTH], "5");
-        assert_eq!(text(tail).await, "56789");
+        assert_eq!(tail.status, MediaStatus::Partial);
+        assert_eq!(tail.headers.content_range.as_deref(), Some("bytes 5-9/10"));
+        assert_eq!(tail.headers.content_length.as_deref(), Some("5"));
+        assert_eq!(text(tail.body).await, "56789");
         let part = source
-            .open_stream(
-                &id,
-                Some(HeaderValue::from_static("bytes=2-3")),
-                false,
-                &mut StreamTiming::default(),
-            )
+            .open_stream(&id, bytes(2, Some(3)), false, &mut StreamTiming::default())
             .await
             .expect("stream");
-        assert_eq!(
-            part.headers[axum::http::header::CONTENT_RANGE],
-            "bytes 2-3/10"
-        );
-        assert_eq!(text(part).await, "23");
+        assert_eq!(part.headers.content_range.as_deref(), Some("bytes 2-3/10"));
+        assert_eq!(text(part.body).await, "23");
         assert_eq!(ranges(&fake), ["bytes=5-8", "bytes=9-9", "bytes=2-3"]);
 
         // Past the end: the upstream 416 is passed on.
@@ -1119,18 +1258,13 @@ mod tests {
             b"",
         ));
         let past = source
-            .open_stream(
-                &id,
-                Some(HeaderValue::from_static("bytes=20-")),
-                false,
-                &mut StreamTiming::default(),
-            )
+            .open_stream(&id, bytes(20, None), false, &mut StreamTiming::default())
             .await
             .expect("stream");
-        assert_eq!(past.status, 416);
+        assert_eq!(past.status, MediaStatus::Unsatisfiable);
     }
 
-    async fn chunks(response: UpstreamResponse) -> Vec<Result<String, String>> {
+    async fn chunks(response: Media) -> Vec<Result<String, String>> {
         response
             .body
             .map(|chunk| chunk.map(|bytes| String::from_utf8(bytes.to_vec()).expect("utf-8")))
@@ -1154,27 +1288,20 @@ mod tests {
             chunk(9, 9, b"9"),
         ]);
         let open = source
-            .open_stream(
-                &id,
-                Some(HeaderValue::from_static("bytes=1-")),
-                false,
-                &mut StreamTiming::default(),
-            )
+            .open_stream(&id, bytes(1, None), false, &mut StreamTiming::default())
             .await
             .expect("stream");
-        assert_eq!(open.status, 206);
-        assert_eq!(
-            open.headers[axum::http::header::CONTENT_RANGE],
-            "bytes 1-9/10"
-        );
-        assert_eq!(open.headers[axum::http::header::CONTENT_LENGTH], "9");
-        assert_eq!(open.headers[axum::http::header::ACCEPT_RANGES], "bytes");
-        assert_eq!(open.headers[axum::http::header::CONTENT_TYPE], "audio/webm");
-        assert_eq!(text(open).await, "123456789");
+        assert_eq!(open.status, MediaStatus::Partial);
+        assert_eq!(open.headers.content_range.as_deref(), Some("bytes 1-9/10"));
+        assert_eq!(open.headers.content_length.as_deref(), Some("9"));
+        assert_eq!(open.headers.accept_ranges.as_deref(), Some("bytes"));
+        assert_eq!(open.headers.content_type.as_deref(), Some("audio/webm"));
+        assert_eq!(text(open.body).await, "123456789");
         {
             let fetched = fake.fetched.lock().expect("lock");
             assert!(fetched.iter().all(|(url, _, headers)| {
-                url == "https://media.example/a.webm" && headers["user-agent"] == "yt-dlp-agent"
+                url == "https://media.example/a.webm"
+                    && header(headers, "user-agent") == Some("yt-dlp-agent")
             }));
         }
         assert_eq!(ranges(&fake), ["bytes=1-4", "bytes=5-8", "bytes=9-9"]);
@@ -1185,21 +1312,16 @@ mod tests {
             .expect("lock")
             .extend([chunk(2, 5, b"2345"), chunk(6, 6, b"6")]);
         let bounded = source
-            .open_stream(
-                &id,
-                Some(HeaderValue::from_static("bytes=2-6")),
-                false,
-                &mut StreamTiming::default(),
-            )
+            .open_stream(&id, bytes(2, Some(6)), false, &mut StreamTiming::default())
             .await
             .expect("stream");
-        assert_eq!(bounded.status, 206);
+        assert_eq!(bounded.status, MediaStatus::Partial);
         assert_eq!(
-            bounded.headers[axum::http::header::CONTENT_RANGE],
-            "bytes 2-6/10"
+            bounded.headers.content_range.as_deref(),
+            Some("bytes 2-6/10")
         );
-        assert_eq!(bounded.headers[axum::http::header::CONTENT_LENGTH], "5");
-        assert_eq!(text(bounded).await, "23456");
+        assert_eq!(bounded.headers.content_length.as_deref(), Some("5"));
+        assert_eq!(text(bounded.body).await, "23456");
         assert_eq!(ranges(&fake), ["bytes=2-5", "bytes=6-6"]);
     }
 
@@ -1217,35 +1339,26 @@ mod tests {
             .expect("lock")
             .extend([chunk(0, 0, b"0"), chunk(4, 4, b"4")]);
         let head = source
-            .open_stream(&id, None, true, &mut StreamTiming::default())
+            .open_stream(&id, RangeRequest::Whole, true, &mut StreamTiming::default())
             .await
             .expect("head");
-        assert_eq!(head.status, 200);
-        assert_eq!(head.headers[axum::http::header::CONTENT_LENGTH], "10");
-        assert_eq!(head.headers[axum::http::header::ACCEPT_RANGES], "bytes");
-        assert_eq!(head.headers[axum::http::header::CONTENT_TYPE], "audio/webm");
-        assert!(
-            head.headers
-                .get(axum::http::header::CONTENT_RANGE)
-                .is_none()
-        );
-        assert_eq!(text(head).await, "");
+        assert_eq!(head.status, MediaStatus::Full);
+        assert_eq!(head.headers.content_length.as_deref(), Some("10"));
+        assert_eq!(head.headers.accept_ranges.as_deref(), Some("bytes"));
+        assert_eq!(head.headers.content_type.as_deref(), Some("audio/webm"));
+        assert!(head.headers.content_range.is_none());
+        assert_eq!(text(head.body).await, "");
         let ranged = source
-            .open_stream(
-                &id,
-                Some(HeaderValue::from_static("bytes=4-")),
-                true,
-                &mut StreamTiming::default(),
-            )
+            .open_stream(&id, bytes(4, None), true, &mut StreamTiming::default())
             .await
             .expect("head");
-        assert_eq!(ranged.status, 206);
+        assert_eq!(ranged.status, MediaStatus::Partial);
         assert_eq!(
-            ranged.headers[axum::http::header::CONTENT_RANGE],
-            "bytes 4-9/10"
+            ranged.headers.content_range.as_deref(),
+            Some("bytes 4-9/10")
         );
-        assert_eq!(ranged.headers[axum::http::header::CONTENT_LENGTH], "6");
-        assert_eq!(text(ranged).await, "");
+        assert_eq!(ranged.headers.content_length.as_deref(), Some("6"));
+        assert_eq!(text(ranged.body).await, "");
         assert_eq!(ranges(&fake), ["bytes=0-0", "bytes=4-4"]);
     }
 
@@ -1263,10 +1376,15 @@ mod tests {
             response(403, "https://media.example/a.webm", &[], b""),
         ]);
         let whole = source
-            .open_stream(&id, None, false, &mut StreamTiming::default())
+            .open_stream(
+                &id,
+                RangeRequest::Whole,
+                false,
+                &mut StreamTiming::default(),
+            )
             .await
             .expect("stream");
-        assert_eq!(whole.status, 200);
+        assert_eq!(whole.status, MediaStatus::Full);
         let body = chunks(whole).await;
         assert_eq!(body.len(), 2, "{body:?}");
         assert_eq!(body[0], Ok("0123".to_owned()));
@@ -1281,28 +1399,17 @@ mod tests {
             .expect("lock")
             .extend([chunk(0, 3, b"0123"), chunk(0, 3, b"0123")]);
         let whole = source
-            .open_stream(&id, None, false, &mut StreamTiming::default())
+            .open_stream(
+                &id,
+                RangeRequest::Whole,
+                false,
+                &mut StreamTiming::default(),
+            )
             .await
             .expect("stream");
         let body = chunks(whole).await;
         assert_eq!(body.len(), 2, "{body:?}");
         assert!(body[1].is_err());
-    }
-
-    #[test]
-    fn reads_single_byte_ranges_only() {
-        let range = |value: &'static str| parse_range(&HeaderValue::from_static(value));
-        assert_eq!(range("bytes=0-"), Some((0, None)));
-        assert_eq!(range("bytes=5-9"), Some((5, Some(9))));
-        for other in [
-            "bytes=-500",
-            "bytes=0-1,4-5",
-            "bytes=9-5",
-            "items=0-1",
-            "bytes=a-",
-        ] {
-            assert_eq!(range(other), None, "{other}");
-        }
     }
 
     #[tokio::test]
@@ -1311,7 +1418,7 @@ mod tests {
         for url in ["http://10.0.0.1/a.mp3", "http://localhost/a.mp3"] {
             let (source, id) = resolved_source(fake.clone(), url, PlaybackFormat::Progressive);
             assert!(matches!(
-                source.open_stream(&id, None, false, &mut StreamTiming::default()).await,
+                source.open_stream(&id, RangeRequest::Whole, false, &mut StreamTiming::default()).await,
                 Err(ExternalError::Failed(message)) if message.contains("unsafe stream URL")
             ));
         }
@@ -1328,7 +1435,12 @@ mod tests {
         );
         assert!(matches!(
             source
-                .open_stream(&id, None, false, &mut StreamTiming::default())
+                .open_stream(
+                    &id,
+                    RangeRequest::Whole,
+                    false,
+                    &mut StreamTiming::default()
+                )
                 .await,
             Err(ExternalError::Unplayable(_))
         ));
@@ -1354,6 +1466,16 @@ mod tests {
         assert!(fake.fetched.lock().expect("lock").is_empty());
     }
 
+    /// The resource tokens of a rewritten playlist of `id`.
+    fn resource_tokens(playlist: &str, id: &str) -> Vec<String> {
+        let prefix = format!("/api/v1/external/tracks/{id}/resources/");
+        playlist
+            .split(['\n', '"'])
+            .filter_map(|part| part.strip_prefix(&prefix))
+            .map(str::to_owned)
+            .collect()
+    }
+
     #[tokio::test]
     async fn hls_uris_go_through_signed_resources_of_the_same_track() {
         let fake = Arc::new(Fake::default());
@@ -1377,26 +1499,22 @@ mod tests {
             PlaybackFormat::Hls,
         );
         let playlist = source.playlist(&id).await.expect("playlist");
-        let prefix = format!("/api/v1/external/tracks/{id}/resources/");
-        let tokens: Vec<String> = playlist
-            .split(['\n', '"'])
-            .filter_map(|part| part.strip_prefix(&prefix))
-            .map(str::to_owned)
-            .collect();
+        let tokens = resource_tokens(&playlist, &id);
         assert_eq!(tokens.len(), 2, "{playlist}");
         assert!(!playlist.contains("cdn.example"));
         let Resource::Media(segment) = source
-            .resource(&id, &tokens[1], None)
+            .resource(&id, &tokens[1], RangeRequest::Whole)
             .await
             .expect("segment")
         else {
             panic!("a segment is media");
         };
-        assert_eq!(text(segment).await, "segment");
+        assert_eq!(segment.status, MediaStatus::Full);
+        assert_eq!(text(segment.body).await, "segment");
         {
             let fetched = fake.fetched.lock().expect("lock");
             assert_eq!(fetched[1].0, "https://cdn.example/a/seg1.m4s");
-            assert_eq!(fetched[1].2["user-agent"], "yt-dlp-agent");
+            assert_eq!(header(&fetched[1].2, "user-agent"), Some("yt-dlp-agent"));
         }
         // Bound to this Track's id, and only as signed.
         let other = source
@@ -1412,11 +1530,130 @@ mod tests {
             (id.as_str(), "https%3A%2F%2Fcdn.example%2Fx"),
         ] {
             assert!(matches!(
-                source.resource(track, resource, None).await,
+                source.resource(track, resource, RangeRequest::Whole).await,
                 Err(ExternalError::BadRequest(_))
             ));
         }
         assert_eq!(fake.fetched.lock().expect("lock").len(), 2);
+    }
+
+    // Resolving other Tracks drops a Track's stale URL from the resolve
+    // cache while a player still fetches the segments its playlist signed;
+    // the site refuses those without yt-dlp's headers.
+    #[tokio::test]
+    async fn hls_resources_keep_their_headers_after_the_track_leaves_the_resolve_cache() {
+        let fake = Arc::new(Fake::default());
+        fake.responses.lock().expect("lock").extend([
+            response(
+                200,
+                "https://cdn.example/a/playlist.m3u8",
+                &[("content-type", "application/vnd.apple.mpegurl")],
+                b"#EXTM3U\n#EXTINF:10,\nseg1.m4s\n",
+            ),
+            response(
+                200,
+                "https://cdn.example/a/seg1.m4s",
+                &[("content-type", "audio/mp4")],
+                b"segment",
+            ),
+        ]);
+        let (source, a) = resolved_source(
+            fake.clone(),
+            "https://cdn.example/a/playlist.m3u8",
+            PlaybackFormat::Hls,
+        );
+        let playlist = source.playlist(&a).await.expect("playlist");
+        let tokens = resource_tokens(&playlist, &a);
+        assert_eq!(tokens.len(), 1, "{playlist}");
+
+        // A's URL goes stale, and resolving B drops it from the cache.
+        let resolved = source.cache.get(&a).expect("cached");
+        source.cache.insert(&a, resolved, Duration::ZERO);
+        let b = source
+            .tracks
+            .sign(&TrackRef::new("https://soundcloud.com/a/c", "Soundcloud"))
+            .expect("id");
+        source.cache.insert(
+            &b,
+            Arc::new(Resolved {
+                url: "https://cdn.example/b/playlist.m3u8".to_owned(),
+                format: PlaybackFormat::Hls,
+                headers: agent("other-agent"),
+                chunk_size: None,
+            }),
+            CACHE_TTL,
+        );
+        assert!(source.cache.headers(&a).is_empty());
+
+        let Resource::Media(segment) = source
+            .resource(&a, &tokens[0], RangeRequest::Whole)
+            .await
+            .expect("segment")
+        else {
+            panic!("a segment is media");
+        };
+        assert_eq!(text(segment.body).await, "segment");
+        let fetched = fake.fetched.lock().expect("lock");
+        assert_eq!(fetched[1].0, "https://cdn.example/a/seg1.m4s");
+        assert_eq!(header(&fetched[1].2, "user-agent"), Some("yt-dlp-agent"));
+    }
+
+    #[test]
+    fn hls_headers_expire_with_their_tokens_and_are_bounded() {
+        let store = HlsHeaders::default();
+        store.keep("a", agent("a"));
+        assert_eq!(store.get("a"), Some(agent("a")));
+        store.keep_until("stale", agent("stale"), Instant::now());
+        assert_eq!(store.get("stale"), None);
+
+        let later = Instant::now() + Duration::from_secs(60);
+        for index in 0..HLS_HEADERS_CAPACITY {
+            store.keep_until(
+                &format!("t{index}"),
+                agent("t"),
+                later + Duration::from_secs(index as u64),
+            );
+        }
+        // Full: the entry that expires first made room.
+        assert_eq!(store.get("t0"), None);
+        assert_eq!(store.get("a"), Some(agent("a")));
+        assert_eq!(
+            store.entries.lock().expect("lock").len(),
+            HLS_HEADERS_CAPACITY
+        );
+    }
+
+    #[tokio::test]
+    async fn nested_playlists_are_rewritten_with_the_same_headers() {
+        let fake = Arc::new(Fake::default());
+        fake.responses.lock().expect("lock").extend([
+            response(
+                200,
+                "https://cdn.example/a/master.m3u8",
+                &[("content-type", "application/vnd.apple.mpegurl")],
+                b"#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\naudio.m3u8\n",
+            ),
+            response(
+                200,
+                "https://cdn.example/a/audio.m3u8",
+                &[],
+                b"#EXTM3U\n#EXT-X-KEY:METHOD=SAMPLE-AES,URI=\"k\"\n",
+            ),
+        ]);
+        let (source, id) = resolved_source(
+            fake.clone(),
+            "https://cdn.example/a/master.m3u8",
+            PlaybackFormat::Hls,
+        );
+        let playlist = source.playlist(&id).await.expect("playlist");
+        let tokens = resource_tokens(&playlist, &id);
+        // A nested DRM playlist is unplayable (422), like a top-level one.
+        assert!(matches!(
+            source.resource(&id, &tokens[0], RangeRequest::Whole).await,
+            Err(ExternalError::Unplayable(_))
+        ));
+        let fetched = fake.fetched.lock().expect("lock");
+        assert_eq!(header(&fetched[1].2, "user-agent"), Some("yt-dlp-agent"));
     }
 
     #[tokio::test]
@@ -1466,7 +1703,7 @@ mod tests {
             PlaybackFormat::Progressive,
         );
         assert!(matches!(
-            source.open_stream(&id, None, false, &mut StreamTiming::default()).await,
+            source.open_stream(&id, RangeRequest::Whole, false, &mut StreamTiming::default()).await,
             Err(ExternalError::Failed(message)) if message.contains("403")
         ));
         assert!(source.cache.get(&id).is_none());
@@ -1497,7 +1734,12 @@ mod tests {
         source.cache.insert(&id, resolved, CACHE_TTL);
         assert!(
             source
-                .open_stream(&id, None, false, &mut StreamTiming::default())
+                .open_stream(
+                    &id,
+                    RangeRequest::Whole,
+                    false,
+                    &mut StreamTiming::default()
+                )
                 .await
                 .is_err()
         );
@@ -1506,7 +1748,7 @@ mod tests {
 
     #[tokio::test]
     async fn nothing_runs_while_disabled() {
-        let source = ExternalSource::with_upstream(None, Arc::new(Fake::default()));
+        let source = ExternalSource::with_fetcher(None, Arc::new(Fake::default()));
         assert!(!source.is_enabled());
         assert_eq!(
             source
@@ -1519,7 +1761,7 @@ mod tests {
             Err(ExternalError::Disabled)
         );
         assert!(matches!(
-            source.resource("x", "y", None).await,
+            source.resource("x", "y", RangeRequest::Whole).await,
             Err(ExternalError::Disabled)
         ));
         assert_eq!(source.artwork("x").await, Err(ExternalError::Disabled));
@@ -1527,7 +1769,7 @@ mod tests {
 
     /// A source and the id of a Track whose search found `artwork`.
     fn artwork_source(fake: Arc<Fake>, artwork: Option<&str>) -> (ExternalSource, String) {
-        let source = ExternalSource::with_upstream(Some(&config()), fake);
+        let source = ExternalSource::with_fetcher(Some(&config()), fake);
         let id = source
             .tracks
             .sign(&TrackRef {
@@ -1560,7 +1802,11 @@ mod tests {
         {
             let fetched = fake.fetched.lock().expect("lock");
             assert_eq!(fetched[0].0, ARTWORK);
-            assert!(fetched[0].1.is_none());
+            assert_eq!(fetched[0].1, RangeRequest::Whole);
+            assert_eq!(
+                header(&fetched[0].2, "accept"),
+                Some("image/jpeg, image/png, image/webp")
+            );
         }
 
         let large: &'static [u8] = Box::leak(vec![0_u8; ARTWORK_MAX_BYTES + 1].into_boxed_slice());
@@ -1611,7 +1857,7 @@ mod tests {
 
     #[tokio::test]
     async fn queries_and_limits_are_checked_before_yt_dlp_runs() {
-        let source = ExternalSource::with_upstream(Some(&config()), Arc::new(Fake::default()));
+        let source = ExternalSource::with_fetcher(Some(&config()), Arc::new(Fake::default()));
         for (query, limit) in [
             ("", 10),
             ("\u{7}  \n", 10),
@@ -1669,7 +1915,6 @@ mod tests {
             ],
             chunk_size: None,
         });
-        assert_eq!(resolved.headers.len(), 1);
-        assert_eq!(resolved.headers["user-agent"], "agent");
+        assert_eq!(resolved.headers, agent("agent"));
     }
 }
