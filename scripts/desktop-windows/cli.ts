@@ -1,8 +1,10 @@
-// Builds the Windows Desktop Client from WSL and runs it on the Windows side.
-//   build  Web Client, shell bundle, release core cross-built with mingw-w64,
-//          pinned mpv; electron-builder's `dir` target, copied to the
-//          Windows output folder (%LOCALAPPDATA%\EarthlyAudio by default)
-//   start  the built client
+// Builds the Windows Desktop Client from WSL and runs it on the Windows side;
+// in WSL the desktop:* tasks reach it through scripts/desktop.sh.
+//   build  Web Client (unless --web-built), shell bundle, release core
+//          cross-built with mingw-w64, pinned mpv; electron-builder's `dir`
+//          target, copied to the Windows output folder
+//          (%LOCALAPPDATA%\EarthlyAudio by default)
+//   start  the built client; --wait waits until it exits
 //   dev    the built client with a fresh shell bundle and debug core,
 //          rendering the Vite dev server in WSL with HMR
 //   clean  the staging folder and the Windows output folder
@@ -90,14 +92,14 @@ function installedExecutable(): string {
 	const executable = join(windowsOutputDirectory(), executableName);
 	if (!existsSync(executable)) {
 		throw new Error(
-			`Missing ${executable}; run 'mise run desktop:windows' first.`,
+			`Missing ${executable}; run 'mise run desktop:build' first.`,
 		);
 	}
 	return executable;
 }
 
-async function build() {
-	buildWeb();
+async function build(options: Set<string>) {
+	if (!options.has("--web-built")) buildWeb();
 	buildShell();
 	const core = buildCore("release");
 	rmSync(stagedCoreDirectory, { recursive: true, force: true });
@@ -132,8 +134,27 @@ async function build() {
 	console.log(`Installed the Windows Desktop Client in ${output}.`);
 }
 
-function start() {
+/** Runs the client attached to this process and resolves with its exit code. */
+function runClient(executable: string, env: NodeJS.ProcessEnv) {
+	const client = spawn(executable, [], {
+		cwd: windowsOutputDirectory(),
+		env,
+		stdio: "inherit",
+	});
+	return new Promise<number>((resolveExit) => {
+		client.on("exit", (exitCode) => resolveExit(exitCode ?? 1));
+		client.on("error", (error) => {
+			console.error(error.message);
+			resolveExit(1);
+		});
+	});
+}
+
+async function start(options: Set<string>) {
 	const executable = installedExecutable();
+	// `mise run start` stops its Music Server when this returns.
+	if (options.has("--wait"))
+		process.exit(await runClient(executable, process.env));
 	// WSL hands its stdio pipes to a Windows process it starts, and a client
 	// started through `cmd /c start` inherits them, so the interop call does
 	// not return until the client exits; a detached one dies with a one-off
@@ -214,23 +235,13 @@ async function dev() {
 	const wslEnv = [process.env.WSLENV, "EARTHLY_AUDIO_DEV_SERVER_URL", ...sentry]
 		.filter(Boolean)
 		.join(":");
-	const client = spawn(executable, [], {
-		cwd: output,
-		env: {
+	process.exit(
+		await runClient(executable, {
 			...process.env,
 			EARTHLY_AUDIO_DEV_SERVER_URL: devServerUrl,
 			WSLENV: wslEnv,
-		},
-		stdio: "inherit",
-	});
-	const code = await new Promise<number>((resolveExit) => {
-		client.on("exit", (exitCode) => resolveExit(exitCode ?? 1));
-		client.on("error", (error) => {
-			console.error(error.message);
-			resolveExit(1);
-		});
-	});
-	process.exit(code);
+		}),
+	);
 }
 
 function clean() {
@@ -238,22 +249,32 @@ function clean() {
 	removeWindowsDirectory(windowsOutputDirectory());
 }
 
-const commands: Record<string, () => void | Promise<void>> = {
-	build,
-	start,
-	dev,
-	clean,
+const commands: Record<
+	string,
+	{ run: (options: Set<string>) => void | Promise<void>; options: string[] }
+> = {
+	build: { run: build, options: ["--web-built"] },
+	start: { run: start, options: ["--wait"] },
+	dev: { run: dev, options: [] },
+	clean: { run: clean, options: [] },
 };
 const usage =
-	"Usage: node scripts/desktop-windows/cli.ts build|start|dev|clean";
-const command = process.argv[2] ?? "";
+	"Usage: node scripts/desktop-windows/cli.ts build [--web-built]|start [--wait]|dev|clean";
+const [command = "", ...options] = process.argv.slice(2);
 const selected = commands[command];
 if (!selected) {
 	console.error(command ? `Unknown command: ${command}\n${usage}` : usage);
 	process.exit(2);
 }
+const unknown = options.filter((option) => !selected.options.includes(option));
+if (unknown.length > 0) {
+	console.error(
+		`Unknown option for ${command}: ${unknown.join(" ")}\n${usage}`,
+	);
+	process.exit(2);
+}
 try {
-	await selected();
+	await selected.run(new Set(options));
 } catch (error) {
 	console.error(error instanceof Error ? error.message : error);
 	process.exit(1);
