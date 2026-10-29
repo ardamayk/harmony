@@ -4,6 +4,11 @@ import {
 	type QueueEventSource,
 	subscribeQueueEvents,
 } from "./queue-events";
+import {
+	type ApiOperation,
+	isDevelopmentBuild,
+	validateResponse,
+} from "./response-validation";
 
 /**
  * Longest-edge sizes the server scales covers to. Pick the one at or above
@@ -14,6 +19,10 @@ export type CoverSize = 64 | 128 | 256 | 512 | 1024;
 export * from "./capabilities";
 export type { QueueEvent, QueueEventSource } from "./queue-events";
 export { QUEUE_EVENTS_CAPABILITY } from "./queue-events";
+export {
+	type ApiOperation,
+	ApiResponseValidationError,
+} from "./response-validation";
 
 export type ApiClientConfig = {
 	baseUrl: string;
@@ -27,6 +36,15 @@ export type ApiClientConfig = {
 		onEvent: (event: QueueEvent) => void,
 		onError: (error: Error) => void,
 	) => (() => void) | Promise<() => void>;
+	/**
+	 * Checks every JSON response against the operation's schema from the
+	 * contract and throws ApiResponseValidationError on a mismatch. For
+	 * development and tests only: production builds must leave it off, since
+	 * library lists can hold thousands of items. Defaults to on when
+	 * `process.env.NODE_ENV` is set to anything but "production" (Node test
+	 * runs), off otherwise.
+	 */
+	validateResponses?: boolean;
 };
 
 type Schemas = components["schemas"];
@@ -263,6 +281,7 @@ export function createApiClient(config: ApiClientConfig) {
 		transport = globalThis.fetch,
 		eventSourceFactory = (url) => new EventSource(url) as QueueEventSource,
 		queueEventSubscriber,
+		validateResponses = isDevelopmentBuild(),
 	} = config;
 	const getMediaBaseUrl = () =>
 		typeof mediaBaseUrl === "function" ? mediaBaseUrl() : mediaBaseUrl;
@@ -282,15 +301,19 @@ export function createApiClient(config: ApiClientConfig) {
 	): Promise<ManagedImportPreview> {
 		if (config.transport || typeof XMLHttpRequest === "undefined") {
 			onProgress?.(0);
-			return request<ManagedImportPreview>(`/api/v1/imports/${importId}/file`, {
-				method: "PUT",
-				headers: {
-					"Content-Type": file.type || "application/octet-stream",
-					"X-Import-Filename": originalFilename,
+			return request<ManagedImportPreview>(
+				"uploadManagedImportFile",
+				`/api/v1/imports/${importId}/file`,
+				{
+					method: "PUT",
+					headers: {
+						"Content-Type": file.type || "application/octet-stream",
+						"X-Import-Filename": originalFilename,
+					},
+					body: file,
+					signal,
 				},
-				body: file,
-				signal,
-			}).then((preview) => {
+			).then((preview) => {
 				onProgress?.(100);
 				return preview;
 			});
@@ -318,9 +341,21 @@ export function createApiClient(config: ApiClientConfig) {
 					);
 				}
 			});
-			upload.addEventListener("load", () => {
+			upload.addEventListener("load", async () => {
 				removeAbortListener();
 				if (upload.status >= 200 && upload.status < 300) {
+					try {
+						if (validateResponses) {
+							await validateResponse(
+								"uploadManagedImportFile",
+								upload.status,
+								upload.response,
+							);
+						}
+					} catch (error) {
+						reject(error);
+						return;
+					}
 					onProgress?.(100);
 					resolve(upload.response as ManagedImportPreview);
 					return;
@@ -363,7 +398,8 @@ export function createApiClient(config: ApiClientConfig) {
 			{
 				getBaseUrl: getQueueEventsBaseUrl,
 				getCapabilities: async () =>
-					(await request<HealthResponse>("/api/v1/health")).capabilities,
+					(await request<HealthResponse>("getHealth", "/api/v1/health"))
+						.capabilities,
 				getToken,
 				transport,
 				eventSourceFactory,
@@ -374,7 +410,11 @@ export function createApiClient(config: ApiClientConfig) {
 		);
 	}
 
-	async function request<T>(path: string, init?: RequestInit): Promise<T> {
+	async function request<T>(
+		operation: ApiOperation,
+		path: string,
+		init?: RequestInit,
+	): Promise<T> {
 		const headers = new Headers(init?.headers);
 		headers.set("Accept", "application/json");
 		if (init?.body && !headers.has("Content-Type")) {
@@ -405,26 +445,35 @@ export function createApiClient(config: ApiClientConfig) {
 			return undefined as T;
 		}
 
-		return (await response.json()) as T;
+		const body: unknown = await response.json();
+		if (validateResponses) {
+			await validateResponse(operation, response.status, body);
+		}
+		return body as T;
 	}
 
 	return {
-		getHealth: () => request<HealthResponse>("/api/v1/health"),
-		getMe: () => request<User>("/api/v1/me"),
-		getPreferences: () => request<UserPreferences>("/api/v1/preferences"),
+		getHealth: () => request<HealthResponse>("getHealth", "/api/v1/health"),
+		getMe: () => request<User>("getMe", "/api/v1/me"),
+		getPreferences: () =>
+			request<UserPreferences>("getPreferences", "/api/v1/preferences"),
 		patchPreferences: (body: UserPreferencesPatch) =>
-			request<UserPreferences>("/api/v1/preferences", {
+			request<UserPreferences>("patchPreferences", "/api/v1/preferences", {
 				method: "PATCH",
 				body: JSON.stringify(body),
 			}),
 
 		listArtists: (params?: ListParams) =>
-			request<ArtistList>(`/api/v1/library/artists${buildQuery(params)}`),
+			request<ArtistList>(
+				"listArtists",
+				`/api/v1/library/artists${buildQuery(params)}`,
+			),
 		getArtist: (artistId: string) =>
-			request<Artist>(`/api/v1/library/artists/${artistId}`),
+			request<Artist>("getArtist", `/api/v1/library/artists/${artistId}`),
 		/** Resolves `null` when the Artist has no biography (yet). */
 		getArtistBiography: (artistId: string) =>
 			request<ArtistBiography>(
+				"getArtistBiography",
 				`/api/v1/library/artists/${artistId}/biography`,
 			).catch((error: unknown) => {
 				if (error instanceof ApiError && error.status === 404) return null;
@@ -435,6 +484,7 @@ export function createApiClient(config: ApiClientConfig) {
 			trackIds.length === 0
 				? Promise.resolve(new Map<string, number>())
 				: request<Schemas["PlayCountList"]>(
+						"listTrackPlayCounts",
 						`/api/v1/library/tracks/play-counts?ids=${encodeURIComponent(trackIds.join(","))}`,
 					).then(
 						(list) =>
@@ -443,33 +493,42 @@ export function createApiClient(config: ApiClientConfig) {
 		/** Deezer's genres for an Album whose tags name none (ADR 0027). */
 		listAlbumOnlineGenres: (albumId: string) =>
 			request<Schemas["GenreNameList"]>(
+				"listAlbumOnlineGenres",
 				`/api/v1/library/albums/${albumId}/online-genres`,
 			).then((list) => list.items),
 		listArtistPopularTracks: (artistId: string, limit?: number) =>
 			request<Schemas["PopularTrackList"]>(
+				"listArtistPopularTracks",
 				`/api/v1/library/artists/${artistId}/popular-tracks${limit ? `?limit=${limit}` : ""}`,
 			).then((list) => list.items.map(normalizeTrack)),
 		listAlbums: (params?: ListParams) =>
 			request<WireAlbumList>(
+				"listAlbums",
 				`/api/v1/library/albums${buildQuery(params)}`,
 			).then(normalizeAlbumList),
 		getAlbum: (albumId: string) =>
-			request<WireAlbumDetail>(`/api/v1/library/albums/${albumId}`).then(
-				normalizeAlbumDetail,
-			),
+			request<WireAlbumDetail>(
+				"getAlbum",
+				`/api/v1/library/albums/${albumId}`,
+			).then(normalizeAlbumDetail),
 		listTracks: (params?: ListParams) =>
 			request<WireTrackList>(
+				"listTracks",
 				`/api/v1/library/tracks${buildQuery(params)}`,
 			).then(normalizeTrackList),
 		getTrack: (trackId: string) =>
-			request<WireTrack>(`/api/v1/library/tracks/${trackId}`).then(
+			request<WireTrack>("getTrack", `/api/v1/library/tracks/${trackId}`).then(
 				normalizeTrack,
 			),
 		getTrackLyrics: (trackId: string) =>
-			request<TrackLyrics>(`/api/v1/library/tracks/${trackId}/lyrics`),
+			request<TrackLyrics>(
+				"getTrackLyrics",
+				`/api/v1/library/tracks/${trackId}/lyrics`,
+			),
 		/** Resolves the pending shape (HTTP 202) while peaks are still being generated. */
 		getTrackWaveform: (trackId: string) =>
 			request<TrackWaveform | TrackWaveformPending>(
+				"getTrackWaveform",
 				`/api/v1/library/tracks/${trackId}/waveform`,
 				{
 					cache: "no-cache",
@@ -477,26 +536,37 @@ export function createApiClient(config: ApiClientConfig) {
 			),
 		previewAlbumDeletion: (albumId: string) =>
 			request<AlbumDeletionPreview>(
+				"previewAlbumDeletion",
 				`/api/v1/library/albums/${albumId}/deletion`,
 			),
 		deleteAlbum: (albumId: string, confirmationToken: string) =>
-			request<AlbumDeletionResult>(`/api/v1/library/albums/${albumId}`, {
-				method: "DELETE",
-				headers: { "X-Permanent-Delete": "1" },
-				body: JSON.stringify({ confirmationToken }),
-			}),
+			request<AlbumDeletionResult>(
+				"deleteAlbum",
+				`/api/v1/library/albums/${albumId}`,
+				{
+					method: "DELETE",
+					headers: { "X-Permanent-Delete": "1" },
+					body: JSON.stringify({ confirmationToken }),
+				},
+			),
 		previewTrackDeletion: (trackId: string) =>
 			request<TrackDeletionPreview>(
+				"previewTrackDeletion",
 				`/api/v1/library/tracks/${trackId}/deletion`,
 			),
 		deleteTrack: (trackId: string, confirmationToken: string) =>
-			request<DeleteResult>(`/api/v1/library/tracks/${trackId}`, {
-				method: "DELETE",
-				headers: { "X-Permanent-Delete": "1" },
-				body: JSON.stringify({ confirmationToken }),
-			}),
+			request<DeleteResult>(
+				"deleteTrack",
+				`/api/v1/library/tracks/${trackId}`,
+				{
+					method: "DELETE",
+					headers: { "X-Permanent-Delete": "1" },
+					body: JSON.stringify({ confirmationToken }),
+				},
+			),
 		createTrackReplacement: (trackId: string) =>
 			request<ManagedImportJob>(
+				"createTrackReplacement",
 				`/api/v1/library/tracks/${trackId}/replacement`,
 				{
 					method: "POST",
@@ -508,6 +578,7 @@ export function createApiClient(config: ApiClientConfig) {
 			confirmationToken: string,
 		) =>
 			request<TrackReplacementResult>(
+				"confirmTrackReplacement",
 				`/api/v1/imports/${importId}/replacement`,
 				{
 					method: "POST",
@@ -516,18 +587,26 @@ export function createApiClient(config: ApiClientConfig) {
 				},
 			),
 		listImportHistory: () =>
-			request<ManagedImportHistoryList>("/api/v1/import-history"),
+			request<ManagedImportHistoryList>(
+				"listImportHistory",
+				"/api/v1/import-history",
+			),
 		createManagedImportBatch: (options?: ManagedImportBatchCreate) =>
-			request<ManagedImportBatch>("/api/v1/import-batches", {
-				method: "POST",
-				body: options ? JSON.stringify(options) : undefined,
-			}),
+			request<ManagedImportBatch>(
+				"createManagedImportBatch",
+				"/api/v1/import-batches",
+				{
+					method: "POST",
+					body: options ? JSON.stringify(options) : undefined,
+				},
+			),
 		uploadManagedImportArtwork: (
 			batchId: string,
 			albumKey: string,
 			file: File,
 		) =>
 			request<ManagedImportArtworkOption>(
+				"uploadManagedImportArtwork",
 				`/api/v1/import-batches/${batchId}/albums/${albumKey}/artwork`,
 				{
 					method: "PUT",
@@ -538,16 +617,27 @@ export function createApiClient(config: ApiClientConfig) {
 		getManagedImportArtworkUrl: (batchId: string, artworkId: string) =>
 			`${getMediaBaseUrl()}/api/v1/import-batches/${batchId}/artwork/${encodeURIComponent(artworkId)}`,
 		heartbeatManagedImportBatch: (batchId: string) =>
-			request<void>(`/api/v1/import-batches/${batchId}/heartbeat`, {
-				method: "POST",
-			}),
+			request<void>(
+				"heartbeatManagedImportBatch",
+				`/api/v1/import-batches/${batchId}/heartbeat`,
+				{
+					method: "POST",
+				},
+			),
 		getManagedImportBatch: (batchId: string) =>
-			request<ManagedImportBatch>(`/api/v1/import-batches/${batchId}`),
+			request<ManagedImportBatch>(
+				"getManagedImportBatch",
+				`/api/v1/import-batches/${batchId}`,
+			),
 		cancelManagedImportBatch: (batchId: string, keepalive = false) =>
-			request<void>(`/api/v1/import-batches/${batchId}`, {
-				method: "DELETE",
-				keepalive,
-			}),
+			request<void>(
+				"cancelManagedImportBatch",
+				`/api/v1/import-batches/${batchId}`,
+				{
+					method: "DELETE",
+					keepalive,
+				},
+			),
 		confirmManagedImportBatch: (
 			batchId: string,
 			revision: number,
@@ -555,49 +645,64 @@ export function createApiClient(config: ApiClientConfig) {
 			duplicateDecisions?: ManagedImportDuplicateDecision[],
 			albumDecisions?: ManagedImportAlbumDecision[],
 		) =>
-			request<ManagedImportBatch>(`/api/v1/import-batches/${batchId}/confirm`, {
-				method: "POST",
-				body: JSON.stringify({
-					revision,
-					selectedFileIds,
-					duplicateDecisions,
-					albumDecisions,
-				}),
-			}),
+			request<ManagedImportBatch>(
+				"confirmManagedImportBatch",
+				`/api/v1/import-batches/${batchId}/confirm`,
+				{
+					method: "POST",
+					body: JSON.stringify({
+						revision,
+						selectedFileIds,
+						duplicateDecisions,
+						albumDecisions,
+					}),
+				},
+			),
 		createManagedImportJob: (batchId?: string, clientFileId?: string) =>
-			request<ManagedImportJob>("/api/v1/imports", {
+			request<ManagedImportJob>("createManagedImportJob", "/api/v1/imports", {
 				method: "POST",
 				body: batchId ? JSON.stringify({ batchId, clientFileId }) : undefined,
 			}),
 		getManagedImportJob: (importId: string) =>
-			request<ManagedImportJob>(`/api/v1/imports/${importId}`),
+			request<ManagedImportJob>(
+				"getManagedImportJob",
+				`/api/v1/imports/${importId}`,
+			),
 		cancelManagedImport: (importId: string) =>
-			request<void>(`/api/v1/imports/${importId}`, { method: "DELETE" }),
+			request<void>("cancelManagedImport", `/api/v1/imports/${importId}`, {
+				method: "DELETE",
+			}),
 		uploadManagedImportFile,
 		confirmManagedImport: (
 			importId: string,
 			revision: number,
 			duplicateDecision?: ManagedImportDuplicateDecision["action"],
 		) =>
-			request<ManagedImportResult>(`/api/v1/imports/${importId}/confirm`, {
-				method: "POST",
-				body: JSON.stringify({ revision, duplicateDecision }),
-			}),
+			request<ManagedImportResult>(
+				"confirmManagedImport",
+				`/api/v1/imports/${importId}/confirm`,
+				{
+					method: "POST",
+					body: JSON.stringify({ revision, duplicateDecision }),
+				},
+			),
 
 		getPlaybackQueue: () =>
-			request<WireQueue>("/api/v1/playback/queue").then(normalizeQueue),
+			request<WireQueue>("getPlaybackQueue", "/api/v1/playback/queue").then(
+				normalizeQueue,
+			),
 		subscribePlaybackQueueEvents,
 		replacePlaybackQueue: (
 			trackIds: string[],
 			revision: string,
 			source?: QueueItemSource,
 		) =>
-			request<WireQueue>("/api/v1/playback/queue", {
+			request<WireQueue>("replacePlaybackQueue", "/api/v1/playback/queue", {
 				method: "PUT",
 				body: JSON.stringify({ trackIds, revision, source }),
 			}).then(normalizeQueue),
 		reorderPlaybackQueue: (itemIds: string[], revision: string) =>
-			request<WireQueue>("/api/v1/playback/queue", {
+			request<WireQueue>("reorderPlaybackQueue", "/api/v1/playback/queue", {
 				method: "PATCH",
 				body: JSON.stringify({ itemIds, revision }),
 			}).then(normalizeQueue),
@@ -606,92 +711,130 @@ export function createApiClient(config: ApiClientConfig) {
 			revision: string,
 			source?: QueueItemSource,
 		) =>
-			request<WireQueue>("/api/v1/playback/queue/items", {
-				method: "POST",
-				body: JSON.stringify({ trackId, revision, source }),
-			}).then(normalizeQueue),
+			request<WireQueue>(
+				"appendPlaybackQueueItem",
+				"/api/v1/playback/queue/items",
+				{
+					method: "POST",
+					body: JSON.stringify({ trackId, revision, source }),
+				},
+			).then(normalizeQueue),
 		removePlaybackQueueItem: (itemId: string, revision: string) =>
-			request<WireQueue>(`/api/v1/playback/queue/items/${itemId}`, {
-				method: "DELETE",
-				headers: { "If-Match": revision },
-			}).then(normalizeQueue),
+			request<WireQueue>(
+				"removePlaybackQueueItem",
+				`/api/v1/playback/queue/items/${itemId}`,
+				{
+					method: "DELETE",
+					headers: { "If-Match": revision },
+				},
+			).then(normalizeQueue),
 		/** Removes the items after afterItemId and keeps the rest; null clears the whole queue. */
 		clearPlaybackQueue: (afterItemId: string | null, revision: string) =>
 			request<WireQueue>(
+				"clearPlaybackQueue",
 				`/api/v1/playback/queue${afterItemId ? `?${new URLSearchParams({ afterItemId }).toString()}` : ""}`,
 				{ method: "DELETE", headers: { "If-Match": revision } },
 			).then(normalizeQueue),
 		/** One coherent Library Search; the server ranks, gates typo correction, and picks the Best Match. */
 		searchLibrary: (q: string, all = false) =>
 			request<LibrarySearchResponse>(
+				"searchLibrary",
 				`/api/v1/library/search?${new URLSearchParams({ q }).toString()}${all ? "&all=true" : ""}`,
 			),
-		listPlaylists: () => request<PlaylistList>("/api/v1/playlists"),
+		listPlaylists: () =>
+			request<PlaylistList>("listPlaylists", "/api/v1/playlists"),
 		createPlaylist: (body: PlaylistCreate) =>
-			request<Playlist>("/api/v1/playlists", {
+			request<Playlist>("createPlaylist", "/api/v1/playlists", {
 				method: "POST",
 				body: JSON.stringify(body),
 			}),
 		getPlaylist: (playlistId: string) =>
-			request<WirePlaylistDetail>(`/api/v1/playlists/${playlistId}`).then(
-				normalizePlaylistDetail,
-			),
+			request<WirePlaylistDetail>(
+				"getPlaylist",
+				`/api/v1/playlists/${playlistId}`,
+			).then(normalizePlaylistDetail),
 		addPlaylistTrack: (playlistId: string, trackId: string) =>
-			request<WirePlaylistDetail>(`/api/v1/playlists/${playlistId}/tracks`, {
-				method: "POST",
-				body: JSON.stringify({ trackId }),
-			}).then(normalizePlaylistDetail),
+			request<WirePlaylistDetail>(
+				"addPlaylistTrack",
+				`/api/v1/playlists/${playlistId}/tracks`,
+				{
+					method: "POST",
+					body: JSON.stringify({ trackId }),
+				},
+			).then(normalizePlaylistDetail),
 		removePlaylistTrack: (playlistId: string, trackId: string) =>
 			request<WirePlaylistDetail>(
+				"removePlaylistTrack",
 				`/api/v1/playlists/${playlistId}/tracks/${trackId}`,
 				{
 					method: "DELETE",
 				},
 			).then(normalizePlaylistDetail),
 		listRadioStations: () =>
-			request<RadioStationList>("/api/v1/radio/stations"),
+			request<RadioStationList>("listRadioStations", "/api/v1/radio/stations"),
 		getRadioStation: (stationId: string) =>
-			request<RadioStation>(`/api/v1/radio/stations/${stationId}`),
+			request<RadioStation>(
+				"getRadioStation",
+				`/api/v1/radio/stations/${stationId}`,
+			),
 		createRadioStation: (body: RadioStationCreate) =>
-			request<RadioStation>("/api/v1/radio/stations", {
+			request<RadioStation>("createRadioStation", "/api/v1/radio/stations", {
 				method: "POST",
 				body: JSON.stringify(body),
 			}),
 		patchRadioStation: (stationId: string, body: RadioStationPatch) =>
-			request<RadioStation>(`/api/v1/radio/stations/${stationId}`, {
-				method: "PATCH",
-				body: JSON.stringify(body),
-			}),
+			request<RadioStation>(
+				"patchRadioStation",
+				`/api/v1/radio/stations/${stationId}`,
+				{
+					method: "PATCH",
+					body: JSON.stringify(body),
+				},
+			),
 		deleteRadioStation: (stationId: string) =>
-			request<void>(`/api/v1/radio/stations/${stationId}`, {
-				method: "DELETE",
-			}),
+			request<void>(
+				"deleteRadioStation",
+				`/api/v1/radio/stations/${stationId}`,
+				{
+					method: "DELETE",
+				},
+			),
 		searchRadioStations: (params?: RadioSearchParams) =>
 			request<RadioSearchResultList>(
+				"searchRadioStations",
 				`/api/v1/radio/search${buildRadioSearchQuery(params)}`,
 			),
 		listRadioCatalogCountries: () =>
-			request<RadioCatalogOptionList>("/api/v1/radio/catalog/countries"),
+			request<RadioCatalogOptionList>(
+				"listRadioCatalogCountries",
+				"/api/v1/radio/catalog/countries",
+			),
 		listRadioCatalogTags: () =>
-			request<RadioCatalogOptionList>("/api/v1/radio/catalog/tags"),
+			request<RadioCatalogOptionList>(
+				"listRadioCatalogTags",
+				"/api/v1/radio/catalog/tags",
+			),
 		importRadioStation: (body: RadioImportRequest) =>
-			request<RadioStation>("/api/v1/radio/import", {
+			request<RadioStation>("importRadioStation", "/api/v1/radio/import", {
 				method: "POST",
 				body: JSON.stringify(body),
 			}),
 		getRadioNowPlaying: (stationId: string) =>
 			request<RadioNowPlaying>(
+				"getRadioNowPlaying",
 				`/api/v1/radio/stations/${stationId}/now-playing`,
 			),
 		/** Searches the External Source; `limit` defaults to the server's 10 (at most 20). */
 		searchExternalSource: (q: string, limit?: number, signal?: AbortSignal) =>
 			request<ExternalSearchResponse>(
+				"searchExternalSource",
 				`/api/v1/external/search?${new URLSearchParams({ q }).toString()}${limit != null ? `&limit=${limit}` : ""}`,
 				{ signal },
 			),
 		/** Resolves an External Track; play `streamPath` through getExternalStreamUrl. */
 		getExternalTrackPlayback: (externalTrackId: string, signal?: AbortSignal) =>
 			request<ExternalTrackPlayback>(
+				"getExternalTrackPlayback",
 				`/api/v1/external/tracks/${encodeURIComponent(externalTrackId)}/playback`,
 				{ signal },
 			),

@@ -1390,7 +1390,8 @@ export interface components {
             artists: string[];
             albumArtists: string[];
             album: string;
-            genres: string[];
+            /** @description Null when the file names no genre. */
+            genres: string[] | null;
             trackNo: number;
             trackTotal?: number;
             discNo: number;

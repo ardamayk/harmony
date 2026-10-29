@@ -22,6 +22,7 @@ import { Input } from "#/components/ui/input";
 import { apiClient } from "#/lib/api";
 import { HEADER_SEARCH_CONTAINER_CLASS } from "#/lib/page-layout-classes";
 import { radioQueryKeys } from "#/lib/radio-query-keys";
+import { radioStationQuickEditSchema } from "#/lib/radio-station-form";
 import { matchesLocalStationFilter } from "#/lib/radio-station-filter";
 import { cn } from "#/lib/utils";
 
@@ -163,7 +164,10 @@ function StationCard({
 	const [isContextMenuOpen, setIsContextMenuOpen] = useState(false);
 	const [editName, setEditName] = useState(station.name);
 	const [editStreamUrl, setEditStreamUrl] = useState(station.streamUrl);
-	const canSaveEdit = Boolean(editName.trim() && editStreamUrl.trim());
+	const parsedEdit = radioStationQuickEditSchema.safeParse({
+		name: editName,
+		streamUrl: editStreamUrl,
+	});
 	const canEditStation = station.source === "manual";
 	const tags = station.tags.slice(0, 2);
 	const nowPlaying = useQuery({
@@ -265,12 +269,10 @@ function StationCard({
 					<div className="flex shrink-0 items-center gap-2">
 						<Button
 							size="sm"
-							disabled={!canSaveEdit || isMutating}
+							disabled={!parsedEdit.success || isMutating}
 							onClick={() => {
-								onUpdate({
-									name: editName.trim(),
-									streamUrl: editStreamUrl.trim(),
-								});
+								if (!parsedEdit.success) return;
+								onUpdate(parsedEdit.data);
 								setIsEditing(false);
 							}}
 						>

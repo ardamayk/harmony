@@ -2838,6 +2838,8 @@ components:
           type: string
         genres:
           type: array
+          nullable: true
+          description: Null when the file names no genre.
           items:
             type: string
         trackNo:

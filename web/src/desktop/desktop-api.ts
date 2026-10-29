@@ -1,6 +1,7 @@
 import {
 	DESKTOP_BRIDGE_KEY,
 	type DesktopCommand,
+	type DesktopCommandArgs,
 	type DesktopEvent,
 	type EarthlyDesktopBridge,
 	type Unlisten,
@@ -30,12 +31,12 @@ function desktopBridge(): EarthlyDesktopBridge {
  * Sends a command to the Desktop Client. A failed command rejects with the
  * command's own error value, as the Rust core or the shell produced it.
  */
-export function invoke<T>(
-	command: DesktopCommand,
-	args?: Record<string, unknown>,
+export function invoke<T, C extends DesktopCommand = DesktopCommand>(
+	command: C,
+	args?: DesktopCommandArgs<C>,
 ): Promise<T> {
 	try {
-		return desktopBridge().invoke<T>(command, args);
+		return desktopBridge().invoke<T, C>(command, args);
 	} catch (error) {
 		return Promise.reject(error);
 	}

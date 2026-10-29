@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Generates the TypeScript API client types from the OpenAPI contract.
+# Generates the TypeScript API client types and zod response schemas from the
+# OpenAPI contract.
 set -euo pipefail
 
 REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -31,3 +32,7 @@ else
 		"$CONTRACT_ROOT/openapi.yaml" \
 		-o "$OUTPUT_ROOT/packages/api-client/src/generated/schema.ts")
 fi
+
+(cd "$REPOSITORY_ROOT/packages/contracts" && node generate-zod.mts \
+	"$CONTRACT_ROOT/openapi.yaml" \
+	"$OUTPUT_ROOT/packages/api-client/src/generated")

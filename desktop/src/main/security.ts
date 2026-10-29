@@ -62,12 +62,10 @@ export function isTrustedRendererUrl(
 /**
  * External links (Spotify, Last.fm, ...) leave the Desktop Client and open
  * in the system browser. Only web URLs are accepted, so renderer content
- * cannot hand arbitrary schemes to the operating system.
+ * cannot hand arbitrary schemes to the operating system. (The invoke schema
+ * has already checked that the renderer sent a string.)
  */
-export function validateExternalUrl(raw: unknown): string {
-	if (typeof raw !== "string") {
-		throw new Error("External link is not a valid URL.");
-	}
+export function validateExternalUrl(raw: string): string {
 	let parsed: URL;
 	try {
 		parsed = new URL(raw);

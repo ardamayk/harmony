@@ -1,7 +1,11 @@
 import { ApiError } from "@repo/api-client";
 import { QueryClient, type QueryKey } from "@tanstack/react-query";
 import { describe, expect, it } from "vite-plus/test";
-import { shouldPersistQuery } from "./query-persistence";
+import {
+	parsePersistedClient,
+	QUERY_CACHE_BUSTER,
+	shouldPersistQuery,
+} from "./query-persistence";
 
 function query(queryKey: unknown[]) {
 	const client = new QueryClient();
@@ -57,5 +61,34 @@ describe("shouldPersistQuery", () => {
 			}),
 		});
 		expect(shouldPersistQuery(gone)).toBe(false);
+	});
+});
+
+describe("parsePersistedClient", () => {
+	const saved = {
+		timestamp: 1_700_000_000_000,
+		buster: QUERY_CACHE_BUSTER,
+		clientState: { queries: [{ queryKey: ["library"] }], mutations: [] },
+	};
+
+	it("restores a saved cache as it was written", () => {
+		expect(parsePersistedClient(saved)).toBe(saved);
+	});
+
+	it("drops a missing, old or corrupt save instead of throwing", () => {
+		for (const value of [
+			undefined,
+			null,
+			"saved",
+			[],
+			{},
+			{ ...saved, timestamp: "yesterday" },
+			{ ...saved, buster: undefined },
+			{ ...saved, clientState: null },
+			{ ...saved, clientState: { queries: {}, mutations: [] } },
+			{ timestamp: saved.timestamp, clientState: saved.clientState },
+		]) {
+			expect(parsePersistedClient(value)).toBeUndefined();
+		}
 	});
 });

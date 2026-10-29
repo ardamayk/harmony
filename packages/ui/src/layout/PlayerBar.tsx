@@ -26,6 +26,7 @@ import {
 	useState,
 } from "react";
 import { createPortal } from "react-dom";
+import { parseRecentPlaylistIds } from "../lib/stored-preferences";
 import { useFocusTrap } from "../lib/use-focus-trap";
 import { cn } from "../lib/utils";
 import { NowPlayingAnnouncer } from "../playback/NowPlayingAnnouncer";
@@ -70,12 +71,9 @@ const RECENT_PLAYLIST_LIMIT = 2;
 function readRecentPlaylistIds(): string[] {
 	if (typeof window === "undefined") return [];
 	try {
-		const raw = window.localStorage.getItem(RECENT_PLAYLISTS_KEY);
-		if (!raw) return [];
-		const parsed = JSON.parse(raw);
-		return Array.isArray(parsed)
-			? parsed.filter((id): id is string => typeof id === "string")
-			: [];
+		return parseRecentPlaylistIds(
+			window.localStorage.getItem(RECENT_PLAYLISTS_KEY),
+		);
 	} catch {
 		return [];
 	}

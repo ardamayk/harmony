@@ -1,7 +1,10 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
+import * as z from "zod";
 
-export type WindowPlacement = { x: number; y: number };
+const windowPlacement = z.object({ x: z.int(), y: z.int() });
+
+export type WindowPlacement = z.infer<typeof windowPlacement>;
 
 /**
  * Remembers where the mini player was last placed, next to the core's
@@ -12,8 +15,10 @@ export class PlacementStore {
 
 	load(): WindowPlacement | null {
 		try {
-			const value: unknown = JSON.parse(readFileSync(this.path, "utf8"));
-			if (isPlacement(value)) return { x: value.x, y: value.y };
+			const parsed = windowPlacement.safeParse(
+				JSON.parse(readFileSync(this.path, "utf8")),
+			);
+			if (parsed.success) return parsed.data;
 		} catch {
 			// Missing or corrupt: no remembered placement.
 		}
@@ -24,10 +29,4 @@ export class PlacementStore {
 		mkdirSync(dirname(this.path), { recursive: true });
 		writeFileSync(this.path, JSON.stringify(placement));
 	}
-}
-
-function isPlacement(value: unknown): value is WindowPlacement {
-	if (typeof value !== "object" || value === null) return false;
-	const { x, y } = value as Record<string, unknown>;
-	return Number.isInteger(x) && Number.isInteger(y);
 }
