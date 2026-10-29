@@ -451,6 +451,30 @@ describe("PlayerBar", () => {
 		expect(screen.getByLabelText("Quality High Quality")).toBeTruthy();
 	});
 
+	it("names the External Source next to the External label", async () => {
+		const { engine } = renderPlayerBar(undefined, undefined, {
+			externalSourceName: "SoundCloud",
+		});
+		await act(async () => {
+			await engine.play({
+				type: "external-track",
+				externalTrack: {
+					id: "external-2",
+					title: "Named Song",
+					artistName: "Artist",
+					durationMs: 90000,
+					webpageUrl: null,
+					extractor: "Soundcloud",
+					hasArtwork: false,
+				},
+				playbackUrl: "/api/v1/external/tracks/external-2/stream",
+				sourceUrl: "/api/v1/external/tracks/external-2/stream",
+			});
+		});
+
+		expect(screen.getByText("External – SoundCloud")).toBeTruthy();
+	});
+
 	it("shows an External Track with a label, seeking only, no favorite and no track actions", async () => {
 		vi.useFakeTimers();
 		try {

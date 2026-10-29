@@ -30,6 +30,7 @@ const mocks = vi.hoisted(() => ({
 	searchExternalSource: vi.fn(),
 	getExternalTrackPlayback: vi.fn(),
 	hasExternalSource: false,
+	externalSourceName: "SoundCloud" as string | undefined,
 	navigate: vi.fn(),
 	playTrack: vi.fn(),
 	playExternalTrack: vi.fn(),
@@ -52,7 +53,7 @@ vi.mock("#/hooks/use-server-capability", () => ({
 	useServerCapability: (capability: string) =>
 		capability === "external-source.v1" && mocks.hasExternalSource,
 	useExternalSourceName: () =>
-		mocks.hasExternalSource ? "SoundCloud" : undefined,
+		mocks.hasExternalSource ? mocks.externalSourceName : undefined,
 }));
 vi.mock("@tanstack/react-router", () => ({
 	useNavigate: () => mocks.navigate,
@@ -140,6 +141,7 @@ describe("LibrarySearchDialog", () => {
 		vi.clearAllMocks();
 		vi.useRealTimers();
 		mocks.hasExternalSource = false;
+		mocks.externalSourceName = "SoundCloud";
 	});
 
 	it("shows no body before a query, only the input row and the footer", () => {
@@ -205,17 +207,17 @@ describe("LibrarySearchDialog", () => {
 				target: { value: "ne" },
 			});
 			await screen.findByText("Nemo mix");
-			expect(screen.queryByRole("group", { name: "External" })).toBeNull();
+			expect(screen.queryByRole("group", { name: "SoundCloud" })).toBeNull();
 			expect(mocks.searchExternalSource).not.toHaveBeenCalled();
 		});
 
-		it("lists External Tracks in their own group after the library groups", async () => {
+		it("lists External Tracks in their own section after the Library section", async () => {
 			mocks.hasExternalSource = true;
 			renderDialog();
 			fireEvent.change(screen.getByRole("combobox"), {
 				target: { value: "ne" },
 			});
-			const external = await screen.findByRole("group", { name: "External" });
+			const external = await screen.findByRole("group", { name: "SoundCloud" });
 			const option = await within(external).findByRole("option", {
 				name: /^Around the World/,
 			});
@@ -227,7 +229,7 @@ describe("LibrarySearchDialog", () => {
 				undefined,
 				expect.any(AbortSignal),
 			);
-			const library = screen.getByRole("region", { name: "From Your Library" });
+			const library = screen.getByRole("group", { name: "Library" });
 			expect(within(library).queryByText("Around the World")).toBeNull();
 			expect(
 				library.compareDocumentPosition(external) &
@@ -257,7 +259,7 @@ describe("LibrarySearchDialog", () => {
 			fireEvent.change(screen.getByRole("combobox"), {
 				target: { value: "ne" },
 			});
-			const external = await screen.findByRole("group", { name: "External" });
+			const external = await screen.findByRole("group", { name: "SoundCloud" });
 			const withCover = await within(external).findByRole("option", {
 				name: /^Around the World/,
 			});
@@ -360,12 +362,12 @@ describe("LibrarySearchDialog", () => {
 			fireEvent.change(screen.getByRole("combobox"), {
 				target: { value: "ne" },
 			});
-			const external = await screen.findByRole("group", { name: "External" });
+			const external = await screen.findByRole("group", { name: "SoundCloud" });
 			expect(
 				(await within(external).findByRole("alert")).textContent,
-			).toContain("External results could not be loaded.");
+			).toContain("SoundCloud results could not be loaded.");
 			expect(screen.getAllByRole("alert")).toHaveLength(1);
-			const library = screen.getByRole("region", { name: "From Your Library" });
+			const library = screen.getByRole("group", { name: "Library" });
 			expect(within(library).getByText("Nemo mix")).toBeTruthy();
 
 			mocks.searchExternalSource.mockResolvedValue({
@@ -389,7 +391,7 @@ describe("LibrarySearchDialog", () => {
 			await act(() => vi.advanceTimersByTimeAsync(200));
 			expect(mocks.searchLibrary).toHaveBeenCalledWith("ne");
 			expect(mocks.searchExternalSource).not.toHaveBeenCalled();
-			const external = screen.getByRole("group", { name: "External" });
+			const external = screen.getByRole("group", { name: "SoundCloud" });
 			expect(within(external).getByText("Searching…")).toBeTruthy();
 			await act(() => vi.advanceTimersByTimeAsync(299));
 			expect(mocks.searchExternalSource).not.toHaveBeenCalled();
@@ -573,7 +575,7 @@ describe("LibrarySearchDialog", () => {
 			fireEvent.change(screen.getByRole("combobox"), {
 				target: { value: "ne" },
 			});
-			await screen.findByText("No External results for “ne”.");
+			await screen.findByText("No results on SoundCloud");
 			expect(mocks.getExternalTrackPlayback).not.toHaveBeenCalled();
 		});
 
@@ -666,6 +668,186 @@ describe("LibrarySearchDialog", () => {
 			expect(mocks.getExternalTrackPlayback).not.toHaveBeenCalled();
 		});
 
+		it("heads both sections alike, the External one with the site's name", async () => {
+			mocks.hasExternalSource = true;
+			renderDialog();
+			fireEvent.change(screen.getByRole("combobox"), {
+				target: { value: "ne" },
+			});
+			const library = await screen.findByRole("group", { name: "Library" });
+			const external = await screen.findByRole("group", { name: "SoundCloud" });
+			const libraryHeader = within(library).getByText("Library");
+			const externalHeader = within(external).getByText(
+				"External – SoundCloud",
+			);
+			expect(libraryHeader.className).toBe(externalHeader.className);
+			expect(libraryHeader.querySelector("svg.lucide-library")).toBeTruthy();
+			expect(externalHeader.querySelector("svg.lucide-globe")).toBeTruthy();
+			// The kinds stay inside the Library section.
+			expect(
+				await within(library).findByRole("group", { name: "Playlist" }),
+			).toBeTruthy();
+			await within(external).findByRole("option", {
+				name: /^Around the World/,
+			});
+		});
+
+		it("falls back to External when the site has no name", async () => {
+			mocks.hasExternalSource = true;
+			mocks.externalSourceName = undefined;
+			mocks.searchExternalSource.mockResolvedValue({
+				source: "scsearch",
+				items: [],
+			});
+			renderDialog();
+			fireEvent.change(screen.getByRole("combobox"), {
+				target: { value: "ne" },
+			});
+			const external = await screen.findByRole("group", { name: "External" });
+			expect(within(external).getByText("External")).toBeTruthy();
+			expect(
+				await within(external).findByText("No External results"),
+			).toBeTruthy();
+		});
+
+		it("says the library has no matches in its section while External results show", async () => {
+			mocks.hasExternalSource = true;
+			mocks.searchLibrary.mockResolvedValue(empty);
+			renderDialog();
+			fireEvent.change(screen.getByRole("combobox"), {
+				target: { value: "re" },
+			});
+			const library = await screen.findByRole("group", { name: "Library" });
+			const line = await within(library).findByText(
+				"No matches in your library",
+			);
+			expect(line.tagName).toBe("P");
+			expect(line.className).not.toMatch(/text-center|py-6/);
+			const external = screen.getByRole("group", { name: "SoundCloud" });
+			await within(external).findByRole("option", {
+				name: /^Around the World/,
+			});
+			expect(within(external).queryByText(/No results/)).toBeNull();
+			expect(
+				library.compareDocumentPosition(external) &
+					Node.DOCUMENT_POSITION_FOLLOWING,
+			).toBeTruthy();
+		});
+
+		it("counts each source in the header", async () => {
+			mocks.hasExternalSource = true;
+			mocks.searchLibrary.mockResolvedValue(empty);
+			mocks.searchExternalSource.mockResolvedValue({
+				source: "scsearch",
+				items: [daftPunk, { ...daftPunk, id: "second", title: "Da Funk" }],
+			});
+			renderDialog();
+			fireEvent.change(screen.getByRole("combobox"), {
+				target: { value: "re" },
+			});
+			await screen.findByRole("option", { name: /^Da Funk/ });
+			const count = screen.getByRole("status");
+			expect(count.tagName).toBe("OUTPUT");
+			await waitFor(() =>
+				expect(count.textContent).toBe("0 in library\u00a0· 2 on SoundCloud"),
+			);
+			// A narrow card keeps only the library count.
+			expect(count.lastElementChild?.className).toContain("hidden");
+			expect(count.lastElementChild?.className).toContain("@lg:inline");
+		});
+
+		it("counts unnamed External results without a site", async () => {
+			mocks.hasExternalSource = true;
+			mocks.externalSourceName = undefined;
+			mocks.searchLibrary.mockResolvedValue({ ...empty, tracks: [nemo] });
+			renderDialog();
+			fireEvent.change(screen.getByRole("combobox"), {
+				target: { value: "ne" },
+			});
+			await screen.findByRole("option", { name: /^Around the World/ });
+			await waitFor(() =>
+				expect(screen.getByRole("status").textContent).toBe(
+					"1 in library\u00a0· 1 external",
+				),
+			);
+		});
+
+		it("counts the library alone while External results load", async () => {
+			mocks.hasExternalSource = true;
+			mocks.searchExternalSource.mockImplementation(
+				() => new Promise(() => {}),
+			);
+			mocks.searchLibrary.mockResolvedValue({ ...empty, tracks: [nemo] });
+			renderDialog();
+			fireEvent.change(screen.getByRole("combobox"), {
+				target: { value: "ne" },
+			});
+			await screen.findByText("Nemo");
+			expect(screen.getByRole("status").textContent).toBe("1 in library");
+		});
+
+		it("moves across both sections with the arrow keys, wrapping at the ends", async () => {
+			mocks.hasExternalSource = true;
+			mocks.searchLibrary.mockResolvedValue({ ...empty, tracks: [nemo] });
+			const second = { ...daftPunk, id: "second.signature", title: "Da Funk" };
+			mocks.searchExternalSource.mockResolvedValue({
+				source: "scsearch",
+				items: [daftPunk, second],
+			});
+			renderDialog(vi.fn(), withoutFirstPrefetch);
+			const input = screen.getByRole("combobox");
+			fireEvent.change(input, { target: { value: "ne" } });
+			await screen.findByRole("option", { name: /^Da Funk/ });
+			const library = screen.getByRole("group", { name: "Library" });
+			const external = screen.getByRole("group", { name: "SoundCloud" });
+			const active = () => {
+				const id = input.getAttribute("aria-activedescendant");
+				const option = id ? document.getElementById(id) : null;
+				expect(option?.getAttribute("aria-selected")).toBe("true");
+				expect(screen.getAllByRole("option", { selected: true })).toEqual([
+					option,
+				]);
+				return option;
+			};
+			expect(library.contains(active())).toBe(true);
+			fireEvent.keyDown(input, { key: "ArrowDown" });
+			expect(
+				within(external).getByRole("option", { name: /^Around the World/ }),
+			).toBe(active());
+			fireEvent.keyDown(input, { key: "ArrowDown" });
+			expect(within(external).getByRole("option", { name: /^Da Funk/ })).toBe(
+				active(),
+			);
+			fireEvent.keyDown(input, { key: "ArrowDown" });
+			expect(library.contains(active())).toBe(true);
+			fireEvent.keyDown(input, { key: "ArrowUp" });
+			expect(within(external).getByRole("option", { name: /^Da Funk/ })).toBe(
+				active(),
+			);
+			expect(document.activeElement).toBe(input);
+		});
+
+		it("shows an External failure inside its section", async () => {
+			mocks.hasExternalSource = true;
+			mocks.searchLibrary.mockResolvedValue(empty);
+			mocks.searchExternalSource.mockRejectedValue(new Error("boom"));
+			renderDialog();
+			fireEvent.change(screen.getByRole("combobox"), {
+				target: { value: "re" },
+			});
+			const external = await screen.findByRole("group", { name: "SoundCloud" });
+			const alert = await within(external).findByRole("alert");
+			expect(alert.textContent).toContain(
+				"SoundCloud results could not be loaded.",
+			);
+			expect(within(alert).getByRole("button", { name: "Retry" })).toBeTruthy();
+			const library = screen.getByRole("group", { name: "Library" });
+			expect(
+				await within(library).findByText("No matches in your library"),
+			).toBeTruthy();
+			expect(screen.getByRole("status").textContent).toBe("0 in library");
+		});
+
 		it("shows its own loading and empty states", async () => {
 			mocks.hasExternalSource = true;
 			let finish!: (value: { source: string; items: ExternalTrack[] }) => void;
@@ -679,7 +861,7 @@ describe("LibrarySearchDialog", () => {
 			fireEvent.change(screen.getByRole("combobox"), {
 				target: { value: "ne" },
 			});
-			const external = await screen.findByRole("group", { name: "External" });
+			const external = await screen.findByRole("group", { name: "SoundCloud" });
 			await screen.findByText("Nemo mix");
 			expect(within(external).getByText("Searching…")).toBeTruthy();
 			await waitFor(() =>
@@ -688,7 +870,7 @@ describe("LibrarySearchDialog", () => {
 			expect(within(external).getByText("Searching…")).toBeTruthy();
 			await act(async () => finish({ source: "scsearch", items: [] }));
 			expect(
-				await within(external).findByText("No External results for “ne”."),
+				await within(external).findByText("No results on SoundCloud"),
 			).toBeTruthy();
 		});
 	});
@@ -699,9 +881,7 @@ describe("LibrarySearchDialog", () => {
 			target: { value: "ne" },
 		});
 
-		const section = await screen.findByRole("region", {
-			name: "From Your Library",
-		});
+		const section = await screen.findByRole("group", { name: "Library" });
 		// The coherent response preserves server ordering.
 		await within(section).findByText("Nemo mix");
 		const labels = within(section)
@@ -904,13 +1084,19 @@ describe("LibrarySearchDialog", () => {
 		).toBeNull();
 	});
 
-	it("tells the user when nothing matches", async () => {
+	it("tells the user when nothing matches, in the Library section", async () => {
 		mocks.searchLibrary.mockResolvedValue(empty);
 		renderDialog();
 		fireEvent.change(screen.getByRole("combobox"), {
 			target: { value: "zzz" },
 		});
-		expect(await screen.findByText(/matches “zzz”/)).toBeTruthy();
+		const library = await screen.findByRole("group", { name: "Library" });
+		expect(within(library).getByText("Library")).toBeTruthy();
+		expect(
+			await within(library).findByText("No matches in your library"),
+		).toBeTruthy();
+		expect(screen.getAllByRole("group")).toEqual([library]);
+		expect(screen.getByRole("status").textContent).toBe("0 results");
 	});
 
 	it("shows failures instead of empty results and retries the search", async () => {
@@ -923,7 +1109,7 @@ describe("LibrarySearchDialog", () => {
 			"textContent",
 			"Search results could not be loaded.Retry",
 		);
-		expect(screen.queryByText(/Nothing in your library/)).toBeNull();
+		expect(screen.queryByText(/No matches in your library/)).toBeNull();
 		mocks.searchLibrary.mockResolvedValue(results);
 		fireEvent.click(screen.getByRole("button", { name: "Retry" }));
 		await screen.findByText("Nemo");
@@ -942,7 +1128,7 @@ describe("LibrarySearchDialog", () => {
 		expect(screen.queryAllByRole("option")).toHaveLength(0);
 		fireEvent.keyDown(input, { key: "Enter" });
 		expect(mocks.playTrack).not.toHaveBeenCalled();
-		expect(await screen.findByText(/matches “zzz”/)).toBeTruthy();
+		expect(await screen.findByText("No matches in your library")).toBeTruthy();
 	});
 
 	it.each(["track", "album", "artist", "genre", "playlist"] as const)(
@@ -1113,7 +1299,7 @@ describe("LibrarySearchDialog", () => {
 			"Search results could not be refreshed.Retry",
 		);
 		expect(screen.getByText("Nemo")).toBeTruthy();
-		expect(screen.queryByText(/Nothing in your library/)).toBeNull();
+		expect(screen.queryByText(/No matches in your library/)).toBeNull();
 	});
 
 	it("refreshes cached search results after a Playlist mutation", async () => {

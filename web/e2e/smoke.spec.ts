@@ -59,7 +59,7 @@ test("library search opens from the top nav and groups results", async ({
 	const dialog = page.getByTestId("library-search-dialog");
 	await expect(dialog).toBeVisible();
 	await dialog.getByRole("combobox").fill("a");
-	await expect(dialog.getByText("From Your Library")).toBeVisible();
+	await expect(dialog.getByRole("group", { name: "Library" })).toBeVisible();
 });
 
 test("now playing widget shows empty state", async ({ page }) => {

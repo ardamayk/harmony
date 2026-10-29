@@ -17,6 +17,7 @@ import {
 	CornerDownLeft,
 	Disc3,
 	Globe,
+	Library,
 	ListMusic,
 	ListPlus,
 	LoaderCircle,
@@ -126,10 +127,11 @@ function subscribeToNothing(): () => void {
 
 /**
  * Searches every library surface at once: Tracks, Albums, Artists, Genres and
- * Playlists. Results are grouped under "From Your Library"; choosing a track
- * plays it, anything else opens its page. When the Music Server offers the
- * External Source, its results follow in their own "External" group, which
- * loads and fails on its own.
+ * Playlists. Results are grouped by kind inside the "Library" section;
+ * choosing a track plays it, anything else opens its page. When the Music
+ * Server offers the External Source, its results follow in a parallel section
+ * named after the site (e.g. "YouTube", else "External"), which loads, fails
+ * and empties on its own.
  */
 export function LibrarySearchDialog({
 	open,
@@ -437,6 +439,14 @@ export function LibrarySearchDialog({
 	const externalFailed = canShowExternal && externalSearch.isError;
 	const isSearchingExternal =
 		showExternalGroup && (isDebouncingExternal || externalSearch.isFetching);
+	const externalLabel = externalSourceName ?? "External";
+	const externalHeader = externalSourceName
+		? `External – ${externalSourceName}`
+		: "External";
+	const externalCount =
+		canShowExternal && externalSearch.isSuccess
+			? externalResults.length
+			: undefined;
 
 	const resultCount =
 		canShowResults && search.data
@@ -638,8 +648,9 @@ export function LibrarySearchDialog({
 			>
 				<DialogTitle className="sr-only">{searchLabel}</DialogTitle>
 				{/* Covers the top bar's search field it opens over; its bottom
-				    border lies on the top bar's (library-search-row in styles.css). */}
-				<div className="library-search-row flex shrink-0 items-center gap-3 border-border border-b px-4">
+				    border lies on the top bar's (library-search-row in styles.css).
+				    A container: the card is as wide as that field, not the window. */}
+				<div className="library-search-row @container flex shrink-0 items-center gap-3 border-border border-b px-4">
 					<Search className="size-5 shrink-0 text-caption" />
 					<input
 						ref={inputRef}
@@ -663,8 +674,30 @@ export function LibrarySearchDialog({
 						onKeyDown={onInputKeyDown}
 						className="min-w-0 flex-1 self-stretch bg-transparent text-base outline-none placeholder:text-muted-foreground [&::-webkit-search-cancel-button]:appearance-none"
 					/>
-					{resultCount !== undefined ? (
-						<output className="flex h-8 shrink-0 items-center rounded-sm border border-border px-3 text-caption text-xs">
+					{hasExternalSource ? (
+						resultCount !== undefined || externalCount !== undefined ? (
+							<output className="flex h-8 shrink-0 items-center rounded-sm border border-border px-3 text-caption text-xs tabular-nums">
+								{resultCount !== undefined ? (
+									<span>{resultCount} in library</span>
+								) : null}
+								{externalCount !== undefined ? (
+									// A narrow card keeps the library count; the External one
+									// stays in its section.
+									<span
+										className={cn(
+											resultCount !== undefined && "hidden @lg:inline",
+										)}
+									>
+										{resultCount !== undefined ? " · " : ""}
+										{externalSourceName
+											? `${externalCount} on ${externalSourceName}`
+											: `${externalCount} external`}
+									</span>
+								) : null}
+							</output>
+						) : null
+					) : resultCount !== undefined ? (
+						<output className="flex h-8 shrink-0 items-center rounded-sm border border-border px-3 text-caption text-xs tabular-nums">
 							{resultCount} {resultCount === 1 ? "result" : "results"}
 						</output>
 					) : null}
@@ -686,40 +719,42 @@ export function LibrarySearchDialog({
 					{/* No query, no body: just the input row and the footer. */}
 					<div
 						ref={measureResults}
-						className={cn("flow-root", hasQuery && "p-3 sm:p-4")}
+						className={cn(
+							"flow-root",
+							hasQuery && "flex flex-col gap-6 p-3 sm:p-4",
+						)}
 					>
-						{failed ? (
-							<div role="alert" className="px-3 py-3 text-sm">
-								<p>
-									{libraryResults.length > 0
-										? "Search results could not be refreshed."
-										: "Search results could not be loaded."}
-								</p>
-								<button
-									type="button"
-									className="mt-2 underline"
-									disabled={isSearching}
-									onClick={() => {
-										void search.refetch();
-									}}
-								>
-									Retry
-								</button>
-							</div>
-						) : null}
-						{showEmpty ? (
-							<p className="px-3 py-6 text-center text-caption text-sm">
-								Nothing in your library matches “{debouncedQuery}”.
-							</p>
-						) : null}
-						{isSearching && libraryResults.length === 0 ? (
-							<p className="px-3 py-6 text-center text-caption text-sm">
-								Searching…
-							</p>
-						) : null}
-						{groups.length > 0 ? (
-							<section aria-label="From Your Library">
-								<p className="sr-only">From Your Library</p>
+						{hasQuery ? (
+							// biome-ignore lint/a11y/useSemanticElements: listbox option groups are not form fieldsets.
+							<div role="group" aria-label="Library">
+								<SectionHeader icon={Library} label="Library" />
+								{failed ? (
+									<div role="alert" className="px-3 py-2 text-sm">
+										<p>
+											{libraryResults.length > 0
+												? "Search results could not be refreshed."
+												: "Search results could not be loaded."}
+										</p>
+										<button
+											type="button"
+											className="mt-2 underline"
+											disabled={isSearching}
+											onClick={() => {
+												void search.refetch();
+											}}
+										>
+											Retry
+										</button>
+									</div>
+								) : null}
+								{showEmpty ? (
+									<p className="px-3 py-2 text-caption text-sm">
+										No matches in your library
+									</p>
+								) : null}
+								{isSearching && libraryResults.length === 0 ? (
+									<p className="px-3 py-2 text-caption text-sm">Searching…</p>
+								) : null}
 								{groups.map((group) => (
 									// biome-ignore lint/a11y/useSemanticElements: listbox option groups are not form fieldsets.
 									<div
@@ -739,15 +774,12 @@ export function LibrarySearchDialog({
 										</ul>
 									</div>
 								))}
-							</section>
+							</div>
 						) : null}
 						{showExternalGroup ? (
 							// biome-ignore lint/a11y/useSemanticElements: listbox option groups are not form fieldsets.
-							<div role="group" aria-label="External" className="pt-3">
-								<p className="flex items-center gap-2 px-3 py-2 font-medium text-caption text-xs uppercase tracking-wider">
-									<Globe className="size-3.5" />
-									External
-								</p>
+							<div role="group" aria-label={externalLabel}>
+								<SectionHeader icon={Globe} label={externalHeader} />
 								{externalResults.length > 0 ? (
 									<ul className="flex flex-col">
 										{externalResults.map((result) =>
@@ -757,7 +789,7 @@ export function LibrarySearchDialog({
 								) : null}
 								{externalFailed ? (
 									<div role="alert" className="px-3 py-2 text-sm">
-										<p>External results could not be loaded.</p>
+										<p>{externalLabel} results could not be loaded.</p>
 										<button
 											type="button"
 											className="mt-2 underline"
@@ -773,7 +805,9 @@ export function LibrarySearchDialog({
 									<p className="px-3 py-2 text-caption text-sm">Searching…</p>
 								) : externalSearch.isSuccess && externalResults.length === 0 ? (
 									<p className="px-3 py-2 text-caption text-sm">
-										No External results for “{externalQuery}”.
+										{externalSourceName
+											? `No results on ${externalSourceName}`
+											: "No External results"}
 									</p>
 								) : null}
 							</div>
@@ -828,6 +862,26 @@ export function LibrarySearchDialog({
 				</div>
 			</DialogContent>
 		</Dialog>
+	);
+}
+
+/**
+ * A source section's header: Library or the External Source. It keeps its
+ * case, unlike the uppercase kind headers inside the Library section, so the
+ * two levels read apart.
+ */
+function SectionHeader({
+	icon: Icon,
+	label,
+}: {
+	icon: typeof Music2;
+	label: string;
+}) {
+	return (
+		<p className="flex items-center gap-2 px-3 py-2 font-medium text-caption text-xs">
+			<Icon className="size-3.5" />
+			{label}
+		</p>
 	);
 }
 

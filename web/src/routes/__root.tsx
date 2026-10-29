@@ -30,7 +30,10 @@ import { toggleMiniPlayer } from "#/desktop/mini-player-bridge";
 import { desktopWindowControls } from "#/desktop/window-controls";
 import { useFavoriteRadioStations } from "#/hooks/use-favorite-radio-stations";
 import { useFavoriteTracks } from "#/hooks/use-favorite-tracks";
-import { useServerCapability } from "#/hooks/use-server-capability";
+import {
+	useExternalSourceName,
+	useServerCapability,
+} from "#/hooks/use-server-capability";
 import { apiClient } from "#/lib/api";
 import { isMiniPlayerRoute } from "#/lib/mini-player-route";
 import { createPlaybackApi } from "#/lib/playback-api";
@@ -51,6 +54,7 @@ function PlayerBarWithSync() {
 	const { isStationFavorite, toggleStationFavorite } =
 		useFavoriteRadioStations();
 	const canShowWaveform = useServerCapability(TRACK_WAVEFORM_CAPABILITY);
+	const externalSourceName = useExternalSourceName();
 	return (
 		<PlayerBar
 			onPlaylistMutated={() => {
@@ -69,6 +73,7 @@ function PlayerBarWithSync() {
 			}
 			windowControls={isDesktopClient() ? desktopWindowControls : undefined}
 			canShowWaveform={canShowWaveform}
+			externalSourceName={externalSourceName}
 		/>
 	);
 }

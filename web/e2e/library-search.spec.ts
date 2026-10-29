@@ -181,7 +181,9 @@ test("cached absence becomes imported Track; Enter decodes audio; Album navigati
 	expect(deleted.bestMatch).toBeUndefined();
 	expect(deleted.tracks).toEqual([]);
 	await expect(
-		searchDialog(page).getByText(`Nothing in your library matches “${title}”.`),
+		searchDialog(page)
+			.getByRole("group", { name: "Library" })
+			.getByText("No matches in your library"),
 	).toBeVisible();
 	expect(
 		(await request.get(`/api/v1/tracks/${track.id}/stream`)).status(),
