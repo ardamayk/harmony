@@ -20,6 +20,12 @@ const REQUIRED_SERVER_CAPABILITIES: &[&str] = &[
     "managed-track-replacement.v1",
 ];
 const MAX_RESPONSE_BYTES: usize = 32 * 1024 * 1024;
+/// Deadline for an ordinary renderer API request.
+const API_REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
+/// Deadline for External Source search and playback resolution. The Music
+/// Server gives yt-dlp up to 20 s to search and 30 s to resolve, after waiting
+/// for one of its two yt-dlp permits, so these outlast the ordinary deadline.
+const EXTERNAL_SOURCE_REQUEST_TIMEOUT: Duration = Duration::from_secs(75);
 const ALLOWED_REQUEST_HEADERS: &[&str] = &[
     "accept",
     "authorization",
@@ -186,7 +192,7 @@ impl HttpBridge {
     fn build(max_response_bytes: usize) -> Result<Self, ConnectionError> {
         let client = reqwest::Client::builder()
             .connect_timeout(Duration::from_secs(3))
-            .timeout(Duration::from_secs(10))
+            .timeout(API_REQUEST_TIMEOUT)
             .redirect(Policy::none())
             .build()
             .map_err(|_| {
@@ -302,17 +308,11 @@ impl HttpBridge {
             ));
         }
 
-        // Batch confirmation rechecks and commits every selected file before
-        // responding, so it can outlast the ordinary API request deadline.
-        let client = if method == reqwest::Method::POST
-            && url.path().starts_with("/api/v1/import-batches/")
-            && url.path().ends_with("/confirm")
-        {
-            &self.streaming_client
-        } else {
-            &self.client
+        let timeout = api_request_timeout(&method, url.path());
+        let mut outgoing = match timeout {
+            Some(timeout) => self.client.request(method, url).timeout(timeout),
+            None => self.streaming_client.request(method, url),
         };
-        let mut outgoing = client.request(method, url);
         for (name, value) in request.headers {
             if !ALLOWED_REQUEST_HEADERS.contains(&name.to_ascii_lowercase().as_str()) {
                 return Err(ConnectionError::new(
@@ -542,6 +542,32 @@ impl HttpBridge {
     }
 }
 
+/// The deadline for one renderer API request sent through
+/// [`HttpBridge::send`], or `None` when it waits for the Music Server's answer
+/// however long it takes. Media goes through the media proxy instead, which
+/// has no overall deadline.
+fn api_request_timeout(method: &reqwest::Method, path: &str) -> Option<Duration> {
+    // Batch confirmation rechecks and commits every selected file before
+    // responding, so it can outlast the ordinary API request deadline.
+    if method == reqwest::Method::POST
+        && path.starts_with("/api/v1/import-batches/")
+        && path.ends_with("/confirm")
+    {
+        return None;
+    }
+    let segments = path.split('/').collect::<Vec<_>>();
+    let is_external_source_lookup = match segments.as_slice() {
+        ["", "api", "v1", "external", "search"] => true,
+        ["", "api", "v1", "external", "tracks", track_id, "playback"] => !track_id.is_empty(),
+        _ => false,
+    };
+    if is_external_source_lookup {
+        Some(EXTERNAL_SOURCE_REQUEST_TIMEOUT)
+    } else {
+        Some(API_REQUEST_TIMEOUT)
+    }
+}
+
 /// Cancellation of in-flight renderer HTTP requests, by the renderer's
 /// request ID. A cancel for an ID that is not in flight does nothing, so the
 /// shell registers a request before it reads the next command (see `run`).
@@ -655,8 +681,8 @@ impl ConnectionStore {
 #[cfg(test)]
 mod tests {
     use super::{
-        ConnectionErrorCode, ConnectionStore, HttpBridge, HttpRequest, HttpRequestCancellations,
-        ServerOrigin,
+        API_REQUEST_TIMEOUT, ConnectionErrorCode, ConnectionStore, EXTERNAL_SOURCE_REQUEST_TIMEOUT,
+        HttpBridge, HttpRequest, HttpRequestCancellations, ServerOrigin, api_request_timeout,
     };
     use std::collections::BTreeMap;
     use std::fs;
@@ -1316,6 +1342,48 @@ mod tests {
                 .expect("server sees the connection end")
                 .expect("server thread reports"),
             "the outgoing request's connection must be closed"
+        );
+    }
+
+    #[test]
+    fn api_request_timeout_is_chosen_by_path() {
+        let get = reqwest::Method::GET;
+        let post = reqwest::Method::POST;
+        let ordinary = Some(API_REQUEST_TIMEOUT);
+        let external = Some(EXTERNAL_SOURCE_REQUEST_TIMEOUT);
+        assert!(EXTERNAL_SOURCE_REQUEST_TIMEOUT > API_REQUEST_TIMEOUT);
+
+        assert_eq!(
+            api_request_timeout(&get, "/api/v1/external/search"),
+            external
+        );
+        assert_eq!(
+            api_request_timeout(&get, "/api/v1/external/tracks/track-1/playback"),
+            external
+        );
+        assert_eq!(
+            api_request_timeout(&get, "/api/v1/library/tracks"),
+            ordinary
+        );
+        assert_eq!(
+            api_request_timeout(&get, "/api/v1/external/tracks//playback"),
+            ordinary
+        );
+        assert_eq!(
+            api_request_timeout(&get, "/api/v1/external/tracks/track-1/playback/extra"),
+            ordinary
+        );
+        assert_eq!(
+            api_request_timeout(&get, "/api/v1/external/tracks/track-1/artwork"),
+            ordinary
+        );
+        assert_eq!(
+            api_request_timeout(&post, "/api/v1/import-batches/batch-1/confirm"),
+            None
+        );
+        assert_eq!(
+            api_request_timeout(&get, "/api/v1/import-batches/batch-1/confirm"),
+            ordinary
         );
     }
 
