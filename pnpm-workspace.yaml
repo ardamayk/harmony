@@ -16,6 +16,9 @@ overrides:
   postcss: 8.5.26
   postcss-selector-parser: 7.1.6
   seroval: 1.6.11
+  # @scalar/api-reference pins a vulnerable undici for its Node-only loaders;
+  # the served browser bundle does not include it.
+  "@scalar/json-magic>undici": 7.30.1
   vite: "catalog:"
 
 # Packages whose install scripts may run.
@@ -25,3 +28,6 @@ allowBuilds:
   # electron-builder's Squirrel.Windows maker; the Windows build uses the
   # `dir` target, so its 7-Zip selection script never needs to run.
   electron-winstaller: false
+  # Pulled in by @scalar/api-reference; only its prebuilt browser bundle is
+  # served, so the Vue 2/3 switch script never needs to run.
+  vue-demi: false
