@@ -45,6 +45,7 @@ pub fn metadata_from_preview(file: &PreviewFile, album_key: &str) -> NormalizedM
         title: file.title.clone(),
         artists: file.artists.clone().unwrap_or_default(),
         album_artists: file.album_artists.clone().unwrap_or_default(),
+        album_artists_from_artists: !file.album_artist_warning.is_empty(),
         album: file.album.clone(),
         album_identity_key: album_key.to_owned(),
         track_position: MediaPosition {

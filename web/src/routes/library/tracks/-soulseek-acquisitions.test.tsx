@@ -340,6 +340,33 @@ describe("Soulseek Acquisitions in Import Music", () => {
 			).toBe(false);
 		});
 
+		it("notes a file whose Album Artist came from its Artist tag", async () => {
+			const notice =
+				"No Album Artist tag; the Artist tag is used as the Album Artist";
+			const [file] = reviewBatch.files;
+			mocks.getManagedImportBatch.mockResolvedValue({
+				...reviewBatch,
+				files: [
+					{
+						...file,
+						preview: {
+							...file?.preview,
+							file: { ...file?.preview?.file, albumArtistWarning: notice },
+						},
+					},
+				],
+			} as never);
+			renderImportDialog();
+			fireEvent.click(
+				await screen.findByRole("button", { name: "Review import" }),
+			);
+
+			const preview = await screen.findByRole("region", {
+				name: "Import Preview",
+			});
+			expect(within(preview).getByText(notice)).toBeTruthy();
+		});
+
 		it("never cancels the acquisition when the dialog closes", async () => {
 			const { onOpenChange } = renderImportDialog();
 			fireEvent.click(

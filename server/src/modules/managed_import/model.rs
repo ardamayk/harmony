@@ -198,6 +198,10 @@ pub struct PreviewFile {
     pub size_bytes: i64,
     #[serde(skip_serializing_if = "String::is_empty")]
     pub artwork_warning: String,
+    /// Set when the file has no Album Artist tag and its Artist credits
+    /// stand in for it.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub album_artist_warning: String,
     pub original_filename: String,
     pub title: String,
     pub artists: Option<Vec<String>>,

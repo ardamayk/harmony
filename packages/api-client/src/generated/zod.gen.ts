@@ -229,6 +229,7 @@ export const zManagedImportPreviewFileCommon = z.object({
     contentSha256: z.string().optional(),
     sizeBytes: z.coerce.bigint().min(BigInt('-9223372036854775808'), { error: 'Invalid value: Expected int64 to be >= -9223372036854775808' }).max(BigInt('9223372036854775807'), { error: 'Invalid value: Expected int64 to be <= 9223372036854775807' }).optional(),
     artworkWarning: z.string().optional(),
+    albumArtistWarning: z.string().optional(),
     originalFilename: z.string(),
     title: z.string(),
     artists: z.array(z.string()).min(1),

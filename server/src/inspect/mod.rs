@@ -23,7 +23,9 @@ use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
 
 pub use errors::Issue;
-pub use metadata::{MediaPosition, NormalizedMetadata, ReplayGain};
+pub use metadata::{
+    ALBUM_ARTIST_FROM_ARTIST_WARNING, MediaPosition, NormalizedMetadata, ReplayGain,
+};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct AlbumArtwork {

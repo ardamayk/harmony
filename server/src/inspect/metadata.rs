@@ -8,6 +8,8 @@ use unicode_normalization::UnicodeNormalization;
 
 pub const MAX_IDENTITY_VALUE_BYTES: usize = 200;
 pub const MAX_MEDIA_POSITION: i64 = 9999;
+pub const ALBUM_ARTIST_FROM_ARTIST_WARNING: &str =
+    "No Album Artist tag; the Artist tag is used as the Album Artist";
 
 /// Raw tag values by upper-case key, in file order.
 pub type Tags = HashMap<String, Vec<String>>;
@@ -82,6 +84,9 @@ pub struct NormalizedMetadata {
     pub title: String,
     pub artists: Vec<String>,
     pub album_artists: Vec<String>,
+    /// The file has no Album Artist tag, so `album_artists` holds its Artist
+    /// credits.
+    pub album_artists_from_artists: bool,
     pub album: String,
     pub track_position: MediaPosition,
     pub disc_position: MediaPosition,
@@ -160,7 +165,14 @@ pub fn split_genre_tag_values<S: AsRef<str>>(values: &[S]) -> Vec<String> {
 pub fn normalize(tags: &Tags, replay_gain: ReplayGain) -> Result<NormalizedMetadata> {
     let title = required_single_tag(tags, "TITLE");
     let artists = required_artist_credits(tags, "ARTIST");
-    let album_artists = required_artist_credits(tags, "ALBUMARTIST");
+    // A missing or blank Album Artist falls back to the file's own Artist
+    // credits; a missing Artist is reported once, under ARTIST.
+    let album_artists_from_artists = artist_credits_absent(tags, "ALBUMARTIST");
+    let album_artists = if album_artists_from_artists {
+        artists.clone().or_else(|_| Ok(Vec::new()))
+    } else {
+        required_artist_credits(tags, "ALBUMARTIST")
+    };
     let album = required_single_tag(tags, "ALBUM");
     let genres = split_genre_tag_values(tags.get("GENRE").map_or(&[][..], Vec::as_slice));
     let track = track_position(tags);
@@ -183,6 +195,7 @@ pub fn normalize(tags: &Tags, replay_gain: ReplayGain) -> Result<NormalizedMetad
         title: title?,
         artists: artists?,
         album_artists: album_artists?,
+        album_artists_from_artists,
         album: album?,
         track_position: track?,
         disc_position: disc?,
@@ -214,12 +227,23 @@ fn optional_lyrics(tags: &Tags) -> String {
     String::new()
 }
 
-fn required_artist_credits(tags: &Tags, key: &str) -> Result<Vec<String>> {
+fn artist_credits_key(tags: &Tags, key: &str) -> String {
     let plural = format!("{key}S");
     if tags.contains_key(&plural) {
-        return required_tags(tags, &plural);
+        plural
+    } else {
+        key.to_owned()
     }
-    required_tags(tags, key)
+}
+
+fn required_artist_credits(tags: &Tags, key: &str) -> Result<Vec<String>> {
+    required_tags(tags, &artist_credits_key(tags, key))
+}
+
+/// Whether the credits under `key` are missing or hold only blank values.
+fn artist_credits_absent(tags: &Tags, key: &str) -> bool {
+    tags.get(&artist_credits_key(tags, key))
+        .is_none_or(|values| values.iter().all(|value| value.trim().is_empty()))
 }
 
 fn required_single_tag(tags: &Tags, key: &str) -> Result<String> {
@@ -502,10 +526,6 @@ mod tests {
             [
                 ("TITLE".to_owned(), "expected exactly one value".to_owned()),
                 ("ARTIST".to_owned(), "required tag is missing".to_owned()),
-                (
-                    "ALBUMARTIST".to_owned(),
-                    "required tag is missing".to_owned()
-                ),
                 ("ALBUM".to_owned(), "required tag is missing".to_owned()),
                 (
                     "TRACKNUMBER".to_owned(),
@@ -513,6 +533,41 @@ mod tests {
                 ),
             ]
         );
+    }
+
+    #[test]
+    fn a_missing_or_blank_album_artist_falls_back_to_the_artist() {
+        let without: Vec<_> = complete()
+            .into_iter()
+            .filter(|(key, _)| *key != "ALBUMARTIST")
+            .collect();
+        let metadata = normalize(&tags(&without), ReplayGain::default()).unwrap();
+        assert_eq!(metadata.album_artists, ["Artist"]);
+        assert!(metadata.album_artists_from_artists);
+
+        let mut blank = without.clone();
+        blank.push(("ALBUMARTIST", "  "));
+        blank.push(("ARTISTS", "One"));
+        blank.push(("ARTISTS", "Two"));
+        let metadata = normalize(&tags(&blank), ReplayGain::default()).unwrap();
+        assert_eq!(metadata.album_artists, ["One", "Two"]);
+        assert!(metadata.album_artists_from_artists);
+
+        let tagged = normalize(&tags(&complete()), ReplayGain::default()).unwrap();
+        assert_eq!(tagged.album_artists, ["Album Artist"]);
+        assert!(!tagged.album_artists_from_artists);
+
+        let no_artist: Vec<_> = without
+            .into_iter()
+            .filter(|(key, _)| *key != "ARTIST")
+            .collect();
+        let failure = normalize(&tags(&no_artist), ReplayGain::default()).unwrap_err();
+        let fields: Vec<_> = failure
+            .issues()
+            .into_iter()
+            .map(|issue| issue.field)
+            .collect();
+        assert_eq!(fields, ["ARTIST"]);
     }
 
     #[test]

@@ -3056,6 +3056,9 @@ components:
           format: int64
         artworkWarning:
           type: string
+        albumArtistWarning:
+          type: string
+          description: Present when the file has no Album Artist tag and its Artist tag is used as the Album Artist.
         originalFilename:
           type: string
         title:

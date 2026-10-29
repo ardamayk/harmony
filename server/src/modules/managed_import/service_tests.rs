@@ -290,6 +290,120 @@ async fn confirms_a_batch_with_album_previews() {
     assert_eq!(history.items[0].files[0].file_id, client_file_id);
 }
 
+/// The fixture FLAC with its Vorbis comments replaced by `comments`.
+fn flac_with_comments(comments: &[&str]) -> Vec<u8> {
+    let mut out = FLAC[..4].to_vec();
+    let mut position = 4;
+    loop {
+        let header = FLAC[position];
+        let length = u32::from_be_bytes([
+            0,
+            FLAC[position + 1],
+            FLAC[position + 2],
+            FLAC[position + 3],
+        ]) as usize;
+        if header & 0x7f == 4 {
+            let mut comment_block = Vec::new();
+            comment_block.extend_from_slice(&0u32.to_le_bytes());
+            comment_block.extend_from_slice(&(comments.len() as u32).to_le_bytes());
+            for comment in comments {
+                comment_block.extend_from_slice(&(comment.len() as u32).to_le_bytes());
+                comment_block.extend_from_slice(comment.as_bytes());
+            }
+            out.push(header);
+            out.extend_from_slice(&(comment_block.len() as u32).to_be_bytes()[1..]);
+            out.extend_from_slice(&comment_block);
+        } else {
+            out.extend_from_slice(&FLAC[position..position + 4 + length]);
+        }
+        position += 4 + length;
+        if header & 0x80 != 0 {
+            break;
+        }
+    }
+    out.extend_from_slice(&FLAC[position..]);
+    out
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_missing_album_artist_falls_back_to_the_artist() {
+    let h = harness().await;
+    let batch = h.service.create_batch().await.unwrap();
+    let job = h
+        .service
+        .create_job(&batch.id, &uuid::Uuid::new_v4().to_string())
+        .await
+        .unwrap();
+    let without_album_artist = flac_with_comments(&[
+        "TITLE=Fallback",
+        "ARTIST=Solo Artist",
+        "ALBUM=Strict Import Tests",
+        "TRACKNUMBER=1/9",
+    ]);
+    let preview = h
+        .upload(&job.id, "fallback.flac", &without_album_artist)
+        .await
+        .unwrap();
+    assert_eq!(preview.file.album_artists, Some(vec!["Solo Artist".into()]));
+    assert_eq!(
+        preview.file.album_artist_warning,
+        crate::inspect::ALBUM_ARTIST_FROM_ARTIST_WARNING
+    );
+
+    let rejected_job = h
+        .service
+        .create_job(&batch.id, &uuid::Uuid::new_v4().to_string())
+        .await
+        .unwrap();
+    let without_artists = flac_with_comments(&[
+        "TITLE=Nobody",
+        "ALBUM=Strict Import Tests",
+        "TRACKNUMBER=2/9",
+    ]);
+    let error = h
+        .upload(&rejected_job.id, "nobody.flac", &without_artists)
+        .await
+        .unwrap_err();
+    assert_eq!(error.as_validation().unwrap().field, "ARTIST");
+
+    let current = h.service.get_batch(&batch.id).await.unwrap();
+    let state_of = |id: &str| {
+        current
+            .files
+            .iter()
+            .find(|file| file.job_id == id)
+            .unwrap()
+            .state
+            .clone()
+    };
+    assert_eq!(state_of(&job.id), BATCH_FILE_ACCEPTED);
+    assert_eq!(state_of(&rejected_job.id), BATCH_FILE_REJECTED);
+    assert_eq!(current.albums.len(), 1);
+    assert_eq!(
+        current.albums[0].album_artists,
+        Some(vec!["Solo Artist".into()])
+    );
+
+    let confirmation = BatchConfirmation {
+        revision: current.revision,
+        selected_file_ids: Some(vec![job.id.clone()]),
+        ..BatchConfirmation::default()
+    };
+    let completed = h
+        .service
+        .confirm_batch(&CancellationToken::new(), &batch.id, &confirmation)
+        .await
+        .unwrap();
+    assert_eq!(completed.files[0].outcome, OUTCOME_IMPORTED);
+    let stored: String = sqlx::query_scalar(
+        "SELECT artists.name FROM album_artists JOIN artists ON artists.id = album_artists.artist_id",
+    )
+    .fetch_one(&h.pool)
+    .await
+    .unwrap();
+    assert_eq!(stored, "Solo Artist");
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn a_server_fed_file_previews_like_the_same_uploaded_bytes() {
     let h = harness().await;

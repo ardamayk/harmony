@@ -210,6 +210,11 @@ pub fn preview_from_inspection(
             album_key: identity::sha256_hex(&album_identity_key(metadata)),
             content_sha256: inspection.file_sha256.clone(),
             artwork_warning: inspection.album_artwork.warning.clone(),
+            album_artist_warning: if metadata.album_artists_from_artists {
+                inspect::ALBUM_ARTIST_FROM_ARTIST_WARNING.to_owned()
+            } else {
+                String::new()
+            },
             original_filename: original_filename.to_owned(),
             title: metadata.title.clone(),
             title_key: identity::normalize_identity(&metadata.title),

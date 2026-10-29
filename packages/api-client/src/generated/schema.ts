@@ -1487,6 +1487,8 @@ export interface components {
             /** Format: int64 */
             sizeBytes?: number;
             artworkWarning?: string;
+            /** @description Present when the file has no Album Artist tag and its Artist tag is used as the Album Artist. */
+            albumArtistWarning?: string;
             originalFilename: string;
             title: string;
             artists: string[];

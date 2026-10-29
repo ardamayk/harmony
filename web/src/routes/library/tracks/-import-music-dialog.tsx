@@ -568,6 +568,11 @@ const ImportFileRow = memo(function ImportFileRow({
 					<ImportTransferDetails entry={entry} isExpanded />
 				</div>
 			) : null}
+			{entry.preview?.file.albumArtistWarning ? (
+				<p className="text-warning text-sm">
+					{entry.preview.file.albumArtistWarning}
+				</p>
+			) : null}
 			<DuplicateReview
 				entry={entry}
 				isBusy={isBusy}
