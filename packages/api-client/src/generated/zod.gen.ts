@@ -226,7 +226,7 @@ export const zManagedImportPreviewFileCommon = z.object({
     artists: z.array(z.string()).min(1),
     albumArtists: z.array(z.string()).min(1),
     album: z.string(),
-    genres: z.array(z.string()),
+    genres: z.array(z.string()).nullable(),
     trackNo: z.int().gte(1),
     trackTotal: z.int().gte(1).optional(),
     discNo: z.int().gte(1),
