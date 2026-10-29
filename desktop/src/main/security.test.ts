@@ -2,6 +2,7 @@
 // in the Tauri capability and config tests.
 
 import { CORE_COMMANDS, SHELL_COMMANDS } from "@repo/desktop-bridge";
+import { DESKTOP_COMMAND_ARGS } from "@repo/desktop-bridge/schemas";
 import { describe, expect, it } from "vite-plus/test";
 import {
 	CONTENT_SECURITY_POLICY,
@@ -95,7 +96,6 @@ describe("external links", () => {
 			/not allowed/,
 		);
 		expect(() => validateExternalUrl("not a url")).toThrow(/not a valid URL/);
-		expect(() => validateExternalUrl(42)).toThrow(/not a valid URL/);
 	});
 });
 
@@ -105,5 +105,11 @@ describe("command allowlist", () => {
 		expect(allowed).not.toContain("desktop_register_import_paths");
 		expect(allowed).not.toContain("shell_action");
 		expect(new Set(allowed).size).toBe(allowed.length);
+	});
+
+	it("has an argument schema for exactly the allowlisted commands", () => {
+		expect(Object.keys(DESKTOP_COMMAND_ARGS).sort()).toEqual(
+			[...CORE_COMMANDS, ...SHELL_COMMANDS].sort(),
+		);
 	});
 });

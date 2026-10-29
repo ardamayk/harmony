@@ -20,6 +20,12 @@ describe("PlacementStore", () => {
 
 			writeFileSync(path, JSON.stringify({ x: 1.5, y: 2 }));
 			expect(store.load()).toBeNull();
+
+			writeFileSync(path, JSON.stringify({ x: "1", y: 2 }));
+			expect(store.load()).toBeNull();
+
+			writeFileSync(path, JSON.stringify([1, 2]));
+			expect(store.load()).toBeNull();
 		} finally {
 			rmSync(directory, { recursive: true, force: true });
 		}

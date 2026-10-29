@@ -1,6 +1,10 @@
 // The contract between the Desktop Client's renderer (web/) and the Electron
 // shell (desktop/): what the preload script exposes as `window.earthlyDesktop`,
 // the IPC channels behind it, and which commands renderer content may send.
+// The runtime schemas the main process parses each message with live in
+// `@repo/desktop-bridge/schemas`.
+
+import type { DesktopCommandArgsMap } from "./schemas";
 
 /** Name of the preload API on `window`. */
 export const DESKTOP_BRIDGE_KEY = "earthlyDesktop";
@@ -84,6 +88,10 @@ export type CoreCommand = (typeof CORE_COMMANDS)[number];
 export type ShellCommand = (typeof SHELL_COMMANDS)[number];
 export type DesktopCommand = CoreCommand | ShellCommand;
 
+/** The arguments a command accepts (see DESKTOP_COMMAND_ARGS). */
+export type DesktopCommandArgs<C extends DesktopCommand = DesktopCommand> =
+	DesktopCommandArgsMap[C];
+
 /** Core events the main process forwards to every renderer window. */
 export const DESKTOP_EVENTS = {
 	playbackState: "desktop-playback-state",
@@ -123,9 +131,9 @@ export type DesktopWindowApi = {
 
 /** `window.earthlyDesktop`, present only inside the Desktop Client. */
 export type EarthlyDesktopBridge = {
-	invoke<T = unknown>(
-		command: DesktopCommand,
-		args?: Record<string, unknown>,
+	invoke<T = unknown, C extends DesktopCommand = DesktopCommand>(
+		command: C,
+		args?: DesktopCommandArgs<C>,
 	): Promise<T>;
 	listen<T = unknown>(
 		event: DesktopEvent,
@@ -133,14 +141,6 @@ export type EarthlyDesktopBridge = {
 	): Unlisten;
 	readonly window: DesktopWindowApi;
 };
-
-export function isDesktopCommand(command: unknown): command is DesktopCommand {
-	return (
-		typeof command === "string" &&
-		((CORE_COMMANDS as readonly string[]).includes(command) ||
-			(SHELL_COMMANDS as readonly string[]).includes(command))
-	);
-}
 
 export function isCoreCommand(command: string): command is CoreCommand {
 	return (CORE_COMMANDS as readonly string[]).includes(command);

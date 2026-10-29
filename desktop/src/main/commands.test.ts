@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from "vite-plus/test";
-import { type CommandDeps, handleInvoke } from "./commands";
+import {
+	type CommandDeps,
+	handleInvoke,
+	runWindowAction,
+	type WindowControls,
+} from "./commands";
 import { CoreCommandError } from "./core-process";
 
 function deps(overrides: Partial<CommandDeps> = {}): CommandDeps {
@@ -51,6 +56,107 @@ describe("handleInvoke", () => {
 			expect(result.ok).toBe(false);
 		}
 		expect(requestCore).not.toHaveBeenCalled();
+	});
+
+	it("refuses invalid arguments without reaching the core or the shell", async () => {
+		const shell = deps();
+		const cases: [string, unknown][] = [
+			// Missing, mistyped and extra fields.
+			["desktop_playback_seek", undefined],
+			["desktop_playback_seek", {}],
+			["desktop_playback_seek", { seconds: "42" }],
+			["desktop_playback_seek", { seconds: 42, paths: ["/etc/passwd"] }],
+			["desktop_playback_set_transition_fade", { milliseconds: -1 }],
+			["desktop_playback_set_transition_fade", { milliseconds: 1.5 }],
+			["desktop_playback_set_equalizer_gain", { index: 0 }],
+			["desktop_playback_set_replay_gain", { mode: "loud" }],
+			["desktop_playback_set_processing_profile", { profile: 1 }],
+			["desktop_playback_sync_queue_context", { sources: {}, currentIndex: 0 }],
+			[
+				"desktop_playback_play",
+				{ source: { type: "file", playbackUrl: "/etc/passwd" } },
+			],
+			["desktop_release_import_selections", { selectionIds: [1, 2] }],
+			["save_server_connection", "http://example.com"],
+			[
+				"desktop_http_request",
+				{ request: { method: "GET", url: "/", body: [256] } },
+			],
+			["desktop_http_request", { request: { method: "GET", url: "/" } }],
+			// Commands without arguments take none.
+			["desktop_playback_pause", { force: true }],
+			["desktop_playback_pause", "now"],
+			["desktop_select_import_files", { paths: ["/etc/passwd"] }],
+			["desktop_open_external_url", { url: 42 }],
+			["desktop_open_external_url", undefined],
+			["desktop_show_main_window", []],
+		];
+		for (const [command, args] of cases) {
+			const result = await handleInvoke(shell, command, args);
+			expect(result.ok, `${command} ${JSON.stringify(args)}`).toBe(false);
+		}
+		expect(shell.requestCore).not.toHaveBeenCalled();
+		expect(shell.pickImportFiles).not.toHaveBeenCalled();
+		expect(shell.openExternal).not.toHaveBeenCalled();
+		expect(shell.showMainWindow).not.toHaveBeenCalled();
+	});
+
+	it("names the command and the offending fields, not their values", async () => {
+		const result = await handleInvoke(deps(), "desktop_playback_seek", {
+			seconds: "secret-value",
+			extra: "other-secret",
+		});
+
+		expect(result.ok).toBe(false);
+		const error = String(!result.ok && result.error);
+		expect(error).toContain("desktop_playback_seek");
+		expect(error).toContain("seconds");
+		expect(error).toContain("extra");
+		expect(error).not.toContain("secret");
+	});
+
+	it("accepts the arguments the renderer sends", async () => {
+		const requestCore = vi.fn<CommandDeps["requestCore"]>();
+		const source = {
+			type: "track",
+			track: { id: "t1", title: "Song" },
+			playbackUrl: "http://127.0.0.1:43129/token/tracks/t1",
+			queueItemId: "q1",
+		};
+		const cases: [string, unknown][] = [
+			["get_server_connection", undefined],
+			["get_server_connection", {}],
+			["desktop_playback_play", { source }],
+			["desktop_playback_play", { source: undefined }],
+			[
+				"desktop_playback_sync_queue_context",
+				{ sources: [source], currentIndex: null },
+			],
+			["desktop_playback_set_equalizer_gain", { index: 3, value: -2.5 }],
+			["desktop_playback_set_equalizer_preset", { preset: "bass-boost" }],
+			[
+				"desktop_http_request",
+				{
+					request: {
+						method: "PATCH",
+						url: "/api/v1/preferences",
+						headers: { "content-type": "application/json" },
+						body: [123, 125],
+					},
+				},
+			],
+			[
+				"desktop_upload_import_file",
+				{ selectionId: "s1", uploadId: "u1", jobId: "j1" },
+			],
+		];
+		for (const [command, args] of cases) {
+			const result = await handleInvoke(deps({ requestCore }), command, args);
+			expect(result.ok, `${command} ${JSON.stringify(args)}`).toBe(true);
+		}
+		expect(requestCore).toHaveBeenCalledWith("desktop_playback_play", {
+			source,
+		});
 	});
 
 	it("passes the core's own error value through", async () => {
@@ -134,5 +240,49 @@ describe("handleInvoke", () => {
 		expect(shell.toggleMiniWindow).toHaveBeenCalledTimes(1);
 		expect(shell.showMainWindow).toHaveBeenCalledTimes(1);
 		expect(shell.requestCore).not.toHaveBeenCalled();
+	});
+});
+
+describe("runWindowAction", () => {
+	function controls(maximized = false): WindowControls {
+		return {
+			minimize: vi.fn(),
+			maximize: vi.fn(),
+			unmaximize: vi.fn(),
+			isMaximized: vi.fn(() => maximized),
+			close: vi.fn(),
+		};
+	}
+
+	it("runs the renderer's window actions", () => {
+		const window = controls();
+		runWindowAction(window, "minimize");
+		runWindowAction(window, "toggle-maximize");
+		runWindowAction(window, "close");
+
+		expect(window.minimize).toHaveBeenCalledTimes(1);
+		expect(window.maximize).toHaveBeenCalledTimes(1);
+		expect(window.close).toHaveBeenCalledTimes(1);
+
+		const maximized = controls(true);
+		runWindowAction(maximized, "toggle-maximize");
+		expect(maximized.unmaximize).toHaveBeenCalledTimes(1);
+	});
+
+	it("drops anything else", () => {
+		const window = controls();
+		for (const action of [
+			"maximize",
+			"Close",
+			"",
+			1,
+			null,
+			{ action: "close" },
+		]) {
+			runWindowAction(window, action);
+		}
+		for (const control of Object.values(window)) {
+			expect(control).not.toHaveBeenCalled();
+		}
 	});
 });

@@ -1,9 +1,13 @@
 import {
 	type InvokeResult,
 	isCoreCommand,
-	isDesktopCommand,
 	type ShellCommand,
 } from "@repo/desktop-bridge";
+import {
+	type ParsedInvoke,
+	parseInvoke,
+	WINDOW_ACTION,
+} from "@repo/desktop-bridge/schemas";
 import { CoreCommandError } from "./core-process";
 import { validateExternalUrl } from "./security";
 
@@ -29,7 +33,9 @@ export type CommandDeps = {
  * Answers one renderer invoke. Allowlisted core commands are forwarded with
  * their arguments; shell commands run here. Everything else is refused, so
  * renderer content cannot register file paths with the core or drive tray
- * and lifetime actions.
+ * and lifetime actions. Arguments must match the command's schema (see
+ * DESKTOP_COMMAND_ARGS): missing, mistyped or extra fields are refused
+ * before anything runs.
  */
 export async function handleInvoke(
 	deps: CommandDeps,
@@ -37,33 +43,34 @@ export async function handleInvoke(
 	args: unknown,
 ): Promise<InvokeResult> {
 	try {
-		if (!isDesktopCommand(command)) {
-			throw new CoreCommandError(
-				`Desktop command '${String(command)}' is not allowed.`,
-			);
-		}
-		const params = isPlainObject(args) ? args : undefined;
-		const value = isCoreCommand(command)
-			? await deps.requestCore(command, params)
-			: await runShellCommand(deps, command, params);
+		const parsed = parseInvoke(command, args);
+		if (!parsed.ok) throw new CoreCommandError(parsed.error);
+		const invoke = parsed.value;
+		const value = isCoreCommand(invoke.command)
+			? await deps.requestCore(
+					invoke.command,
+					invoke.args as Record<string, unknown> | undefined,
+				)
+			: await runShellCommand(deps, invoke as ShellInvoke);
 		return { ok: true, value: value ?? null };
 	} catch (error) {
 		return { ok: false, error: errorValue(error) };
 	}
 }
 
+type ShellInvoke = Extract<ParsedInvoke, { command: ShellCommand }>;
+
 async function runShellCommand(
 	deps: CommandDeps,
-	command: ShellCommand,
-	params: Record<string, unknown> | undefined,
+	invoke: ShellInvoke,
 ): Promise<unknown> {
-	switch (command) {
+	switch (invoke.command) {
 		case "desktop_select_import_files":
 			return registerImportPaths(deps, await deps.pickImportFiles());
 		case "desktop_select_import_folder":
 			return registerImportPaths(deps, await deps.pickImportFolder());
 		case "desktop_open_external_url":
-			return deps.openExternal(validateExternalUrl(params?.url));
+			return deps.openExternal(validateExternalUrl(invoke.args.url));
 		case "desktop_open_mini_player":
 			return deps.openMiniWindow();
 		case "desktop_close_mini_player":
@@ -72,6 +79,29 @@ async function runShellCommand(
 			return deps.toggleMiniWindow();
 		case "desktop_show_main_window":
 			return deps.showMainWindow();
+	}
+}
+
+/** The window controls the renderer's own frame drives. */
+export type WindowControls = {
+	minimize(): void;
+	maximize(): void;
+	unmaximize(): void;
+	isMaximized(): boolean;
+	close(): void;
+};
+
+/** Runs one window message from the renderer; anything else is dropped. */
+export function runWindowAction(window: WindowControls, action: unknown): void {
+	const parsed = WINDOW_ACTION.safeParse(action);
+	if (!parsed.success) return;
+	switch (parsed.data) {
+		case "minimize":
+			return window.minimize();
+		case "toggle-maximize":
+			return window.isMaximized() ? window.unmaximize() : window.maximize();
+		case "close":
+			return window.close();
 	}
 }
 
@@ -85,8 +115,4 @@ function errorValue(error: unknown): unknown {
 	if (error instanceof CoreCommandError) return error.value;
 	if (error instanceof Error) return error.message;
 	return String(error);
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null && !Array.isArray(value);
 }

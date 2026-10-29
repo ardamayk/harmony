@@ -3,7 +3,7 @@
 // core (native playback, media proxy, Managed Import) as a child process.
 // See docs/adr/0024-electron-shell-with-rust-core.md.
 
-import { DESKTOP_EVENTS, IPC, type WindowAction } from "@repo/desktop-bridge";
+import { DESKTOP_EVENTS, IPC } from "@repo/desktop-bridge";
 import {
 	app,
 	BrowserWindow,
@@ -16,7 +16,7 @@ import {
 	shell,
 } from "electron";
 import { join } from "node:path";
-import { handleInvoke, IMPORT_EXTENSIONS } from "./commands";
+import { handleInvoke, IMPORT_EXTENSIONS, runWindowAction } from "./commands";
 import { CoreProcess } from "./core-process";
 import { devServerOrigin, shellPaths } from "./paths";
 import { PlacementStore } from "./placement-store";
@@ -201,16 +201,9 @@ async function start() {
 		isTrusted(event) ? (windowOf(event)?.isMaximized() ?? false) : false,
 	);
 
-	ipcMain.on(IPC.window, (event, action: WindowAction) => {
+	ipcMain.on(IPC.window, (event, action: unknown) => {
 		const window = windowOf(event);
 		if (!isTrusted(event) || window === null) return;
-		switch (action) {
-			case "minimize":
-				return window.minimize();
-			case "toggle-maximize":
-				return window.isMaximized() ? window.unmaximize() : window.maximize();
-			case "close":
-				return window.close();
-		}
+		runWindowAction(window, action);
 	});
 }

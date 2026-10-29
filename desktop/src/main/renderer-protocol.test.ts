@@ -72,9 +72,14 @@ describe("createRendererHandler", () => {
 	it("refuses writes and unknown files", async () => {
 		const handler = createRendererHandler(root, async () => new Response("ok"));
 
+		for (const method of ["POST", "PUT", "DELETE", "OPTIONS"]) {
+			expect(
+				(await handler(new Request("app://earthly/", { method }))).status,
+			).toBe(405);
+		}
 		expect(
-			(await handler(new Request("app://earthly/", { method: "POST" }))).status,
-		).toBe(405);
+			(await handler(new Request("app://earthly/", { method: "HEAD" }))).status,
+		).toBe(200);
 		expect((await handler(new Request("app://earthly/x.png"))).status).toBe(
 			404,
 		);
