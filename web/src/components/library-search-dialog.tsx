@@ -4,7 +4,11 @@ import {
 	type LibrarySearchResult,
 } from "@repo/api-client";
 import { AlbumArt, toast, usePlayback } from "@repo/ui";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import {
+	keepPreviousData,
+	useQuery,
+	useQueryClient,
+} from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import {
 	ArrowDown,
@@ -39,12 +43,17 @@ import { useDebouncedValue } from "#/hooks/use-debounced-value";
 import { useReturnFocus } from "#/hooks/use-return-focus";
 import { useServerCapability } from "#/hooks/use-server-capability";
 import { apiClient } from "#/lib/api";
+import { externalPlaybackQueryOptions } from "#/lib/external-playback-query";
 import { getTrackArtistName } from "#/lib/library-display";
 import { libraryQueryKeys } from "#/lib/library-query-keys";
 import { cn } from "#/lib/utils";
 
 const RESULTS_PER_GROUP = 5;
 const SEARCH_DEBOUNCE_MS = 200;
+/** Each yt-dlp search takes about a second, so typing waits longer for one. */
+const EXTERNAL_SEARCH_DEBOUNCE_MS = 500;
+/** A pointer resting this long on an External row prefetches its playback. */
+const EXTERNAL_PREFETCH_HOVER_MS = 250;
 
 type SearchResult = {
 	/** Unique across groups; also the option's DOM id suffix. */
@@ -57,6 +66,10 @@ type SearchResult = {
 	opensPage?: boolean;
 	/** Shown for External Tracks, which have no library page to open. */
 	duration?: string;
+	/** An External Track's cover, through the Music Server. */
+	artworkUrl?: string;
+	/** Set on External rows: the track whose playback can be prefetched. */
+	externalTrackId?: string;
 	action: () => void;
 };
 
@@ -131,7 +144,18 @@ export function LibrarySearchDialog({
 	const navigate = useNavigate();
 	const { playTrack, addToQueue, playExternalTrack } = usePlayback();
 	const hasExternalSource = useServerCapability(EXTERNAL_SOURCE_CAPABILITY);
-	const canShowExternal = canShowResults && hasExternalSource;
+	// The External group shows with the library results; its own query waits
+	// for the longer debounce so typing does not start a yt-dlp search per pause.
+	const showExternalGroup = canShowResults && hasExternalSource;
+	const externalQuery = useDebouncedValue(
+		query.trim(),
+		EXTERNAL_SEARCH_DEBOUNCE_MS,
+	);
+	const isDebouncingExternal = query.trim() !== externalQuery;
+	const canShowExternal = showExternalGroup && !isDebouncingExternal;
+	const queryClient = useQueryClient();
+	const prefetchingExternalId = useRef<string | null>(null);
+	const hoverPrefetchTimer = useRef<number | undefined>(undefined);
 	const listboxId = useId();
 	const measureResults = useCallback((content: HTMLDivElement | null) => {
 		if (!content) return;
@@ -175,13 +199,51 @@ export function LibrarySearchDialog({
 	});
 
 	// No placeholder data: yt-dlp takes seconds, and the previous query's
-	// External Tracks would sit under the new query for that long.
+	// External Tracks would sit under the new query for that long. The signal
+	// aborts a superseded search, which ends its yt-dlp process on the server.
 	const externalSearch = useQuery({
-		queryKey: ["external-search", debouncedQuery],
-		queryFn: () => apiClient.searchExternalSource(debouncedQuery),
+		queryKey: ["external-search", externalQuery],
+		queryFn: ({ signal }) =>
+			apiClient.searchExternalSource(externalQuery, undefined, signal),
 		enabled: canShowExternal,
 		retry: false,
 	});
+
+	/** One prefetch at a time: a newer External row replaces the older one. */
+	const prefetchExternalPlayback = useCallback(
+		(externalTrackId: string) => {
+			const previous = prefetchingExternalId.current;
+			if (previous === externalTrackId) return;
+			if (previous) {
+				void queryClient.cancelQueries({
+					queryKey: externalPlaybackQueryOptions(previous).queryKey,
+					exact: true,
+				});
+			}
+			prefetchingExternalId.current = externalTrackId;
+			void queryClient
+				.prefetchQuery(externalPlaybackQueryOptions(externalTrackId))
+				.finally(() => {
+					if (prefetchingExternalId.current === externalTrackId) {
+						prefetchingExternalId.current = null;
+					}
+				});
+		},
+		[queryClient],
+	);
+	const cancelHoverPrefetch = useCallback(() => {
+		window.clearTimeout(hoverPrefetchTimer.current);
+		hoverPrefetchTimer.current = undefined;
+	}, []);
+
+	// Closing ends a pending search and hover; an in-flight prefetch is kept,
+	// since playing the track may be waiting on it.
+	useEffect(() => {
+		if (open) return;
+		cancelHoverPrefetch();
+		void queryClient.cancelQueries({ queryKey: ["external-search"] });
+	}, [open, queryClient, cancelHoverPrefetch]);
+	useEffect(() => cancelHoverPrefetch, [cancelHoverPrefetch]);
 
 	const close = useCallback(() => onOpenChange(false), [onOpenChange]);
 
@@ -271,7 +333,15 @@ export function LibrarySearchDialog({
 			subtitle: track.artistName ?? undefined,
 			duration:
 				track.durationMs != null ? formatDuration(track.durationMs) : undefined,
+			artworkUrl: track.hasArtwork
+				? apiClient.getExternalTrackArtworkUrl(track.id)
+				: undefined,
+			externalTrackId: track.id,
 			action: () => {
+				// The play path reads this prefetch; a later one must not cancel it.
+				if (prefetchingExternalId.current === track.id) {
+					prefetchingExternalId.current = null;
+				}
 				void playExternalTrack(track);
 				close();
 			},
@@ -294,7 +364,8 @@ export function LibrarySearchDialog({
 	const showEmpty =
 		canShowResults && !isSearching && !failed && libraryResults.length === 0;
 	const externalFailed = canShowExternal && externalSearch.isError;
-	const isSearchingExternal = canShowExternal && externalSearch.isFetching;
+	const isSearchingExternal =
+		showExternalGroup && (isDebouncingExternal || externalSearch.isFetching);
 
 	const resultCount =
 		canShowResults && search.data
@@ -349,21 +420,16 @@ export function LibrarySearchDialog({
 
 	const onInputKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
 		if (event.nativeEvent.isComposing || flatResults.length === 0) return;
-		if (event.key === "ArrowDown") {
+		if (event.key === "ArrowDown" || event.key === "ArrowUp") {
 			event.preventDefault();
-			setActiveKey(
+			const step = event.key === "ArrowDown" ? 1 : -1;
+			const next =
 				flatResults[
-					(flatResults.indexOf(activeResult) + 1) % flatResults.length
-				].key,
-			);
-		} else if (event.key === "ArrowUp") {
-			event.preventDefault();
-			setActiveKey(
-				flatResults[
-					(flatResults.indexOf(activeResult) - 1 + flatResults.length) %
+					(flatResults.indexOf(activeResult) + step + flatResults.length) %
 						flatResults.length
-				].key,
-			);
+				];
+			setActiveKey(next.key);
+			if (next.externalTrackId) prefetchExternalPlayback(next.externalTrackId);
 		} else if (event.key === "Enter") {
 			event.preventDefault();
 			if (event.repeat) return;
@@ -390,7 +456,17 @@ export function LibrarySearchDialog({
 					aria-selected={isActive}
 					tabIndex={-1}
 					className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-left outline-none"
-					onMouseEnter={() => setActiveKey(result.key)}
+					onMouseEnter={() => {
+						setActiveKey(result.key);
+						cancelHoverPrefetch();
+						const { externalTrackId } = result;
+						if (!externalTrackId) return;
+						hoverPrefetchTimer.current = window.setTimeout(
+							() => prefetchExternalPlayback(externalTrackId),
+							EXTERNAL_PREFETCH_HOVER_MS,
+						);
+					}}
+					onMouseLeave={cancelHoverPrefetch}
 					onMouseDown={(event) => event.preventDefault()}
 					onClick={result.action}
 				>
@@ -399,6 +475,14 @@ export function LibrarySearchDialog({
 							coverUrl={apiClient.getAlbumCoverUrl(result.albumId, 128)}
 							title={result.title}
 							className="size-10 shrink-0 rounded-sm"
+						/>
+					) : result.artworkUrl ? (
+						// The icon stays the placeholder if the cover fails to load.
+						<AlbumArt
+							coverUrl={result.artworkUrl}
+							title={result.title}
+							className="size-10 shrink-0 rounded-sm bg-muted/50"
+							fallback={<Icon className="size-4" />}
 						/>
 					) : (
 						<span className="flex size-10 shrink-0 items-center justify-center rounded-sm bg-muted/50 text-caption">
@@ -586,7 +670,7 @@ export function LibrarySearchDialog({
 								))}
 							</section>
 						) : null}
-						{canShowExternal ? (
+						{showExternalGroup ? (
 							// biome-ignore lint/a11y/useSemanticElements: listbox option groups are not form fieldsets.
 							<div role="group" aria-label="External" className="pt-3">
 								<p className="flex items-center gap-2 px-3 py-2 font-medium text-caption text-xs uppercase tracking-wider">
@@ -618,7 +702,7 @@ export function LibrarySearchDialog({
 									<p className="px-3 py-2 text-caption text-sm">Searching…</p>
 								) : externalSearch.isSuccess && externalResults.length === 0 ? (
 									<p className="px-3 py-2 text-caption text-sm">
-										No External results for “{debouncedQuery}”.
+										No External results for “{externalQuery}”.
 									</p>
 								) : null}
 							</div>

@@ -495,16 +495,22 @@ describe("BrowserPlaybackEngine", () => {
 				durationMs: 30500,
 				webpageUrl: "https://soundcloud.com/uploader/external-song",
 				extractor: "Soundcloud",
+				hasArtwork: true,
 			},
 			playbackUrl: streamUrl,
 			sourceUrl: streamUrl,
+			artworkUrl: "/api/v1/external/tracks/external-1/artwork",
 		});
 
 		expect(hls.loadSource).toHaveBeenCalledWith(streamUrl);
 		expect(engine.getState().duration).toBe(30.5);
 		expect(
 			(session.metadata as unknown as { init: MediaMetadataInit }).init,
-		).toMatchObject({ title: "External Song", artist: "", artwork: [] });
+		).toMatchObject({
+			title: "External Song",
+			artist: "",
+			artwork: [{ src: "/api/v1/external/tracks/external-1/artwork" }],
+		});
 
 		media.paused = true;
 		media.dispatchEvent(new Event("ended"));

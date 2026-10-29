@@ -640,7 +640,7 @@ function mediaMetadataFor(source: PlaybackSource): MediaMetadataFields {
 			title: source.externalTrack.title,
 			artist: source.externalTrack.artistName ?? "",
 			album: "",
-			artwork: [],
+			artwork: source.artworkUrl ? [{ src: source.artworkUrl }] : [],
 		};
 	}
 	const radio =
