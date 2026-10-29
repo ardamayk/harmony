@@ -74,6 +74,10 @@ function AppShellFrame({
 						"--library-search-width": metrics && `${metrics.searchWidth}px`,
 						"--library-search-center": metrics && `${metrics.searchCenter}px`,
 						"--library-search-top": metrics && `${metrics.searchTop}px`,
+						"--library-search-row-height":
+							metrics?.searchRowHeight !== undefined
+								? `${metrics.searchRowHeight}px`
+								: undefined,
 					} as CSSProperties
 				}
 				data-app-shell

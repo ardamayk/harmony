@@ -427,6 +427,48 @@ describe("AppShell", () => {
 		);
 	});
 
+	it("sizes the search card's input row to end on the top bar's bottom border", () => {
+		const observed = new Map<Element, () => void>();
+		vi.stubGlobal(
+			"ResizeObserver",
+			class {
+				constructor(private callback: () => void) {}
+				observe(target: Element) {
+					observed.set(target, this.callback);
+				}
+				unobserve() {}
+				disconnect() {}
+			},
+		);
+		let headerHeight = 64;
+		const getBounds = HTMLElement.prototype.getBoundingClientRect;
+		vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+			function (this: HTMLElement) {
+				if (this.hasAttribute("data-library-search-field"))
+					return new DOMRect(300, 8, 500, 48);
+				if (this.tagName === "HEADER")
+					return new DOMRect(0, 0, 1600, headerHeight);
+				if (this.hasAttribute("data-app-shell"))
+					return new DOMRect(0, 0, 1600, 900);
+				return getBounds.call(this);
+			},
+		);
+		const { container } = renderShell(<AppShell onSearch={vi.fn()} />);
+		const shell = container.querySelector<HTMLElement>("[data-app-shell]");
+		// From the field's top (8px) to the bar's bottom edge (64px).
+		expect(shell?.style.getPropertyValue("--library-search-top")).toBe("8px");
+		expect(shell?.style.getPropertyValue("--library-search-row-height")).toBe(
+			"56px",
+		);
+		const remeasure = shell ? observed.get(shell) : undefined;
+		if (!remeasure) throw new Error("The shell was not observed");
+		headerHeight = 72;
+		act(remeasure);
+		expect(shell?.style.getPropertyValue("--library-search-row-height")).toBe(
+			"64px",
+		);
+	});
+
 	it("lets the Desktop Client drag the window by the top nav's empty space", () => {
 		const { container } = render(<TopNav onSearch={vi.fn()} />);
 		const header = container.querySelector("header") as HTMLElement;

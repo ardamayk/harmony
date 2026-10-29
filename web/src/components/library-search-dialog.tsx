@@ -41,9 +41,15 @@ import {
 } from "#/components/ui/dialog";
 import { useDebouncedValue } from "#/hooks/use-debounced-value";
 import { useReturnFocus } from "#/hooks/use-return-focus";
-import { useServerCapability } from "#/hooks/use-server-capability";
+import {
+	useExternalSourceName,
+	useServerCapability,
+} from "#/hooks/use-server-capability";
 import { apiClient } from "#/lib/api";
-import { externalPlaybackQueryOptions } from "#/lib/external-playback-query";
+import {
+	EXTERNAL_PLAYBACK_STALE_MS,
+	externalPlaybackQueryOptions,
+} from "#/lib/external-playback-query";
 import { getTrackArtistName } from "#/lib/library-display";
 import { libraryQueryKeys } from "#/lib/library-query-keys";
 import { cn } from "#/lib/utils";
@@ -54,6 +60,11 @@ const SEARCH_DEBOUNCE_MS = 200;
 const EXTERNAL_SEARCH_DEBOUNCE_MS = 500;
 /** A pointer resting this long on an External row prefetches its playback. */
 const EXTERNAL_PREFETCH_HOVER_MS = 250;
+/**
+ * Experiment: once External results arrive, prefetch the first one's playback
+ * as if it were hovered. Turn off to measure without it.
+ */
+const PREFETCH_FIRST_EXTERNAL_RESULT = true;
 
 type SearchResult = {
 	/** Unique across groups; also the option's DOM id suffix. */
@@ -109,9 +120,12 @@ function subscribeToNothing(): () => void {
 export function LibrarySearchDialog({
 	open,
 	onOpenChange,
+	prefetchFirstExternalResult = PREFETCH_FIRST_EXTERNAL_RESULT,
 }: {
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
+	/** Defaults to PREFETCH_FIRST_EXTERNAL_RESULT; tests turn it off. */
+	prefetchFirstExternalResult?: boolean;
 }) {
 	const portalContainer = useSyncExternalStore(
 		subscribeToNothing,
@@ -144,6 +158,11 @@ export function LibrarySearchDialog({
 	const navigate = useNavigate();
 	const { playTrack, addToQueue, playExternalTrack } = usePlayback();
 	const hasExternalSource = useServerCapability(EXTERNAL_SOURCE_CAPABILITY);
+	const externalSourceName = useExternalSourceName();
+	const searchLabel =
+		hasExternalSource && externalSourceName
+			? `Search your library and ${externalSourceName}`
+			: "Search your library";
 	// The External group shows with the library results; its own query waits
 	// for the longer debounce so typing does not start a yt-dlp search per pause.
 	const showExternalGroup = canShowResults && hasExternalSource;
@@ -252,6 +271,32 @@ export function LibrarySearchDialog({
 		void queryClient.cancelQueries({ queryKey: ["external-search"] });
 	}, [open, queryClient, cancelHoverPrefetch]);
 	useEffect(() => cancelHoverPrefetch, [cancelHoverPrefetch]);
+
+	// The External debounce already waited for typing to stop, so the first
+	// result is the likeliest pick: resolve it ahead through the same single
+	// prefetch, which a hover or keyboard highlight then replaces.
+	const firstExternalTrackId =
+		open && canShowExternal && externalSearch.isSuccess
+			? externalSearch.data.items[0]?.id
+			: undefined;
+	useEffect(() => {
+		if (!prefetchFirstExternalResult || !firstExternalTrackId) return;
+		const cached = queryClient.getQueryState(
+			externalPlaybackQueryOptions(firstExternalTrackId).queryKey,
+		);
+		if (
+			cached?.data !== undefined &&
+			Date.now() - cached.dataUpdatedAt < EXTERNAL_PLAYBACK_STALE_MS
+		) {
+			return;
+		}
+		prefetchExternalPlayback(firstExternalTrackId);
+	}, [
+		prefetchFirstExternalResult,
+		firstExternalTrackId,
+		queryClient,
+		prefetchExternalPlayback,
+	]);
 
 	const close = useCallback(() => onOpenChange(false), [onOpenChange]);
 
@@ -573,9 +618,10 @@ export function LibrarySearchDialog({
 				finalFocus={() => returnFocus.restore()}
 				className="library-search-card top-[var(--library-search-top)] left-[var(--library-search-center,50%)] flex max-w-(--library-search-width,36rem) translate-y-0 flex-col overflow-hidden p-0"
 			>
-				<DialogTitle className="sr-only">Search your library</DialogTitle>
-				{/* Lines up with the top bar's search field it opens over. */}
-				<div className="flex shrink-0 items-center gap-3 border-border border-b px-4">
+				<DialogTitle className="sr-only">{searchLabel}</DialogTitle>
+				{/* Covers the top bar's search field it opens over; its bottom
+				    border lies on the top bar's (library-search-row in styles.css). */}
+				<div className="library-search-row flex shrink-0 items-center gap-3 border-border border-b px-4">
 					<Search className="size-5 shrink-0 text-caption" />
 					<input
 						ref={inputRef}
@@ -587,9 +633,9 @@ export function LibrarySearchDialog({
 							activeResult ? optionId(listboxId, activeResult.key) : undefined
 						}
 						aria-autocomplete="list"
-						aria-label="Search your library"
+						aria-label={searchLabel}
 						maxLength={200}
-						placeholder="Search your library"
+						placeholder={searchLabel}
 						value={query}
 						onChange={(event) => {
 							setQuery(event.target.value);
@@ -597,7 +643,7 @@ export function LibrarySearchDialog({
 							setShowAll(false);
 						}}
 						onKeyDown={onInputKeyDown}
-						className="h-12 min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-muted-foreground [&::-webkit-search-cancel-button]:appearance-none"
+						className="min-w-0 flex-1 self-stretch bg-transparent text-base outline-none placeholder:text-muted-foreground [&::-webkit-search-cancel-button]:appearance-none"
 					/>
 					{resultCount !== undefined ? (
 						<output className="flex h-8 shrink-0 items-center rounded-sm border border-border px-3 text-caption text-xs">
@@ -619,12 +665,11 @@ export function LibrarySearchDialog({
 					aria-label="Search results"
 					className="min-h-0 flex-1 overflow-y-auto"
 				>
-					<div ref={measureResults} className="flow-root p-3 sm:p-4">
-						{!hasQuery ? (
-							<p className="px-3 py-6 text-center text-caption text-sm">
-								Type to search your library.
-							</p>
-						) : null}
+					{/* No query, no body: just the input row and the footer. */}
+					<div
+						ref={measureResults}
+						className={cn("flow-root", hasQuery && "p-3 sm:p-4")}
+					>
 						{failed ? (
 							<div role="alert" className="px-3 py-3 text-sm">
 								<p>

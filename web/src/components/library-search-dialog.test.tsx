@@ -47,6 +47,8 @@ vi.mock("#/lib/api", () => ({
 vi.mock("#/hooks/use-server-capability", () => ({
 	useServerCapability: (capability: string) =>
 		capability === "external-source.v1" && mocks.hasExternalSource,
+	useExternalSourceName: () =>
+		mocks.hasExternalSource ? "SoundCloud" : undefined,
 }));
 vi.mock("@tanstack/react-router", () => ({
 	useNavigate: () => mocks.navigate,
@@ -96,7 +98,12 @@ const results: LibrarySearchResponse = {
 	],
 };
 
-function renderDialog(onOpenChange = vi.fn()) {
+function renderDialog(
+	onOpenChange = vi.fn(),
+	{
+		prefetchFirstExternalResult,
+	}: { prefetchFirstExternalResult?: boolean } = {},
+) {
 	const client = new QueryClient({
 		defaultOptions: { queries: { retry: false } },
 	});
@@ -105,11 +112,17 @@ function renderDialog(onOpenChange = vi.fn()) {
 		onOpenChange,
 		...render(
 			<QueryClientProvider client={client}>
-				<LibrarySearchDialog open onOpenChange={onOpenChange} />
+				<LibrarySearchDialog
+					open
+					onOpenChange={onOpenChange}
+					prefetchFirstExternalResult={prefetchFirstExternalResult}
+				/>
 			</QueryClientProvider>,
 		),
 	};
 }
+/** Keeps a test about hover or keyboard prefetch free of the automatic one. */
+const withoutFirstPrefetch = { prefetchFirstExternalResult: false };
 
 describe("LibrarySearchDialog", () => {
 	beforeEach(() => {
@@ -123,6 +136,14 @@ describe("LibrarySearchDialog", () => {
 		vi.clearAllMocks();
 		vi.useRealTimers();
 		mocks.hasExternalSource = false;
+	});
+
+	it("shows no body before a query, only the input row and the footer", () => {
+		renderDialog();
+		const listbox = screen.getByRole("listbox", { name: "Search results" });
+		expect(listbox.textContent).toBe("");
+		expect(listbox.firstElementChild?.className).not.toMatch(/p-3/);
+		expect(screen.queryByText(/Type to search/)).toBeNull();
 	});
 
 	describe("External Source", () => {
@@ -142,6 +163,36 @@ describe("LibrarySearchDialog", () => {
 				items: [daftPunk],
 			});
 			mocks.playExternalTrack.mockResolvedValue(undefined);
+			mocks.getExternalTrackPlayback.mockResolvedValue({
+				format: "progressive",
+				streamPath: "/api/v1/external/tracks/token.signature/stream",
+			});
+		});
+
+		it("names the site in the search field only with the capability", () => {
+			const { unmount } = renderDialog();
+			const input = screen.getByRole("combobox", {
+				name: "Search your library",
+			});
+			expect(input.getAttribute("placeholder")).toBe("Search your library");
+			expect(
+				screen.getByRole("dialog", { name: "Search your library" }),
+			).toBeTruthy();
+			unmount();
+
+			mocks.hasExternalSource = true;
+			renderDialog();
+			const named = screen.getByRole("combobox", {
+				name: "Search your library and SoundCloud",
+			});
+			expect(named.getAttribute("placeholder")).toBe(
+				"Search your library and SoundCloud",
+			);
+			expect(
+				screen.getByRole("dialog", {
+					name: "Search your library and SoundCloud",
+				}),
+			).toBeTruthy();
 		});
 
 		it("stays hidden and never searches without the capability", async () => {
@@ -358,7 +409,7 @@ describe("LibrarySearchDialog", () => {
 				streamPath: "/api/v1/external/tracks/token.signature/stream",
 			};
 			mocks.getExternalTrackPlayback.mockResolvedValue(playback);
-			const { client } = renderDialog();
+			const { client } = renderDialog(vi.fn(), withoutFirstPrefetch);
 			const input = screen.getByRole("combobox");
 			fireEvent.change(input, { target: { value: "ne" } });
 			await screen.findByRole("option", { name: /^Around the World/ });
@@ -385,7 +436,7 @@ describe("LibrarySearchDialog", () => {
 			mocks.getExternalTrackPlayback.mockImplementation(
 				() => new Promise(() => {}),
 			);
-			renderDialog();
+			renderDialog(vi.fn(), withoutFirstPrefetch);
 			fireEvent.change(screen.getByRole("combobox"), {
 				target: { value: "ne" },
 			});
@@ -424,7 +475,7 @@ describe("LibrarySearchDialog", () => {
 			mocks.getExternalTrackPlayback.mockImplementation(
 				() => new Promise(() => {}),
 			);
-			renderDialog();
+			renderDialog(vi.fn(), withoutFirstPrefetch);
 			const input = screen.getByRole("combobox");
 			fireEvent.change(input, { target: { value: "ne" } });
 			await screen.findByRole("option", { name: /^Da Funk/ });
@@ -440,6 +491,130 @@ describe("LibrarySearchDialog", () => {
 				);
 			await waitFor(() => expect(olderSignal?.aborted).toBe(true));
 			expect(newerSignal?.aborted).toBe(false);
+		});
+
+		it("prefetches the first External result's playback once results arrive", async () => {
+			mocks.hasExternalSource = true;
+			const { client } = renderDialog();
+			fireEvent.change(screen.getByRole("combobox"), {
+				target: { value: "ne" },
+			});
+			await screen.findByRole("option", { name: /^Around the World/ });
+			await waitFor(() =>
+				expect(mocks.getExternalTrackPlayback).toHaveBeenCalledWith(
+					daftPunk.id,
+					expect.any(AbortSignal),
+				),
+			);
+			await waitFor(() =>
+				expect(
+					client.getQueryData(["external-playback", daftPunk.id]),
+				).toBeDefined(),
+			);
+			expect(mocks.getExternalTrackPlayback).toHaveBeenCalledTimes(1);
+		});
+
+		it("does not prefetch when there are no External results", async () => {
+			mocks.hasExternalSource = true;
+			mocks.searchExternalSource.mockResolvedValue({
+				source: "scsearch",
+				items: [],
+			});
+			renderDialog();
+			fireEvent.change(screen.getByRole("combobox"), {
+				target: { value: "ne" },
+			});
+			await screen.findByText("No External results for “ne”.");
+			expect(mocks.getExternalTrackPlayback).not.toHaveBeenCalled();
+		});
+
+		it("does not prefetch a first result that is already resolved", async () => {
+			mocks.hasExternalSource = true;
+			const { client } = renderDialog();
+			client.setQueryData(["external-playback", daftPunk.id], {
+				format: "progressive",
+				streamPath: "/cached",
+			});
+			fireEvent.change(screen.getByRole("combobox"), {
+				target: { value: "ne" },
+			});
+			await screen.findByRole("option", { name: /^Around the World/ });
+			await act(() => vi.advanceTimersByTimeAsync(50));
+			expect(mocks.getExternalTrackPlayback).not.toHaveBeenCalled();
+		});
+
+		it("lets a hover on another External row replace the first-result prefetch", async () => {
+			vi.useFakeTimers({ shouldAdvanceTime: false });
+			mocks.hasExternalSource = true;
+			const second = { ...daftPunk, id: "second.signature", title: "Da Funk" };
+			mocks.searchExternalSource.mockResolvedValue({
+				source: "scsearch",
+				items: [daftPunk, second],
+			});
+			mocks.getExternalTrackPlayback.mockImplementation(
+				() => new Promise(() => {}),
+			);
+			renderDialog();
+			fireEvent.change(screen.getByRole("combobox"), {
+				target: { value: "ne" },
+			});
+			await act(() => vi.advanceTimersByTimeAsync(500));
+			await act(() => vi.advanceTimersByTimeAsync(10));
+			expect(
+				mocks.getExternalTrackPlayback.mock.calls.map(([id]) => id),
+			).toEqual([daftPunk.id]);
+			fireEvent.mouseEnter(screen.getByRole("option", { name: /^Da Funk/ }));
+			await act(() => vi.advanceTimersByTimeAsync(250));
+			expect(
+				mocks.getExternalTrackPlayback.mock.calls.map(([id]) => id),
+			).toEqual([daftPunk.id, second.id]);
+			const [firstSignal, hoverSignal] =
+				mocks.getExternalTrackPlayback.mock.calls.map(
+					([, signal]) => signal as AbortSignal,
+				);
+			expect(firstSignal?.aborted).toBe(true);
+			expect(hoverSignal?.aborted).toBe(false);
+		});
+
+		it("does not prefetch the first result when the experiment is off", async () => {
+			mocks.hasExternalSource = true;
+			renderDialog(vi.fn(), withoutFirstPrefetch);
+			fireEvent.change(screen.getByRole("combobox"), {
+				target: { value: "ne" },
+			});
+			await screen.findByRole("option", { name: /^Around the World/ });
+			await act(() => vi.advanceTimersByTimeAsync(50));
+			expect(mocks.getExternalTrackPlayback).not.toHaveBeenCalled();
+		});
+
+		it("does not prefetch when the dialog closes before External results arrive", async () => {
+			mocks.hasExternalSource = true;
+			let finish!: (value: { source: string; items: ExternalTrack[] }) => void;
+			mocks.searchExternalSource.mockImplementation(
+				() =>
+					new Promise((resolve) => {
+						finish = resolve;
+					}),
+			);
+			const client = new QueryClient({
+				defaultOptions: { queries: { retry: false } },
+			});
+			const view = (open: boolean) => (
+				<QueryClientProvider client={client}>
+					<LibrarySearchDialog open={open} onOpenChange={vi.fn()} />
+				</QueryClientProvider>
+			);
+			const { rerender } = render(view(true));
+			fireEvent.change(screen.getByRole("combobox"), {
+				target: { value: "ne" },
+			});
+			await waitFor(() =>
+				expect(mocks.searchExternalSource).toHaveBeenCalled(),
+			);
+			rerender(view(false));
+			await act(async () => finish({ source: "scsearch", items: [daftPunk] }));
+			await act(() => vi.advanceTimersByTimeAsync(50));
+			expect(mocks.getExternalTrackPlayback).not.toHaveBeenCalled();
 		});
 
 		it("shows its own loading and empty states", async () => {

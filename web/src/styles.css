@@ -563,6 +563,15 @@ html[data-window-maximized] body::after {
 		width: var(--library-search-width, min(36rem, calc(100vw - 2rem)));
 		transform-origin: top center;
 	}
+	.library-search-row {
+		/* The card's 1px top border plus this row, its bottom border included,
+		   span the top bar from the search field's top to the bar's bottom
+		   edge (the App Shell measures it), so the two bottom borders lie on
+		   one line. Without the measurement the calc clamps to 0 and the
+		   row keeps a 3rem field over its border. */
+		min-height: calc(3rem + 1px);
+		height: calc(var(--library-search-row-height, 0px) - 1px);
+	}
 	@keyframes library-search-enter {
 		from {
 			opacity: 0;
