@@ -62,7 +62,10 @@ impl AppState {
             modules::managed_import::ManagedImport::new(db.clone(), &config, queue_events.clone());
         let external_source =
             modules::external_source::ExternalSource::new(config.external_source.as_ref());
-        let soulseek = modules::soulseek::Soulseek::new(config.soulseek.as_ref());
+        let soulseek = modules::soulseek::Soulseek::new(
+            config.soulseek.as_ref(),
+            &config.managed_storage_path,
+        );
         Self {
             config: Arc::new(config),
             dependencies: Arc::new(dependencies),

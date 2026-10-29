@@ -1,6 +1,6 @@
 use earthly_music_server::app::{self, AppState};
 use earthly_music_server::config::{self, Config};
-use earthly_music_server::{db, dependencies, observability};
+use earthly_music_server::{db, dependencies, modules, observability};
 use std::path::PathBuf;
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::layer::SubscriberExt;
@@ -64,6 +64,11 @@ async fn run(config: Config) -> Result<(), String> {
         report
             .0
             .push(dependencies::probe_yt_dlp(&external_source.yt_dlp).await);
+    }
+    if let Some(soulseek) = &config.soulseek {
+        report
+            .0
+            .push(modules::soulseek::probe_dependency(soulseek).await);
     }
     for dependency in &report.0 {
         if dependency.available {

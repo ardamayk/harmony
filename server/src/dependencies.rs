@@ -10,6 +10,8 @@ use std::time::Duration;
 pub const FFMPEG: &str = "ffmpeg";
 pub const FFPROBE: &str = "ffprobe";
 pub const YT_DLP: &str = "yt-dlp";
+/// The operator's slskd, reached over HTTP rather than found on PATH.
+pub const SLSKD: &str = "slskd";
 const VERSION_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// One probed program. `version` is empty when the program is missing or
