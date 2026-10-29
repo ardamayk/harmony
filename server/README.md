@@ -83,3 +83,23 @@ ENV EXTERNAL_SOURCE_SEARCH=scsearch
 ```
 
 Or they install yt-dlp into a mounted volume and point `YT_DLP` at it.
+
+## Sentry (optional)
+
+The Music Server can send errors, request traces, logs and External Source metrics to your own Sentry ([ADR 0033](../docs/adr/0033-opt-in-sentry-for-the-rust-programs.md)). It is off unless `SENTRY_DSN` is set; the project has no DSN of its own and never reports from anyone else's server.
+
+| Variable | Meaning |
+| --- | --- |
+| `SENTRY_DSN` | Your project's DSN, such as `https://<public-key>@<your-sentry-host>/<project-id>`. Unset, nothing is sent. |
+| `SENTRY_ENVIRONMENT` | Unset, `development` for a debug build and `production` for a release build. |
+| `SENTRY_TRACES_SAMPLE_RATE` | The share of requests sent as transactions, 0 to 1. Unset, `1.0`. |
+
+Keep the DSN out of git, for example in `mise.local.toml`:
+
+```toml
+[env]
+SENTRY_DSN = "https://<public-key>@<your-sentry-host>/<project-id>"
+SENTRY_ENVIRONMENT = "development"
+```
+
+Transactions are named by route template (`GET /api/v1/external/tracks/{external_track_id}/stream`). URLs, query strings, search queries, path ids, headers, client addresses and file paths are not sent; Rust has no Sentry profiling.

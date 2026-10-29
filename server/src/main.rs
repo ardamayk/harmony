@@ -1,26 +1,46 @@
 use earthly_music_server::app::{self, AppState};
 use earthly_music_server::config::{self, Config};
-use earthly_music_server::{db, dependencies};
+use earthly_music_server::{db, dependencies, observability};
 use std::path::PathBuf;
 use tracing_subscriber::EnvFilter;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 
-#[tokio::main]
-async fn main() {
-    // One JSON object per line on stdout, like the Go server's slog.
-    tracing_subscriber::fmt()
-        .json()
-        .flatten_event(true)
-        .with_current_span(false)
-        .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
+fn main() {
+    let config = Config::from_env().map_err(|error| format!("configuration failed: {error}"));
+    // Sentry starts before the runtime and only with SENTRY_DSN (ADR 0033).
+    let sentry = config
+        .as_ref()
+        .ok()
+        .and_then(|config| observability::init(config.sentry.as_ref(), &config.version));
+    // One JSON object per line on stdout, like the Go server's slog; with
+    // Sentry, the same lines also go to it.
+    tracing_subscriber::registry()
+        .with(EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
+        .with(
+            tracing_subscriber::fmt::layer()
+                .json()
+                .flatten_event(true)
+                .with_current_span(false),
+        )
+        .with(sentry.is_some().then(observability::tracing_layer))
         .init();
-    if let Err(error) = run().await {
+    let result = config.and_then(|config| {
+        tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .map_err(|error| format!("runtime failed: {error}"))?
+            .block_on(run(config))
+    });
+    if let Err(error) = result {
         tracing::error!(%error, "server failed");
+        // Sends what is queued before exiting.
+        drop(sentry);
         std::process::exit(1);
     }
 }
 
-async fn run() -> Result<(), String> {
-    let config = Config::from_env().map_err(|error| format!("configuration failed: {error}"))?;
+async fn run(config: Config) -> Result<(), String> {
     config::validate_server_address(&config.addr)
         .map_err(|error| format!("unsafe server address: {error}"))?;
     let address = config::bind_address(&config.addr)

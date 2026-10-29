@@ -5,12 +5,16 @@
 //! Lines carry milliseconds, counts, the Track's fingerprint and the
 //! query's length: never a URL or the query itself. Requests refused before
 //! any work (source disabled, bad request, no artwork) are not logged.
+//! With Sentry configured (ADR 0033), the same numbers become spans of the
+//! request's transaction and metrics.
 
 use super::service::ExternalError;
 use super::token::fingerprint;
+use crate::observability::{self, sequential};
 use axum::http::HeaderValue;
 use bytes::Bytes;
 use futures_util::stream::{BoxStream, Stream, StreamExt};
+use sentry::protocol::Unit;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -28,6 +32,29 @@ pub struct RunTiming {
     pub queue: Option<Duration>,
     pub run: Option<Duration>,
     pub parse: Option<Duration>,
+}
+
+impl RunTiming {
+    /// Its steps as child spans: the wait for a turn, then yt-dlp, then
+    /// reading its output.
+    fn steps(&self) -> Vec<observability::Step> {
+        sequential(&[
+            ("external_source.queue", self.queue),
+            ("external_source.yt_dlp", self.run),
+            ("external_source.parse", self.parse),
+        ])
+    }
+
+    /// Its wait and run as metrics for one yt-dlp `operation`.
+    fn report(&self, operation: &str) {
+        let attributes = [("operation", operation)];
+        if let Some(queue) = self.queue {
+            observability::distribution_ms("external_source.yt_dlp.queue", queue, &attributes);
+        }
+        if let Some(run) = self.run {
+            observability::distribution_ms("external_source.yt_dlp.duration", run, &attributes);
+        }
+    }
 }
 
 /// How a resolve was answered: from the cache, by a new yt-dlp run, or by
@@ -197,6 +224,24 @@ impl Drop for SearchLog {
             outcome,
             "External Source search"
         );
+        let total = self.end.total();
+        observability::record_span(
+            self.end.started,
+            "external_source.search",
+            total,
+            &[
+                ("outcome", outcome.into()),
+                ("query_len", self.query_len.into()),
+                ("results", self.results.into()),
+            ],
+            &self.run.steps(),
+        );
+        observability::distribution_ms(
+            "external_source.search.duration",
+            total,
+            &[("outcome", outcome)],
+        );
+        self.run.report("search");
     }
 }
 
@@ -243,6 +288,40 @@ impl Drop for ResolveLog {
             outcome,
             "External Track resolve"
         );
+        let total = self.end.total();
+        let cache = self.timing.cache.map(CacheUse::as_str);
+        observability::record_span(
+            self.end.started,
+            "external_source.resolve",
+            total,
+            &[
+                ("outcome", outcome.into()),
+                ("cache", cache.into()),
+                ("format", self.timing.format.into()),
+                ("extractor", self.timing.extractor.clone().into()),
+            ],
+            &self.timing.run.steps(),
+        );
+        observability::distribution_ms(
+            "external_source.resolve.duration",
+            total,
+            &[("outcome", outcome), ("cache", cache.unwrap_or("none"))],
+        );
+        report_cache(cache, "playback");
+        // A joined run is counted by the request that started it.
+        if self.timing.cache == Some(CacheUse::Miss) {
+            self.timing.run.report("resolve");
+        }
+    }
+}
+
+/// How a resolve was answered, for the cache hit rate.
+fn report_cache(cache: Option<&str>, request: &str) {
+    if let Some(cache) = cache {
+        observability::count(
+            "external_source.resolve.cache",
+            &[("cache", cache), ("request", request)],
+        );
     }
 }
 
@@ -254,6 +333,9 @@ pub struct StreamLog {
     track: String,
     range: String,
     bytes: u64,
+    /// Its spans and first-byte metrics are recorded once, while the request
+    /// is still open.
+    traced: bool,
 }
 
 impl StreamLog {
@@ -264,6 +346,7 @@ impl StreamLog {
             track: fingerprint(id),
             range: range_label(range, head),
             bytes: 0,
+            traced: false,
         }
     }
 
@@ -282,6 +365,7 @@ impl StreamLog {
         body: BoxStream<'static, Result<Bytes, String>>,
     ) -> BoxStream<'static, Result<Bytes, String>> {
         self.end.status = Some(status);
+        self.trace();
         if self.range == "head" {
             self.end.finish("ok");
             return body;
@@ -291,6 +375,38 @@ impl StreamLog {
             log: Some(self),
         }
         .boxed()
+    }
+}
+
+impl StreamLog {
+    /// The resolve and the wait for upstream's first byte, as spans of the
+    /// request and metrics, before the body starts.
+    fn trace(&mut self) {
+        if std::mem::replace(&mut self.traced, true) {
+            return;
+        }
+        let cache = self.timing.resolve.cache.map(CacheUse::as_str);
+        observability::record_span(
+            self.end.started,
+            "external_source.stream",
+            self.end.total(),
+            &[
+                ("cache", cache.into()),
+                ("range", self.range.clone().into()),
+            ],
+            &sequential(&[
+                ("external_source.resolve", self.timing.resolve.total),
+                ("external_source.upstream_ttfb", self.timing.upstream_ttfb),
+            ]),
+        );
+        report_cache(cache, "stream");
+        if let Some(ttfb) = self.timing.upstream_ttfb {
+            observability::distribution_ms(
+                "external_source.stream.ttfb",
+                ttfb,
+                &[("cache", cache.unwrap_or("none"))],
+            );
+        }
     }
 }
 
@@ -333,6 +449,20 @@ impl Drop for StreamLog {
             status = self.end.status,
             outcome,
             "External Track stream"
+        );
+        // Refused before its body: still within the request.
+        self.trace();
+        let attributes = [("outcome", outcome)];
+        observability::distribution_ms(
+            "external_source.stream.duration",
+            Duration::from_millis(total_ms),
+            &attributes,
+        );
+        observability::distribution(
+            "external_source.stream.bytes",
+            self.bytes as f64,
+            Unit::Byte,
+            &attributes,
         );
     }
 }
@@ -403,6 +533,19 @@ impl Drop for ArtworkLog {
             status = self.end.status,
             outcome,
             "External Track artwork"
+        );
+        let total = self.end.total();
+        observability::record_span(
+            self.end.started,
+            "external_source.artwork",
+            total,
+            &[("outcome", outcome.into()), ("bytes", self.bytes.into())],
+            &[],
+        );
+        observability::distribution_ms(
+            "external_source.artwork.duration",
+            total,
+            &[("outcome", outcome)],
         );
     }
 }

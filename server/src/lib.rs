@@ -12,6 +12,7 @@ pub mod gojson;
 pub mod inspect;
 pub mod migrate;
 pub mod modules;
+pub mod observability;
 pub mod query;
 pub mod respond;
 pub mod searchdata;
