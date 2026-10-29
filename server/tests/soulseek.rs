@@ -2,7 +2,7 @@
 //! fake slskd: a small HTTP server on loopback that answers scripted JSON
 //! and records every request. Nothing here reaches the Soulseek network.
 
-use axum::body::Body;
+use axum::body::{Body, Bytes};
 use axum::extract::State;
 use axum::http::{HeaderMap, Method, Request, StatusCode, Uri, header};
 use axum::response::{IntoResponse, Response};
@@ -28,6 +28,7 @@ struct Recorded {
     /// Path and query, such as `/api/v0/searches/<id>?includeResponses=true`.
     uri: String,
     api_key: Option<String>,
+    body: Value,
 }
 
 #[derive(Default)]
@@ -89,6 +90,7 @@ async fn answer(
     method: Method,
     uri: Uri,
     headers: HeaderMap,
+    body: Bytes,
 ) -> Response {
     let mut state = state.lock().unwrap();
     state.requests.push(Recorded {
@@ -98,6 +100,7 @@ async fn answer(
             .get("x-api-key")
             .and_then(|value| value.to_str().ok())
             .map(str::to_owned),
+        body: serde_json::from_slice(&body).unwrap_or(Value::Null),
     });
     match state.replies.get(&format!("{method} {}", uri.path())) {
         Some((status, body)) => (*status, axum::Json(body.clone())).into_response(),
@@ -143,6 +146,7 @@ fn share(local_path: &str, excluded: bool, files: u64) -> Value {
 
 struct Harness {
     router: axum::Router,
+    state: AppState,
     managed: PathBuf,
     _directory: tempfile::TempDir,
     _downloads: tempfile::TempDir,
@@ -170,8 +174,10 @@ async fn harness(slskd: Option<&url::Url>) -> Harness {
     })
     .expect("config");
     config.soulseek = slskd.map(|url| soulseek_config(url, downloads.path()));
+    let state = AppState::new(config, Report::default(), pool);
     Harness {
-        router: app::router(AppState::new(config, Report::default(), pool)),
+        router: app::router(state.clone()),
+        state,
         managed,
         _directory: directory,
         _downloads: downloads,
@@ -458,4 +464,515 @@ async fn slskd_joins_the_dependency_report_as_an_optional_dependency() {
             version: String::new(),
         }
     );
+}
+
+/// One file in an slskd search response.
+fn file(filename: &str, size: u64, attributes: Value) -> Value {
+    let mut file = json!({
+        "filename": filename,
+        "size": size,
+        "extension": "",
+        "code": 1,
+        "isLocked": false
+    });
+    file.as_object_mut()
+        .unwrap()
+        .extend(attributes.as_object().unwrap().clone());
+    file
+}
+
+/// One user's slskd search response.
+fn response(username: &str, free_slot: bool, queue: u64, speed: u64, files: Vec<Value>) -> Value {
+    json!({
+        "username": username,
+        "hasFreeUploadSlot": free_slot,
+        "queueLength": queue,
+        "uploadSpeed": speed,
+        "fileCount": files.len(),
+        "lockedFileCount": 0,
+        "lockedFiles": [],
+        "token": 7,
+        "files": files
+    })
+}
+
+/// slskd's `GET /api/v0/searches/{id}?includeResponses=true`.
+fn search(id: &str, text: &str, complete: bool, responses: Vec<Value>) -> Value {
+    json!({
+        "id": id,
+        "searchText": text,
+        "state": if complete { "Completed, TimedOut" } else { "InProgress" },
+        "isComplete": complete,
+        "responseCount": responses.len(),
+        "fileCount": 0,
+        "lockedFileCount": 0,
+        "startedAt": "2026-10-29T10:00:00.0000000",
+        "token": 7,
+        "responses": responses
+    })
+}
+
+/// An Album offered as 24-bit FLAC by alice, erin and (incomplete) bob, as
+/// FLAC without reported quality by dave, as MP3 320 by carol, and one bob
+/// file as 16-bit FLAC.
+fn album_responses() -> Vec<Value> {
+    let hi_res = json!({"bitDepth": 24, "sampleRate": 48000, "length": 320});
+    vec![
+        response(
+            "carol",
+            false,
+            2,
+            500,
+            vec![
+                file(
+                    r"Share\Daft Punk - Discovery\01 One More Time.mp3",
+                    10,
+                    json!({"bitRate": 320, "isVariableBitRate": false}),
+                ),
+                file(
+                    r"Share\Daft Punk - Discovery\02 Aerodynamic.mp3",
+                    11,
+                    json!({"bitRate": 320, "isVariableBitRate": false}),
+                ),
+                file(r"Share\Daft Punk - Discovery\notes.txt", 1, json!({})),
+            ],
+        ),
+        response(
+            "bob",
+            true,
+            0,
+            9000,
+            vec![
+                file(
+                    r"Music\Discovery\01 One More Time.flac",
+                    300,
+                    hi_res.clone(),
+                ),
+                file(
+                    r"Music\Discovery\02 Aerodynamic.flac",
+                    50,
+                    json!({"bitDepth": 16, "sampleRate": 44100}),
+                ),
+            ],
+        ),
+        response(
+            "erin",
+            false,
+            1,
+            100000,
+            vec![
+                file(r"E\Discovery\01 One More Time.flac", 100, hi_res.clone()),
+                file(r"E\Discovery\02 Aerodynamic.flac", 200, hi_res.clone()),
+            ],
+        ),
+        response(
+            "dave",
+            true,
+            0,
+            100,
+            vec![
+                file(r"D\Discovery\01 One More Time.flac", 120, json!({})),
+                file(r"D\Discovery\02 Aerodynamic.flac", 120, json!({})),
+            ],
+        ),
+        response(
+            "alice",
+            true,
+            0,
+            1000,
+            vec![
+                file(
+                    r"@@alice\Daft Punk\Discovery [24-48]\01 One More Time.flac",
+                    100,
+                    hi_res.clone(),
+                ),
+                file(
+                    r"@@alice\Daft Punk\Discovery [24-48]\02 Aerodynamic.flac",
+                    200,
+                    hi_res.clone(),
+                ),
+                file(
+                    r"@@alice\Daft Punk\Discovery [24-48]\cover.jpg",
+                    10,
+                    json!({}),
+                ),
+            ],
+        ),
+    ]
+}
+
+async fn start_search(harness: &Harness, slskd: &FakeSlskd, query: &str, scope: &str) -> String {
+    slskd.reply(Method::POST, "/api/v0/searches", StatusCode::OK, json!({}));
+    let (status, body) = send_json(
+        &harness.router,
+        Method::POST,
+        "/api/v1/soulseek/searches",
+        Some(json!({"query": query, "scope": scope})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+    body["searchId"].as_str().expect("searchId").to_owned()
+}
+
+/// A version's sources without their opaque ids, which are checked apart.
+fn without_source_ids(versions: &Value) -> Value {
+    let mut versions = versions.clone();
+    for version in versions.as_array_mut().unwrap() {
+        for source in version["sources"].as_array_mut().unwrap() {
+            let id = source.as_object_mut().unwrap().remove("sourceId");
+            assert!(id.and_then(|id| id.as_str().map(str::len)).unwrap_or(0) > 0);
+        }
+    }
+    versions
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_search_starts_in_slskd_with_the_trimmed_query() {
+    let slskd = FakeSlskd::start().await;
+    let harness = harness(Some(&slskd.url)).await;
+    let search_id = start_search(&harness, &slskd, "  Daft Punk Discovery\n", "album").await;
+    assert!(uuid::Uuid::parse_str(&search_id).is_ok(), "{search_id}");
+    let requests = slskd.requests();
+    let started = requests
+        .iter()
+        .find(|request| request.method == Method::POST)
+        .expect("slskd search");
+    assert_eq!(started.uri, "/api/v0/searches");
+    assert_eq!(started.api_key.as_deref(), Some(API_KEY));
+    assert_eq!(
+        started.body,
+        json!({"id": search_id, "searchText": "Daft Punk Discovery"})
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn album_sources_group_into_versions_in_display_order() {
+    let slskd = FakeSlskd::start().await;
+    let harness = harness(Some(&slskd.url)).await;
+    let search_id = start_search(&harness, &slskd, "Daft Punk Discovery", "album").await;
+    slskd.reply(
+        Method::GET,
+        &format!("/api/v0/searches/{search_id}"),
+        StatusCode::OK,
+        search(&search_id, "Daft Punk Discovery", false, album_responses()),
+    );
+    let uri = format!("/api/v1/soulseek/searches/{search_id}");
+    let (status, body) = send(&harness.router, Method::GET, &uri).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["searchId"], search_id.as_str());
+    assert_eq!(body["query"], "Daft Punk Discovery");
+    assert_eq!(body["scope"], "album");
+    assert_eq!(body["state"], "searching");
+    let source = |username: &str,
+                  folder: &str,
+                  files: u64,
+                  bytes: u64,
+                  complete: bool,
+                  free: bool,
+                  queue: u64,
+                  speed: u64| {
+        json!({
+            "username": username,
+            "folder": folder,
+            "fileCount": files,
+            "totalBytes": bytes,
+            "complete": complete,
+            "hasFreeUploadSlot": free,
+            "queueLength": queue,
+            "uploadSpeedBytesPerSecond": speed
+        })
+    };
+    assert_eq!(
+        without_source_ids(&body["versions"]),
+        json!([
+            {
+                "versionKey": "flac-24-48000",
+                "quality": {"format": "flac", "lossless": true, "bitDepth": 24, "sampleRateHz": 48000},
+                "fileCount": 2,
+                "totalBytes": 300,
+                "sourceCount": 3,
+                "completeSourceCount": 2,
+                "sources": [
+                    source("alice", r"@@alice\Daft Punk\Discovery [24-48]", 2, 300, true, true, 0, 1000),
+                    source("erin", r"E\Discovery", 2, 300, true, false, 1, 100000),
+                    source("bob", r"Music\Discovery", 1, 300, false, true, 0, 9000),
+                ]
+            },
+            {
+                "versionKey": "flac-16-44100",
+                "quality": {"format": "flac", "lossless": true, "bitDepth": 16, "sampleRateHz": 44100},
+                "fileCount": 1,
+                "totalBytes": 50,
+                "sourceCount": 1,
+                "completeSourceCount": 1,
+                "sources": [source("bob", r"Music\Discovery", 1, 50, true, true, 0, 9000)]
+            },
+            {
+                "versionKey": "flac-x-x",
+                "quality": {"format": "flac", "lossless": true},
+                "fileCount": 2,
+                "totalBytes": 240,
+                "sourceCount": 1,
+                "completeSourceCount": 1,
+                "sources": [source("dave", r"D\Discovery", 2, 240, true, true, 0, 100)]
+            },
+            {
+                "versionKey": "mp3-320-cbr",
+                "quality": {"format": "mp3", "lossless": false, "bitrateKbps": 320, "variableBitrate": false},
+                "fileCount": 2,
+                "totalBytes": 21,
+                "sourceCount": 1,
+                "completeSourceCount": 1,
+                "sources": [source("carol", r"Share\Daft Punk - Discovery", 2, 21, true, false, 2, 500)]
+            }
+        ])
+    );
+    let reads = slskd
+        .requests()
+        .into_iter()
+        .filter(|request| request.method == Method::GET)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        reads[0].uri,
+        format!("/api/v0/searches/{search_id}?includeResponses=true")
+    );
+    // Source ids are stable between reads and distinct within a version.
+    let (_, again) = send(&harness.router, Method::GET, &uri).await;
+    assert_eq!(again, body);
+    let ids: Vec<&Value> = body["versions"][0]["sources"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|source| &source["sourceId"])
+        .collect();
+    assert_eq!(ids.len(), 3);
+    assert!(ids[0] != ids[1] && ids[1] != ids[2] && ids[0] != ids[2]);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn track_sources_are_single_files_and_a_finished_search_is_complete() {
+    let slskd = FakeSlskd::start().await;
+    let harness = harness(Some(&slskd.url)).await;
+    let search_id = start_search(&harness, &slskd, "Daft Punk One More Time", "track").await;
+    slskd.reply(
+        Method::GET,
+        &format!("/api/v0/searches/{search_id}"),
+        StatusCode::OK,
+        search(
+            &search_id,
+            "Daft Punk One More Time",
+            true,
+            vec![response(
+                "alice",
+                true,
+                0,
+                1000,
+                vec![
+                    file(
+                        r"A\Singles\One More Time.mp3",
+                        9,
+                        json!({"bitRate": 245, "isVariableBitRate": true}),
+                    ),
+                    file(
+                        r"A\Singles\One More Time (Radio Edit).mp3",
+                        7,
+                        json!({"bitRate": 251, "isVariableBitRate": true}),
+                    ),
+                ],
+            )],
+        ),
+    );
+    let (status, body) = send(
+        &harness.router,
+        Method::GET,
+        &format!("/api/v1/soulseek/searches/{search_id}"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["scope"], "track");
+    assert_eq!(body["state"], "complete");
+    let versions = body["versions"].as_array().unwrap();
+    assert_eq!(versions.len(), 1, "{body}");
+    let version = &versions[0];
+    assert_eq!(version["versionKey"], "mp3-vbr");
+    assert_eq!(
+        version["quality"],
+        json!({"format": "mp3", "lossless": false, "variableBitrate": true})
+    );
+    assert_eq!(version["fileCount"], 1);
+    assert_eq!(version["totalBytes"], 9);
+    assert_eq!(version["sourceCount"], 2);
+    assert_eq!(version["completeSourceCount"], 2);
+    for source in version["sources"].as_array().unwrap() {
+        assert_eq!(source["folder"], r"A\Singles");
+        assert_eq!(source["fileCount"], 1);
+        assert_eq!(source["complete"], true);
+    }
+    assert_ne!(
+        version["sources"][0]["sourceId"],
+        version["sources"][1]["sourceId"]
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_bad_search_is_refused_without_calling_slskd() {
+    let slskd = FakeSlskd::start().await;
+    let harness = harness(Some(&slskd.url)).await;
+    for body in [
+        json!({"query": "", "scope": "album"}),
+        json!({"query": " \n\t", "scope": "album"}),
+        json!({"query": "x".repeat(201), "scope": "album"}),
+        json!({"query": "Discovery", "scope": "single"}),
+        json!({"query": "Discovery"}),
+        json!("Discovery"),
+    ] {
+        let (status, answer) = send_json(
+            &harness.router,
+            Method::POST,
+            "/api/v1/soulseek/searches",
+            Some(body.clone()),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+        assert_eq!(answer["code"], "bad_request", "{body}");
+    }
+    assert!(slskd.requests().is_empty());
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn an_unknown_search_answers_404() {
+    let slskd = FakeSlskd::start().await;
+    let harness = harness(Some(&slskd.url)).await;
+    // slskd no longer knows a search the Music Server started.
+    let forgotten = start_search(&harness, &slskd, "Discovery", "album").await;
+    for search_id in [
+        forgotten.as_str(),
+        "s1",
+        // A search the Music Server did not start.
+        "0b5d5d5e-8a3f-4c11-9d3e-5b0c3f2a1e77",
+    ] {
+        let (status, body) = send(
+            &harness.router,
+            Method::GET,
+            &format!("/api/v1/soulseek/searches/{search_id}"),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NOT_FOUND, "{search_id}");
+        assert_eq!(body["code"], "search_not_found", "{search_id}");
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_search_without_slskd_or_its_login_answers_503() {
+    let slskd = FakeSlskd::start().await;
+    let logged_out = harness(Some(&slskd.url)).await;
+    slskd.reply(
+        Method::POST,
+        "/api/v0/searches",
+        StatusCode::CONFLICT,
+        json!("The server connection must be connected and logged in to perform a search (currently: Disconnected)"),
+    );
+    let create = Some(json!({"query": "Discovery", "scope": "album"}));
+    let (status, body) = send_json(
+        &logged_out.router,
+        Method::POST,
+        "/api/v1/soulseek/searches",
+        create.clone(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(body["code"], "soulseek_not_logged_in");
+
+    let unreachable = harness(Some(&unreachable_slskd())).await;
+    let (status, body) = send_json(
+        &unreachable.router,
+        Method::POST,
+        "/api/v1/soulseek/searches",
+        create,
+    )
+    .await;
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(body["code"], "slskd_unreachable");
+    assert!(
+        body["message"].as_str().unwrap().contains("slskd"),
+        "{body}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_version_resolves_to_its_ordered_sources_and_their_files() {
+    let slskd = FakeSlskd::start().await;
+    let harness = harness(Some(&slskd.url)).await;
+    let search_id = start_search(&harness, &slskd, "Daft Punk Discovery", "album").await;
+    slskd.reply(
+        Method::GET,
+        &format!("/api/v0/searches/{search_id}"),
+        StatusCode::OK,
+        search(&search_id, "Daft Punk Discovery", true, album_responses()),
+    );
+    let soulseek = &harness.state.soulseek;
+    let resolved = soulseek
+        .resolve_version(&search_id, "flac-24-48000", None)
+        .await
+        .expect("version");
+    assert_eq!(resolved.query, "Daft Punk Discovery");
+    assert_eq!(resolved.scope, soulseek::Scope::Album);
+    let users: Vec<&str> = resolved
+        .version
+        .sources
+        .iter()
+        .map(|source| source.username.as_str())
+        .collect();
+    assert_eq!(users, ["alice", "erin", "bob"]);
+    let alice = &resolved.version.sources[0];
+    assert_eq!(
+        alice
+            .files
+            .iter()
+            .map(|file| (file.filename.as_str(), file.size))
+            .collect::<Vec<_>>(),
+        [
+            (
+                r"@@alice\Daft Punk\Discovery [24-48]\01 One More Time.flac",
+                100
+            ),
+            (
+                r"@@alice\Daft Punk\Discovery [24-48]\02 Aerodynamic.flac",
+                200
+            ),
+        ]
+    );
+    assert_eq!(
+        alice
+            .artwork
+            .iter()
+            .map(|file| file.filename.as_str())
+            .collect::<Vec<_>>(),
+        [r"@@alice\Daft Punk\Discovery [24-48]\cover.jpg"]
+    );
+
+    // A chosen source goes first; the rest keep their order.
+    let bob = resolved.version.sources[2].id.clone();
+    let chosen = soulseek
+        .resolve_version(&search_id, "flac-24-48000", Some(&bob))
+        .await
+        .expect("version");
+    let users: Vec<&str> = chosen
+        .version
+        .sources
+        .iter()
+        .map(|source| source.username.as_str())
+        .collect();
+    assert_eq!(users, ["bob", "alice", "erin"]);
+
+    for (key, source) in [("flac-8-8000", None), ("flac-24-48000", Some("nope"))] {
+        assert_eq!(
+            soulseek
+                .resolve_version(&search_id, key, source)
+                .await
+                .err(),
+            Some(soulseek::SoulseekError::VersionNotFound),
+            "{key} {source:?}"
+        );
+    }
 }

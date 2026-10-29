@@ -6,7 +6,11 @@
 mod handlers;
 mod service;
 mod slskd;
+mod versions;
 
 pub use handlers::routes;
-pub use service::{Sharing, Soulseek, SoulseekError, Status, probe_dependency};
+pub use service::{
+    ResolvedVersion, Sharing, Soulseek, SoulseekError, SoulseekSearch, Status, probe_dependency,
+};
 pub use slskd::Application;
+pub use versions::{Quality, RemoteFile, Scope, Source, Version};
