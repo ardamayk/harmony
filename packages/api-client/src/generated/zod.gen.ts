@@ -17,7 +17,7 @@ export const zHealthResponse = z.object({
 });
 
 export const zUser = z.object({
-    id: z.uuid(),
+    id: z.guid(),
     username: z.string(),
     displayName: z.string().optional()
 });
@@ -115,7 +115,7 @@ export const zErrorResponse = z.object({
 });
 
 export const zManagedImportJob = z.object({
-    id: z.uuid(),
+    id: z.guid(),
     status: z.enum([
         'uploading',
         'awaiting_confirmation',
@@ -125,13 +125,13 @@ export const zManagedImportJob = z.object({
     revision: z.int().gte(1),
     validationProgress: z.int().gte(0).lte(100),
     errorCode: z.string().optional(),
-    trackId: z.uuid().optional(),
-    replacesTrackId: z.uuid().optional()
+    trackId: z.guid().optional(),
+    replacesTrackId: z.guid().optional()
 });
 
 export const zManagedImportJobCreate = z.object({
-    batchId: z.uuid(),
-    clientFileId: z.uuid()
+    batchId: z.guid(),
+    clientFileId: z.guid()
 });
 
 export const zManagedImportBatchCreate = z.record(z.string(), z.unknown());
@@ -148,19 +148,19 @@ export const zManagedImportHistoryCounts = z.object({
 
 export const zManagedImportHistoryFile = z.object({
     issues: z.array(zValidationIssue).optional(),
-    fileId: z.uuid(),
-    jobId: z.uuid(),
+    fileId: z.guid(),
+    jobId: z.guid(),
     safeFilename: z.string().max(255).optional(),
     startedAt: z.iso.datetime({ offset: true }),
     completedAt: z.iso.datetime({ offset: true }),
     contentSha256: z.string().regex(/^[0-9a-f]{64}$/).optional(),
     resultCode: z.string().min(1),
-    createdTrackId: z.uuid().optional(),
+    createdTrackId: z.guid().optional(),
     replacedTrackId: z.string().optional()
 });
 
 export const zManagedImportHistoryItem = z.object({
-    importId: z.uuid(),
+    importId: z.guid(),
     startedAt: z.iso.datetime({ offset: true }),
     completedAt: z.iso.datetime({ offset: true }),
     resultCode: z.enum([
@@ -198,8 +198,8 @@ export const zManagedImportAlbumDecision = z.object({
 
 export const zManagedImportDuplicateDecision = z.object({
     targetRevision: z.int().gte(1).optional(),
-    trackId: z.uuid().optional(),
-    jobId: z.uuid(),
+    trackId: z.guid().optional(),
+    jobId: z.guid(),
     action: z.enum([
         'import_separately',
         'replace_existing',
@@ -210,7 +210,7 @@ export const zManagedImportDuplicateDecision = z.object({
 export const zManagedImportBatchConfirmation = z.object({
     albumDecisions: z.array(zManagedImportAlbumDecision).optional(),
     revision: z.int().gte(1),
-    selectedFileIds: z.array(z.uuid()),
+    selectedFileIds: z.array(z.guid()),
     duplicateDecisions: z.array(zManagedImportDuplicateDecision).optional()
 });
 
@@ -318,7 +318,7 @@ export const zManagedImportDuplicateCandidate = z.object({
     revision: z.int().gte(1).optional(),
     titleKey: z.string().optional(),
     currentFile: zManagedImportPreviewFile.optional(),
-    trackId: z.uuid(),
+    trackId: z.guid(),
     title: z.string(),
     artists: z.array(z.string()).min(1),
     album: z.string(),
@@ -353,10 +353,10 @@ export const zManagedImportConfirmation = z.object({
 });
 
 export const zManagedImportResult = z.object({
-    jobId: z.uuid(),
+    jobId: z.guid(),
     status: z.enum(['committed']),
     revision: z.int().gte(1),
-    trackId: z.uuid()
+    trackId: z.guid()
 });
 
 export const zArtist = z.object({
@@ -381,7 +381,7 @@ export const zReleaseIdentifier = z.object({
 });
 
 export const zAlbumArtwork = z.object({
-    sourceTrackId: z.uuid().optional(),
+    sourceTrackId: z.guid().optional(),
     contentSha256: z.string().regex(/^[0-9a-f]{64}$/),
     mediaType: z.enum([
         'image/jpeg',
@@ -415,7 +415,7 @@ export const zArtistList = z.object({
 });
 
 export const zAlbum = z.object({
-    id: z.uuid(),
+    id: z.guid(),
     title: z.string(),
     artistId: z.string(),
     artistName: z.string(),
@@ -435,7 +435,7 @@ export const zAlbumList = z.object({
 });
 
 export const zTrackWaveform = z.object({
-    trackId: z.uuid(),
+    trackId: z.guid(),
     peakCount: z.int(),
     peaks: z.array(z.int().gte(0).lte(255))
 });
@@ -446,7 +446,7 @@ export const zTrackWaveformPending = z.object({
 });
 
 export const zTrackLyrics = z.object({
-    trackId: z.uuid(),
+    trackId: z.guid(),
     lyrics: z.string()
 });
 
@@ -458,12 +458,12 @@ export const zReplayGainMetadata = z.object({
 });
 
 export const zTrack = z.object({
-    id: z.uuid(),
+    id: z.guid(),
     title: z.string(),
     artistName: z.string(),
     artists: z.array(zArtistCredit).optional(),
     albumArtists: z.array(zArtistCredit).optional(),
-    albumId: z.uuid(),
+    albumId: z.guid(),
     albumTitle: z.string().optional(),
     trackNo: z.int().optional(),
     discNo: z.int().gte(1).optional(),
@@ -548,7 +548,7 @@ export const zLibrarySearchResponse = z.object({
 });
 
 export const zPlaylist = z.object({
-    id: z.uuid(),
+    id: z.guid(),
     name: z.string(),
     isDefault: z.boolean(),
     trackCount: z.int()
@@ -568,7 +568,7 @@ export const zPlaylistCreate = z.object({
 });
 
 export const zPlaylistTrackAdd = z.object({
-    trackId: z.uuid()
+    trackId: z.guid()
 });
 
 export const zRadioNowPlaying = z.object({
@@ -580,7 +580,7 @@ export const zRadioNowPlaying = z.object({
 });
 
 export const zRadioStation = z.object({
-    id: z.uuid(),
+    id: z.guid(),
     name: z.string(),
     streamUrl: z.url(),
     homepageUrl: z.url().optional(),
@@ -678,13 +678,13 @@ export const zDeleteResult = z.object({
 });
 
 export const zAlbumDeletionTrack = z.object({
-    trackId: z.uuid(),
+    trackId: z.guid(),
     trackTitle: z.string(),
     sizeBytes: z.int().gte(0)
 });
 
 export const zAlbumDeletionFailed = z.object({
-    trackId: z.uuid(),
+    trackId: z.guid(),
     trackTitle: z.string(),
     reason: z.string()
 });
@@ -701,7 +701,7 @@ export const zTrackDeletionManagedFile = z.object({
 });
 
 export const zTrackDeletionPlaylistReference = z.object({
-    id: z.uuid(),
+    id: z.guid(),
     name: z.string()
 });
 
@@ -711,7 +711,7 @@ export const zTrackDeletionQueueReference = z.object({
 });
 
 export const zAlbumDeletionPreview = z.object({
-    albumId: z.uuid(),
+    albumId: z.guid(),
     albumTitle: z.string(),
     trackCount: z.int().gte(1),
     totalSizeBytes: z.int().gte(0),
@@ -722,7 +722,7 @@ export const zAlbumDeletionPreview = z.object({
 });
 
 export const zTrackDeletionPreview = z.object({
-    trackId: z.uuid(),
+    trackId: z.guid(),
     trackTitle: z.string(),
     managedFile: zTrackDeletionManagedFile,
     playlistReferences: z.array(zTrackDeletionPlaylistReference),
@@ -742,8 +742,8 @@ export const zTrackReplacementFieldDiff = z.object({
 });
 
 export const zTrackReplacementLibraryChange = z.object({
-    currentAlbumId: z.uuid(),
-    replacementAlbumId: z.uuid().optional(),
+    currentAlbumId: z.guid(),
+    replacementAlbumId: z.guid().optional(),
     movesAlbum: z.boolean(),
     createsAlbum: z.boolean(),
     removesEmptyAlbum: z.boolean(),
@@ -770,7 +770,7 @@ export const zTrackReplacementFileDeletion = z.object({
  * Every visible consequence of replacing a Managed Track's audio file while keeping its identity.
  */
 export const zTrackReplacementPreview = z.object({
-    trackId: z.uuid(),
+    trackId: z.guid(),
     trackTitle: z.string(),
     sourceFormat: zTrackReplacementFieldDiff,
     technicalProperties: z.array(zTrackReplacementFieldDiff),
@@ -786,7 +786,7 @@ export const zTrackReplacementPreview = z.object({
 
 export const zManagedImportPreview = z.object({
     matchingTracks: z.array(zManagedImportDuplicateCandidate).optional(),
-    jobId: z.uuid(),
+    jobId: z.guid(),
     status: z.enum(['awaiting_confirmation', 'failed']),
     revision: z.int().gte(1),
     file: zManagedImportPreviewFile,
@@ -808,8 +808,8 @@ export const zManagedImportBatchFile = z.object({
     transferredBytes: z.coerce.bigint().gte(BigInt(0)).max(BigInt('9223372036854775807'), { error: 'Invalid value: Expected int64 to be <= 9223372036854775807' }).optional(),
     totalBytes: z.coerce.bigint().gte(BigInt(0)).max(BigInt('9223372036854775807'), { error: 'Invalid value: Expected int64 to be <= 9223372036854775807' }).optional(),
     issues: z.array(zValidationIssue).optional(),
-    jobId: z.uuid(),
-    clientFileId: z.uuid().optional(),
+    jobId: z.guid(),
+    clientFileId: z.guid().optional(),
     state: z.enum([
         'accepted',
         'rejected',
@@ -837,12 +837,12 @@ export const zManagedImportBatchFile = z.object({
         'replaced',
         'not_attempted'
     ]).optional(),
-    trackId: z.uuid().optional()
+    trackId: z.guid().optional()
 });
 
 export const zManagedImportBatch = z.object({
     albums: z.array(zManagedImportAlbumPreview).optional(),
-    id: z.uuid(),
+    id: z.guid(),
     status: z.enum([
         'uploading',
         'confirming',
@@ -858,10 +858,10 @@ export const zTrackReplacementConfirmation = z.object({
 });
 
 export const zTrackReplacementResult = z.object({
-    jobId: z.uuid(),
+    jobId: z.guid(),
     status: z.enum(['committed']),
     revision: z.int().gte(1),
-    trackId: z.uuid(),
+    trackId: z.guid(),
     deletedFiles: z.int().gte(0)
 });
 
@@ -899,8 +899,8 @@ export const zQueueItemSource = z.discriminatedUnion('kind', [
 
 export const zQueueItem = z.object({
     source: zQueueItemSource.optional(),
-    id: z.uuid(),
-    trackId: z.uuid(),
+    id: z.guid(),
+    trackId: z.guid(),
     position: z.int(),
     track: zTrack
 });
@@ -921,7 +921,7 @@ export const zQueueEvent = z.object({
  */
 export const zQueueReplace = z.object({
     source: zQueueItemSource.optional(),
-    trackIds: z.array(z.uuid()).max(1000),
+    trackIds: z.array(z.guid()).max(1000),
     revision: z.string()
 });
 
@@ -930,7 +930,7 @@ export const zQueueReplace = z.object({
  */
 export const zQueueItemAppend = z.object({
     source: zQueueItemSource.optional(),
-    trackId: z.uuid(),
+    trackId: z.guid(),
     revision: z.string()
 });
 
@@ -938,7 +938,7 @@ export const zQueueItemAppend = z.object({
  * Queue mutation bodies are limited to 1048576 bytes; invalid or oversized requests return 400. Queues may contain at most 1000 items.
  */
 export const zQueueReorder = z.object({
-    itemIds: z.array(z.uuid()),
+    itemIds: z.array(z.guid()),
     revision: z.string()
 });
 
@@ -950,21 +950,21 @@ export const zLimit = z.int().gte(1).lte(500).default(50);
 
 export const zOffset = z.int().gte(0).default(0);
 
-export const zArtistId = z.uuid();
+export const zArtistId = z.guid();
 
-export const zAlbumId = z.uuid();
+export const zAlbumId = z.guid();
 
-export const zTrackId = z.uuid();
+export const zTrackId = z.guid();
 
-export const zImportId = z.uuid();
+export const zImportId = z.guid();
 
-export const zBatchId = z.uuid();
+export const zBatchId = z.guid();
 
-export const zQueueItemId = z.uuid();
+export const zQueueItemId = z.guid();
 
-export const zPlaylistId = z.uuid();
+export const zPlaylistId = z.guid();
 
-export const zStationId = z.uuid();
+export const zStationId = z.guid();
 
 /**
  * Service is healthy

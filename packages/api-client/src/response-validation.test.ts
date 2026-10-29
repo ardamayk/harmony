@@ -39,6 +39,15 @@ describe("response validation on (development and tests)", () => {
 		).resolves.toEqual(withExtraField);
 	});
 
+	it("accepts the Music Server's single user id, which is not an RFC 9562 UUID", async () => {
+		const me = {
+			id: "00000000-0000-0000-0000-000000000001",
+			username: "admin",
+		};
+
+		await expect(clientAnswering(me, true).getMe()).resolves.toEqual(me);
+	});
+
 	it("rejects a mismatch, naming the operation and paths but no values", async () => {
 		const error = await clientAnswering(invalidArtists, true)
 			.listArtists()
