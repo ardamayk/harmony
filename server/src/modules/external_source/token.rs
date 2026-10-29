@@ -1,8 +1,10 @@
-//! External Track ids: the page URL and extractor this server's own search
-//! produced, HMAC-signed with a per-process key. Only a signed id is ever
-//! resolved, so a client cannot make the server run yt-dlp on a URL of its
-//! choosing. Ids die with the process.
+//! External Track ids: the page URL, extractor and artwork URL this
+//! server's own search produced, HMAC-signed with a per-process key. Only a
+//! signed id is ever resolved or its artwork fetched, so a client cannot
+//! make the server run yt-dlp on, or request, a URL of its choosing. Ids die
+//! with the process.
 
+use crate::modules::radio::validate_stream_url;
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use hmac::{Hmac, KeyInit, Mac};
@@ -22,6 +24,19 @@ pub struct TrackRef {
     /// The extractor yt-dlp is pinned to (`--use-extractors`).
     #[serde(rename = "e")]
     pub extractor: String,
+    /// The cover image the search chose (a public HTTPS URL), if any.
+    #[serde(rename = "a", default, skip_serializing_if = "Option::is_none")]
+    pub artwork_url: Option<String>,
+}
+
+impl TrackRef {
+    pub fn new(url: &str, extractor: &str) -> Self {
+        Self {
+            url: url.to_owned(),
+            extractor: extractor.to_owned(),
+            artwork_url: None,
+        }
+    }
 }
 
 pub struct TokenSigner {
@@ -70,7 +85,13 @@ impl TokenSigner {
         mac.verify_slice(&signature).map_err(|_| INVALID)?;
         let payload = URL_SAFE_NO_PAD.decode(payload).map_err(|_| INVALID)?;
         let track: TrackRef = serde_json::from_slice(&payload).map_err(|_| INVALID)?;
-        if !is_extractor_key(&track.extractor) || !is_web_url(&track.url) {
+        if !is_extractor_key(&track.extractor)
+            || !is_web_url(&track.url)
+            || track
+                .artwork_url
+                .as_deref()
+                .is_some_and(|url| !is_artwork_url(url))
+        {
             return Err(INVALID.to_owned());
         }
         Ok(track)
@@ -96,6 +117,12 @@ fn is_web_url(value: &str) -> bool {
     url::Url::parse(value).is_ok_and(|url| matches!(url.scheme(), "http" | "https"))
 }
 
+/// Artwork is fetched only from public HTTPS addresses.
+pub fn is_artwork_url(value: &str) -> bool {
+    url::Url::parse(value).is_ok_and(|url| url.scheme() == "https")
+        && validate_stream_url(value).is_ok()
+}
+
 /// A short, stable stand-in for an id: what logs name instead of URLs, and
 /// what HLS resource tokens are bound to.
 pub fn fingerprint(id: &str) -> String {
@@ -107,10 +134,7 @@ mod tests {
     use super::*;
 
     fn track() -> TrackRef {
-        TrackRef {
-            url: "https://soundcloud.com/artist/track".to_owned(),
-            extractor: "Soundcloud".to_owned(),
-        }
+        TrackRef::new("https://soundcloud.com/artist/track", "Soundcloud")
     }
 
     #[test]
@@ -123,6 +147,12 @@ mod tests {
         );
         assert_eq!(signer.verify(&id), Ok(track()));
         assert_eq!(signer.sign(&track()), Some(id));
+        let with_artwork = TrackRef {
+            artwork_url: Some("https://i1.sndcdn.com/artworks-x-t300x300.jpg".to_owned()),
+            ..track()
+        };
+        let id = signer.sign(&with_artwork).expect("id");
+        assert_eq!(signer.verify(&id), Ok(with_artwork));
     }
 
     #[test]
@@ -153,22 +183,31 @@ mod tests {
             ("https://soundcloud.com/a", "all,-generic"),
             ("https://soundcloud.com/a", ""),
         ] {
+            let id = signer.sign(&TrackRef::new(url, extractor)).expect("id");
+            assert!(signer.verify(&id).is_err(), "{url} {extractor}");
+        }
+        for artwork in [
+            "http://i1.sndcdn.com/a.jpg",
+            "https://127.0.0.1/a.jpg",
+            "https://localhost/a.jpg",
+            "file:///etc/passwd",
+        ] {
             let id = signer
                 .sign(&TrackRef {
-                    url: url.to_owned(),
-                    extractor: extractor.to_owned(),
+                    artwork_url: Some(artwork.to_owned()),
+                    ..track()
                 })
                 .expect("id");
-            assert!(signer.verify(&id).is_err(), "{url} {extractor}");
+            assert!(signer.verify(&id).is_err(), "{artwork}");
         }
     }
 
     #[test]
     fn overlong_ids_are_not_issued() {
-        let long = TrackRef {
-            url: format!("https://example.com/{}", "a".repeat(MAX_ID_LENGTH)),
-            extractor: "Generic".to_owned(),
-        };
+        let long = TrackRef::new(
+            &format!("https://example.com/{}", "a".repeat(MAX_ID_LENGTH)),
+            "Generic",
+        );
         assert_eq!(TokenSigner::new().sign(&long), None);
     }
 

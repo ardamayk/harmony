@@ -318,12 +318,31 @@ fn is_stream_path(path: &str) -> bool {
         return true;
     }
     // External Track streams, playlists and segments, and resolving one,
-    // which yt-dlp bounds itself.
-    if path.starts_with("/api/v1/external/tracks/") {
+    // which yt-dlp bounds itself. Artwork is one small image, so it keeps
+    // the normal bound.
+    if path.starts_with("/api/v1/external/tracks/") && !path.ends_with("/artwork") {
         return true;
     }
     path.ends_with("/stream")
         && (path.starts_with("/api/v1/tracks/")
             || path.starts_with("/api/v1/radio/stations/")
             || path.starts_with("/api/v1/radio/preview/"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_stream_path;
+
+    #[test]
+    fn external_track_audio_is_unbounded_but_its_artwork_is_not() {
+        for path in [
+            "/api/v1/external/tracks/a.b/stream",
+            "/api/v1/external/tracks/a.b/playback",
+            "/api/v1/external/tracks/a.b/playlist.m3u8",
+            "/api/v1/external/tracks/a.b/resources/c.d",
+        ] {
+            assert!(is_stream_path(path), "{path}");
+        }
+        assert!(!is_stream_path("/api/v1/external/tracks/a.b/artwork"));
+    }
 }

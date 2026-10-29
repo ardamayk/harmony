@@ -4,9 +4,11 @@
 //! (signed ids) are resolved, yt-dlp is pinned to the extractor that found
 //! them, and every resolved, playlist and segment URL must be a public
 //! HTTP(S) address. Resolved URLs are signed and expire, so they are never
-//! logged; logs name the id's fingerprint and the extractor.
+//! logged; logs name the id's fingerprint and the extractor. Artwork comes
+//! only from the HTTPS URL the search signed into the id, through the same
+//! guards, and is never logged either.
 
-use super::token::{TokenSigner, TrackRef, fingerprint};
+use super::token::{TokenSigner, TrackRef, fingerprint, is_artwork_url};
 use super::yt_dlp::{MAX_SEARCH_RESULTS, ResolvedFormat, YtDlp};
 use crate::config::ExternalSourceConfig;
 use crate::modules::radio::{
@@ -32,6 +34,14 @@ const CACHE_TTL: Duration = Duration::from_secs(600);
 const CACHE_CAPACITY: usize = 64;
 /// A resolved URL is dropped this long before its own `expire` time.
 const EXPIRY_MARGIN_SECONDS: i64 = 30;
+/// A URL refused within this long of its resolution is kept: running
+/// yt-dlp again at once would only print the same URL.
+const REFUSAL_GRACE: Duration = Duration::from_secs(60);
+/// An External Track's artwork must arrive within this, and be at most
+/// `ARTWORK_MAX_BYTES` of one of `ARTWORK_MEDIA_TYPES`.
+const ARTWORK_TIMEOUT: Duration = Duration::from_secs(15);
+const ARTWORK_MAX_BYTES: usize = 2 << 20;
+const ARTWORK_MEDIA_TYPES: &[&str] = &["image/jpeg", "image/png", "image/webp"];
 /// The request headers from yt-dlp's `http_headers` that are forwarded.
 const FORWARDED_HEADERS: &[&str] = &[
     "user-agent",
@@ -53,6 +63,9 @@ pub enum ExternalError {
     /// wrong endpoint for the Track's format.
     #[error("{0}")]
     Unplayable(String),
+    /// The search found no artwork for the External Track.
+    #[error("the External Track has no artwork")]
+    ArtworkMissing,
     /// yt-dlp failed or printed something unreadable, or the site's server
     /// did not deliver.
     #[error("{0}")]
@@ -74,6 +87,15 @@ pub struct ExternalTrack {
     pub duration_ms: Option<i64>,
     pub webpage_url: Option<String>,
     pub extractor: String,
+    /// Whether `/artwork` serves a cover for it.
+    pub has_artwork: bool,
+}
+
+/// An External Track's cover, read whole.
+#[derive(Debug, PartialEq)]
+pub struct Artwork {
+    pub media_type: &'static str,
+    pub data: Bytes,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -205,10 +227,13 @@ fn unix_now() -> i64 {
 
 type Resolution = Shared<BoxFuture<'static, Result<Arc<Resolved>, ExternalError>>>;
 
+/// A cached resolution, when it is stale, and when it was made.
+type CacheEntry = (Arc<Resolved>, Instant, Instant);
+
 /// Resolved URLs by id (never audio), and the resolutions running.
 #[derive(Default)]
 struct ResolveCache {
-    entries: Mutex<HashMap<String, (Arc<Resolved>, Instant)>>,
+    entries: Mutex<HashMap<String, CacheEntry>>,
     in_flight: Mutex<HashMap<String, Resolution>>,
 }
 
@@ -217,8 +242,8 @@ impl ResolveCache {
         let entries = self.entries.lock().expect("resolve cache lock");
         entries
             .get(id)
-            .filter(|(_, until)| *until > Instant::now())
-            .map(|(resolved, _)| resolved.clone())
+            .filter(|(_, until, _)| *until > Instant::now())
+            .map(|(resolved, _, _)| resolved.clone())
     }
 
     /// The request headers the Track resolved with, even after its URL is
@@ -227,27 +252,45 @@ impl ResolveCache {
         let entries = self.entries.lock().expect("resolve cache lock");
         entries
             .get(id)
-            .map(|(resolved, _)| resolved.headers.clone())
+            .map(|(resolved, _, _)| resolved.headers.clone())
             .unwrap_or_default()
     }
 
     fn insert(&self, id: &str, resolved: Arc<Resolved>, lifetime: Duration) {
+        self.insert_resolved_at(id, resolved, lifetime, Instant::now());
+    }
+
+    fn insert_resolved_at(
+        &self,
+        id: &str,
+        resolved: Arc<Resolved>,
+        lifetime: Duration,
+        resolved_at: Instant,
+    ) {
         let mut entries = self.entries.lock().expect("resolve cache lock");
         let now = Instant::now();
-        entries.retain(|_, (_, until)| *until > now);
+        entries.retain(|_, (_, until, _)| *until > now);
         if entries.len() >= CACHE_CAPACITY
             && let Some(oldest) = entries
                 .iter()
-                .min_by_key(|(_, (_, until))| *until)
+                .min_by_key(|(_, (_, until, _))| *until)
                 .map(|(id, _)| id.clone())
         {
             entries.remove(&oldest);
         }
-        entries.insert(id.to_owned(), (resolved, now + lifetime));
+        entries.insert(id.to_owned(), (resolved, now + lifetime, resolved_at));
     }
 
-    fn forget(&self, id: &str) {
-        self.entries.lock().expect("resolve cache lock").remove(id);
+    /// Drops the Track's URL after the site refused it, unless it was
+    /// resolved moments ago (see [`REFUSAL_GRACE`]).
+    fn forget_refused(&self, id: &str) {
+        let mut entries = self.entries.lock().expect("resolve cache lock");
+        if entries
+            .get(id)
+            .is_some_and(|(_, _, resolved_at)| resolved_at.elapsed() >= REFUSAL_GRACE)
+        {
+            entries.remove(id);
+        }
     }
 }
 
@@ -320,11 +363,18 @@ impl ExternalSource {
         let items = items
             .into_iter()
             .filter_map(|item| {
-                let id = self.tracks.sign(&TrackRef {
-                    url: item.webpage_url.clone(),
-                    extractor: item.extractor.clone(),
-                })?;
+                let track = TrackRef::new(&item.webpage_url, &item.extractor);
+                // An id too long with its artwork is issued without it.
+                let found_artwork = item.artwork_url.is_some();
+                let (id, has_artwork) = match self.tracks.sign(&TrackRef {
+                    artwork_url: item.artwork_url,
+                    ..track.clone()
+                }) {
+                    Some(id) => (id, found_artwork),
+                    None => (self.tracks.sign(&track)?, false),
+                };
                 Some(ExternalTrack {
+                    has_artwork,
                     id,
                     title: item.title,
                     artist_name: item.artist_name,
@@ -353,10 +403,13 @@ impl ExternalSource {
     }
 
     /// The upstream response for a progressive Track, `range` passed on.
+    /// With `head`, a chunked Track is answered from a 1-byte probe and
+    /// without a body.
     pub async fn open_stream(
         &self,
         id: &str,
         range: Option<HeaderValue>,
+        head: bool,
     ) -> Result<UpstreamResponse, ExternalError> {
         let resolved = self.resolve(id).await?;
         if resolved.format != PlaybackFormat::Progressive {
@@ -373,25 +426,36 @@ impl ExternalSource {
                 .fetch(id, &resolved.url, resolved.headers.clone(), range)
                 .await;
         };
-        self.fetch_in_chunks(id, &resolved, chunk_size, start, end, range.is_some())
-            .await
+        self.fetch_in_chunks(
+            id,
+            &resolved,
+            chunk_size,
+            (start, end),
+            range.is_some(),
+            head,
+        )
+        .await
     }
 
     /// Serves `start..=end` (to the end of the file without `end`) as one
     /// response from upstream ranges of at most `chunk_size` bytes, fetched
     /// one after another as the client reads, the way yt-dlp downloads such
-    /// a file.
+    /// a file. With `head` only `start` is fetched, for the headers.
     async fn fetch_in_chunks(
         &self,
         id: &str,
         resolved: &Resolved,
         chunk_size: u64,
-        start: u64,
-        end: Option<u64>,
+        (start, end): (u64, Option<u64>),
         ranged: bool,
+        head: bool,
     ) -> Result<UpstreamResponse, ExternalError> {
         use axum::http::header::{ACCEPT_RANGES, CONTENT_LENGTH, CONTENT_RANGE};
-        let chunk_last = start.saturating_add(chunk_size - 1);
+        let chunk_last = if head {
+            start
+        } else {
+            start.saturating_add(chunk_size - 1)
+        };
         let first = self
             .fetch(
                 id,
@@ -426,19 +490,31 @@ impl ExternalSource {
             headers.remove(CONTENT_RANGE);
             200
         };
+        if head {
+            return Ok(UpstreamResponse {
+                status,
+                headers,
+                url: first.url,
+                body: futures_util::stream::empty().boxed(),
+            });
+        }
         let upstream = self.upstream.clone();
         let url = first.url.clone();
         let request_headers = resolved.headers.clone();
+        let track_hash = fingerprint(id);
         let rest = futures_util::stream::unfold(served_last + 1, move |next| {
             let upstream = upstream.clone();
             let url = url.clone();
             let request_headers = request_headers.clone();
+            let track_hash = track_hash.clone();
             async move {
                 if next > last {
                     return None;
                 }
                 let chunk_last = next.saturating_add(chunk_size - 1).min(last);
+                // The body ends here; the URL is never logged.
                 let failed = |message: String| {
+                    tracing::warn!(track = %track_hash, error = %message, "External Track stream ended early");
                     let body: BoxStream<'static, Result<Bytes, String>> =
                         futures_util::stream::iter([Err(message)]).boxed();
                     Some((body, u64::MAX))
@@ -447,11 +523,15 @@ impl ExternalSource {
                     .get_with_headers(url, Some(byte_range(next, chunk_last)), request_headers)
                     .await
                 {
-                    Ok(response) if response.status == 206 => {
+                    Ok(response)
+                        if response.status == 206
+                            && parse_content_range(&response.headers)
+                                .is_some_and(|(first, last, _)| (first, last) == (next, chunk_last)) =>
+                    {
                         Some((response.body, chunk_last.saturating_add(1)))
                     }
                     Ok(response) => failed(format!(
-                        "the External Track's stream answered {}",
+                        "the External Track's stream answered {} for a later chunk",
                         response.status
                     )),
                     Err(_) => failed("the External Track's stream failed".to_owned()),
@@ -501,6 +581,98 @@ impl ExternalSource {
             return Ok(Resource::Playlist(self.rewrite(id, response).await?));
         }
         Ok(Resource::Media(response))
+    }
+
+    /// The cover the search chose for the Track, fetched whole through the
+    /// SSRF-guarded client: a JPEG, PNG or WebP image of at most 2 MiB.
+    pub async fn artwork(&self, id: &str) -> Result<Artwork, ExternalError> {
+        self.ensure_enabled()?;
+        let track = self.tracks.verify(id).map_err(ExternalError::BadRequest)?;
+        let url = track.artwork_url.ok_or(ExternalError::ArtworkMissing)?;
+        tokio::time::timeout(ARTWORK_TIMEOUT, self.fetch_artwork(id, &url))
+            .await
+            .map_err(|_| {
+                ExternalError::Timeout(format!(
+                    "the External Track's artwork did not arrive within {} s",
+                    ARTWORK_TIMEOUT.as_secs()
+                ))
+            })?
+    }
+
+    async fn fetch_artwork(&self, id: &str, url: &str) -> Result<Artwork, ExternalError> {
+        use axum::http::header::{ACCEPT, CONTENT_LENGTH, CONTENT_TYPE};
+        let failed = |message: String| {
+            tracing::warn!(track = %fingerprint(id), error = %message, "External Track artwork failed");
+            ExternalError::Failed(message)
+        };
+        if !is_artwork_url(url) {
+            return Err(failed("unsafe artwork URL".to_owned()));
+        }
+        let parsed = Url::parse(url).map_err(|error| failed(error.to_string()))?;
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            ACCEPT,
+            HeaderValue::from_static("image/jpeg, image/png, image/webp"),
+        );
+        let response = self
+            .upstream
+            .get_with_headers(parsed, None, headers)
+            .await
+            .map_err(|error| {
+                // The client's error names the URL; only its cause is kept.
+                let cause = error
+                    .split_once("\": ")
+                    .map_or("request failed", |(_, cause)| cause);
+                failed(format!("the External Track's artwork failed: {cause}"))
+            })?;
+        if response.status != 200 {
+            return Err(failed(format!(
+                "the External Track's artwork answered {}",
+                response.status
+            )));
+        }
+        let media_type = response
+            .headers
+            .get(CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .map(|value| {
+                value
+                    .split(';')
+                    .next()
+                    .unwrap_or_default()
+                    .trim()
+                    .to_ascii_lowercase()
+            })
+            .and_then(|value| {
+                ARTWORK_MEDIA_TYPES
+                    .iter()
+                    .copied()
+                    .find(|allowed| *allowed == value)
+            })
+            .ok_or_else(|| failed("the External Track's artwork is not an image".to_owned()))?;
+        let too_large = || failed("the External Track's artwork exceeds 2 MiB".to_owned());
+        if response
+            .headers
+            .get(CONTENT_LENGTH)
+            .and_then(|value| value.to_str().ok()?.parse::<u64>().ok())
+            .is_some_and(|length| length > ARTWORK_MAX_BYTES as u64)
+        {
+            return Err(too_large());
+        }
+        let mut body = response.body;
+        let mut data = Vec::new();
+        while let Some(chunk) = body.next().await {
+            let chunk = chunk
+                .map_err(|_| failed("failed to read the External Track's artwork".to_owned()))?;
+            if data.len() + chunk.len() > ARTWORK_MAX_BYTES {
+                return Err(too_large());
+            }
+            data.extend_from_slice(&chunk);
+        }
+        Ok(Artwork {
+            media_type,
+            data: Bytes::from(data),
+        })
     }
 
     async fn resolve(&self, id: &str) -> Result<Arc<Resolved>, ExternalError> {
@@ -563,8 +735,8 @@ impl ExternalSource {
     }
 
     /// GETs a public HTTP(S) URL through the SSRF-guarded client. A
-    /// refused, expired or missing URL is forgotten, so the next request
-    /// resolves the Track again.
+    /// refused, expired or missing URL is forgotten (unless just resolved),
+    /// so the next request resolves the Track again.
     async fn fetch(
         &self,
         id: &str,
@@ -590,7 +762,7 @@ impl ExternalSource {
             200..=299 | 416 => Ok(response),
             status => {
                 if matches!(status, 401 | 403 | 404 | 410) {
-                    self.cache.forget(id);
+                    self.cache.forget_refused(id);
                 }
                 Err(ExternalError::Failed(format!(
                     "the External Track's stream answered {status}"
@@ -713,14 +885,12 @@ mod tests {
         let source = ExternalSource::with_upstream(Some(&config()), fake);
         let id = source
             .tracks
-            .sign(&TrackRef {
-                url: "https://soundcloud.com/a/b".to_owned(),
-                extractor: "Soundcloud".to_owned(),
-            })
+            .sign(&TrackRef::new("https://soundcloud.com/a/b", "Soundcloud"))
             .expect("id");
         let mut headers = HeaderMap::new();
         headers.insert("user-agent", HeaderValue::from_static("yt-dlp-agent"));
-        source.cache.insert(
+        // Resolved a while ago, so a refusal now means the URL went stale.
+        source.cache.insert_resolved_at(
             &id,
             Arc::new(Resolved {
                 url: url.to_owned(),
@@ -729,6 +899,9 @@ mod tests {
                 chunk_size,
             }),
             CACHE_TTL,
+            Instant::now()
+                .checked_sub(REFUSAL_GRACE)
+                .expect("an earlier instant"),
         );
         (source, id)
     }
@@ -761,7 +934,7 @@ mod tests {
             format!("/api/v1/external/tracks/{id}/stream")
         );
         let upstream = source
-            .open_stream(&id, Some(HeaderValue::from_static("bytes=0-1")))
+            .open_stream(&id, Some(HeaderValue::from_static("bytes=0-1")), false)
             .await
             .expect("stream");
         assert_eq!(upstream.status, 206);
@@ -809,7 +982,7 @@ mod tests {
             chunk(4, 7, b"4567"),
             chunk(8, 9, b"89"),
         ]);
-        let whole = source.open_stream(&id, None).await.expect("stream");
+        let whole = source.open_stream(&id, None, false).await.expect("stream");
         assert_eq!(whole.status, 200);
         assert_eq!(whole.headers[axum::http::header::CONTENT_LENGTH], "10");
         assert!(
@@ -828,7 +1001,7 @@ mod tests {
             chunk(2, 3, b"23"),
         ]);
         let tail = source
-            .open_stream(&id, Some(HeaderValue::from_static("bytes=5-")))
+            .open_stream(&id, Some(HeaderValue::from_static("bytes=5-")), false)
             .await
             .expect("stream");
         assert_eq!(tail.status, 206);
@@ -839,7 +1012,7 @@ mod tests {
         assert_eq!(tail.headers[axum::http::header::CONTENT_LENGTH], "5");
         assert_eq!(text(tail).await, "56789");
         let part = source
-            .open_stream(&id, Some(HeaderValue::from_static("bytes=2-3")))
+            .open_stream(&id, Some(HeaderValue::from_static("bytes=2-3")), false)
             .await
             .expect("stream");
         assert_eq!(
@@ -857,10 +1030,145 @@ mod tests {
             b"",
         ));
         let past = source
-            .open_stream(&id, Some(HeaderValue::from_static("bytes=20-")))
+            .open_stream(&id, Some(HeaderValue::from_static("bytes=20-")), false)
             .await
             .expect("stream");
         assert_eq!(past.status, 416);
+    }
+
+    async fn chunks(response: UpstreamResponse) -> Vec<Result<String, String>> {
+        response
+            .body
+            .map(|chunk| chunk.map(|bytes| String::from_utf8(bytes.to_vec()).expect("utf-8")))
+            .collect()
+            .await
+    }
+
+    #[tokio::test]
+    async fn chunked_ranges_are_split_at_chunk_boundaries_with_resolved_headers() {
+        let fake = Arc::new(Fake::default());
+        let (source, id) = chunked_source(
+            fake.clone(),
+            "https://media.example/a.webm",
+            PlaybackFormat::Progressive,
+            Some(4),
+        );
+        // An open range chained over three upstream requests.
+        fake.responses.lock().expect("lock").extend([
+            chunk(1, 4, b"1234"),
+            chunk(5, 8, b"5678"),
+            chunk(9, 9, b"9"),
+        ]);
+        let open = source
+            .open_stream(&id, Some(HeaderValue::from_static("bytes=1-")), false)
+            .await
+            .expect("stream");
+        assert_eq!(open.status, 206);
+        assert_eq!(
+            open.headers[axum::http::header::CONTENT_RANGE],
+            "bytes 1-9/10"
+        );
+        assert_eq!(open.headers[axum::http::header::CONTENT_LENGTH], "9");
+        assert_eq!(open.headers[axum::http::header::ACCEPT_RANGES], "bytes");
+        assert_eq!(open.headers[axum::http::header::CONTENT_TYPE], "audio/webm");
+        assert_eq!(text(open).await, "123456789");
+        {
+            let fetched = fake.fetched.lock().expect("lock");
+            assert!(fetched.iter().all(|(url, _, headers)| {
+                url == "https://media.example/a.webm" && headers["user-agent"] == "yt-dlp-agent"
+            }));
+        }
+        assert_eq!(ranges(&fake), ["bytes=1-4", "bytes=5-8", "bytes=9-9"]);
+
+        // A bounded range larger than a chunk, across a boundary.
+        fake.responses
+            .lock()
+            .expect("lock")
+            .extend([chunk(2, 5, b"2345"), chunk(6, 6, b"6")]);
+        let bounded = source
+            .open_stream(&id, Some(HeaderValue::from_static("bytes=2-6")), false)
+            .await
+            .expect("stream");
+        assert_eq!(bounded.status, 206);
+        assert_eq!(
+            bounded.headers[axum::http::header::CONTENT_RANGE],
+            "bytes 2-6/10"
+        );
+        assert_eq!(bounded.headers[axum::http::header::CONTENT_LENGTH], "5");
+        assert_eq!(text(bounded).await, "23456");
+        assert_eq!(ranges(&fake), ["bytes=2-5", "bytes=6-6"]);
+    }
+
+    #[tokio::test]
+    async fn chunked_heads_answer_from_a_one_byte_probe() {
+        let fake = Arc::new(Fake::default());
+        let (source, id) = chunked_source(
+            fake.clone(),
+            "https://media.example/a.webm",
+            PlaybackFormat::Progressive,
+            Some(4),
+        );
+        fake.responses
+            .lock()
+            .expect("lock")
+            .extend([chunk(0, 0, b"0"), chunk(4, 4, b"4")]);
+        let head = source.open_stream(&id, None, true).await.expect("head");
+        assert_eq!(head.status, 200);
+        assert_eq!(head.headers[axum::http::header::CONTENT_LENGTH], "10");
+        assert_eq!(head.headers[axum::http::header::ACCEPT_RANGES], "bytes");
+        assert_eq!(head.headers[axum::http::header::CONTENT_TYPE], "audio/webm");
+        assert!(
+            head.headers
+                .get(axum::http::header::CONTENT_RANGE)
+                .is_none()
+        );
+        assert_eq!(text(head).await, "");
+        let ranged = source
+            .open_stream(&id, Some(HeaderValue::from_static("bytes=4-")), true)
+            .await
+            .expect("head");
+        assert_eq!(ranged.status, 206);
+        assert_eq!(
+            ranged.headers[axum::http::header::CONTENT_RANGE],
+            "bytes 4-9/10"
+        );
+        assert_eq!(ranged.headers[axum::http::header::CONTENT_LENGTH], "6");
+        assert_eq!(text(ranged).await, "");
+        assert_eq!(ranges(&fake), ["bytes=0-0", "bytes=4-4"]);
+    }
+
+    #[tokio::test]
+    async fn chunked_bodies_end_at_an_upstream_error() {
+        let fake = Arc::new(Fake::default());
+        let (source, id) = chunked_source(
+            fake.clone(),
+            "https://media.example/a.webm",
+            PlaybackFormat::Progressive,
+            Some(4),
+        );
+        fake.responses.lock().expect("lock").extend([
+            chunk(0, 3, b"0123"),
+            response(403, "https://media.example/a.webm", &[], b""),
+        ]);
+        let whole = source.open_stream(&id, None, false).await.expect("stream");
+        assert_eq!(whole.status, 200);
+        let body = chunks(whole).await;
+        assert_eq!(body.len(), 2, "{body:?}");
+        assert_eq!(body[0], Ok("0123".to_owned()));
+        assert!(
+            matches!(&body[1], Err(message) if message.contains("403") && !message.contains("media.example"))
+        );
+        assert_eq!(ranges(&fake), ["bytes=0-3", "bytes=4-7"]);
+
+        // A later chunk that is not the range asked for ends it too.
+        fake.responses
+            .lock()
+            .expect("lock")
+            .extend([chunk(0, 3, b"0123"), chunk(0, 3, b"0123")]);
+        let whole = source.open_stream(&id, None, false).await.expect("stream");
+        let body = chunks(whole).await;
+        assert_eq!(body.len(), 2, "{body:?}");
+        assert!(body[1].is_err());
     }
 
     #[test]
@@ -885,7 +1193,7 @@ mod tests {
         for url in ["http://10.0.0.1/a.mp3", "http://localhost/a.mp3"] {
             let (source, id) = resolved_source(fake.clone(), url, PlaybackFormat::Progressive);
             assert!(matches!(
-                source.open_stream(&id, None).await,
+                source.open_stream(&id, None, false).await,
                 Err(ExternalError::Failed(message)) if message.contains("unsafe stream URL")
             ));
         }
@@ -901,7 +1209,7 @@ mod tests {
             PlaybackFormat::Hls,
         );
         assert!(matches!(
-            source.open_stream(&id, None).await,
+            source.open_stream(&id, None, false).await,
             Err(ExternalError::Unplayable(_))
         ));
         assert_eq!(
@@ -970,10 +1278,10 @@ mod tests {
         // Bound to this Track's id, and only as signed.
         let other = source
             .tracks
-            .sign(&TrackRef {
-                url: "https://soundcloud.com/a/other".to_owned(),
-                extractor: "Soundcloud".to_owned(),
-            })
+            .sign(&TrackRef::new(
+                "https://soundcloud.com/a/other",
+                "Soundcloud",
+            ))
             .expect("id");
         for (track, resource) in [
             (other.as_str(), tokens[1].as_str()),
@@ -1035,7 +1343,7 @@ mod tests {
             PlaybackFormat::Progressive,
         );
         assert!(matches!(
-            source.open_stream(&id, None).await,
+            source.open_stream(&id, None, false).await,
             Err(ExternalError::Failed(message)) if message.contains("403")
         ));
         assert!(source.cache.get(&id).is_none());
@@ -1044,6 +1352,28 @@ mod tests {
             source.playback(&id).await,
             Err(ExternalError::Unavailable(_))
         ));
+    }
+
+    // Running yt-dlp again moments after it printed the URL would only
+    // print the same URL again.
+    #[tokio::test]
+    async fn urls_refused_just_after_resolving_are_kept() {
+        let fake = Arc::new(Fake::default());
+        fake.responses.lock().expect("lock").push(response(
+            403,
+            "https://media.example/a.m4a",
+            &[],
+            b"",
+        ));
+        let (source, id) = resolved_source(
+            fake.clone(),
+            "https://media.example/a.m4a",
+            PlaybackFormat::Progressive,
+        );
+        let resolved = source.cache.get(&id).expect("cached");
+        source.cache.insert(&id, resolved, CACHE_TTL);
+        assert!(source.open_stream(&id, None, false).await.is_err());
+        assert!(source.cache.get(&id).is_some());
     }
 
     #[tokio::test]
@@ -1059,6 +1389,91 @@ mod tests {
             source.resource("x", "y", None).await,
             Err(ExternalError::Disabled)
         ));
+        assert_eq!(source.artwork("x").await, Err(ExternalError::Disabled));
+    }
+
+    /// A source and the id of a Track whose search found `artwork`.
+    fn artwork_source(fake: Arc<Fake>, artwork: Option<&str>) -> (ExternalSource, String) {
+        let source = ExternalSource::with_upstream(Some(&config()), fake);
+        let id = source
+            .tracks
+            .sign(&TrackRef {
+                artwork_url: artwork.map(str::to_owned),
+                ..TrackRef::new("https://soundcloud.com/a/b", "Soundcloud")
+            })
+            .expect("id");
+        (source, id)
+    }
+
+    const ARTWORK: &str = "https://i1.sndcdn.com/artworks-x-t300x300.jpg";
+
+    #[tokio::test]
+    async fn artwork_is_fetched_from_the_signed_url_only_as_a_small_image() {
+        let fake = Arc::new(Fake::default());
+        fake.responses.lock().expect("lock").push(response(
+            200,
+            ARTWORK,
+            &[("content-type", "image/JPEG; charset=binary")],
+            b"\xff\xd8\xff",
+        ));
+        let (source, id) = artwork_source(fake.clone(), Some(ARTWORK));
+        assert_eq!(
+            source.artwork(&id).await,
+            Ok(Artwork {
+                media_type: "image/jpeg",
+                data: Bytes::from_static(b"\xff\xd8\xff"),
+            })
+        );
+        {
+            let fetched = fake.fetched.lock().expect("lock");
+            assert_eq!(fetched[0].0, ARTWORK);
+            assert!(fetched[0].1.is_none());
+        }
+
+        let large: &'static [u8] = Box::leak(vec![0_u8; ARTWORK_MAX_BYTES + 1].into_boxed_slice());
+        fake.responses.lock().expect("lock").extend([
+            response(200, ARTWORK, &[("content-type", "text/html")], b"<html>"),
+            response(200, ARTWORK, &[], b"x"),
+            response(
+                200,
+                ARTWORK,
+                &[("content-type", "image/svg+xml")],
+                b"<svg/>",
+            ),
+            response(200, ARTWORK, &[("content-type", "image/png")], large),
+            response(
+                200,
+                ARTWORK,
+                &[("content-type", "image/png"), ("content-length", "3000000")],
+                b"x",
+            ),
+            response(404, ARTWORK, &[("content-type", "image/png")], b""),
+        ]);
+        for _ in 0..6 {
+            assert!(matches!(
+                source.artwork(&id).await,
+                Err(ExternalError::Failed(message)) if !message.contains("sndcdn")
+            ));
+        }
+    }
+
+    #[tokio::test]
+    async fn artwork_needs_a_signed_id_that_has_artwork() {
+        let fake = Arc::new(Fake::default());
+        let (source, id) = artwork_source(fake.clone(), None);
+        assert_eq!(
+            source.artwork(&id).await,
+            Err(ExternalError::ArtworkMissing)
+        );
+        let (source, id) = artwork_source(fake.clone(), Some(ARTWORK));
+        let (payload, signature) = id.split_once('.').expect("dot");
+        for bad in [format!("{payload}A.{signature}"), "not-an-id".to_owned()] {
+            assert!(matches!(
+                source.artwork(&bad).await,
+                Err(ExternalError::BadRequest(_))
+            ));
+        }
+        assert!(fake.fetched.lock().expect("lock").is_empty());
     }
 
     #[tokio::test]

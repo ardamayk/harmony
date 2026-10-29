@@ -2,7 +2,9 @@
 //! respond. Every route answers 404 `external_source_disabled` while the
 //! source is not configured.
 
-use super::service::{DEFAULT_SEARCH_LIMIT, ExternalError, Playback, Resource, SearchResults};
+use super::service::{
+    Artwork, DEFAULT_SEARCH_LIMIT, ExternalError, Playback, Resource, SearchResults,
+};
 use crate::app::AppState;
 use crate::modules::radio::{HLS_CONTENT_TYPE, UpstreamResponse, copy_stream_headers};
 use crate::query::GoQuery;
@@ -11,7 +13,7 @@ use axum::Json;
 use axum::Router;
 use axum::body::Body;
 use axum::extract::{Path, State};
-use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
+use axum::http::{HeaderMap, HeaderValue, Method, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 
@@ -35,6 +37,10 @@ pub fn routes() -> Router<AppState> {
             "/api/v1/external/tracks/{external_track_id}/resources/{resource}",
             get(resource),
         )
+        .route(
+            "/api/v1/external/tracks/{external_track_id}/artwork",
+            get(artwork),
+        )
 }
 
 impl From<ExternalError> for ApiError {
@@ -42,6 +48,9 @@ impl From<ExternalError> for ApiError {
         let (status, code) = match &error {
             ExternalError::Disabled => (StatusCode::NOT_FOUND, "external_source_disabled"),
             ExternalError::BadRequest(_) => (StatusCode::BAD_REQUEST, "bad_request"),
+            ExternalError::ArtworkMissing => {
+                (StatusCode::NOT_FOUND, "external_track_artwork_missing")
+            }
             ExternalError::Unplayable(_) => (
                 StatusCode::UNPROCESSABLE_ENTITY,
                 "external_track_unplayable",
@@ -79,10 +88,12 @@ async fn playback(
 async fn stream(
     State(state): State<AppState>,
     Path(id): Path<String>,
+    method: Method,
     headers: HeaderMap,
 ) -> ApiResult<Response> {
     let range = headers.get(header::RANGE).cloned();
-    let response = state.external_source.open_stream(&id, range).await?;
+    let head = method == Method::HEAD;
+    let response = state.external_source.open_stream(&id, range, head).await?;
     Ok(media(response))
 }
 
@@ -106,6 +117,25 @@ async fn resource(
             Resource::Media(response) => media(response),
         },
     )
+}
+
+async fn artwork(State(state): State<AppState>, Path(id): Path<String>) -> ApiResult<Response> {
+    Ok(image(state.external_source.artwork(&id).await?))
+}
+
+/// The cover as the image type it was checked to be, kept private to the
+/// listener's browser for an hour (its id dies with the process anyway).
+fn image(artwork: Artwork) -> Response {
+    (
+        StatusCode::OK,
+        [
+            (header::CONTENT_TYPE, artwork.media_type),
+            (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
+            (header::CACHE_CONTROL, "private, max-age=3600"),
+        ],
+        artwork.data,
+    )
+        .into_response()
 }
 
 /// The upstream audio with its status (200, 206 or 416), length and range,
@@ -186,9 +216,27 @@ mod tests {
     }
 
     #[test]
+    fn artwork_is_served_as_its_image_type_and_cached_privately() {
+        let response = image(Artwork {
+            media_type: "image/webp",
+            data: Bytes::from_static(b"RIFF"),
+        });
+        assert_eq!(response.status(), StatusCode::OK);
+        let headers = response.headers();
+        assert_eq!(headers[header::CONTENT_TYPE], "image/webp");
+        assert_eq!(headers[header::X_CONTENT_TYPE_OPTIONS], "nosniff");
+        assert_eq!(headers[header::CACHE_CONTROL], "private, max-age=3600");
+    }
+
+    #[test]
     fn errors_map_to_their_codes() {
         for (error, status, code) in [
             (ExternalError::Disabled, 404, "external_source_disabled"),
+            (
+                ExternalError::ArtworkMissing,
+                404,
+                "external_track_artwork_missing",
+            ),
             (ExternalError::BadRequest("x".into()), 400, "bad_request"),
             (
                 ExternalError::Unplayable("x".into()),

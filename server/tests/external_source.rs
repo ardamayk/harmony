@@ -16,7 +16,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tower::ServiceExt;
 
-const SEARCH_OUTPUT: &str = r#"{"_type": "url", "ie_key": "Soundcloud", "id": "254112221", "url": "https://api.soundcloud.com/tracks/soundcloud%3Atracks%3A254112221", "webpage_url": "https://soundcloud.com/daftpunkofficialmusic/around-the-world", "title": "Around the World", "duration": 30.0, "uploader": "Daft Punk", "artist": "Daft Punk"}
+const SEARCH_OUTPUT: &str = r#"{"_type": "url", "ie_key": "Soundcloud", "id": "254112221", "url": "https://api.soundcloud.com/tracks/soundcloud%3Atracks%3A254112221", "webpage_url": "https://soundcloud.com/daftpunkofficialmusic/around-the-world", "title": "Around the World", "duration": 30.0, "uploader": "Daft Punk", "artist": "Daft Punk", "thumbnail": null, "thumbnails": [{"id": "large", "url": "https://i1.sndcdn.com/artworks-x-large.jpg", "width": 100, "height": 100}, {"id": "t300x300", "url": "https://i1.sndcdn.com/artworks-x-t300x300.jpg", "width": 300, "height": 300}, {"id": "original", "url": "https://i1.sndcdn.com/artworks-x-original.jpg"}]}
 {"_type": "url", "ie_key": "Soundcloud", "id": "88335161", "url": "https://api.soundcloud.com/tracks/soundcloud%3Atracks%3A88335161", "webpage_url": "https://soundcloud.com/eldjkb/get-lucky-original-version", "title": "Get Lucky", "duration": 246.381, "uploader": "DJ KB"}
 {"_type": "url", "ie_key": "Soundcloud", "webpage_url": "https://soundcloud.com/a/third", "title": "Third"}
 "#;
@@ -122,6 +122,7 @@ async fn a_disabled_source_answers_404_and_is_not_advertised() {
         "/api/v1/external/tracks/x/stream",
         "/api/v1/external/tracks/x/playlist.m3u8",
         "/api/v1/external/tracks/x/resources/y",
+        "/api/v1/external/tracks/x/artwork",
     ] {
         let (status, body) = get(&router, uri).await;
         assert_eq!(status, StatusCode::NOT_FOUND, "{uri}");
@@ -172,10 +173,12 @@ async fn search_passes_the_query_as_one_argument_after_the_end_of_options() {
         "https://soundcloud.com/daftpunkofficialmusic/around-the-world"
     );
     assert_eq!(items[0]["extractor"], "Soundcloud");
+    assert_eq!(items[0]["hasArtwork"], true);
     assert_eq!(items[1]["artistName"], "DJ KB");
+    assert_eq!(items[1]["hasArtwork"], false);
     assert_eq!(items[1]["durationMs"], 246_381);
     let id = items[0]["id"].as_str().unwrap();
-    assert!(id.len() <= 2048 && !id.contains("soundcloud.com"));
+    assert!(id.len() <= 2048 && !id.contains("soundcloud.com") && !id.contains("sndcdn"));
 
     let (_, health) = get(&router, "/api/v1/health").await;
     assert!(
@@ -212,7 +215,13 @@ async fn bad_queries_and_ids_are_refused_without_running_yt_dlp() {
         format!("{payload}.{}", &signature[1..]),
         "eyJ1IjoiaHR0cDovLzE2OS4yNTQuMTY5LjI1NC8iLCJlIjoiR2VuZXJpYyJ9.AAAA".to_owned(),
     ] {
-        for endpoint in ["playback", "stream", "playlist.m3u8", "resources/x.y"] {
+        for endpoint in [
+            "playback",
+            "stream",
+            "playlist.m3u8",
+            "resources/x.y",
+            "artwork",
+        ] {
             let uri = format!("/api/v1/external/tracks/{tampered}/{endpoint}");
             let (status, body) = get(&router, &uri).await;
             assert_eq!(status, StatusCode::BAD_REQUEST, "{uri}");
@@ -354,4 +363,99 @@ async fn yt_dlp_failures_map_to_their_codes() {
             assert_eq!(body["message"], error.chars().take(300).collect::<String>());
         }
     }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_track_without_artwork_answers_404_without_a_request() {
+    let directory = tempfile::tempdir().unwrap();
+    let fake = FakeYtDlp::printing(SEARCH_OUTPUT, "");
+    let router = router(directory.path(), Some(&fake.binary()), TIMEOUT).await;
+    let (_, body) = get(&router, "/api/v1/external/search?q=daft+punk").await;
+    let id = body["items"][1]["id"].as_str().unwrap().to_owned();
+    let (status, body) = get(&router, &format!("/api/v1/external/tracks/{id}/artwork")).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(body["code"], "external_track_artwork_missing");
+    assert_eq!(fake.runs().len(), 1, "artwork never runs yt-dlp");
+}
+
+/// Whether `pid` still runs: a killed child that is not yet reaped is a
+/// zombie, which counts as gone.
+fn is_running(pid: u32) -> bool {
+    let Ok(stat) = std::fs::read_to_string(format!("/proc/{pid}/stat")) else {
+        return false;
+    };
+    let state = stat
+        .rsplit_once(')')
+        .and_then(|(_, rest)| rest.split_whitespace().next());
+    !matches!(state, Some("Z" | "X") | None)
+}
+
+async fn eventually(what: &str, mut check: impl FnMut() -> bool) {
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    while !check() {
+        assert!(std::time::Instant::now() < deadline, "timed out: {what}");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+}
+
+/// A client that goes away mid-search must not keep yt-dlp running: hyper
+/// drops the handler future when the connection closes, which drops the
+/// child (`kill_on_drop`) and its turn. Both turns are taken by searches
+/// whose clients disconnect; a third search must then run at once.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_disconnected_search_kills_yt_dlp_and_gives_back_its_turn() {
+    use tokio::io::AsyncWriteExt;
+
+    let directory = tempfile::tempdir().unwrap();
+    let fake = FakeYtDlp::new(
+        "case \" $* \" in\n  *slow*) echo $$ >> \"$dir/pids\"; exec sleep 30 ;;\n  *) cat \"$dir/search.out\" ;;\nesac",
+    );
+    std::fs::write(fake.directory.path().join("search.out"), SEARCH_OUTPUT).expect("write");
+    let router = router(directory.path(), Some(&fake.binary()), TIMEOUT).await;
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("listener");
+    let address = listener.local_addr().expect("address");
+    let server = tokio::spawn(axum::serve(listener, router.clone()).into_future());
+
+    let mut clients = Vec::new();
+    for _ in 0..2 {
+        let mut stream = tokio::net::TcpStream::connect(address)
+            .await
+            .expect("connect");
+        stream
+            .write_all(
+                format!("GET /api/v1/external/search?q=slow HTTP/1.1\r\nHost: {address}\r\n\r\n")
+                    .as_bytes(),
+            )
+            .await
+            .expect("request");
+        clients.push(stream);
+    }
+    let pids_file = fake.directory.path().join("pids");
+    let pids = || -> Vec<u32> {
+        std::fs::read_to_string(&pids_file)
+            .unwrap_or_default()
+            .lines()
+            .filter_map(|line| line.trim().parse().ok())
+            .collect()
+    };
+    eventually("both slow searches started yt-dlp", || pids().len() == 2).await;
+    let started = pids();
+    assert!(started.iter().all(|&pid| is_running(pid)));
+
+    drop(clients);
+    for pid in started {
+        eventually(&format!("yt-dlp {pid} was killed"), || !is_running(pid)).await;
+    }
+
+    let begun = std::time::Instant::now();
+    let (status, body) = get(&router, "/api/v1/external/search?q=daft+punk").await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert!(
+        begun.elapsed() < Duration::from_secs(3),
+        "the next search waited {:?} for a turn",
+        begun.elapsed()
+    );
+    server.abort();
 }
