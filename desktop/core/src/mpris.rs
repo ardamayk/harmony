@@ -221,7 +221,11 @@ impl MprisTrack {
                         .and_then(Value::as_str)
                         .map(str::to_owned),
                     album: None,
-                    art_url: None,
+                    art_url: (source
+                        .pointer("/externalTrack/hasArtwork")
+                        .and_then(Value::as_bool)
+                        == Some(true))
+                    .then(|| format!("{art_base_url}/api/v1/external/tracks/{id}/artwork")),
                     length_micros: length_seconds.map(seconds_to_micros),
                     can_seek: true,
                 })
@@ -693,7 +697,8 @@ mod tests {
                 "artistName": "Daft Punk",
                 "durationMs": 427000,
                 "webpageUrl": "https://soundcloud.com/daftpunk/around-the-world",
-                "extractor": "Soundcloud"
+                "extractor": "Soundcloud",
+                "hasArtwork": false
             },
             "playbackUrl": "http://127.0.0.1:43129/token/api/v1/external/tracks/eyJ1Ijoi.c2ln/playlist.m3u8",
             "sourceUrl": "http://music.example/api/v1/external/tracks/eyJ1Ijoi.c2ln/playlist.m3u8"
@@ -707,6 +712,15 @@ mod tests {
         assert!(track.art_url.is_none());
         assert_eq!(track.length_micros, Some(427_000_000));
         assert!(track.can_seek);
+
+        state.source.as_mut().expect("source")["externalTrack"]["hasArtwork"] = Value::Bool(true);
+        let with_artwork = MprisView::from_state(&state, "http://127.0.0.1:43129/token")
+            .track
+            .expect("external track with artwork");
+        assert_eq!(
+            with_artwork.art_url.as_deref(),
+            Some("http://127.0.0.1:43129/token/api/v1/external/tracks/eyJ1Ijoi.c2ln/artwork")
+        );
 
         state.source.as_mut().expect("source")["externalTrack"]["durationMs"] = Value::Null;
         state.source.as_mut().expect("source")["externalTrack"]["artistName"] = Value::Null;
