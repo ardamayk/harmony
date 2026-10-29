@@ -37,7 +37,30 @@ pub struct ExternalSourceConfig {
     pub search_prefix: String,
     /// The yt-dlp binary: a name looked up on PATH, or a path.
     pub yt_dlp: String,
+    /// yt-dlp extractor arguments such as `youtube:skip=hls,dash`, each
+    /// passed after its own `--extractor-args`.
+    pub extractor_args: Vec<String>,
+    /// The site's name for the clients: `EXTERNAL_SOURCE_NAME`, else the
+    /// name of a known search prefix, else "External".
+    pub name: String,
 }
+
+/// yt-dlp's search prefixes the clients can name without
+/// `EXTERNAL_SOURCE_NAME`. None is a default: the operator still chooses
+/// the prefix (ADR 0032).
+const SEARCH_PREFIX_NAMES: &[(&str, &str)] = &[
+    ("ytsearch", "YouTube"),
+    ("scsearch", "SoundCloud"),
+    ("bilisearch", "BiliBili"),
+    ("nicosearch", "Niconico"),
+    ("gvsearch", "Google Video"),
+    ("yvsearch", "Yahoo Video"),
+    ("rkfnsearch", "Rokfin"),
+];
+
+/// The name shown for a search prefix nobody named.
+const FALLBACK_EXTERNAL_SOURCE_NAME: &str = "External";
+const MAX_EXTERNAL_SOURCE_NAME_CHARS: usize = 40;
 
 #[derive(Debug, thiserror::Error, PartialEq)]
 pub enum ConfigError {
@@ -51,6 +74,12 @@ pub enum ConfigError {
     InvalidLanguage(String),
     #[error("EXTERNAL_SOURCE_SEARCH {0:?} must be a yt-dlp search prefix such as scsearch")]
     InvalidExternalSourceSearch(String),
+    #[error(
+        "EXTERNAL_SOURCE_EXTRACTOR_ARGS item {0:?} must be yt-dlp extractor arguments such as youtube:skip=hls,dash"
+    )]
+    InvalidExternalSourceExtractorArgs(String),
+    #[error("EXTERNAL_SOURCE_NAME {0:?} must be 1 to 40 printable characters such as SoundCloud")]
+    InvalidExternalSourceName(String),
 }
 
 impl Config {
@@ -93,14 +122,39 @@ impl Config {
         // The prefix becomes part of yt-dlp's argument, so only a search
         // prefix's shape passes.
         let external_source_search = get("EXTERNAL_SOURCE_SEARCH", "").trim().to_owned();
+        // Each item becomes one yt-dlp argument, so only the shape of
+        // `IE_KEY:ARG=VAL;ARG=VAL` passes.
+        let extractor_args = get("EXTERNAL_SOURCE_EXTRACTOR_ARGS", "")
+            .split_whitespace()
+            .map(|item| {
+                if is_extractor_args(item) {
+                    Ok(item.to_owned())
+                } else {
+                    Err(ConfigError::InvalidExternalSourceExtractorArgs(
+                        item.to_owned(),
+                    ))
+                }
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        // Shown in the clients, so it stays one short line of text.
+        let external_source_name = get("EXTERNAL_SOURCE_NAME", "").trim().to_owned();
+        if external_source_name.chars().count() > MAX_EXTERNAL_SOURCE_NAME_CHARS
+            || external_source_name.chars().any(char::is_control)
+        {
+            return Err(ConfigError::InvalidExternalSourceName(external_source_name));
+        }
         let external_source = if external_source_search.is_empty() {
             None
         } else if is_search_prefix(&external_source_search) {
             Some(ExternalSourceConfig {
+                name: Some(external_source_name)
+                    .filter(|name| !name.is_empty())
+                    .unwrap_or_else(|| search_prefix_name(&external_source_search).to_owned()),
                 search_prefix: external_source_search,
                 yt_dlp: Some(get("YT_DLP", "").trim().to_owned())
                     .filter(|binary| !binary.is_empty())
                     .unwrap_or_else(|| "yt-dlp".to_owned()),
+                extractor_args,
             })
         } else {
             return Err(ConfigError::InvalidExternalSourceSearch(
@@ -157,6 +211,31 @@ impl Config {
             external_source,
         })
     }
+}
+
+/// One yt-dlp `--extractor-args` value: an extractor key, a colon, then
+/// arguments such as `skip=hls,dash;player_client=web`. It cannot start
+/// with `-` or hold spaces.
+fn is_extractor_args(item: &str) -> bool {
+    let Some((key, arguments)) = item.split_once(':') else {
+        return false;
+    };
+    key.starts_with(|c: char| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+        && key
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '-')
+        && !arguments.is_empty()
+        && arguments
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "_=,;.:-".contains(c))
+}
+
+/// The site a known yt-dlp search prefix searches, else "External".
+fn search_prefix_name(prefix: &str) -> &'static str {
+    SEARCH_PREFIX_NAMES
+        .iter()
+        .find(|(known, _)| *known == prefix)
+        .map_or(FALLBACK_EXTERNAL_SOURCE_NAME, |(_, name)| name)
 }
 
 /// `^[a-z][a-z0-9]{0,30}search$`, the shape of yt-dlp's search prefixes.
@@ -267,6 +346,8 @@ mod tests {
             Some(ExternalSourceConfig {
                 search_prefix: "scsearch".to_owned(),
                 yt_dlp: "yt-dlp".to_owned(),
+                extractor_args: Vec::new(),
+                name: "SoundCloud".to_owned(),
             })
         );
         assert_eq!(
@@ -307,6 +388,115 @@ mod tests {
                 &format!("a{}search", "b".repeat(30))
             )])
             .is_ok()
+        );
+    }
+
+    #[test]
+    fn external_source_name_comes_from_the_prefix_unless_the_operator_names_it() {
+        let name = |pairs: &[(&str, &str)]| {
+            config(pairs).map(|config| config.external_source.expect("on").name)
+        };
+        for (prefix, expected) in [
+            ("ytsearch", "YouTube"),
+            ("scsearch", "SoundCloud"),
+            ("bilisearch", "BiliBili"),
+            ("nicosearch", "Niconico"),
+            ("gvsearch", "Google Video"),
+            ("yvsearch", "Yahoo Video"),
+            ("rkfnsearch", "Rokfin"),
+            ("iasearch", "External"),
+            ("ytmsearch", "External"),
+        ] {
+            assert_eq!(
+                name(&[("EXTERNAL_SOURCE_SEARCH", prefix)]),
+                Ok(expected.to_owned()),
+                "{prefix}"
+            );
+        }
+        assert_eq!(
+            name(&[
+                ("EXTERNAL_SOURCE_SEARCH", "ytsearch"),
+                ("EXTERNAL_SOURCE_NAME", "  My Archive  ")
+            ]),
+            Ok("My Archive".to_owned())
+        );
+        assert_eq!(
+            name(&[
+                ("EXTERNAL_SOURCE_SEARCH", "iasearch"),
+                ("EXTERNAL_SOURCE_NAME", "  ")
+            ]),
+            Ok("External".to_owned())
+        );
+        let longest = "é".repeat(40);
+        assert_eq!(
+            name(&[
+                ("EXTERNAL_SOURCE_SEARCH", "scsearch"),
+                ("EXTERNAL_SOURCE_NAME", &longest)
+            ]),
+            Ok(longest.clone())
+        );
+        for invalid in [
+            format!("{longest}x"),
+            "Sound\nCloud".to_owned(),
+            "a\u{7}".to_owned(),
+        ] {
+            assert_eq!(
+                config(&[
+                    ("EXTERNAL_SOURCE_SEARCH", "scsearch"),
+                    ("EXTERNAL_SOURCE_NAME", &invalid)
+                ])
+                .err(),
+                Some(ConfigError::InvalidExternalSourceName(invalid.clone())),
+                "{invalid:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn extractor_args_are_split_on_whitespace_and_checked() {
+        let extractor_args = |value: &str| {
+            config(&[
+                ("EXTERNAL_SOURCE_SEARCH", "ytsearch"),
+                ("EXTERNAL_SOURCE_EXTRACTOR_ARGS", value),
+            ])
+            .map(|config| config.external_source.expect("on").extractor_args)
+        };
+        assert_eq!(extractor_args("  "), Ok(Vec::new()));
+        assert_eq!(
+            extractor_args(" youtube:skip=hls,dash "),
+            Ok(vec!["youtube:skip=hls,dash".to_owned()])
+        );
+        assert_eq!(
+            extractor_args("youtube:skip=hls,dash;player_client=web\tsoundcloud:formats=http_mp3"),
+            Ok(vec![
+                "youtube:skip=hls,dash;player_client=web".to_owned(),
+                "soundcloud:formats=http_mp3".to_owned(),
+            ])
+        );
+        for invalid in [
+            "skip=hls",
+            "youtube:",
+            ":skip=hls",
+            "-youtube:skip=hls",
+            "--exec:rm",
+            "YouTube:skip=hls",
+            "youtube:skip=$(id)",
+            "youtube:skip=a/b",
+        ] {
+            assert_eq!(
+                extractor_args(invalid),
+                Err(ConfigError::InvalidExternalSourceExtractorArgs(
+                    invalid.to_owned()
+                )),
+                "{invalid}"
+            );
+        }
+        // Checked at startup even while the External Source is off.
+        assert_eq!(
+            config(&[("EXTERNAL_SOURCE_EXTRACTOR_ARGS", "-x")]).err(),
+            Some(ConfigError::InvalidExternalSourceExtractorArgs(
+                "-x".to_owned()
+            ))
         );
     }
 

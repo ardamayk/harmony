@@ -40,6 +40,7 @@ type WireQueue = Schemas["Queue"];
 type WireQueueItem = Schemas["QueueItem"];
 
 export type HealthResponse = Schemas["HealthResponse"];
+export type ExternalSourceInfo = Schemas["ExternalSourceInfo"];
 export type ThemePreferences = Schemas["ThemePreferences"];
 export type LayoutPreferences = Schemas["LayoutPreferences"];
 export type PlaybackPreferences = Schemas["PlaybackPreferences"];

@@ -328,7 +328,10 @@ impl ExternalSource {
     ) -> Self {
         Self {
             search_prefix: config.map(|config| config.search_prefix.clone()),
-            yt_dlp: YtDlp::new(config.map_or("yt-dlp", |config| config.yt_dlp.as_str())),
+            yt_dlp: YtDlp::new(
+                config.map_or("yt-dlp", |config| config.yt_dlp.as_str()),
+                config.map_or(&[], |config| config.extractor_args.as_slice()),
+            ),
             tracks: TokenSigner::new(),
             resources: ResourceSigner::new(),
             upstream,
@@ -927,6 +930,8 @@ mod tests {
             search_prefix: "scsearch".to_owned(),
             // Never started: these tests seed the resolve cache.
             yt_dlp: "/nonexistent/yt-dlp".to_owned(),
+            extractor_args: Vec::new(),
+            name: "SoundCloud".to_owned(),
         }
     }
 

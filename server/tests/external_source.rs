@@ -85,6 +85,8 @@ async fn router(directory: &Path, binary: Option<&Path>, timeout: Duration) -> a
     config.external_source = binary.map(|binary| ExternalSourceConfig {
         search_prefix: "scsearch".to_owned(),
         yt_dlp: binary.to_string_lossy().into_owned(),
+        extractor_args: Vec::new(),
+        name: "SoundCloud".to_owned(),
     });
     let source =
         ExternalSource::new(config.external_source.as_ref()).with_timeouts(timeout, timeout);
@@ -135,6 +137,7 @@ async fn a_disabled_source_answers_404_and_is_not_advertised() {
             .unwrap()
             .contains(&Value::from("external-source.v1"))
     );
+    assert!(health.get("externalSource").is_none(), "{health}");
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -187,6 +190,7 @@ async fn search_passes_the_query_as_one_argument_after_the_end_of_options() {
             .unwrap()
             .contains(&Value::from("external-source.v1"))
     );
+    assert_eq!(health["externalSource"]["name"], "SoundCloud");
 }
 
 #[tokio::test(flavor = "multi_thread")]

@@ -14,12 +14,13 @@ So the Music Server gets an optional **External Source**. The operator installs 
 - **Playback** goes through the server. The server resolves an External Track's audio with yt-dlp and streams the bytes itself, with Range support, on a stream endpoint. The site's resolved URLs are tied to the address that resolved them and expire, so a client cannot use them directly. The Web Client plays that endpoint like a Radio Station stream, and the Desktop Client plays it through its media proxy and mpv like any other Playback Source.
 - Nothing is stored. There is no download to disk, no cache of audio, and no import into Managed Storage. Adding a Track to the library stays the listener's own import.
 - The server advertises `external-source.v1` only when the source is configured, so clients hide the feature otherwise.
+- The operator may pass yt-dlp extractor arguments (`EXTERNAL_SOURCE_EXTRACTOR_ARGS`) to tune their chosen site; the code sets none for any site.
 
 ## Why it is shaped this way
 
 yt-dlp stands as a general-purpose tool with many lawful uses, and liability for a use falls on the person using it. Two things set a "search for any song and play it in full" feature apart: circumventing a site's technical protection is a risk of its own (DMCA §1201, EU InfoSoc Article 6), and a tool built or presented for infringement draws liability that a neutral one does not. This repository is public, so the feature is kept as close to yt-dlp's own position as possible:
 
-- **General, not YouTube-specific.** The source is whatever yt-dlp search prefix the operator chooses. Nothing defaults to or is named after YouTube, and lawful sources such as Internet Archive, Bandcamp's free Tracks and Creative Commons uploads work the same way.
+- **General, not YouTube-specific.** The source is whatever yt-dlp search prefix the operator chooses. Nothing defaults to or is named after YouTube, and lawful sources such as Internet Archive, Bandcamp's free Tracks and Creative Commons uploads work the same way. The clients show the chosen site's name (`EXTERNAL_SOURCE_NAME`, or the name of the prefix the operator set), so the UI names whatever the operator chose and never a default site.
 - **Not distributed.** The project does not ship yt-dlp in any release or published image, and the server never downloads or updates it. The operator installs it and keeps it current (see Installing yt-dlp).
 - **Off by default**, and switched on by the operator for their own server.
 

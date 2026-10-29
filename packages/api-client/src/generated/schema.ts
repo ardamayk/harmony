@@ -1085,6 +1085,12 @@ export interface components {
             capabilities: string[];
             /** @description Server Dependencies probed once at startup, in a stable order (ffmpeg, ffprobe, then the optional yt-dlp only when EXTERNAL_SOURCE_SEARCH is configured). They describe the deployment environment so an operator can see what the installation supports. */
             dependencies: components["schemas"]["ServerDependency"][];
+            externalSource?: components["schemas"]["ExternalSourceInfo"];
+        };
+        /** @description The External Source the operator configured (ADR 0032). Present only when external-source.v1 is advertised. */
+        ExternalSourceInfo: {
+            /** @description The site's name for display, such as SoundCloud: EXTERNAL_SOURCE_NAME, else the name of a known yt-dlp search prefix, else External. */
+            name: string;
         };
         ServerDependency: {
             /** @description Program name as invoked by the Music Server. */

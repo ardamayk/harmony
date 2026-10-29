@@ -32,6 +32,10 @@ The External Source is an optional search of one site through the operator's own
 | --- | --- |
 | `EXTERNAL_SOURCE_SEARCH` | A yt-dlp search prefix, for example `scsearch` (SoundCloud). Unset, the feature is off and the server never runs yt-dlp. |
 | `YT_DLP` | The yt-dlp binary, when it is not on `PATH`. |
+| `EXTERNAL_SOURCE_EXTRACTOR_ARGS` | yt-dlp extractor arguments, passed as `--extractor-args`; separate several with spaces. Unset, none. |
+| `EXTERNAL_SOURCE_NAME` | The site's name in the clients, such as `Internet Archive` (1 to 40 printable characters). Unset, a known prefix names it (`ytsearch` YouTube, `scsearch` SoundCloud, `bilisearch` BiliBili, `nicosearch` Niconico, `gvsearch` Google Video, `yvsearch` Yahoo Video, `rkfnsearch` Rokfin), else `External`. |
+
+For example, with `EXTERNAL_SOURCE_SEARCH=ytsearch`, `EXTERNAL_SOURCE_EXTRACTOR_ARGS=youtube:skip=hls,dash` skips YouTube's HLS and DASH manifests the server does not use, so playback starts about 0.3 s sooner. Do not set `player_skip=webpage`: YouTube then asks to sign in to confirm you are not a bot.
 
 You are responsible for what the source is used for and for the site's terms. Choose a source whose content you may play.
 

@@ -63,15 +63,17 @@ pub struct ResolvedFormat {
 #[derive(Clone)]
 pub struct YtDlp {
     binary: String,
+    extractor_args: Vec<String>,
     pub search_timeout: Duration,
     pub resolve_timeout: Duration,
     permits: Arc<Semaphore>,
 }
 
 impl YtDlp {
-    pub fn new(binary: &str) -> Self {
+    pub fn new(binary: &str, extractor_args: &[String]) -> Self {
         Self {
             binary: binary.to_owned(),
+            extractor_args: extractor_args.to_vec(),
             search_timeout: SEARCH_TIMEOUT,
             resolve_timeout: RESOLVE_TIMEOUT,
             permits: Arc::new(Semaphore::new(CONCURRENCY)),
@@ -86,7 +88,7 @@ impl YtDlp {
         timing: &mut RunTiming,
     ) -> Result<Vec<SearchItem>, ExternalError> {
         let limit = limit.clamp(1, MAX_SEARCH_RESULTS);
-        let args = search_args(prefix, query, limit);
+        let args = search_args(prefix, query, limit, &self.extractor_args);
         let output = self
             .run(args, self.search_timeout, SEARCH_OUTPUT_LIMIT_BYTES, timing)
             .await?;
@@ -104,7 +106,7 @@ impl YtDlp {
     ) -> Result<ResolvedFormat, ExternalError> {
         let output = self
             .run(
-                resolve_args(url, extractor),
+                resolve_args(url, extractor, &self.extractor_args),
                 self.resolve_timeout,
                 RESOLVE_OUTPUT_LIMIT_BYTES,
                 timing,
@@ -220,7 +222,19 @@ fn last_error_line(stderr: &[u8]) -> Option<String> {
     Some(line.chars().take(ERROR_MESSAGE_LIMIT_CHARS).collect())
 }
 
-pub fn search_args(prefix: &str, query: &str, limit: usize) -> Vec<String> {
+/// The operator's extractor arguments, each after its own `--extractor-args`.
+fn extractor_args_flags(extractor_args: &[String]) -> impl Iterator<Item = String> + '_ {
+    extractor_args
+        .iter()
+        .flat_map(|item| ["--extractor-args".to_owned(), item.clone()])
+}
+
+pub fn search_args(
+    prefix: &str,
+    query: &str,
+    limit: usize,
+    extractor_args: &[String],
+) -> Vec<String> {
     [
         "--ignore-config",
         "--no-warnings",
@@ -228,15 +242,15 @@ pub fn search_args(prefix: &str, query: &str, limit: usize) -> Vec<String> {
         "--dump-json",
         "--socket-timeout",
         "15",
-        "--",
     ]
     .into_iter()
     .map(str::to_owned)
-    .chain([format!("{prefix}{limit}:{query}")])
+    .chain(extractor_args_flags(extractor_args))
+    .chain(["--".to_owned(), format!("{prefix}{limit}:{query}")])
     .collect()
 }
 
-pub fn resolve_args(url: &str, extractor: &str) -> Vec<String> {
+pub fn resolve_args(url: &str, extractor: &str, extractor_args: &[String]) -> Vec<String> {
     [
         "--ignore-config",
         "--no-warnings",
@@ -246,11 +260,11 @@ pub fn resolve_args(url: &str, extractor: &str) -> Vec<String> {
         extractor,
         "-f",
         FORMAT_SELECTOR,
-        "--",
-        url,
     ]
     .into_iter()
     .map(str::to_owned)
+    .chain(extractor_args_flags(extractor_args))
+    .chain(["--".to_owned(), url.to_owned()])
     .collect()
 }
 
@@ -436,14 +450,15 @@ mod tests {
 
     #[test]
     fn the_query_is_one_argument_after_the_end_of_options() {
-        let args = search_args("scsearch", "--exec rm -rf / ; daft punk", 3);
+        let args = search_args("scsearch", "--exec rm -rf / ; daft punk", 3, &[]);
         let end = args.iter().position(|arg| arg == "--").expect("--");
         assert_eq!(
             args[end + 1..],
             ["scsearch3:--exec rm -rf / ; daft punk".to_owned()]
         );
         assert_eq!(args[0], "--ignore-config");
-        let args = resolve_args("https://soundcloud.com/a/b", "Soundcloud");
+        assert!(!args.iter().any(|arg| arg == "--extractor-args"));
+        let args = resolve_args("https://soundcloud.com/a/b", "Soundcloud", &[]);
         assert_eq!(
             args[args.len() - 6..],
             [
@@ -456,6 +471,36 @@ mod tests {
             ]
             .map(str::to_owned)
         );
+        assert!(!args.iter().any(|arg| arg == "--extractor-args"));
+    }
+
+    #[test]
+    fn extractor_args_come_before_the_end_of_options() {
+        let extractor_args = [
+            "youtube:skip=hls,dash".to_owned(),
+            "soundcloud:formats=http_mp3".to_owned(),
+        ];
+        let flags = [
+            "--extractor-args",
+            "youtube:skip=hls,dash",
+            "--extractor-args",
+            "soundcloud:formats=http_mp3",
+            "--",
+        ]
+        .map(str::to_owned);
+        let args = search_args("ytsearch", "daft punk", 3, &extractor_args);
+        assert_eq!(args[0], "--ignore-config");
+        assert_eq!(args[args.len() - 6..args.len() - 1], flags);
+        assert_eq!(args[args.len() - 1], "ytsearch3:daft punk");
+        let url = "https://www.youtube.com/watch?v=5NV6Rdv1a3I";
+        let args = resolve_args(url, "Youtube", &extractor_args);
+        assert_eq!(args[0], "--ignore-config");
+        assert_eq!(
+            args[args.len() - 8..args.len() - 5],
+            ["-f", FORMAT_SELECTOR, "--extractor-args"]
+        );
+        assert_eq!(args[args.len() - 6..args.len() - 1], flags);
+        assert_eq!(args[args.len() - 1], url);
     }
 
     // Shapes measured from yt-dlp 2026.10.26 (`scsearch`, `ytsearch`).

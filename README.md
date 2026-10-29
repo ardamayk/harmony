@@ -97,6 +97,8 @@ The Music Server reads its settings from environment variables only; it does not
 | `LASTFM_API_KEY` | none | Your own Last.fm API key; turns on Track play counts. |
 | `EXTERNAL_SOURCE_SEARCH` | none | A yt-dlp search prefix such as `scsearch`; turns on the External Source. |
 | `YT_DLP` | `yt-dlp` | The yt-dlp binary, when it is not on `PATH`. |
+| `EXTERNAL_SOURCE_EXTRACTOR_ARGS` | none | yt-dlp extractor arguments such as `youtube:skip=hls,dash`; separate several with spaces. |
+| `EXTERNAL_SOURCE_NAME` | from the prefix, else `External` | The site's name in the clients' search, such as `Internet Archive`; up to 40 characters. |
 | `RADIO_BROWSER_BASE_URL` | `https://de1.api.radio-browser.info` | Radio Browser mirror for the station catalog. |
 | `APP_VERSION` | `0.1.0` | Version shown in the health response and Settings. |
 
