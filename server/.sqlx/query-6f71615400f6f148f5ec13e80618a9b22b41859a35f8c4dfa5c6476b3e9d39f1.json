@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id AS \"id!\" FROM managed_import_batches WHERE status != 'completed' AND updated_at <= ?",
+  "query": "SELECT id AS \"id!\" FROM managed_import_batches\n                WHERE status != 'completed' AND owner = 'client' AND updated_at <= ?",
   "describe": {
     "columns": [
       {
@@ -22,5 +22,5 @@
       true
     ]
   },
-  "hash": "2cc125ec3ce9c929d4019afdaee8b0dab6cf18ad707ad6bdbc190b02cc3507a1"
+  "hash": "6f71615400f6f148f5ec13e80618a9b22b41859a35f8c4dfa5c6476b3e9d39f1"
 }

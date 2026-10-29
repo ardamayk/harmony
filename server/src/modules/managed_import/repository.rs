@@ -202,16 +202,19 @@ impl Repository {
         Ok(job)
     }
 
-    pub async fn create_batch(&self) -> Result<Batch> {
+    /// A batch owned by a Playback Client, or by the server (`server`).
+    pub async fn create_batch(&self, server_owned: bool) -> Result<Batch> {
         let batch = Batch {
             id: uuid::Uuid::new_v4().to_string(),
             status: BATCH_STATUS_UPLOADING.to_owned(),
             revision: 1,
             ..Batch::default()
         };
+        let owner = if server_owned { "server" } else { "client" };
         sqlx::query!(
-            "INSERT INTO managed_import_batches (id, status, revision) VALUES (?, 'uploading', 1)",
-            batch.id
+            "INSERT INTO managed_import_batches (id, status, revision, owner) VALUES (?, 'uploading', 1, ?)",
+            batch.id,
+            owner
         )
         .execute(&self.pool)
         .await
@@ -369,24 +372,45 @@ impl Repository {
         Self::commit(tx, operation).await
     }
 
+    /// Uncommitted client batches; server-owned batches live until confirmed
+    /// or cancelled.
     pub async fn list_uncommitted_batch_ids(
         &self,
         updated_before: Option<&str>,
     ) -> Result<Vec<String>> {
         let ids = match updated_before {
-            Some(before) => sqlx::query_scalar!(
-                r#"SELECT id AS "id!" FROM managed_import_batches WHERE status != 'completed' AND updated_at <= ?"#,
-                before
-            )
-            .fetch_all(&self.pool)
-            .await,
-            None => sqlx::query_scalar!(
-                r#"SELECT id AS "id!" FROM managed_import_batches WHERE status != 'completed'"#
-            )
-            .fetch_all(&self.pool)
-            .await,
+            Some(before) => {
+                sqlx::query_scalar!(
+                    r#"SELECT id AS "id!" FROM managed_import_batches
+                WHERE status != 'completed' AND owner = 'client' AND updated_at <= ?"#,
+                    before
+                )
+                .fetch_all(&self.pool)
+                .await
+            }
+            None => {
+                sqlx::query_scalar!(
+                    r#"SELECT id AS "id!" FROM managed_import_batches
+                WHERE status != 'completed' AND owner = 'client'"#
+                )
+                .fetch_all(&self.pool)
+                .await
+            }
         };
         ids.map_err(Error::from)
+    }
+
+    /// The staged files of server-owned batches, which a restart keeps.
+    pub async fn list_server_owned_staged_paths(&self) -> Result<Vec<String>> {
+        sqlx::query_scalar!(
+            r#"SELECT jobs.staged_file_path AS "path!" FROM managed_import_jobs jobs
+            JOIN managed_import_batches batches ON batches.id = jobs.batch_id
+            WHERE batches.owner = 'server' AND batches.status != 'completed'
+                AND jobs.staged_file_path IS NOT NULL AND jobs.staged_file_path != ''"#
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(context("list server-owned Managed Import staging"))
     }
 
     pub async fn list_uncommitted_standalone_job_ids(

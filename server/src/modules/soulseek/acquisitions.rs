@@ -13,9 +13,12 @@ use super::service::{Soulseek, SoulseekError};
 use super::slskd::{SlskdError, TransferState};
 use super::versions::{Quality, RemoteFile, Scope};
 use crate::auth::DEFAULT_USER_ID;
+use crate::modules::managed_import::errors::Sentinel;
+use crate::modules::managed_import::model::{BATCH_STATUS_COMPLETED, BATCH_STATUS_CONFIRMING};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
+use tokio_util::sync::CancellationToken;
 
 /// How often the worker polls slskd, and how long a source may make no
 /// progress before the next source is tried. Tests shorten both.
@@ -189,6 +192,11 @@ impl Acquisition {
             .filter(|file| file.kind == FileKind::Audio)
     }
 
+    /// Whether an audio file waits on the current source.
+    fn pending_audio(&self) -> bool {
+        self.pending().any(|(_, file)| file.kind == FileKind::Audio)
+    }
+
     /// Files waiting on the current source.
     fn pending(&self) -> impl Iterator<Item = (usize, &AcquisitionFile)> {
         self.files
@@ -265,22 +273,31 @@ impl Soulseek {
         let Some(first) = sources.first() else {
             return Err(SoulseekError::VersionNotFound);
         };
-        let files = first
+        let queued = |kind: FileKind, remote: &RemoteFile| AcquisitionFile {
+            kind,
+            name: file_name(&remote.filename).to_owned(),
+            source_index: 0,
+            remote_filename: remote.filename.clone(),
+            size: remote.size,
+            transfer_id: None,
+            state: FileState::Queued,
+            bytes_transferred: 0,
+            job_id: None,
+            outcome: None,
+        };
+        let mut files: Vec<AcquisitionFile> = first
             .files
             .iter()
-            .map(|remote| AcquisitionFile {
-                kind: FileKind::Audio,
-                name: file_name(&remote.filename).to_owned(),
-                source_index: 0,
-                remote_filename: remote.filename.clone(),
-                size: remote.size,
-                transfer_id: None,
-                state: FileState::Queued,
-                bytes_transferred: 0,
-                job_id: None,
-                outcome: None,
-            })
+            .map(|remote| queued(FileKind::Audio, remote))
             .collect();
+        if let Some(cover) = cover(&first.artwork) {
+            files.push(queued(FileKind::Artwork, cover));
+        }
+        let batch = self
+            .managed_import()
+            .create_server_batch()
+            .await
+            .map_err(internal)?;
         let mut acquisition = Acquisition {
             id: uuid::Uuid::new_v4().to_string(),
             query: resolved.query,
@@ -290,16 +307,17 @@ impl Soulseek {
             sources,
             source_index: 0,
             state: AcquisitionState::Downloading,
-            batch_id: None,
+            batch_id: Some(batch.id),
             failure_reason: None,
             progress_at_ms: now_ms(),
             created_at: String::new(),
             updated_at: String::new(),
             files,
         };
-        repo.insert(DEFAULT_USER_ID, &acquisition)
-            .await
-            .map_err(internal)?;
+        if let Err(error) = repo.insert(DEFAULT_USER_ID, &acquisition).await {
+            self.cancel_batch(&acquisition).await;
+            return Err(internal(error));
+        }
         self.wake.notify_one();
         if let Some(stored) = repo
             .get(DEFAULT_USER_ID, &acquisition.id)
@@ -332,25 +350,80 @@ impl Soulseek {
         Ok(self.observe(acquisition).await)
     }
 
-    /// The acquisition as the listener sees it now.
-    async fn observe(&self, acquisition: Acquisition) -> Acquisition {
+    /// The acquisition as the listener sees it now: completed as soon as its
+    /// batch is confirmed, cancelled as soon as its batch is cancelled
+    /// through the import-batches routes, before the worker records it.
+    async fn observe(&self, mut acquisition: Acquisition) -> Acquisition {
+        if matches!(
+            acquisition.state,
+            AcquisitionState::Completed | AcquisitionState::Cancelled
+        ) {
+            return acquisition;
+        }
+        match self.batch_status(&acquisition).await {
+            Ok(Some(status)) if status == BATCH_STATUS_COMPLETED => {
+                acquisition.state = AcquisitionState::Completed;
+            }
+            Ok(None) if acquisition.state != AcquisitionState::Failed => {
+                acquisition.state = AcquisitionState::Cancelled;
+            }
+            _ => {}
+        }
         acquisition
     }
 
+    /// The acquisition's batch status; `None` once the batch is gone.
+    async fn batch_status(
+        &self,
+        acquisition: &Acquisition,
+    ) -> Result<Option<String>, SoulseekError> {
+        let Some(batch_id) = &acquisition.batch_id else {
+            return Ok(None);
+        };
+        self.managed_import()
+            .batch_status(batch_id)
+            .await
+            .map_err(internal)
+    }
+
+    /// Cancels the acquisition's batch unless it is confirmed; logged on
+    /// failure.
+    async fn cancel_batch(&self, acquisition: &Acquisition) {
+        let Some(batch_id) = &acquisition.batch_id else {
+            return;
+        };
+        if let Err(error) = self.managed_import().cancel_batch(batch_id).await
+            && !error.is(Sentinel::InvalidState)
+        {
+            tracing::warn!(%error, acquisition = %acquisition.id, "cancel the acquisition's Import Batch failed");
+        }
+    }
+
     /// Cancels an active acquisition: stops slskd's transfers, deletes the
-    /// downloaded copies and marks it cancelled. A finished one (failed,
-    /// completed or cancelled) is dismissed instead: it is removed, and the
-    /// listener no longer sees it.
+    /// downloaded copies, cancels its Import Batch and marks it cancelled. A
+    /// finished one (failed, completed or cancelled) is dismissed instead:
+    /// its unconfirmed batch is cancelled, it is removed, and the listener
+    /// no longer sees it. Neither is possible while the batch commits.
     pub async fn cancel_acquisition(&self, id: &str) -> Result<(), SoulseekError> {
         self.ensure_enabled()?;
         let repo = self.repo();
         let _lock = self.acquisition_lock().await;
-        let mut acquisition = repo
+        let acquisition = repo
             .get(DEFAULT_USER_ID, id)
             .await
             .map_err(internal)?
             .ok_or(SoulseekError::AcquisitionNotFound)?;
+        let batch_status = self.batch_status(&acquisition).await?;
+        if batch_status.as_deref() == Some(BATCH_STATUS_CONFIRMING) {
+            return Err(SoulseekError::Conflict(
+                "the acquisition's Import Batch is being committed".to_owned(),
+            ));
+        }
+        let mut acquisition = self.observe(acquisition).await;
         self.discard_downloads(&mut acquisition).await;
+        if batch_status.is_some_and(|status| status != BATCH_STATUS_COMPLETED) {
+            self.cancel_batch(&acquisition).await;
+        }
         match acquisition.state {
             AcquisitionState::Failed
             | AcquisitionState::Completed
@@ -487,10 +560,151 @@ impl Soulseek {
 
     /// One poll of one acquisition.
     async fn step(&self, acquisition: &mut Acquisition, timing: WorkerTiming) {
+        // The listener may confirm or cancel the batch at any time through
+        // the import-batches routes.
+        match self.batch_status(acquisition).await {
+            Err(error) => {
+                tracing::error!(%error, acquisition = %acquisition.id, "read the acquisition's Import Batch failed");
+                return;
+            }
+            Ok(Some(status)) if status == BATCH_STATUS_COMPLETED => {
+                self.discard_downloads(acquisition).await;
+                acquisition.state = AcquisitionState::Completed;
+                return;
+            }
+            Ok(None) => {
+                self.discard_downloads(acquisition).await;
+                acquisition.state = AcquisitionState::Cancelled;
+                return;
+            }
+            Ok(Some(_)) => {}
+        }
         if acquisition.state.is_downloading() {
             self.download(acquisition, timing).await;
+            self.feed(acquisition).await;
         }
         self.settle(acquisition);
+        if acquisition.state == AcquisitionState::Failed
+            && !acquisition
+                .audio()
+                .any(|file| file.state == FileState::Staged)
+        {
+            // Nothing arrived, so there is nothing to review.
+            self.cancel_batch(acquisition).await;
+            acquisition.batch_id = None;
+        }
+    }
+
+    /// Hands every downloaded audio file to Managed Import, then the cover
+    /// image once the Albums are known. A handed-over file's download copy
+    /// and slskd transfer are removed.
+    async fn feed(&self, acquisition: &mut Acquisition) {
+        let Some(batch_id) = acquisition.batch_id.clone() else {
+            return;
+        };
+        let import = self.managed_import();
+        for index in 0..acquisition.files.len() {
+            let file = &acquisition.files[index];
+            if file.kind != FileKind::Audio || file.state != FileState::Downloaded {
+                continue;
+            }
+            let Some(path) = self.downloaded_copy(&file.remote_filename) else {
+                tracing::warn!(acquisition = %acquisition.id, file = %file.name, "downloaded copy disappeared");
+                acquisition.files[index].state = FileState::Failed;
+                continue;
+            };
+            // A job from before a restart that never got its file.
+            if let Some(job_id) = acquisition.files[index].job_id.take()
+                && let Err(error) = import.cancel_job(&job_id).await
+            {
+                tracing::warn!(%error, acquisition = %acquisition.id, "cancel unfinished Managed Import job failed");
+            }
+            let job = match import
+                .create_job(&batch_id, &uuid::Uuid::new_v4().to_string())
+                .await
+            {
+                Ok(job) => job,
+                Err(error) => {
+                    // The batch was confirmed or cancelled meanwhile; the
+                    // next step sees it.
+                    tracing::warn!(%error, acquisition = %acquisition.id, "create Managed Import job failed");
+                    return;
+                }
+            };
+            acquisition.files[index].job_id = Some(job.id.clone());
+            if let Err(error) = self.repo().save(acquisition).await {
+                tracing::error!(%error, acquisition = %acquisition.id, "save Soulseek Acquisition failed");
+            }
+            let name = acquisition.files[index].name.clone();
+            let outcome = match import
+                .upload_from_path(&CancellationToken::new(), &job.id, &name, &path)
+                .await
+            {
+                Ok(_) => "previewed",
+                // The Import Preview shows why.
+                Err(_) => "rejected",
+            };
+            let file = &mut acquisition.files[index];
+            file.outcome = Some(outcome.to_owned());
+            file.state = FileState::Staged;
+            self.hand_over(acquisition, index).await;
+        }
+        let audio_done = acquisition
+            .audio()
+            .all(|file| matches!(file.state, FileState::Staged | FileState::Failed));
+        let Some(index) = acquisition
+            .files
+            .iter()
+            .position(|file| file.kind == FileKind::Artwork && file.state == FileState::Downloaded)
+        else {
+            return;
+        };
+        if !audio_done {
+            return;
+        }
+        let attached = match self.downloaded_copy(&acquisition.files[index].remote_filename) {
+            Some(path) => self.attach_artwork(&batch_id, &path).await,
+            None => false,
+        };
+        let file = &mut acquisition.files[index];
+        file.outcome = Some(if attached { "attached" } else { "skipped" }.to_owned());
+        file.state = FileState::Staged;
+        self.hand_over(acquisition, index).await;
+    }
+
+    /// Offers the cover image for every Album the batch's preview groups.
+    /// An image Managed Import does not accept is skipped silently.
+    async fn attach_artwork(&self, batch_id: &str, path: &Path) -> bool {
+        let Ok(data) = tokio::fs::read(path).await else {
+            return false;
+        };
+        let import = self.managed_import();
+        let Ok(batch) = import.get_batch(batch_id).await else {
+            return false;
+        };
+        let mut attached = false;
+        for album in &batch.albums {
+            attached |= import
+                .upload_artwork(batch_id, &album.key, &data)
+                .await
+                .is_ok();
+        }
+        attached
+    }
+
+    /// Deletes a file's download copy and removes its slskd transfer once
+    /// Managed Import has it.
+    async fn hand_over(&self, acquisition: &mut Acquisition, index: usize) {
+        let username = acquisition.sources[acquisition.files[index].source_index]
+            .username
+            .clone();
+        let file = &mut acquisition.files[index];
+        self.remove_download_copy(&file.remote_filename);
+        if let (Some(slskd), Some(transfer_id)) = (self.slskd_client(), file.transfer_id.take())
+            && let Err(error) = slskd.remove_download(&username, &transfer_id).await
+        {
+            tracing::warn!(%error, "remove finished slskd download failed");
+        }
     }
 
     /// Reads the current source's transfers, records progress, queues what
@@ -555,6 +769,10 @@ impl Soulseek {
                             failure.get_or_insert_with(|| {
                                 format!("{} answered {reason}", source.username)
                             });
+                        } else {
+                            // The Album Artwork is a nicety, not a reason to
+                            // leave a source.
+                            file.state = FileState::Failed;
                         }
                     }
                 }
@@ -582,12 +800,16 @@ impl Soulseek {
             }
             let stalled = now - acquisition.progress_at_ms
                 > i64::try_from(timing.stall_timeout.as_millis()).unwrap_or(i64::MAX);
-            if failure.is_none() && stalled && acquisition.pending().next().is_some() {
-                failure = Some(format!(
-                    "{} made no progress for {} seconds",
-                    source.username,
-                    timing.stall_timeout.as_secs()
-                ));
+            if failure.is_none() && stalled {
+                if acquisition.pending_audio() {
+                    failure = Some(format!(
+                        "{} made no progress for {} seconds",
+                        source.username,
+                        timing.stall_timeout.as_secs()
+                    ));
+                } else {
+                    give_up_artwork(acquisition);
+                }
             }
             if let Some(reason) = failure {
                 self.next_source(acquisition, &reason).await;
@@ -595,7 +817,7 @@ impl Soulseek {
             }
         }
         let missing = acquisition.audio().any(|file| file.state.is_missing());
-        if missing && acquisition.pending().next().is_none() {
+        if missing && !acquisition.pending_audio() {
             // The current source lacks the files still missing.
             let reason = format!("{} does not offer the missing files", source.username);
             self.next_source(acquisition, &reason).await;
@@ -621,6 +843,8 @@ impl Soulseek {
                 file.bytes_transferred = 0;
             }
         }
+        // The cover image comes only from the first source's folder.
+        give_up_artwork(acquisition);
         tracing::info!(acquisition = %acquisition.id, %reason, "trying the next Acquisition Source");
         let mut index = current + 1;
         while index < acquisition.sources.len() && !assign(acquisition, index) {
@@ -646,7 +870,9 @@ impl Soulseek {
         }
     }
 
-    /// Moves the acquisition on once no file waits on slskd.
+    /// Moves the acquisition on: downloading while an audio file is to
+    /// arrive, importing while Managed Import is still to take a file, then
+    /// review, or failed when a file never arrived.
     fn settle(&self, acquisition: &mut Acquisition) {
         if !acquisition.state.is_downloading() {
             return;
@@ -655,14 +881,20 @@ impl Soulseek {
             acquisition.state = AcquisitionState::Downloading;
             return;
         }
-        if acquisition
+        let importing = acquisition.files.iter().any(|file| {
+            file.state == FileState::Downloaded
+                || (file.kind == FileKind::Artwork && file.state.is_missing())
+        });
+        acquisition.state = if importing {
+            AcquisitionState::Importing
+        } else if acquisition
             .audio()
             .any(|file| file.state == FileState::Failed)
         {
-            acquisition.state = AcquisitionState::Failed;
-            return;
-        }
-        acquisition.state = AcquisitionState::Importing;
+            AcquisitionState::Failed
+        } else {
+            AcquisitionState::Review
+        };
     }
 
     /// The completed download of a remote file, when it is in slskd's
@@ -671,6 +903,29 @@ impl Soulseek {
         let path = local_path(self.downloads_path()?, remote);
         path.is_file().then_some(path)
     }
+}
+
+/// Stops waiting for a cover image that has not arrived; its transfer, if
+/// any, goes with the acquisition's other transfers.
+fn give_up_artwork(acquisition: &mut Acquisition) {
+    for file in &mut acquisition.files {
+        if file.kind == FileKind::Artwork && file.state.is_missing() {
+            file.state = FileState::Failed;
+        }
+    }
+}
+
+/// The folder's cover image: one named cover, folder or front, else the
+/// first.
+fn cover(artwork: &[RemoteFile]) -> Option<&RemoteFile> {
+    let named = |remote: &&RemoteFile| {
+        let name = file_name(&remote.filename).to_ascii_lowercase();
+        let stem = name
+            .rsplit_once('.')
+            .map_or(name.as_str(), |(stem, _)| stem);
+        matches!(stem, "cover" | "folder" | "front")
+    };
+    artwork.iter().find(named).or_else(|| artwork.first())
 }
 
 /// Takes the acquisition's missing audio files from source `index`; `false`

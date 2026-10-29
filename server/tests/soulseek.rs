@@ -20,6 +20,11 @@ use std::time::Duration;
 use tower::ServiceExt;
 
 const CAPABILITY: &str = "soulseek-acquisition.v1";
+/// A FLAC file that passes the Strict Import Profile.
+const FLAC: &[u8] = include_bytes!("../testdata/strict-import.flac");
+/// A file named .flac that is not audio.
+const NOT_AUDIO: &[u8] = include_bytes!("../testdata/not-audio.flac");
+const COVER: &[u8] = include_bytes!("../testdata/cover.png");
 const API_KEY: &str = "test-key";
 
 /// One request the fake slskd received.
@@ -175,6 +180,15 @@ impl FakeSlskd {
             .unwrap()
             .file_behaviors
             .insert(filename.to_owned(), behavior);
+    }
+
+    /// The bytes a successful download of `name` writes.
+    fn content(&self, name: &str, data: &[u8]) {
+        self.state
+            .lock()
+            .unwrap()
+            .contents
+            .insert(name.to_owned(), data.to_vec());
     }
 
     fn transfers(&self) -> Vec<FakeTransfer> {
@@ -1396,7 +1410,7 @@ async fn an_acquisition_starts_with_the_first_source_and_downloads_its_files() {
     assert!(started["createdAt"].as_str().unwrap().ends_with('Z'));
 
     let progress = wait_for(&harness, id, "per-file progress", |body| {
-        states(body) == ["downloaded", "downloading"]
+        states(body) == ["staged", "downloading"]
     })
     .await;
     assert_eq!(progress["files"][1]["bytesTransferred"], 100);
@@ -1404,7 +1418,11 @@ async fn an_acquisition_starts_with_the_first_source_and_downloads_its_files() {
     assert_eq!(queued.len(), 1, "one request queues the source's files");
     assert_eq!(
         queued[0].body,
-        json!([{"filename": ALICE_ONE, "size": 100}, {"filename": ALICE_TWO, "size": 200}])
+        json!([
+            {"filename": ALICE_ONE, "size": 100},
+            {"filename": ALICE_TWO, "size": 200},
+            {"filename": r"@@alice\Daft Punk\Discovery [24-48]\cover.jpg", "size": 10}
+        ])
     );
     assert_eq!(queued[0].api_key.as_deref(), Some(API_KEY));
 
@@ -1528,7 +1546,7 @@ async fn a_failing_source_falls_over_to_the_next_source_of_the_version() {
     assert_eq!(body["state"], "downloading");
     assert_eq!(body["sourcesTried"], 2);
     // alice's file that arrived is kept; only the missing one comes from erin.
-    assert_eq!(body["files"][0]["state"], "downloaded");
+    assert_eq!(body["files"][0]["state"], "staged");
     let queued = slskd.requests_to(Method::POST, "/api/v0/transfers/downloads/erin");
     assert_eq!(queued.len(), 1);
     assert_eq!(
@@ -1545,16 +1563,11 @@ async fn a_failing_source_falls_over_to_the_next_source_of_the_version() {
         slskd.transfers()
     );
     slskd.finish_held();
-    let done = wait_for(&harness, &id, "every file", |body| {
-        body["state"] != "downloading"
-    })
-    .await;
-    assert_eq!(states(&done), ["downloaded", "downloaded"], "{done}");
-    assert!(
-        files_in(&harness.downloads).contains(&"Discovery/02 Aerodynamic.flac".to_owned()),
-        "{:?}",
-        files_in(&harness.downloads)
-    );
+    let done = wait_for(&harness, &id, "review", |body| body["state"] == "review").await;
+    assert_eq!(states(&done), ["staged", "staged"], "{done}");
+    // Managed Import has both files; slskd's copies and transfers are gone.
+    assert!(files_in(&harness.downloads).is_empty());
+    assert!(slskd.transfers().is_empty(), "{:?}", slskd.transfers());
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -1576,6 +1589,32 @@ async fn exhausted_sources_fail_the_acquisition_with_the_files_that_arrived() {
         slskd.requests_to(Method::POST, "/api/v0/transfers/downloads/bob")[0].body,
         json!([{"filename": BOB_ONE, "size": 300}])
     );
+    // The file that arrived is in the Import Preview for review.
+    let batch_uri = format!(
+        "/api/v1/import-batches/{}",
+        body["batchId"].as_str().expect("batchId")
+    );
+    let (status, batch) = send(&harness.router, Method::GET, &batch_uri).await;
+    assert_eq!(status, StatusCode::OK, "{batch}");
+    assert_eq!(
+        batch["files"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|file| file["originalFilename"].clone())
+            .collect::<Vec<_>>(),
+        ["01 One More Time.flac"]
+    );
+    // Dismissing the failed acquisition discards its batch.
+    let (status, _) = send(
+        &harness.router,
+        Method::DELETE,
+        &format!("/api/v1/soulseek/acquisitions/{id}"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (status, _) = send(&harness.router, Method::GET, &batch_uri).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -1627,20 +1666,34 @@ async fn a_stalled_source_falls_over() {
 #[tokio::test(flavor = "multi_thread")]
 async fn cancelling_removes_transfers_and_downloaded_copies() {
     let slskd = FakeSlskd::start().await;
+    slskd.content("01 One More Time.flac", FLAC);
     slskd.file_behaves(ALICE_TWO, Behavior::Hold);
     let (harness, search_id) = acquiring(&slskd, NO_STALL).await;
     let id = acquire_hi_res(&harness, &search_id).await;
-    wait_for(&harness, &id, "first file", |body| {
-        states(body) == ["downloaded", "downloading"]
+    let body = wait_for(&harness, &id, "first file", |body| {
+        states(body) == ["staged", "downloading"]
     })
     .await;
-    assert_eq!(files_in(&harness.downloads).len(), 1);
+    let batch_id = body["batchId"].as_str().expect("batchId").to_owned();
+    assert!(
+        !files_in(&harness.downloads).is_empty(),
+        "the cover waits for the audio"
+    );
+    assert_eq!(files_in(&harness.managed.join(".staging")).len(), 1);
     let uri = format!("/api/v1/soulseek/acquisitions/{id}");
     let (status, _) = send(&harness.router, Method::DELETE, &uri).await;
     assert_eq!(status, StatusCode::NO_CONTENT);
     assert_eq!(acquisition(&harness, &id).await["state"], "cancelled");
     assert!(slskd.transfers().is_empty(), "{:?}", slskd.transfers());
     assert!(files_in(&harness.downloads).is_empty());
+    assert!(files_in(&harness.managed.join(".staging")).is_empty());
+    let (status, _) = send(
+        &harness.router,
+        Method::GET,
+        &format!("/api/v1/import-batches/{batch_id}"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "the batch is cancelled");
     // Deleting a cancelled acquisition dismisses it.
     let (status, _) = send(&harness.router, Method::DELETE, &uri).await;
     assert_eq!(status, StatusCode::NO_CONTENT);
@@ -1670,11 +1723,22 @@ async fn an_acquisition_continues_after_a_restart_from_slskd_state() {
     // slskd finishes while the Music Server is down.
     slskd.finish_held();
     restarted.start_worker(NO_STALL).await;
-    let body = wait_for(&restarted, &id, "both files", |body| {
-        body["state"] != "downloading"
-    })
+    let body = wait_for(&restarted, &id, "review", |body| body["state"] == "review").await;
+    assert_eq!(states(&body), ["staged", "staged"], "{body}");
+    // An acquisition awaiting review survives another restart, staging
+    // included: its batch is server-owned.
+    let batch_id = body["batchId"].as_str().unwrap().to_owned();
+    let mut again = restarted.restart().await;
+    again.start_worker(NO_STALL).await;
+    let (status, batch) = send(
+        &again.router,
+        Method::GET,
+        &format!("/api/v1/import-batches/{batch_id}"),
+    )
     .await;
-    assert_eq!(states(&body), ["downloaded", "downloaded"], "{body}");
+    assert_eq!(status, StatusCode::OK, "{batch}");
+    assert_eq!(batch["files"].as_array().unwrap().len(), 2);
+    assert_eq!(acquisition(&again, &id).await["state"], "review");
     assert_eq!(
         slskd
             .requests_to(Method::POST, "/api/v0/transfers/downloads/alice")
@@ -1682,4 +1746,255 @@ async fn an_acquisition_continues_after_a_restart_from_slskd_state() {
         1,
         "nothing is queued twice"
     );
+}
+
+/// frank's folder of the fixture Album: one well-tagged FLAC, one file
+/// that is not audio, and two images of which `cover.png` is the cover.
+fn strict_album_response(username: &str, folder: &str) -> Value {
+    response(
+        username,
+        true,
+        0,
+        1000,
+        vec![
+            file(
+                &format!(r"{folder}\03 Inspection Fixture.flac"),
+                FLAC.len() as u64,
+                json!({}),
+            ),
+            file(
+                &format!(r"{folder}\04 Broken.flac"),
+                NOT_AUDIO.len() as u64,
+                json!({}),
+            ),
+            file(&format!(r"{folder}\back.png"), 5, json!({})),
+            file(
+                &format!(r"{folder}\cover.png"),
+                COVER.len() as u64,
+                json!({}),
+            ),
+        ],
+    )
+}
+
+/// Acquires the fixture Album from frank and waits for its review.
+async fn reviewed_strict_album(slskd: &FakeSlskd) -> (Harness, String, Value) {
+    slskd.content("03 Inspection Fixture.flac", FLAC);
+    slskd.content("04 Broken.flac", NOT_AUDIO);
+    slskd.content("cover.png", COVER);
+    let mut harness = harness(Some(&slskd.url)).await;
+    slskd.serve_downloads(&harness.downloads);
+    harness.start_worker(NO_STALL).await;
+    let search_id = start_search(&harness, slskd, "Strict Import Tests", "album").await;
+    slskd.reply(
+        Method::GET,
+        &format!("/api/v0/searches/{search_id}"),
+        StatusCode::OK,
+        search(
+            &search_id,
+            "Strict Import Tests",
+            true,
+            vec![strict_album_response("frank", r"F\Strict Import Tests")],
+        ),
+    );
+    let (status, started) = start_acquisition(
+        &harness,
+        json!({"searchId": search_id, "versionKey": "flac-x-x"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{started}");
+    let id = started["acquisitionId"].as_str().unwrap().to_owned();
+    let review = wait_for(&harness, &id, "review", |body| body["state"] == "review").await;
+    (harness, id, review)
+}
+
+async fn get_raw(router: &axum::Router, uri: &str) -> (StatusCode, Bytes) {
+    let response = router
+        .clone()
+        .oneshot(Request::get(uri).body(Body::empty()).unwrap())
+        .await
+        .expect("response");
+    let status = response.status();
+    (
+        status,
+        response.into_body().collect().await.unwrap().to_bytes(),
+    )
+}
+
+async fn library_track_count(harness: &Harness) -> u64 {
+    let (status, page) = send(&harness.router, Method::GET, "/api/v1/library/tracks").await;
+    assert_eq!(status, StatusCode::OK, "{page}");
+    page["items"].as_array().unwrap().len() as u64
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn an_acquisition_reaches_review_and_its_confirmed_files_enter_the_library() {
+    let slskd = FakeSlskd::start().await;
+    let (harness, id, review) = reviewed_strict_album(&slskd).await;
+    assert_eq!(states(&review), ["staged", "staged"], "{review}");
+    let batch_id = review["batchId"].as_str().expect("batchId").to_owned();
+    for file in review["files"].as_array().unwrap() {
+        assert!(file["jobId"].as_str().is_some(), "{file}");
+    }
+    // Only the audio and the cover image were downloaded.
+    let queued = slskd.requests_to(Method::POST, "/api/v0/transfers/downloads/frank");
+    let queued: Vec<String> = queued
+        .iter()
+        .flat_map(|request| request.body.as_array().unwrap().clone())
+        .map(|file| file["filename"].as_str().unwrap().to_owned())
+        .collect();
+    assert_eq!(
+        queued,
+        [
+            r"F\Strict Import Tests\03 Inspection Fixture.flac",
+            r"F\Strict Import Tests\04 Broken.flac",
+            r"F\Strict Import Tests\cover.png",
+        ]
+    );
+    // The copies are Managed Import's now.
+    assert!(files_in(&harness.downloads).is_empty());
+    assert!(slskd.transfers().is_empty(), "{:?}", slskd.transfers());
+
+    // The batch reads like any Import Batch: one ready file, one rejected
+    // by the Strict Import Profile, and the folder's cover offered.
+    let batch_uri = format!("/api/v1/import-batches/{batch_id}");
+    let (status, batch) = send(&harness.router, Method::GET, &batch_uri).await;
+    assert_eq!(status, StatusCode::OK, "{batch}");
+    assert_eq!(batch["status"], "uploading");
+    let files = batch["files"].as_array().unwrap();
+    assert_eq!(files.len(), 2, "{batch}");
+    let ready = files
+        .iter()
+        .find(|file| file["state"] == "accepted")
+        .expect("ready file");
+    assert_eq!(ready["originalFilename"], "03 Inspection Fixture.flac");
+    let rejected = files
+        .iter()
+        .find(|file| file["state"] == "rejected")
+        .expect("rejected file");
+    assert_eq!(rejected["originalFilename"], "04 Broken.flac");
+    assert!(
+        !rejected["errorCode"]
+            .as_str()
+            .unwrap_or_default()
+            .is_empty()
+    );
+    let albums = batch["albums"].as_array().unwrap();
+    assert_eq!(albums.len(), 1, "{batch}");
+    let artwork = albums[0]["artworks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|artwork| artwork["id"].as_str().unwrap().starts_with("upload-"))
+        .expect("the source folder's cover");
+    assert_eq!(artwork["mediaType"], "image/png");
+    let (status, image) = get_raw(
+        &harness.router,
+        &format!(
+            "/api/v1/import-batches/{batch_id}/artwork/{}",
+            artwork["id"].as_str().unwrap()
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(&image[..], COVER);
+
+    // No client heartbeats the batch, and it does not expire.
+    let tomorrow = std::time::SystemTime::now() + Duration::from_secs(24 * 60 * 60);
+    harness
+        .state
+        .managed_import
+        .service
+        .cleanup_inactive(tomorrow)
+        .await
+        .unwrap();
+    let (status, _) = send(&harness.router, Method::GET, &batch_uri).await;
+    assert_eq!(status, StatusCode::OK, "a server-owned batch survives");
+    assert_eq!(acquisition(&harness, &id).await["state"], "review");
+
+    // Confirming through the existing route completes the acquisition.
+    let (status, confirmed) = send_json(
+        &harness.router,
+        Method::POST,
+        &format!("{batch_uri}/confirm"),
+        Some(json!({
+            "revision": batch["revision"],
+            "selectedFileIds": [ready["jobId"]],
+            "albumDecisions": [{
+                "albumKey": albums[0]["key"],
+                "artworkMode": "selected",
+                "artworkId": artwork["id"]
+            }]
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{confirmed}");
+    assert_eq!(acquisition(&harness, &id).await["state"], "completed");
+    assert_eq!(library_track_count(&harness).await, 1);
+    wait_for(&harness, &id, "the worker to record it", |body| {
+        body["state"] == "completed"
+    })
+    .await;
+
+    // Dismissing a completed acquisition leaves its Tracks alone.
+    let uri = format!("/api/v1/soulseek/acquisitions/{id}");
+    let (status, _) = send(&harness.router, Method::DELETE, &uri).await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (status, _) = send(&harness.router, Method::GET, &uri).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(library_track_count(&harness).await, 1);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn an_acquisition_in_review_cannot_be_cancelled_while_committing() {
+    let slskd = FakeSlskd::start().await;
+    let (harness, id, review) = reviewed_strict_album(&slskd).await;
+    let batch_id = review["batchId"].as_str().unwrap().to_owned();
+    let set_status = |status: &'static str| {
+        let pool = harness.state.db.clone();
+        let batch_id = batch_id.clone();
+        async move {
+            sqlx::query("UPDATE managed_import_batches SET status = ? WHERE id = ?")
+                .bind(status)
+                .bind(batch_id)
+                .execute(&pool)
+                .await
+                .unwrap();
+        }
+    };
+    let uri = format!("/api/v1/soulseek/acquisitions/{id}");
+    set_status("confirming").await;
+    let (status, body) = send(&harness.router, Method::DELETE, &uri).await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert_eq!(body["code"], "acquisition_state_conflict");
+    set_status("uploading").await;
+
+    // In review, cancelling removes the batch and its staging.
+    assert!(!files_in(&harness.managed.join(".staging")).is_empty());
+    let (status, _) = send(&harness.router, Method::DELETE, &uri).await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    assert_eq!(acquisition(&harness, &id).await["state"], "cancelled");
+    let (status, _) = send(
+        &harness.router,
+        Method::GET,
+        &format!("/api/v1/import-batches/{batch_id}"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert!(files_in(&harness.managed.join(".staging")).is_empty());
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn cancelling_the_batch_through_its_own_route_cancels_the_acquisition() {
+    let slskd = FakeSlskd::start().await;
+    let (harness, id, review) = reviewed_strict_album(&slskd).await;
+    let batch_id = review["batchId"].as_str().unwrap();
+    let (status, _) = send(
+        &harness.router,
+        Method::DELETE,
+        &format!("/api/v1/import-batches/{batch_id}"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    assert_eq!(acquisition(&harness, &id).await["state"], "cancelled");
 }

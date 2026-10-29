@@ -532,6 +532,12 @@ impl Storage {
 
     /// Removes every upload left in `.staging`.
     pub fn remove_all_staged(&self) -> Result<()> {
+        self.remove_all_staged_except(&std::collections::HashSet::new())
+    }
+
+    /// Removes every upload left in `.staging` except the staged paths in
+    /// `keep` (as jobs store them).
+    pub fn remove_all_staged_except(&self, keep: &std::collections::HashSet<String>) -> Result<()> {
         let root = self.open_root()?;
         let entries = match root.read_dir(STAGING) {
             Err(error) if not_found(&error) => return Ok(()),
@@ -545,14 +551,12 @@ impl Storage {
             if !name.starts_with(".import-") || !name.ends_with(".upload") {
                 continue;
             }
-            failures.push(
-                remove_rooted_file(
-                    &root,
-                    &format!("{STAGING}/{name}"),
-                    "Managed Import staging file",
-                )
-                .err(),
-            );
+            let relative = format!("{STAGING}/{name}");
+            if keep.contains(&self.absolute_path(&relative)) {
+                continue;
+            }
+            failures
+                .push(remove_rooted_file(&root, &relative, "Managed Import staging file").err());
         }
         match Error::join(failures) {
             Some(error) => Err(error),

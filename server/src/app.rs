@@ -66,6 +66,7 @@ impl AppState {
             config.soulseek.as_ref(),
             &config.managed_storage_path,
             db.clone(),
+            managed_import.service.clone(),
         );
         Self {
             config: Arc::new(config),

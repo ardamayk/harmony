@@ -6,7 +6,9 @@ use super::slskd::{Application, Share, Slskd, SlskdError};
 use super::versions::{self, Scope, Version};
 use crate::config::SoulseekConfig;
 use crate::dependencies::{self, Dependency};
+use crate::modules::managed_import::service::Service as ImportService;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use uuid::Uuid;
 
 /// The longest Soulseek query, as for External Source searches.
@@ -96,6 +98,8 @@ pub struct Soulseek {
     slskd: Option<Slskd>,
     managed_storage_path: PathBuf,
     repo: Repository,
+    /// Managed Import's public service, which takes the downloads.
+    managed_import: Arc<ImportService>,
     /// Serializes the worker's steps with starting and cancelling, so each
     /// sees an acquisition between steps.
     acquisitions: tokio::sync::Mutex<()>,
@@ -108,12 +112,14 @@ impl Soulseek {
         config: Option<&SoulseekConfig>,
         managed_storage_path: &str,
         pool: sqlx::SqlitePool,
+        managed_import: Arc<ImportService>,
     ) -> Self {
         Self {
             config: config.cloned(),
             slskd: config.map(Slskd::new),
             managed_storage_path: PathBuf::from(managed_storage_path),
             repo: Repository::new(pool),
+            managed_import,
             acquisitions: tokio::sync::Mutex::new(()),
             wake: tokio::sync::Notify::new(),
         }
@@ -121,6 +127,10 @@ impl Soulseek {
 
     pub(super) fn repo(&self) -> &Repository {
         &self.repo
+    }
+
+    pub(super) fn managed_import(&self) -> &ImportService {
+        &self.managed_import
     }
 
     pub(super) async fn acquisition_lock(&self) -> tokio::sync::MutexGuard<'_, ()> {

@@ -281,6 +281,71 @@ async fn confirms_a_batch_with_album_previews() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn a_server_fed_file_previews_like_the_same_uploaded_bytes() {
+    let h = harness().await;
+    let uploaded_batch = h.service.create_batch().await.unwrap();
+    let uploaded_job = h
+        .service
+        .create_job(&uploaded_batch.id, &uuid::Uuid::new_v4().to_string())
+        .await
+        .unwrap();
+    let uploaded = h
+        .upload(&uploaded_job.id, "strict-import.flac", FLAC)
+        .await
+        .unwrap();
+
+    let fed_batch = h.service.create_server_batch().await.unwrap();
+    let fed_job = h
+        .service
+        .create_job(&fed_batch.id, &uuid::Uuid::new_v4().to_string())
+        .await
+        .unwrap();
+    let local = h._dir.path().join("download.flac");
+    std::fs::write(&local, FLAC).unwrap();
+    let fed = h
+        .service
+        .upload_from_path(
+            &CancellationToken::new(),
+            &fed_job.id,
+            "strict-import.flac",
+            &local,
+        )
+        .await
+        .unwrap();
+
+    let comparable = |preview: &Preview| {
+        let mut preview = preview.clone();
+        preview.job_id = String::new();
+        serde_json::to_value(&preview).unwrap()
+    };
+    assert_eq!(comparable(&fed), comparable(&uploaded));
+    let fed_batch = h.service.get_batch(&fed_batch.id).await.unwrap();
+    assert_eq!(fed_batch.files[0].state, BATCH_FILE_ACCEPTED);
+    assert!(
+        local.exists(),
+        "Managed Import copies; the caller owns its file"
+    );
+
+    // Neither liveness nor restart cleanup touches the server-owned batch.
+    let later = std::time::SystemTime::now() + std::time::Duration::from_secs(24 * 60 * 60);
+    h.service.cleanup_inactive(later).await.unwrap();
+    h.service.cleanup_restart().await.unwrap();
+    assert_eq!(
+        h.service
+            .batch_status(&fed_batch.id)
+            .await
+            .unwrap()
+            .as_deref(),
+        Some(BATCH_STATUS_UPLOADING)
+    );
+    assert_eq!(
+        h.service.batch_status(&uploaded_batch.id).await.unwrap(),
+        None
+    );
+    assert_eq!(h.staged_files(), 1, "the server-owned file stays staged");
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn canceling_a_batch_removes_staging_and_archives_it() {
     let h = harness().await;
     let batch = h.service.create_batch().await.unwrap();

@@ -348,7 +348,25 @@ impl Service {
     }
 
     pub async fn create_batch(&self) -> Result<Batch> {
-        self.repo.create_batch().await
+        self.repo.create_batch(false).await
+    }
+
+    /// A batch the server fills itself, such as a Soulseek Acquisition's.
+    /// No Playback Client holds it, so it is exempt from client-liveness
+    /// and restart cleanup and lives until confirmed or cancelled (ADR 0036,
+    /// an exception to ADR 0018). It is read, confirmed and cancelled
+    /// through the same routes as any batch.
+    pub async fn create_server_batch(&self) -> Result<Batch> {
+        self.repo.create_batch(true).await
+    }
+
+    /// The batch's status, or `None` once it is cancelled.
+    pub async fn batch_status(&self, batch_id: &str) -> Result<Option<String>> {
+        match self.repo.get_batch_status(batch_id).await {
+            Ok(status) => Ok(Some(status)),
+            Err(error) if error.is(Sentinel::NotFound) => Ok(None),
+            Err(error) => Err(error),
+        }
     }
 
     pub async fn get_batch(&self, batch_id: &str) -> Result<Batch> {
@@ -641,9 +659,15 @@ impl Service {
 
     pub async fn cleanup_restart(&self) -> Result<()> {
         self.recover_commits().await?;
+        let keep: HashSet<String> = self
+            .repo
+            .list_server_owned_staged_paths()
+            .await?
+            .into_iter()
+            .collect();
         let staging = self
             .storage
-            .remove_all_staged()
+            .remove_all_staged_except(&keep)
             .err()
             .map(|error| error.context("remove Managed Import restart staging"));
         let reconcile = self.cleanup_uncommitted(None).await.err();
@@ -847,6 +871,42 @@ impl Service {
             .await;
         self.finish_active_upload(job_id, &cancel);
         result
+    }
+
+    /// Feeds a file the server already has, such as a Soulseek download,
+    /// into the job: the same staging, SHA-256, Strict Import Profile and
+    /// Import Preview as [`Service::upload`]; only the byte source differs.
+    pub async fn upload_from_path(
+        &self,
+        request: &CancellationToken,
+        job_id: &str,
+        original_filename: &str,
+        path: &std::path::Path,
+    ) -> Result<Preview> {
+        let file = tokio::fs::File::open(path)
+            .await
+            .map_err(|error| Error::new(format!("open {}: {error}", path.display())))?;
+        let length = file
+            .metadata()
+            .await
+            .map_err(|error| Error::new(format!("stat {}: {error}", path.display())))?
+            .len();
+        let body = tokio_util::io::ReaderStream::new(file).map(|chunk| {
+            chunk.map_err(|error| {
+                Error::wrap(
+                    Sentinel::UploadInterrupted,
+                    format!("read server file: {error}"),
+                )
+            })
+        });
+        self.upload(
+            request,
+            job_id,
+            original_filename,
+            Box::pin(body),
+            i64::try_from(length).unwrap_or(i64::MAX),
+        )
+        .await
     }
 
     async fn upload_locked<S>(
