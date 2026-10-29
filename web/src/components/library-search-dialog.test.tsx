@@ -1,4 +1,8 @@
-import type { ExternalTrack, LibrarySearchResponse } from "@repo/api-client";
+import {
+	ApiError,
+	type ExternalTrack,
+	type LibrarySearchResponse,
+} from "@repo/api-client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
 	act,
@@ -286,6 +290,51 @@ describe("LibrarySearchDialog", () => {
 			expect(mocks.playTrack).not.toHaveBeenCalled();
 			expect(onOpenChange).toHaveBeenCalledWith(false);
 		});
+
+		it.each([
+			[
+				new ApiError(422, {
+					error: "Unprocessable Entity",
+					code: "external_track_unplayable",
+					message: "no audio",
+				}),
+				"This track can't be played here",
+			],
+			[
+				new ApiError(504, {
+					error: "Gateway Timeout",
+					code: "external_source_timeout",
+					message: "slow",
+				}),
+				"The External Source took too long",
+			],
+			[
+				new ApiError(502, {
+					error: "Bad Gateway",
+					code: "external_source_failed",
+					message: "boom",
+				}),
+				"Couldn't play this track",
+			],
+			[new Error("network"), "Couldn't play this track"],
+		])(
+			"closes and reports a failed External play: %s",
+			async (error, message) => {
+				mocks.hasExternalSource = true;
+				mocks.playExternalTrack.mockRejectedValue(error);
+				const { onOpenChange } = renderDialog();
+				fireEvent.change(screen.getByRole("combobox"), {
+					target: { value: "ne" },
+				});
+				fireEvent.click(
+					await screen.findByRole("option", { name: /^Around the World/ }),
+				);
+				expect(onOpenChange).toHaveBeenCalledWith(false);
+				await waitFor(() =>
+					expect(mocks.toastError).toHaveBeenCalledWith(message),
+				);
+			},
+		);
 
 		it("reaches External Tracks with the keyboard after the library rows", async () => {
 			mocks.hasExternalSource = true;

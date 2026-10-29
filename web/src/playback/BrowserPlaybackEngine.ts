@@ -416,7 +416,12 @@ export class BrowserPlaybackEngine implements PlaybackEngine {
 			this.update({ status: "paused", stopAfterCurrent: false });
 			return;
 		}
-		if (this.state.repeatMode === "once" || this.state.repeatMode === "loop") {
+		// An External Track never repeats; the stored repeat mode stays for the
+		// next Track.
+		if (
+			this.state.source?.type !== "external-track" &&
+			(this.state.repeatMode === "once" || this.state.repeatMode === "loop")
+		) {
 			const repeatMode =
 				this.state.repeatMode === "once" ? "off" : this.state.repeatMode;
 			this.media.currentTime = 0;

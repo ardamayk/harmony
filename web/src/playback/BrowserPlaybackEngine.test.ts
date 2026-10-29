@@ -183,6 +183,38 @@ describe("BrowserPlaybackEngine", () => {
 		},
 	);
 
+	it.each(["once", "loop"] as const)(
+		"ends an External Track instead of repeating it in %s repeat mode, keeping the mode",
+		async (repeatMode) => {
+			const engine = new BrowserPlaybackEngine({ createMedia: () => media });
+			while (engine.getState().repeatMode !== repeatMode) {
+				engine.cycleRepeatMode();
+			}
+			const streamUrl = "/api/v1/external/tracks/external-1/stream";
+			await engine.play({
+				type: "external-track",
+				externalTrack: {
+					id: "external-1",
+					title: "External Song",
+					artistName: null,
+					durationMs: 30000,
+					webpageUrl: "https://soundcloud.com/uploader/external-song",
+					extractor: "Soundcloud",
+					hasArtwork: false,
+				},
+				playbackUrl: streamUrl,
+				sourceUrl: streamUrl,
+			});
+			media.paused = true;
+
+			media.dispatchEvent(new Event("ended"));
+
+			expect(engine.getState()).toMatchObject({ status: "ended", repeatMode });
+			expect(media.play).toHaveBeenCalledOnce();
+			engine.destroy();
+		},
+	);
+
 	it("publishes the buffered range end on progress events", async () => {
 		const engine = new BrowserPlaybackEngine({ createMedia: () => media });
 		await engine.play(trackSource);
