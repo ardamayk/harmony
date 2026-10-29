@@ -13,7 +13,14 @@ import {
 	waitFor,
 	within,
 } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import {
+	afterEach,
+	beforeEach,
+	describe,
+	expect,
+	it,
+	vi,
+} from "vite-plus/test";
 import { ImportSessionContext } from "#/components/import-session-context";
 import { SoulseekInstallDialog } from "./soulseek-install-dialog";
 
@@ -114,9 +121,21 @@ const mp3: AcquisitionVersion = {
 	],
 };
 
+const mp3Vbr: AcquisitionVersion = {
+	...mp3,
+	versionKey: "mp3-vbr-245",
+	quality: {
+		format: "mp3",
+		lossless: false,
+		bitrateKbps: 320,
+		variableBitrate: true,
+	},
+	sources: [{ ...mp3.sources[0]!, sourceId: "source-v", username: "vera" }],
+};
+
 const unknown: AcquisitionVersion = {
 	...mp3,
-	versionKey: "flac-unknown",
+	versionKey: "flac-x-x",
 	quality: { format: "flac", lossless: true },
 };
 
@@ -151,21 +170,165 @@ function renderDialog(onOpenChange = vi.fn(), external = track) {
 	return { onOpenChange };
 }
 
-async function searchFor(versions: AcquisitionVersion[]) {
+function searchButton() {
+	return screen.getByRole("button", {
+		name: "Search Soulseek",
+	}) as HTMLButtonElement;
+}
+
+async function chooseQuality(name: string) {
+	fireEvent.click(screen.getByRole("button", { name: /^Quality/ }));
+	fireEvent.click(await screen.findByRole("menuitemradio", { name }));
+	await waitFor(() =>
+		expect(
+			screen.getByRole("button", { name: `Quality, ${name}` }),
+		).toBeTruthy(),
+	);
+}
+
+/** Chooses the quality, searches, and waits for the completed search. */
+async function searchFor(
+	versions: AcquisitionVersion[],
+	quality = "FLAC 24/48",
+) {
+	await chooseQuality(quality);
 	mocks.startSoulseekSearch.mockResolvedValue({ searchId: SEARCH_ID });
 	mocks.getSoulseekSearch.mockResolvedValue(
 		searchResponse("complete", versions),
 	);
-	fireEvent.click(screen.getByRole("button", { name: "Search Soulseek" }));
+	fireEvent.click(searchButton());
 	await screen.findByText(
-		`${versions.length} ${versions.length === 1 ? "version" : "versions"} found`,
+		/^(\d+ sources? for |No source offers |Nothing found)/,
 	);
 }
 
 describe("SoulseekInstallDialog", () => {
+	beforeEach(() => window.localStorage.clear());
 	afterEach(() => {
 		cleanup();
 		vi.clearAllMocks();
+	});
+
+	it("keeps Search Soulseek disabled until a quality is chosen", async () => {
+		renderDialog();
+		expect(searchButton().disabled).toBe(true);
+		expect(screen.getByText("Choose a quality, then search.")).toBeTruthy();
+
+		await chooseQuality("MP3 320 kbps");
+
+		expect(searchButton().disabled).toBe(false);
+	});
+
+	it("offers the fixed qualities by format", async () => {
+		renderDialog();
+		fireEvent.click(screen.getByRole("button", { name: "Quality" }));
+		await screen.findByRole("menu");
+
+		const groups = {
+			"MP3 · kbps": ["128", "192", "256", "320"],
+			"AAC (M4A) · kbps": ["128", "192", "256"],
+			"Opus · kbps": ["96", "128", "160", "192"],
+			"Ogg Vorbis · kbps": ["128", "160", "192", "256", "320"],
+			"FLAC · bit / kHz": [
+				"16/44.1",
+				"16/48",
+				"24/44.1",
+				"24/48",
+				"24/88.2",
+				"24/96",
+				"24/176.4",
+				"24/192",
+			],
+		};
+		for (const [label, values] of Object.entries(groups)) {
+			const group = screen.getByRole("group", { name: label });
+			expect(
+				within(group)
+					.getAllByRole("menuitemradio")
+					.map((item) => item.textContent),
+			).toEqual(values);
+		}
+		const wav = screen.getByRole("group", { name: "WAV · bit / kHz" });
+		expect(within(wav).getAllByRole("menuitemradio")).toHaveLength(8);
+		expect(
+			screen.getByRole("menuitemradio", { name: "WAV 24/88.2" }),
+		).toBeTruthy();
+	});
+
+	it("shows only the sources of the chosen quality", async () => {
+		renderDialog();
+		await searchFor([flac, mp3], "FLAC 24/48");
+
+		expect(screen.getByText("2 sources for FLAC 24/48")).toBeTruthy();
+		const sources = screen.getByRole("list", {
+			name: "Sources for FLAC 24/48",
+		});
+		const [alice, bob] = within(sources).getAllByRole("listitem");
+		expect(alice?.textContent).toContain("alice");
+		expect(alice?.textContent).toContain("19 files");
+		expect(alice?.textContent).toContain("Free slot · queue 0 · 2.0 MiB/s");
+		expect(bob?.textContent).toContain("12/19 files");
+		expect(bob?.textContent).toContain("No free slot · queue 4 · 300 KiB/s");
+		expect(screen.getByRole("dialog").textContent).toContain(
+			"19 files · 900.0 MiB · 2 sources (1 complete)",
+		);
+		expect(screen.queryByText("carol")).toBeNull();
+		expect(screen.getByRole("dialog").textContent).not.toMatch(
+			/best|recommended|original/i,
+		);
+	});
+
+	it("never matches a variable bitrate to a constant one", async () => {
+		renderDialog();
+		await searchFor([mp3Vbr, mp3], "MP3 320 kbps");
+
+		expect(screen.getByText("1 source for MP3 320 kbps")).toBeTruthy();
+		expect(screen.getByText("carol")).toBeTruthy();
+		expect(screen.queryByText("vera")).toBeNull();
+	});
+
+	it("lists the found qualities when none is the chosen one, and switches without searching again", async () => {
+		renderDialog();
+		await searchFor([flac, mp3Vbr, unknown], "MP3 320 kbps");
+
+		expect(screen.getByText("No source offers MP3 320 kbps.")).toBeTruthy();
+		const found = screen.getByRole("list", { name: "Found qualities" });
+		expect(found.textContent).toContain("MP3 VBR ~320 kbps");
+		expect(found.textContent).toContain("FLAC, quality unknown");
+		fireEvent.click(within(found).getByRole("button", { name: "FLAC 24/48" }));
+
+		expect(screen.getByText("2 sources for FLAC 24/48")).toBeTruthy();
+		expect(
+			screen.getByRole("button", { name: "Quality, FLAC 24/48" }),
+		).toBeTruthy();
+		expect(mocks.startSoulseekSearch).toHaveBeenCalledTimes(1);
+	});
+
+	it("filters the same search again when the quality changes", async () => {
+		renderDialog();
+		await searchFor([flac, mp3], "FLAC 24/48");
+		await chooseQuality("MP3 320 kbps");
+
+		expect(await screen.findByText("1 source for MP3 320 kbps")).toBeTruthy();
+		expect(screen.getByText("carol")).toBeTruthy();
+		expect(mocks.startSoulseekSearch).toHaveBeenCalledTimes(1);
+	});
+
+	it("remembers the last quality per scope", async () => {
+		renderDialog();
+		await chooseQuality("FLAC 24/88.2");
+		fireEvent.click(screen.getByRole("radio", { name: "Track" }));
+		await chooseQuality("MP3 256 kbps");
+		cleanup();
+
+		renderDialog();
+		expect(
+			screen.getByRole("button", { name: "Quality, FLAC 24/88.2" }),
+		).toBeTruthy();
+		fireEvent.click(screen.getByRole("radio", { name: "Track" }));
+		expect(
+			screen.getByRole("button", { name: "Quality, MP3 256 kbps" }),
+		).toBeTruthy();
 	});
 
 	it("prefills the query without video decorations and defaults to the Album", () => {
@@ -218,64 +381,36 @@ describe("SoulseekInstallDialog", () => {
 		expect(mocks.getSoulseekSearch).toHaveBeenCalledWith(SEARCH_ID);
 	});
 
-	it("shows versions while the search runs and keeps polling until complete", async () => {
+	it("shows matching sources while the search runs and keeps polling until complete", async () => {
+		renderDialog();
+		await chooseQuality("FLAC 24/48");
 		mocks.startSoulseekSearch.mockResolvedValue({ searchId: SEARCH_ID });
 		mocks.getSoulseekSearch
-			.mockResolvedValueOnce(searchResponse("searching", [flac]))
+			.mockResolvedValueOnce(searchResponse("searching", [mp3]))
+			.mockResolvedValueOnce(searchResponse("searching", [flac, mp3]))
 			.mockResolvedValue(searchResponse("complete", [flac, mp3]));
-		renderDialog();
-		fireEvent.click(screen.getByRole("button", { name: "Search Soulseek" }));
+		fireEvent.click(searchButton());
 
+		expect(await screen.findByText("Searching Soulseek…")).toBeTruthy();
 		expect(
-			await screen.findByText("Searching Soulseek… 1 version so far"),
+			await screen.findByText(
+				"Searching Soulseek… 2 sources for FLAC 24/48 so far",
+				undefined,
+				{ timeout: 3000 },
+			),
 		).toBeTruthy();
-		expect(
-			screen.getByRole("listitem", { name: "FLAC 24-bit / 48 kHz" }),
-		).toBeTruthy();
-		await screen.findByText("2 versions found", undefined, { timeout: 3000 });
-		expect(screen.getByRole("listitem", { name: "MP3 320 kbps" })).toBeTruthy();
+		await screen.findByText("2 sources for FLAC 24/48", undefined, {
+			timeout: 3000,
+		});
 	});
 
-	it("shows each version's quality, counts and incomplete sources, never a best one", async () => {
-		renderDialog();
-		await searchFor([flac, mp3, unknown]);
-
-		const flacRow = screen.getByRole("listitem", {
-			name: "FLAC 24-bit / 48 kHz",
-		});
-		expect(flacRow.textContent).toContain(
-			"19 files · 900.0 MiB · 2 sources (1 complete)",
-		);
-		expect(
-			screen.getByRole("listitem", { name: "FLAC, quality unknown" }),
-		).toBeTruthy();
-
-		fireEvent.click(
-			within(flacRow).getByRole("button", {
-				name: "Sources for FLAC 24-bit / 48 kHz",
-			}),
-		);
-		const sources = within(flacRow).getByRole("list", {
-			name: "Sources for FLAC 24-bit / 48 kHz",
-		});
-		const [alice, bob] = within(sources).getAllByRole("listitem");
-		expect(alice?.textContent).toContain("alice");
-		expect(alice?.textContent).toContain("19 files");
-		expect(alice?.textContent).toContain("Free slot · queue 0 · 2.0 MiB/s");
-		expect(bob?.textContent).toContain("12/19 files");
-		expect(bob?.textContent).toContain("No free slot · queue 4 · 300 KiB/s");
-
-		const dialog = screen.getByRole("dialog");
-		expect(dialog.textContent).not.toMatch(/best|recommended|original/i);
-	});
-
-	it("starts the chosen version, then opens Import Music", async () => {
+	it("starts the chosen quality, then opens Import Music", async () => {
 		mocks.startSoulseekAcquisition.mockResolvedValue({
 			acquisitionId: "acq-1",
 			query: "Daft Punk One More Time",
 		});
 		const { onOpenChange } = renderDialog();
-		await searchFor([flac, mp3]);
+		await searchFor([flac, mp3], "MP3 320 kbps");
 
 		fireEvent.click(
 			screen.getByRole("button", { name: "Install MP3 320 kbps" }),
@@ -301,9 +436,6 @@ describe("SoulseekInstallDialog", () => {
 		});
 		renderDialog();
 		await searchFor([flac]);
-		fireEvent.click(
-			screen.getByRole("button", { name: "Sources for FLAC 24-bit / 48 kHz" }),
-		);
 		fireEvent.click(screen.getByRole("button", { name: "Install from bob" }));
 
 		await waitFor(() =>
@@ -323,12 +455,13 @@ describe("SoulseekInstallDialog", () => {
 		};
 
 		async function searchForNothing() {
-			mocks.startSoulseekSearch.mockResolvedValue({ searchId: SEARCH_ID });
-			mocks.getSoulseekSearch.mockResolvedValue(searchResponse("complete", []));
-			fireEvent.click(screen.getByRole("button", { name: "Search Soulseek" }));
-			await screen.findByText(
-				"No versions found. Edit the query and search again.",
-			);
+			await searchFor([]);
+			expect(
+				screen.getByText("Nothing found. Edit the query and search again."),
+			).toBeTruthy();
+			expect(
+				screen.queryByRole("list", { name: "Found qualities" }),
+			).toBeNull();
 		}
 
 		it("searches the Album without the artist", async () => {
@@ -391,6 +524,7 @@ describe("SoulseekInstallDialog", () => {
 
 	it("explains an unreachable or logged-out slskd", async () => {
 		renderDialog();
+		await chooseQuality("FLAC 24/48");
 		mocks.startSoulseekSearch.mockRejectedValueOnce(
 			new ApiError(503, {
 				error: "slskd unreachable",

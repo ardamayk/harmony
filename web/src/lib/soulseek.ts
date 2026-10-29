@@ -78,9 +78,13 @@ export function soulseekQueryWithoutArtist(
 	return name.toLowerCase() === query.trim().toLowerCase() ? "" : name;
 }
 
+function khz(hz: number): string {
+	const value = hz / 1000;
+	return Number.isInteger(value) ? String(value) : value.toFixed(1);
+}
+
 function formatSampleRate(hz: number): string {
-	const khz = hz / 1000;
-	return `${Number.isInteger(khz) ? khz : khz.toFixed(1)} kHz`;
+	return `${khz(hz)} kHz`;
 }
 
 /**
@@ -110,6 +114,143 @@ export function formatAcquisitionQuality(quality: AcquisitionQuality): string {
 	return quality.variableBitrate
 		? `${kind} ~${quality.bitrateKbps} kbps`
 		: `${kind} ${quality.bitrateKbps} kbps`;
+}
+
+/**
+ * A quality the listener picks before searching Soulseek, from a fixed list.
+ * Formats are the Music Server's, by file extension: AAC is `m4a`, Ogg
+ * Vorbis is `ogg`.
+ */
+export type QualityChoice =
+	| { key: string; format: string; lossless: false; bitrateKbps: number }
+	| {
+			key: string;
+			format: string;
+			lossless: true;
+			bitDepth: number;
+			sampleRateHz: number;
+	  };
+
+export interface QualityGroup {
+	format: string;
+	label: string;
+	unit: string;
+	choices: QualityChoice[];
+}
+
+function lossyGroup(
+	format: string,
+	label: string,
+	bitrates: number[],
+): QualityGroup {
+	return {
+		format,
+		label,
+		unit: "kbps",
+		choices: bitrates.map((bitrateKbps) => ({
+			key: `${format}-${bitrateKbps}`,
+			format,
+			lossless: false,
+			bitrateKbps,
+		})),
+	};
+}
+
+const LOSSLESS_STEPS: Array<[bitDepth: number, sampleRateHz: number]> = [
+	[16, 44_100],
+	[16, 48_000],
+	[24, 44_100],
+	[24, 48_000],
+	[24, 88_200],
+	[24, 96_000],
+	[24, 176_400],
+	[24, 192_000],
+];
+
+function losslessGroup(format: string, label: string): QualityGroup {
+	return {
+		format,
+		label,
+		unit: "bit / kHz",
+		choices: LOSSLESS_STEPS.map(([bitDepth, sampleRateHz]) => ({
+			key: `${format}-${bitDepth}-${sampleRateHz}`,
+			format,
+			lossless: true,
+			bitDepth,
+			sampleRateHz,
+		})),
+	};
+}
+
+/** The qualities the Install dialog offers, by format. */
+export const QUALITY_GROUPS: QualityGroup[] = [
+	lossyGroup("mp3", "MP3", [128, 192, 256, 320]),
+	lossyGroup("m4a", "AAC (M4A)", [128, 192, 256]),
+	lossyGroup("opus", "Opus", [96, 128, 160, 192]),
+	lossyGroup("ogg", "Ogg Vorbis", [128, 160, 192, 256, 320]),
+	losslessGroup("flac", "FLAC"),
+	losslessGroup("wav", "WAV"),
+];
+
+const QUALITY_CHOICES = new Map(
+	QUALITY_GROUPS.flatMap((group) =>
+		group.choices.map((choice) => [choice.key, choice] as const),
+	),
+);
+
+/** A stored choice key back to its choice; null when not on the list. */
+export function parseQualityChoice(
+	key: string | null | undefined,
+): QualityChoice | null {
+	return (key && QUALITY_CHOICES.get(key)) || null;
+}
+
+/** A choice's value within its group, such as "320" or "24/88.2". */
+export function formatQualityChoiceValue(choice: QualityChoice): string {
+	return choice.lossless
+		? `${choice.bitDepth}/${khz(choice.sampleRateHz)}`
+		: String(choice.bitrateKbps);
+}
+
+/** A choice with its format, such as "MP3 320 kbps" or "FLAC 24/88.2". */
+export function formatQualityChoice(choice: QualityChoice): string {
+	const group = QUALITY_GROUPS.find((group) => group.format === choice.format);
+	const format = group?.label ?? choice.format.toUpperCase();
+	return choice.lossless
+		? `${format} ${formatQualityChoiceValue(choice)}`
+		: `${format} ${choice.bitrateKbps} kbps`;
+}
+
+/**
+ * Whether a version's quality is the chosen one: lossless by format, bit
+ * depth and sample rate; lossy by format and a bitrate that is not
+ * reported as variable.
+ */
+export function qualityMatches(
+	quality: AcquisitionQuality,
+	choice: QualityChoice,
+): boolean {
+	if (quality.format !== choice.format) return false;
+	if (choice.lossless)
+		return (
+			quality.lossless &&
+			quality.bitDepth === choice.bitDepth &&
+			quality.sampleRateHz === choice.sampleRateHz
+		);
+	return (
+		!quality.lossless &&
+		quality.variableBitrate !== true &&
+		quality.bitrateKbps === choice.bitrateKbps
+	);
+}
+
+/** The listed choice a found quality is, or null when it is not listed. */
+export function qualityChoiceOf(
+	quality: AcquisitionQuality,
+): QualityChoice | null {
+	for (const choice of QUALITY_CHOICES.values())
+		if (qualityMatches(quality, choice)) return choice;
+	return null;
 }
 
 const BYTES_PER_KIB = 1024;

@@ -10,6 +10,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, LoaderCircle, X } from "lucide-react";
 import { useContext, useId, useState } from "react";
 import { ImportSessionContext } from "#/components/import-session-context";
+import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import {
 	Dialog,
@@ -18,6 +19,15 @@ import {
 	DialogDescription,
 	DialogTitle,
 } from "#/components/ui/dialog";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuGroup,
+	DropdownMenuLabel,
+	DropdownMenuRadioGroup,
+	DropdownMenuRadioItem,
+	DropdownMenuTrigger,
+} from "#/components/ui/dropdown-menu";
 import { Input } from "#/components/ui/input";
 import { Label } from "#/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "#/components/ui/radio-group";
@@ -25,8 +35,15 @@ import { apiClient } from "#/lib/api";
 import {
 	buildSoulseekQuery,
 	formatAcquisitionQuality,
+	formatQualityChoice,
+	formatQualityChoiceValue,
 	formatSize,
 	formatSpeed,
+	parseQualityChoice,
+	QUALITY_GROUPS,
+	type QualityChoice,
+	qualityChoiceOf,
+	qualityMatches,
 	soulseekErrorMessage,
 	soulseekQueryKeys,
 	soulseekQueryWithoutArtist,
@@ -40,12 +57,41 @@ const scopeOptions: Array<{ value: AcquisitionScope; label: string }> = [
 	{ value: "track", label: "Track" },
 ];
 
+/** The last quality chosen for a scope, kept on this device. */
+const qualityStorageKey = (scope: AcquisitionScope) =>
+	`earthly-audio-soulseek-quality-${scope}`;
+
+function loadQuality(scope: AcquisitionScope): QualityChoice | null {
+	try {
+		return parseQualityChoice(
+			window.localStorage.getItem(qualityStorageKey(scope)),
+		);
+	} catch {
+		return null;
+	}
+}
+
+function storeQuality(scope: AcquisitionScope, choice: QualityChoice) {
+	try {
+		window.localStorage.setItem(qualityStorageKey(scope), choice.key);
+	} catch {
+		// Remembering the quality is a convenience; the choice still applies.
+	}
+}
+
+/** A source with the version it belongs to, which installing it names. */
+interface MatchingSource {
+	version: AcquisitionVersion;
+	source: AcquisitionSource;
+}
+
 /**
- * Searches Soulseek for an External Track and starts a Soulseek Acquisition
- * of the Acquisition Version the listener chooses. Versions keep the Music
- * Server's display order; none is highlighted or called best, so the choice
- * of quality stays the listener's. Closing the dialog never cancels an
- * acquisition: it continues on the Import Music dialog.
+ * Searches Soulseek for an External Track in the quality the listener
+ * chooses from a fixed list, and starts a Soulseek Acquisition from the
+ * sources that offer it. Only that quality is shown; none is highlighted or
+ * called best. Changing the quality filters the same search again. Closing
+ * the dialog never cancels an acquisition: it continues on the Import Music
+ * dialog.
  */
 export function SoulseekInstallDialog({
 	track,
@@ -64,6 +110,9 @@ export function SoulseekInstallDialog({
 	const [query, setQuery] = useState(() => buildSoulseekQuery(track, "album"));
 	// The query follows the scope until the listener edits it.
 	const [queryEdited, setQueryEdited] = useState(false);
+	const [quality, setQuality] = useState<QualityChoice | null>(() =>
+		loadQuality("album"),
+	);
 	const queryId = useId();
 
 	const startSearch = useMutation({
@@ -97,22 +146,27 @@ export function SoulseekInstallDialog({
 
 	const trimmedQuery = query.trim();
 	const versions = search.data?.versions ?? [];
+	const matching = quality
+		? versions.filter((version) => qualityMatches(version.quality, quality))
+		: [];
 	const isSearching =
 		startSearch.isPending ||
 		(Boolean(searchId) && search.data?.state !== "complete" && !search.isError);
 	const searchError = startSearch.error ?? search.error;
 	const searched = startSearch.variables;
-	const foundNothing =
-		!isSearching &&
-		search.data?.state === "complete" &&
-		versions.length === 0 &&
-		!searchError;
+	const isComplete =
+		!isSearching && search.data?.state === "complete" && !searchError;
+	const foundNothing = isComplete && versions.length === 0;
 	const queryWithoutArtist =
 		foundNothing && searched
 			? soulseekQueryWithoutArtist(track, searched.scope, searched.query)
 			: "";
+	const chooseQuality = (choice: QualityChoice) => {
+		setQuality(choice);
+		storeQuality(scope, choice);
+	};
 	const runSearch = (request: { query: string; scope: AcquisitionScope }) => {
-		if (!request.query || startSearch.isPending) return;
+		if (!request.query || !quality || startSearch.isPending) return;
 		startSearch.mutate(request);
 	};
 	const install = (version: AcquisitionVersion, source?: AcquisitionSource) => {
@@ -134,7 +188,7 @@ export function SoulseekInstallDialog({
 					<div className="min-w-0">
 						<DialogTitle>Install</DialogTitle>
 						<DialogDescription className="mt-1">
-							Find “{track.title}” on Soulseek and choose a version to import.
+							Find “{track.title}” on Soulseek in the quality you choose.
 						</DialogDescription>
 					</div>
 					<DialogClose
@@ -162,6 +216,8 @@ export function SoulseekInstallDialog({
 								const next = value as AcquisitionScope;
 								setScope(next);
 								if (!queryEdited) setQuery(buildSoulseekQuery(track, next));
+								const remembered = loadQuality(next);
+								if (remembered) setQuality(remembered);
 							}}
 						>
 							{scopeOptions.map((option) => (
@@ -184,9 +240,10 @@ export function SoulseekInstallDialog({
 									setQueryEdited(true);
 								}}
 							/>
+							<QualityPicker value={quality} onChange={chooseQuality} />
 							<Button
 								type="submit"
-								disabled={!trimmedQuery || startSearch.isPending}
+								disabled={!trimmedQuery || !quality || startSearch.isPending}
 							>
 								Search Soulseek
 							</Button>
@@ -194,13 +251,18 @@ export function SoulseekInstallDialog({
 					</div>
 				</form>
 				<section
-					aria-label="Acquisition Versions"
+					aria-label="Sources"
 					aria-busy={isSearching}
 					className="min-h-0 flex-1 overflow-y-auto overscroll-contain scrollbar-hidden"
 				>
 					<SearchStatus
 						isSearching={isSearching}
 						hasSearched={Boolean(searchId)}
+						quality={quality}
+						matchingSourceCount={matching.reduce(
+							(count, version) => count + version.sources.length,
+							0,
+						)}
 						versionCount={versions.length}
 						error={searchError}
 					/>
@@ -230,6 +292,9 @@ export function SoulseekInstallDialog({
 							) : null}
 						</div>
 					) : null}
+					{isComplete && quality && matching.length === 0 && versions.length ? (
+						<FoundQualities versions={versions} onChoose={chooseQuality} />
+					) : null}
 					{startAcquisition.error ? (
 						<p
 							role="alert"
@@ -238,18 +303,14 @@ export function SoulseekInstallDialog({
 							{soulseekErrorMessage(startAcquisition.error)}
 						</p>
 					) : null}
-					{versions.length > 0 ? (
-						<ul>
-							{versions.map((version) => (
-								<VersionRow
-									key={version.versionKey}
-									version={version}
-									scope={search.data?.scope ?? scope}
-									isBusy={startAcquisition.isPending}
-									onInstall={install}
-								/>
-							))}
-						</ul>
+					{quality && matching.length > 0 ? (
+						<MatchingSources
+							quality={quality}
+							versions={matching}
+							scope={search.data?.scope ?? scope}
+							isBusy={startAcquisition.isPending}
+							onInstall={install}
+						/>
 					) : null}
 				</section>
 			</DialogContent>
@@ -257,14 +318,77 @@ export function SoulseekInstallDialog({
 	);
 }
 
+/** The Quality button and its fixed list, one value chosen at a time. */
+function QualityPicker({
+	value,
+	onChange,
+}: {
+	value: QualityChoice | null;
+	onChange: (choice: QualityChoice) => void;
+}) {
+	const label = value ? formatQualityChoice(value) : null;
+	return (
+		<DropdownMenu>
+			<DropdownMenuTrigger
+				render={
+					<Button
+						type="button"
+						variant="outline"
+						aria-label={label ? `Quality, ${label}` : "Quality"}
+					/>
+				}
+			>
+				{label ?? "Quality"}
+				<ChevronDown aria-hidden="true" />
+			</DropdownMenuTrigger>
+			<DropdownMenuContent align="end" className="w-80">
+				<div className="grid gap-2 pb-2">
+					{QUALITY_GROUPS.map((group) => (
+						<DropdownMenuGroup key={group.format}>
+							<DropdownMenuLabel>
+								{group.label} · {group.unit}
+							</DropdownMenuLabel>
+							<DropdownMenuRadioGroup
+								value={value?.format === group.format ? value.key : ""}
+								onValueChange={(key) => {
+									const choice = parseQualityChoice(String(key));
+									if (choice) onChange(choice);
+								}}
+							>
+								<div className="flex flex-wrap gap-1 px-2">
+									{group.choices.map((choice) => (
+										<DropdownMenuRadioItem
+											key={choice.key}
+											variant="chip"
+											value={choice.key}
+											closeOnClick
+											aria-label={formatQualityChoice(choice)}
+										>
+											{formatQualityChoiceValue(choice)}
+										</DropdownMenuRadioItem>
+									))}
+								</div>
+							</DropdownMenuRadioGroup>
+						</DropdownMenuGroup>
+					))}
+				</div>
+			</DropdownMenuContent>
+		</DropdownMenu>
+	);
+}
+
 function SearchStatus({
 	isSearching,
 	hasSearched,
+	quality,
+	matchingSourceCount,
 	versionCount,
 	error,
 }: {
 	isSearching: boolean;
 	hasSearched: boolean;
+	quality: QualityChoice | null;
+	matchingSourceCount: number;
 	versionCount: number;
 	error: Error | null;
 }) {
@@ -280,9 +404,13 @@ function SearchStatus({
 	if (!hasSearched && !isSearching)
 		return (
 			<p className="px-4 py-3 text-caption text-sm sm:px-6">
-				Edit the query if needed, then search.
+				{quality
+					? "Edit the query if needed, then search."
+					: "Choose a quality, then search."}
 			</p>
 		);
+	const label = quality ? formatQualityChoice(quality) : "";
+	const sources = `${matchingSourceCount} ${matchingSourceCount === 1 ? "source" : "sources"}`;
 	return (
 		<p
 			aria-live="polite"
@@ -295,100 +423,122 @@ function SearchStatus({
 				/>
 			) : null}
 			{isSearching
-				? versionCount > 0
-					? `Searching Soulseek… ${versionCount} ${versionCount === 1 ? "version" : "versions"} so far`
+				? matchingSourceCount > 0
+					? `Searching Soulseek… ${sources} for ${label} so far`
 					: "Searching Soulseek…"
-				: versionCount > 0
-					? `${versionCount} ${versionCount === 1 ? "version" : "versions"} found`
-					: "No versions found. Edit the query and search again."}
+				: matchingSourceCount > 0
+					? `${sources} for ${label}`
+					: versionCount > 0
+						? `No source offers ${label}.`
+						: "Nothing found. Edit the query and search again."}
 		</p>
 	);
 }
 
-function VersionRow({
-	version,
+/**
+ * The qualities a search found when none is the chosen one: listed ones
+ * switch the quality without searching again; others are named only.
+ */
+function FoundQualities({
+	versions,
+	onChoose,
+}: {
+	versions: AcquisitionVersion[];
+	onChoose: (choice: QualityChoice) => void;
+}) {
+	const listed = new Map<string, QualityChoice>();
+	const unlisted = new Set<string>();
+	for (const version of versions) {
+		const choice = qualityChoiceOf(version.quality);
+		if (choice) listed.set(choice.key, choice);
+		else unlisted.add(formatAcquisitionQuality(version.quality));
+	}
+	return (
+		<div className="grid gap-2 px-4 pb-3 sm:px-6">
+			<p className="text-caption text-sm">Found instead:</p>
+			<ul aria-label="Found qualities" className="flex flex-wrap gap-2">
+				{[...listed.values()].map((choice) => (
+					<li key={choice.key}>
+						<Button
+							type="button"
+							variant="outline"
+							size="sm"
+							onClick={() => onChoose(choice)}
+						>
+							{formatQualityChoice(choice)}
+						</Button>
+					</li>
+				))}
+				{[...unlisted].map((label) => (
+					<li key={label} className="flex items-center">
+						<Badge variant="outline">{label}</Badge>
+					</li>
+				))}
+			</ul>
+		</div>
+	);
+}
+
+/**
+ * The sources of the chosen quality as one list. Install takes the first
+ * matching version and lets the Music Server pick its source.
+ */
+function MatchingSources({
+	quality,
+	versions,
 	scope,
 	isBusy,
 	onInstall,
 }: {
-	version: AcquisitionVersion;
+	quality: QualityChoice;
+	versions: AcquisitionVersion[];
 	scope: AcquisitionScope;
 	isBusy: boolean;
 	onInstall: (version: AcquisitionVersion, source?: AcquisitionSource) => void;
 }) {
-	const [isExpanded, setIsExpanded] = useState(false);
-	const sourcesId = useId();
-	const quality = formatAcquisitionQuality(version.quality);
-	const sources = `${version.sourceCount} ${version.sourceCount === 1 ? "source" : "sources"}`;
-	const incomplete = version.sourceCount - version.completeSourceCount;
+	const label = formatQualityChoice(quality);
+	const [primary] = versions;
+	const sources: MatchingSource[] = versions.flatMap((version) =>
+		version.sources.map((source) => ({ version, source })),
+	);
+	const complete = sources.filter(({ source }) => source.complete).length;
+	if (!primary) return null;
 	return (
-		<li
-			aria-label={quality}
-			className="border-border/70 border-b px-4 py-3 last:border-b-0 sm:px-6"
-		>
-			<div className="flex items-center gap-3">
+		<div className="px-4 pb-3 sm:px-6">
+			<div className="flex items-center gap-3 border-border/70 border-b pb-3">
 				<div className="min-w-0 flex-1">
-					<p
-						className="truncate font-medium text-heading text-sm"
-						title={quality}
-					>
-						{quality}
-					</p>
+					<p className="truncate font-medium text-heading text-sm">{label}</p>
 					<p className="text-caption text-xs tabular-nums">
-						{version.fileCount} {version.fileCount === 1 ? "file" : "files"} ·{" "}
-						{formatSize(version.totalBytes)} · {sources}
-						{scope === "album" && incomplete > 0
-							? ` (${version.completeSourceCount} complete)`
+						{primary.fileCount} {primary.fileCount === 1 ? "file" : "files"} ·{" "}
+						{formatSize(primary.totalBytes)} · {sources.length}{" "}
+						{sources.length === 1 ? "source" : "sources"}
+						{scope === "album" && complete < sources.length
+							? ` (${complete} complete)`
 							: ""}
 					</p>
 				</div>
 				<Button
 					type="button"
-					variant="muted"
-					size="icon-sm"
-					aria-label={`Sources for ${quality}`}
-					title="Show sources"
-					aria-expanded={isExpanded}
-					aria-controls={isExpanded ? sourcesId : undefined}
-					onClick={() => setIsExpanded(!isExpanded)}
-				>
-					<ChevronDown
-						aria-hidden="true"
-						className={cn(
-							"size-4 transition-transform motion-reduce:transition-none",
-							isExpanded && "rotate-180",
-						)}
-					/>
-				</Button>
-				<Button
-					type="button"
-					variant="outline"
 					size="sm"
-					aria-label={`Install ${quality}`}
+					aria-label={`Install ${label}`}
 					disabled={isBusy}
-					onClick={() => onInstall(version)}
+					onClick={() => onInstall(primary)}
 				>
 					Install
 				</Button>
 			</div>
-			{isExpanded ? (
-				<ul
-					id={sourcesId}
-					aria-label={`Sources for ${quality}`}
-					className="mt-2 border-border/70 border-t"
-				>
-					{version.sources.map((source) => (
-						<SourceRow
-							key={source.sourceId}
-							source={source}
-							versionFileCount={version.fileCount}
-							isBusy={isBusy}
-							onInstall={() => onInstall(version, source)}
-						/>
-					))}
-				</ul>
-			) : null}
-		</li>
+			<ul aria-label={`Sources for ${label}`}>
+				{sources.map(({ version, source }) => (
+					<SourceRow
+						key={`${version.versionKey}/${source.sourceId}`}
+						source={source}
+						versionFileCount={version.fileCount}
+						isBusy={isBusy}
+						onInstall={() => onInstall(version, source)}
+					/>
+				))}
+			</ul>
+		</div>
 	);
 }
 

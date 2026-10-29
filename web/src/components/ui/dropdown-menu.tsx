@@ -183,14 +183,35 @@ function DropdownMenuRadioGroup({ ...props }: MenuPrimitive.RadioGroup.Props) {
 	);
 }
 
+// A radio item drawn as a small bordered value among others in a wrapping
+// row, such as one quality of a format; the checked one takes the accent.
+const menuChipItemClass =
+	"flex h-8 min-w-12 cursor-default select-none items-center justify-center gap-1 rounded-sm border border-border px-3 text-xs tabular-nums outline-hidden focus:bg-accent focus:text-accent-foreground data-checked:border-primary data-checked:bg-primary data-checked:text-primary-foreground data-checked:focus:bg-primary data-checked:focus:text-primary-foreground data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5";
+
 function DropdownMenuRadioItem({
 	className,
 	children,
 	inset,
+	variant = "default",
 	...props
 }: MenuPrimitive.RadioItem.Props & {
 	inset?: boolean;
+	variant?: "default" | "chip";
 }) {
+	if (variant === "chip")
+		return (
+			<MenuPrimitive.RadioItem
+				data-slot="dropdown-menu-radio-item"
+				data-variant={variant}
+				className={cn(menuChipItemClass, className)}
+				{...props}
+			>
+				<MenuPrimitive.RadioItemIndicator className="flex">
+					<CheckIcon />
+				</MenuPrimitive.RadioItemIndicator>
+				{children}
+			</MenuPrimitive.RadioItem>
+		);
 	return (
 		<MenuPrimitive.RadioItem
 			data-slot="dropdown-menu-radio-item"

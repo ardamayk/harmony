@@ -1,6 +1,14 @@
 import type { ExternalTrack } from "@repo/api-client";
 import { describe, expect, it } from "vite-plus/test";
-import { buildSoulseekQuery, formatAcquisitionQuality } from "./soulseek";
+import {
+	buildSoulseekQuery,
+	formatAcquisitionQuality,
+	formatQualityChoice,
+	parseQualityChoice,
+	QUALITY_GROUPS,
+	qualityChoiceOf,
+	qualityMatches,
+} from "./soulseek";
 
 function externalTrack(
 	title: string,
@@ -92,6 +100,81 @@ describe("buildSoulseekQuery", () => {
 				),
 			).toBe("Daft Punk One More Time");
 		}
+	});
+});
+
+describe("quality choices", () => {
+	const choice = (key: string) => {
+		const parsed = parseQualityChoice(key);
+		if (!parsed) throw new Error(`no choice ${key}`);
+		return parsed;
+	};
+
+	it("keys and names each listed choice", () => {
+		expect(choice("flac-24-88200")).toMatchObject({
+			format: "flac",
+			lossless: true,
+			bitDepth: 24,
+			sampleRateHz: 88_200,
+		});
+		expect(formatQualityChoice(choice("flac-24-88200"))).toBe("FLAC 24/88.2");
+		expect(formatQualityChoice(choice("wav-16-48000"))).toBe("WAV 16/48");
+		expect(formatQualityChoice(choice("m4a-256"))).toBe("AAC (M4A) 256 kbps");
+		expect(formatQualityChoice(choice("ogg-160"))).toBe("Ogg Vorbis 160 kbps");
+		expect(formatQualityChoice(choice("opus-96"))).toBe("Opus 96 kbps");
+		expect(parseQualityChoice("mp3-224")).toBeNull();
+		expect(parseQualityChoice("garbage")).toBeNull();
+		expect(parseQualityChoice(null)).toBeNull();
+		expect(QUALITY_GROUPS.map((group) => group.format)).toEqual([
+			"mp3",
+			"m4a",
+			"opus",
+			"ogg",
+			"flac",
+			"wav",
+		]);
+	});
+
+	it("matches lossless by format, bit depth and sample rate", () => {
+		const flac = choice("flac-24-48000");
+		const quality = {
+			format: "flac",
+			lossless: true,
+			bitDepth: 24,
+			sampleRateHz: 48_000,
+		};
+		expect(qualityMatches(quality, flac)).toBe(true);
+		expect(qualityMatches({ ...quality, sampleRateHz: 44_100 }, flac)).toBe(
+			false,
+		);
+		expect(qualityMatches({ ...quality, format: "wav" }, flac)).toBe(false);
+		expect(qualityMatches({ format: "flac", lossless: true }, flac)).toBe(
+			false,
+		);
+	});
+
+	it("matches lossy by a constant or unreported-mode bitrate, never a variable one", () => {
+		const mp3 = choice("mp3-320");
+		const quality = { format: "mp3", lossless: false, bitrateKbps: 320 };
+		expect(qualityMatches({ ...quality, variableBitrate: false }, mp3)).toBe(
+			true,
+		);
+		expect(qualityMatches(quality, mp3)).toBe(true);
+		expect(qualityMatches({ ...quality, variableBitrate: true }, mp3)).toBe(
+			false,
+		);
+		expect(qualityMatches({ ...quality, bitrateKbps: 256 }, mp3)).toBe(false);
+	});
+
+	it("maps a found quality to its listed choice when there is one", () => {
+		expect(
+			qualityChoiceOf({ format: "m4a", lossless: false, bitrateKbps: 256 })
+				?.key,
+		).toBe("m4a-256");
+		expect(
+			qualityChoiceOf({ format: "mp3", lossless: false, bitrateKbps: 224 }),
+		).toBeNull();
+		expect(qualityChoiceOf({ format: "flac", lossless: true })).toBeNull();
 	});
 });
 
