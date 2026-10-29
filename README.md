@@ -100,6 +100,9 @@ The Music Server reads its settings from environment variables only; it does not
 | `YT_DLP` | `yt-dlp` | The yt-dlp binary, when it is not on `PATH`. |
 | `EXTERNAL_SOURCE_EXTRACTOR_ARGS` | none | yt-dlp extractor arguments such as `youtube:skip=hls,dash`; separate several with spaces. |
 | `EXTERNAL_SOURCE_NAME` | from the prefix, else `External` | The site's name in the clients' search, such as `Internet Archive`; up to 40 characters. |
+| `SLSKD_URL` | none | Your slskd's address, such as `http://127.0.0.1:5030`. With the next two, turns on Soulseek Acquisition. |
+| `SLSKD_API_KEY` | none | An slskd API key with the `ReadWrite` role. |
+| `SLSKD_DOWNLOADS_PATH` | none | slskd's completed downloads directory as the Music Server sees it; must exist and be readable. |
 | `RADIO_BROWSER_BASE_URL` | `https://de1.api.radio-browser.info` | Radio Browser mirror for the station catalog. |
 | `APP_VERSION` | `0.1.0` | Version shown in the health response and Settings. |
 | `SENTRY_DSN` | none | Your own Sentry project's DSN; turns on error, trace, log and metric reporting for the Music Server and the Desktop core. See [server/README.md](server/README.md#sentry-optional). |

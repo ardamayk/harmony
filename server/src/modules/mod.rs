@@ -9,3 +9,4 @@ pub mod playlists;
 pub mod preferences;
 pub mod radio;
 pub mod search;
+pub mod soulseek;

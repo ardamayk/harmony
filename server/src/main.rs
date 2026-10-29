@@ -45,6 +45,10 @@ async fn run(config: Config) -> Result<(), String> {
         .map_err(|error| format!("unsafe server address: {error}"))?;
     let address = config::bind_address(&config.addr)
         .ok_or_else(|| format!("unsafe server address: {}", config.addr))?;
+    if let Some(soulseek) = &config.soulseek {
+        config::validate_soulseek_downloads(soulseek)
+            .map_err(|error| format!("configuration failed: {error}"))?;
+    }
 
     // Run from server/ or from the repository root.
     let mut migrations = PathBuf::from("migrations");

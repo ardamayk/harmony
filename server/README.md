@@ -84,6 +84,18 @@ ENV EXTERNAL_SOURCE_SEARCH=scsearch
 
 Or they install yt-dlp into a mounted volume and point `YT_DLP` at it.
 
+## Soulseek Acquisition (slskd)
+
+Soulseek Acquisition downloads a chosen Acquisition Version through the operator's own [slskd](https://github.com/slskd/slskd) and hands the files to Managed Import ([ADR 0036](../docs/adr/0036-soulseek-acquisition-through-an-operator-run-slskd.md)). It is off by default. The project does not ship or install slskd: you run it with your own Soulseek account, which stays in slskd's configuration, and you are responsible for what is downloaded and shared.
+
+| Variable | Meaning |
+| --- | --- |
+| `SLSKD_URL` | slskd's http or https address, for example `http://127.0.0.1:5030`. |
+| `SLSKD_API_KEY` | An slskd API key with the `ReadWrite` role (searches, transfers, share rescan). |
+| `SLSKD_DOWNLOADS_PATH` | slskd's completed downloads directory as the Music Server sees it. |
+
+Set all three to turn the feature on, or none to leave it off; the server refuses to start with only some of them, or when `SLSKD_DOWNLOADS_PATH` is missing or unreadable.
+
 ## Sentry (optional)
 
 The Music Server can send errors, request traces, logs and External Source metrics to your own Sentry ([ADR 0033](../docs/adr/0033-opt-in-sentry-for-the-rust-programs.md)). It is off unless `SENTRY_DSN` is set; the project has no DSN of its own and never reports from anyone else's server.

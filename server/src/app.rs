@@ -33,6 +33,7 @@ pub struct AppState {
     pub queue_events: Arc<modules::playback::QueueEventBroker>,
     pub managed_import: Arc<modules::managed_import::ManagedImport>,
     pub external_source: Arc<modules::external_source::ExternalSource>,
+    pub soulseek: Arc<modules::soulseek::Soulseek>,
 }
 
 impl AppState {
@@ -61,6 +62,7 @@ impl AppState {
             modules::managed_import::ManagedImport::new(db.clone(), &config, queue_events.clone());
         let external_source =
             modules::external_source::ExternalSource::new(config.external_source.as_ref());
+        let soulseek = modules::soulseek::Soulseek::new(config.soulseek.as_ref());
         Self {
             config: Arc::new(config),
             dependencies: Arc::new(dependencies),
@@ -73,6 +75,7 @@ impl AppState {
             queue_events,
             managed_import: Arc::new(managed_import),
             external_source: Arc::new(external_source),
+            soulseek: Arc::new(soulseek),
         }
     }
 }
@@ -94,6 +97,7 @@ pub fn router(state: AppState) -> Router {
         .merge(modules::playback::routes())
         .merge(modules::managed_import::routes())
         .merge(modules::external_source::routes())
+        .merge(modules::soulseek::routes())
         .fallback(static_assets::web)
         .layer(middleware::from_fn(stream_aware_timeout))
         .layer(middleware::from_fn(no_simple_writes))

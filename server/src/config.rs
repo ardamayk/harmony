@@ -2,6 +2,7 @@
 //! validation as the Go server (server/internal/config).
 
 use std::net::{IpAddr, SocketAddr};
+use std::path::PathBuf;
 
 pub const DEFAULT_MANAGED_STORAGE_RESERVE_BYTES: i64 = 2 * 1024 * 1024 * 1024;
 pub const DEFAULT_MANAGED_IMPORT_FILE_LIMIT_BYTES: i64 = 2 * 1024 * 1024 * 1024;
@@ -28,6 +29,9 @@ pub struct Config {
     pub lastfm_api_key: Option<String>,
     /// The operator's yt-dlp search, off when unset (ADR 0032).
     pub external_source: Option<ExternalSourceConfig>,
+    /// The operator's slskd, off unless all three `SLSKD_*` settings are
+    /// set (ADR 0036).
+    pub soulseek: Option<SoulseekConfig>,
     /// The owner's own Sentry, off when `SENTRY_DSN` is unset (ADR 0033).
     pub sentry: Option<SentryConfig>,
 }
@@ -80,6 +84,35 @@ pub struct ExternalSourceConfig {
     pub name: String,
 }
 
+/// Soulseek Acquisition: the operator's slskd and where its completed
+/// downloads appear to this server. The Soulseek account is slskd's own
+/// configuration; the Music Server never sees its password (ADR 0036).
+#[derive(Clone, PartialEq)]
+pub struct SoulseekConfig {
+    /// `SLSKD_URL`: slskd's base address, such as `http://127.0.0.1:5030`.
+    pub slskd_url: url::Url,
+    /// `SLSKD_API_KEY`: an slskd API key with the `ReadWrite` role.
+    pub api_key: String,
+    /// `SLSKD_DOWNLOADS_PATH`: slskd's completed downloads directory as
+    /// this server sees it.
+    pub downloads_path: PathBuf,
+}
+
+/// Leaves the API key out of debug output.
+impl std::fmt::Debug for SoulseekConfig {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("SoulseekConfig")
+            .field("slskd_url", &self.slskd_url.as_str())
+            .field("api_key", &"<set>")
+            .field("downloads_path", &self.downloads_path)
+            .finish()
+    }
+}
+
+/// The settings that turn Soulseek Acquisition on together.
+const SOULSEEK_SETTINGS: [&str; 3] = ["SLSKD_URL", "SLSKD_API_KEY", "SLSKD_DOWNLOADS_PATH"];
+
 /// yt-dlp's search prefixes the clients can name without
 /// `EXTERNAL_SOURCE_NAME`. None is a default: the operator still chooses
 /// the prefix (ADR 0032).
@@ -126,6 +159,16 @@ pub enum ConfigError {
     InvalidSentryEnvironment(String),
     #[error("SENTRY_TRACES_SAMPLE_RATE {0:?} must be a number from 0 to 1 such as 0.25")]
     InvalidSentryTracesSampleRate(String),
+    #[error(
+        "SLSKD_URL, SLSKD_API_KEY and SLSKD_DOWNLOADS_PATH turn on Soulseek Acquisition together; set {0} too, or unset all three"
+    )]
+    PartialSoulseekConfig(String),
+    #[error("SLSKD_URL {0:?} must be slskd's http or https address such as http://127.0.0.1:5030")]
+    InvalidSlskdUrl(String),
+    #[error(
+        "SLSKD_DOWNLOADS_PATH {0:?} must be a readable directory where slskd's completed downloads appear to the Music Server: {1}"
+    )]
+    UnreadableSlskdDownloads(String, String),
 }
 
 impl Config {
@@ -207,6 +250,7 @@ impl Config {
                 external_source_search,
             ));
         };
+        let soulseek = soulseek_config(&lookup)?;
         let sentry = sentry_config(&lookup)?;
         Ok(Self {
             addr: get("SERVER_ADDR", "127.0.0.1:8090"),
@@ -256,9 +300,67 @@ impl Config {
             lastfm_api_key: Some(get("LASTFM_API_KEY", "").trim().to_owned())
                 .filter(|key| !key.is_empty()),
             external_source,
+            soulseek,
             sentry,
         })
     }
+}
+
+/// Soulseek Acquisition is on only with all three `SLSKD_*` settings and off
+/// with none; anything between is a mistake the operator hears about at
+/// startup rather than a feature that silently stays off.
+fn soulseek_config(
+    lookup: &impl Fn(&str) -> Option<String>,
+) -> Result<Option<SoulseekConfig>, ConfigError> {
+    let values = SOULSEEK_SETTINGS.map(|key| {
+        lookup(key)
+            .map(|value| value.trim().to_owned())
+            .filter(|value| !value.is_empty())
+    });
+    let missing: Vec<&str> = SOULSEEK_SETTINGS
+        .iter()
+        .zip(&values)
+        .filter(|(_, value)| value.is_none())
+        .map(|(key, _)| *key)
+        .collect();
+    let [Some(url), Some(api_key), Some(downloads_path)] = values else {
+        return if missing.len() == SOULSEEK_SETTINGS.len() {
+            Ok(None)
+        } else {
+            Err(ConfigError::PartialSoulseekConfig(missing.join(" and ")))
+        };
+    };
+    // Every slskd request goes to this address with the API key, so only a
+    // plain http or https base address passes.
+    let slskd_url = url::Url::parse(&url)
+        .ok()
+        .filter(|parsed| {
+            matches!(parsed.scheme(), "http" | "https")
+                && parsed.host().is_some()
+                && parsed.username().is_empty()
+                && parsed.password().is_none()
+                && parsed.query().is_none()
+                && parsed.fragment().is_none()
+        })
+        .ok_or(ConfigError::InvalidSlskdUrl(url))?;
+    Ok(Some(SoulseekConfig {
+        slskd_url,
+        api_key,
+        downloads_path: PathBuf::from(downloads_path),
+    }))
+}
+
+/// The server imports from slskd's download directory, so a missing or
+/// unreadable one stops startup instead of failing every acquisition.
+pub fn validate_soulseek_downloads(config: &SoulseekConfig) -> Result<(), ConfigError> {
+    std::fs::read_dir(&config.downloads_path)
+        .map(drop)
+        .map_err(|error| {
+            ConfigError::UnreadableSlskdDownloads(
+                config.downloads_path.to_string_lossy().into_owned(),
+                error.to_string(),
+            )
+        })
 }
 
 /// Sentry is on only with `SENTRY_DSN`; there is no default DSN. The
@@ -651,6 +753,108 @@ mod tests {
         }
         for valid in ["0", "1", "0.05"] {
             assert!(config(&[("SENTRY_TRACES_SAMPLE_RATE", valid)]).is_ok());
+        }
+    }
+
+    #[test]
+    fn soulseek_is_on_only_with_all_three_settings() {
+        assert_eq!(config(&[]).expect("defaults").soulseek, None);
+        assert_eq!(
+            config(&[("SLSKD_URL", " "), ("SLSKD_API_KEY", "")])
+                .expect("blank is unset")
+                .soulseek,
+            None
+        );
+        let on = config(&[
+            ("SLSKD_URL", " http://127.0.0.1:5030 "),
+            ("SLSKD_API_KEY", " secret-key "),
+            ("SLSKD_DOWNLOADS_PATH", "/srv/slskd/downloads"),
+        ])
+        .expect("config")
+        .soulseek
+        .expect("on");
+        assert_eq!(on.slskd_url.as_str(), "http://127.0.0.1:5030/");
+        assert_eq!(on.api_key, "secret-key");
+        assert_eq!(on.downloads_path, PathBuf::from("/srv/slskd/downloads"));
+        // The key stays out of debug output.
+        assert!(!format!("{on:?}").contains("secret-key"));
+    }
+
+    #[test]
+    fn a_partial_soulseek_configuration_names_what_is_missing() {
+        assert_eq!(
+            config(&[("SLSKD_URL", "http://127.0.0.1:5030")]).err(),
+            Some(ConfigError::PartialSoulseekConfig(
+                "SLSKD_API_KEY and SLSKD_DOWNLOADS_PATH".to_owned()
+            ))
+        );
+        let error = config(&[
+            ("SLSKD_API_KEY", "secret-key"),
+            ("SLSKD_DOWNLOADS_PATH", "/srv/slskd/downloads"),
+        ])
+        .expect_err("partial");
+        assert_eq!(
+            error,
+            ConfigError::PartialSoulseekConfig("SLSKD_URL".to_owned())
+        );
+        // The message never repeats the key.
+        assert!(!error.to_string().contains("secret-key"));
+    }
+
+    #[test]
+    fn slskd_url_must_be_a_plain_http_address() {
+        for invalid in [
+            "127.0.0.1:5030",
+            "ftp://127.0.0.1:5030",
+            "http://",
+            "http://user:pass@127.0.0.1:5030",
+            "http://127.0.0.1:5030/?a=b",
+            "not a url",
+        ] {
+            assert_eq!(
+                config(&[
+                    ("SLSKD_URL", invalid),
+                    ("SLSKD_API_KEY", "key"),
+                    ("SLSKD_DOWNLOADS_PATH", "/srv/slskd/downloads"),
+                ])
+                .err(),
+                Some(ConfigError::InvalidSlskdUrl(invalid.to_owned())),
+                "{invalid}"
+            );
+        }
+        assert!(
+            config(&[
+                ("SLSKD_URL", "https://slskd.home.arpa/"),
+                ("SLSKD_API_KEY", "key"),
+                ("SLSKD_DOWNLOADS_PATH", "/srv/slskd/downloads"),
+            ])
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn slskd_downloads_must_be_a_readable_directory() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let soulseek = |path: &std::path::Path| SoulseekConfig {
+            slskd_url: url::Url::parse("http://127.0.0.1:5030").expect("url"),
+            api_key: "key".to_owned(),
+            downloads_path: path.to_owned(),
+        };
+        assert_eq!(
+            validate_soulseek_downloads(&soulseek(directory.path())),
+            Ok(())
+        );
+        let file = directory.path().join("file");
+        std::fs::write(&file, b"").expect("write");
+        for path in [directory.path().join("missing"), file] {
+            assert!(
+                matches!(
+                    validate_soulseek_downloads(&soulseek(&path)),
+                    Err(ConfigError::UnreadableSlskdDownloads(reported, _))
+                        if reported == path.to_string_lossy()
+                ),
+                "{path:?}"
+            );
         }
     }
 
