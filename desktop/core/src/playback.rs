@@ -7,7 +7,7 @@ use crate::output_device::{
 use crate::playback_lifecycle::{
     PlaybackLifecycle, PlaybackLifecycleAction, PlaybackSessionSnapshot,
 };
-use crate::playback_load_timing::{LoadMark, LoadTimer};
+use crate::playback_load_timing::{LoadMark, LoadTimer, LoadTrigger};
 use crate::playback_navigation::{PlaybackQueueContext, PlaybackSource, QueueDirection};
 use crate::processing::{
     AppliedMpvProcessingConfiguration, EffectiveReplayGainMode, MpvProcessingConfiguration,
@@ -972,8 +972,12 @@ fn run_mpv_worker(
         }
     };
     let mut request_id = 0_u64;
+    // mpv writes events in bursts (a load sends a dozen lines at once), so
+    // after a line or a command the worker reads on without waiting; only
+    // an idle connection waits the poll interval for the next request.
+    let mut request_wait = EVENT_POLL_INTERVAL;
     loop {
-        match requests.recv_timeout(EVENT_POLL_INTERVAL) {
+        match requests.recv_timeout(request_wait) {
             Ok(MpvWorkerRequest::Command {
                 command,
                 event_boundary,
@@ -996,9 +1000,16 @@ fn run_mpv_worker(
                         "Pinned mpv command response could not be delivered for request {request_id}: receiver closed."
                     );
                 }
+                request_wait = Duration::ZERO;
             }
             Ok(MpvWorkerRequest::Shutdown) => break,
-            Err(RecvTimeoutError::Timeout) => drain_mpv_event(&mut reader, &events),
+            Err(RecvTimeoutError::Timeout) => {
+                request_wait = if drain_mpv_event(&mut reader, &events) {
+                    Duration::ZERO
+                } else {
+                    EVENT_POLL_INTERVAL
+                };
+            }
             Err(RecvTimeoutError::Disconnected) => {
                 eprintln!("Pinned mpv worker stopped because its request channel disconnected.");
                 break;
@@ -1054,7 +1065,7 @@ fn execute_mpv_command(
     write_mpv_request(stream, request_id, command)?;
     let deadline = Instant::now() + MPV_COMMAND_TIMEOUT;
     while Instant::now() < deadline {
-        if let Some(result) = read_mpv_message(reader, events, request_id)? {
+        if let MpvMessage::Response(result) = read_mpv_message(reader, events, request_id)? {
             return result;
         }
     }
@@ -1074,11 +1085,21 @@ fn write_mpv_request(
         .map_err(|error| format!("Pinned mpv IPC write failed: {error}"))
 }
 
+/// What one read from mpv's IPC connection found.
+enum MpvMessage {
+    /// The response to the awaited request.
+    Response(Result<Value, String>),
+    /// Another line: an event, published, or a stale response.
+    Other,
+    /// Nothing arrived within the poll interval.
+    Nothing,
+}
+
 fn read_mpv_message(
     reader: &mut MpvIpcReader,
     events: &Sender<MpvEvent>,
     request_id: u64,
-) -> Result<Option<Result<Value, String>>, String> {
+) -> Result<MpvMessage, String> {
     let mut line = String::new();
     match reader.read_line(&mut line) {
         Ok(0) => Err("Pinned mpv closed its private IPC connection.".to_owned()),
@@ -1086,13 +1107,13 @@ fn read_mpv_message(
             let message: Value = serde_json::from_str(&line)
                 .map_err(|error| format!("Pinned mpv returned invalid JSON IPC: {error}"))?;
             if message.get("request_id").and_then(Value::as_u64) == Some(request_id) {
-                return Ok(Some(mpv_response_result(&message)));
+                return Ok(MpvMessage::Response(mpv_response_result(&message)));
             }
             emit_mpv_event(events, &message);
-            Ok(None)
+            Ok(MpvMessage::Other)
         }
         Err(error) if matches!(error.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => {
-            Ok(None)
+            Ok(MpvMessage::Nothing)
         }
         Err(error) => Err(format!("Pinned mpv IPC read failed: {error}")),
     }
@@ -1106,14 +1127,20 @@ fn mpv_response_result(message: &Value) -> Result<Value, String> {
     }
 }
 
-fn drain_mpv_event(reader: &mut MpvIpcReader, events: &Sender<MpvEvent>) {
-    if let Err(error) = read_mpv_message(reader, events, u64::MAX) {
-        report_native_playback_error(&format!("mpv event drain failed: {error}"));
-        send_mpv_event(
-            events,
-            MpvEvent::ExitedUnexpectedly(error),
-            "reporting IPC event drain failure",
-        );
+/// Reads one line from mpv; true when one arrived, so more may follow.
+fn drain_mpv_event(reader: &mut MpvIpcReader, events: &Sender<MpvEvent>) -> bool {
+    match read_mpv_message(reader, events, u64::MAX) {
+        Ok(MpvMessage::Nothing) => false,
+        Ok(MpvMessage::Response(_) | MpvMessage::Other) => true,
+        Err(error) => {
+            report_native_playback_error(&format!("mpv event drain failed: {error}"));
+            send_mpv_event(
+                events,
+                MpvEvent::ExitedUnexpectedly(error),
+                "reporting IPC event drain failure",
+            );
+            false
+        }
     }
 }
 
@@ -1487,6 +1514,13 @@ impl PlaybackController {
     ) -> Result<PlaybackSessionState, PlaybackCommandError> {
         self.advance_command_revision();
         let playback_rate = self.state()?.playback_rate;
+        if let Some(source) = snapshot.source() {
+            report_load_line(self.load_timer.start(
+                None,
+                source_kind(source),
+                LoadTrigger::Restore,
+            ));
+        }
         let action = self.with_process(|process| {
             apply_snapshot_to_process(process, snapshot, false, playback_rate)
         });
@@ -1549,8 +1583,11 @@ impl PlaybackController {
         }
         let url = playback_url(source).map_err(|error| error.message)?;
         let load_revision = self.next_load_revision();
-        let source_type = PlaybackSource::parse(source).map_or("unknown", |source| source.kind());
-        self.load_timer.start(load_revision, source_type);
+        report_load_line(self.load_timer.start(
+            Some(load_revision),
+            source_kind(source),
+            LoadTrigger::Play,
+        ));
         self.with_process(|process| {
             process.load_with_event_boundary(&url, load_revision)?;
             process.set_paused(false)
@@ -2448,6 +2485,7 @@ fn dispatch_playback_event(
                 message,
             ) {
                 *events = next_events;
+                time_load_now(context, LoadTrigger::Recovery);
             }
         }
         event => dispatch_regular_playback_event(context, event, last_path_refresh, live_reconnect),
@@ -2483,8 +2521,12 @@ fn dispatch_regular_playback_event(
             decoder.format.sample_rate_hz,
         );
     }
+    let ended_trigger = matches!(event, MpvEvent::Ended).then(|| ended_load_trigger(context));
     if process_mpv_event(context, event, *last_path_refresh) {
         *last_path_refresh = Instant::now();
+    }
+    if let Some(trigger) = ended_trigger {
+        time_load_now(context, trigger);
     }
 }
 
@@ -2496,8 +2538,50 @@ fn report_load_timing(load_timer: &LoadTimer, event: &MpvEvent) {
         MpvEvent::Error(_) => LoadMark::Failed,
         _ => return,
     };
-    if let Some(line) = load_timer.observe(mark) {
+    report_load_line(load_timer.observe(mark));
+}
+
+fn report_load_line(line: Option<String>) {
+    if let Some(line) = line {
         eprintln!("{line}");
+    }
+}
+
+fn source_kind(source: &Value) -> &'static str {
+    PlaybackSource::parse(source).map_or("unknown", |source| source.kind())
+}
+
+/// What the end of the current file starts, read before the event thread
+/// handles it: the same Track again, the appended next Track mpv moves on
+/// to, or the Queue's next Track loaded afresh.
+fn ended_load_trigger(context: &PlaybackEventContext) -> LoadTrigger {
+    let is_repeat_once = context
+        .state
+        .lock()
+        .is_ok_and(|state| state.repeat_mode == RepeatMode::Once);
+    let has_appended = context
+        .process
+        .lock()
+        .is_ok_and(|process| process.appended().is_some());
+    if is_repeat_once {
+        LoadTrigger::Repeat
+    } else if has_appended {
+        LoadTrigger::Gapless
+    } else {
+        LoadTrigger::Queue
+    }
+}
+
+/// Times a load the event thread itself just started, when playback goes on
+/// with a source; the events that follow on this thread are that load's.
+fn time_load_now(context: &PlaybackEventContext, trigger: LoadTrigger) {
+    let source_type = context.state.lock().ok().and_then(|state| {
+        (state.status == PlaybackStatus::Playing)
+            .then(|| state.source.as_ref().map(source_kind))
+            .flatten()
+    });
+    if let Some(source_type) = source_type {
+        report_load_line(context.load_timer.start(None, source_type, trigger));
     }
 }
 
@@ -2732,6 +2816,11 @@ fn reconnect_live_source(
         return Err("playback source changed while reconnect was waiting".to_owned());
     }
     let load_revision = context.load_revision.fetch_add(1, Ordering::AcqRel) + 1;
+    report_load_line(context.load_timer.start(
+        Some(load_revision),
+        source_kind(source),
+        LoadTrigger::Reconnect,
+    ));
     process.load_with_event_boundary(&url, load_revision)?;
     process.set_paused(false)?;
     context
@@ -7206,6 +7295,47 @@ mod tests {
                 })
             })
             .collect()
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn mpv_worker_delivers_a_burst_of_events_without_a_poll_between_lines() {
+        use std::io::Write;
+        let (stream, mut mpv_side) = std::os::unix::net::UnixStream::pair().expect("socket pair");
+        stream
+            .set_read_timeout(Some(super::EVENT_POLL_INTERVAL))
+            .expect("read timeout");
+        let child = Command::new("sleep")
+            .arg("30")
+            .spawn()
+            .expect("stand-in mpv");
+        let (requests, worker, events) = super::spawn_mpv_worker(child, stream);
+        // A load makes mpv write about a dozen lines at once.
+        let burst: String = (0..20)
+            .map(|second| {
+                format!(
+                    "{{\"event\":\"property-change\",\"name\":\"time-pos\",\"data\":{second}}}\n"
+                )
+            })
+            .collect();
+        let written_at = Instant::now();
+        mpv_side.write_all(burst.as_bytes()).expect("write burst");
+        for second in 0..20 {
+            let event = events
+                .recv_timeout(Duration::from_secs(5))
+                .expect("burst event");
+            assert!(matches!(event, MpvEvent::Time(value) if value == f64::from(second)));
+        }
+        // One line per poll interval would take a whole second.
+        assert!(
+            written_at.elapsed() < super::EVENT_POLL_INTERVAL * 8,
+            "burst took {:?}",
+            written_at.elapsed()
+        );
+        requests
+            .send(MpvWorkerRequest::Shutdown)
+            .expect("shutdown worker");
+        worker.join().expect("worker thread");
     }
 
     #[cfg(target_os = "linux")]
