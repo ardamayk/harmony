@@ -21,10 +21,9 @@ on:
         required: true
 
 env:
-  REVIEW_MODEL: glm-5.3-flash
-  # Claude Code runs against Z.ai's Anthropic-format endpoint on the GLM Coding Plan.
-  ANTHROPIC_BASE_URL: https://api.z.ai/api/anthropic
-  API_TIMEOUT_MS: "3000000"
+  REVIEW_MODEL: claude-sonnet-5-5
+  # A finder took 30-60 turns on a 2,400-line PR; the cap bounds a runaway session.
+  MAX_TURNS: 80
   ROUND_LIMIT: 3
   ROUND_OVERRIDE: review-more-rounds
   VOTES_NEEDED: 2
@@ -115,8 +114,8 @@ jobs:
       - id: claude
         uses: anthropics/claude-code-action@5eb090f3c3afd701a0672cd32981197ca27688f6 # v1.0.253
         with:
-          # A Z.ai "Coding Plan" API key, stored as a repo secret.
-          anthropic_api_key: ${{ secrets.ZAI_API_KEY }}
+          # From `claude setup-token` (Max subscription), stored as a repo secret.
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ github.event.pull_request.number }}
@@ -133,6 +132,7 @@ jobs:
             --allowedTools "${{ env.READ_TOOLS }}"
             --json-schema '${{ env.FINDER_SCHEMA }}'
             --model ${{ env.REVIEW_MODEL }}
+            --max-turns ${{ env.MAX_TURNS }}
       - name: Save candidates
         env:
           RESULT: ${{ steps.claude.outputs.structured_output }}
@@ -170,7 +170,7 @@ jobs:
         if: steps.merge.outputs.count != '0'
         uses: anthropics/claude-code-action@5eb090f3c3afd701a0672cd32981197ca27688f6 # v1.0.253
         with:
-          anthropic_api_key: ${{ secrets.ZAI_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ github.event.pull_request.number }}
@@ -185,6 +185,7 @@ jobs:
             --allowedTools "${{ env.READ_TOOLS }}"
             --json-schema '${{ env.VOTER_SCHEMA }}'
             --model ${{ env.REVIEW_MODEL }}
+            --max-turns ${{ env.MAX_TURNS }}
       - name: Save votes
         env:
           COUNT: ${{ steps.merge.outputs.count }}
