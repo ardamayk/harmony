@@ -63,7 +63,7 @@ The validation result shown before a Managed Import is committed. It identifies 
 _Avoid_: Completed import, scan result
 
 **Strict Import Profile**:
-The acceptance contract for Managed Import covering audio integrity and file-tag metadata: Title, Artist, Album Artist, Album, and Track number are required, with a Disc number required for multi-disc Albums and assumed to be one for single-disc Albums. Genre, year, and Album Artwork are optional; missing required metadata is rejected rather than inferred from filenames or an online service.
+The acceptance contract for Managed Import covering audio integrity and file-tag metadata: Title, Artist, Album, and Track number are required, with a Disc number required for multi-disc Albums and assumed to be one for single-disc Albums. A file without an Album Artist takes its own Artist as the Album Artist, and the Import Preview says so for that file. Genre, year, and Album Artwork are optional; missing required metadata is rejected rather than inferred from filenames or an online service.
 _Avoid_: Best-effort scan, legacy exception, filename fallback, tag rewriting
 
 **Import Batch**:

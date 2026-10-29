@@ -20,7 +20,7 @@ mise run dev
 
 Add music through **Managed Import**: open **Tracks** in the web UI, click **Import Music**, and select audio files or a local folder (mp3, flac, ogg, m4a, opus, wav). Every file is validated strictly, shown in an Import Preview, and stored in Managed Storage only after you confirm.
 
-Album matching uses Album Artist credits and the full Album title; year and Track Artist do not split an Album. Edition suffixes such as `(Deluxe)` remain distinct. Only identical file hashes are duplicates. Different bytes at the same Album position and title require an explicit Track Replacement or skipping; you can also create a separate Album.
+Album matching uses Album Artist credits and the full Album title; year and Track Artist do not split an Album. A file without an Album Artist tag uses its Artist tag as the Album Artist, and the Import Preview notes it on that file. Edition suffixes such as `(Deluxe)` remain distinct. Only identical file hashes are duplicates. Different bytes at the same Album position and title require an explicit Track Replacement or skipping; you can also create a separate Album.
 
 Genre, year, and artwork are optional. For a new Album, review embedded covers, upload a JPEG/PNG, or continue without artwork. Existing Album covers are preserved. Recording Identification and its external services are no longer part of import.
 

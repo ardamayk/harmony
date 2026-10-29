@@ -4,6 +4,8 @@ status: accepted
 
 # Managed Import uses file tags, hash duplicates, and album-level artwork
 
+> Amended by [ADR 0037](0037-album-artist-falls-back-to-the-files-artist-tag.md): a missing or blank Album Artist tag falls back to the same file's Artist tag instead of rejecting the file.
+
 The design interview and implementation plan were approved. This decision replaces ADR 0017 and the mandatory Genre and embedded artwork requirements in ADR 0011; the byte-preservation guarantee remains unchanged.
 
 Managed Import will use validated file tags without Recording Identification, MusicBrainz, AcoustID, or Chromaprint. Remove the integration from the server, API contracts and generated clients, Import and Settings interfaces, configuration, dependency reporting, and Docker setup. Keep FFmpeg for audio validation. This deliberately gives up automatic identification and metadata enrichment in favor of a local, predictable import workflow.
