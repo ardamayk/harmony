@@ -1897,7 +1897,7 @@ export interface components {
             bitDepth?: number;
             /** @description Lossless only. */
             sampleRateHz?: number;
-            /** @description Lossy only. For a variable bitrate, the level of the source's average: the nearest LAME preset average for MP3 (V0 245, V2 190 kbps), else the nearest multiple of 32 kbps. */
+            /** @description Lossy only. For a variable bitrate, the level of the source's average: the nearest LAME preset average for MP3 (V0 245, V2 190 kbps), else the nearest multiple of 32 kbps. Otherwise the nearest standard bitrate (32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256 or 320 kbps) to the one the files report. */
             bitrateKbps?: number;
             /** @description Lossy only. */
             variableBitrate?: boolean;

@@ -51,7 +51,8 @@ const VBR_STEP_KBPS: u32 = 32;
 /// The quality a file reports. Lossless files carry bit depth and sample
 /// rate; lossy files carry bitrate and whether it is variable. A variable
 /// bitrate is an average that differs per file, so a source's level is
-/// the mean of its files' bitrates, rounded by [`vbr_level`].
+/// the mean of its files' bitrates, rounded by [`vbr_level`]; any other
+/// bitrate is the nearest standard one, by [`bitrate_step`].
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Quality {
     pub format: String,
@@ -74,6 +75,24 @@ fn vbr_level(format: &str, mean_kbps: u32) -> u32 {
             .unwrap_or(mean_kbps);
     }
     ((mean_kbps + VBR_STEP_KBPS / 2) / VBR_STEP_KBPS * VBR_STEP_KBPS).max(VBR_STEP_KBPS)
+}
+
+/// The standard constant bitrates (kbps) of MP3 and the usual AAC, Vorbis
+/// and Opus encoder settings.
+const STANDARD_BITRATES: [u32; 14] = [
+    32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320,
+];
+
+/// The step a bitrate not reported as variable is grouped by: the nearest
+/// standard bitrate (a tie goes to the higher), so that a file reporting
+/// 161 or 162 kbps forms one version with 160 kbps. A standard bitrate
+/// stays as it is.
+fn bitrate_step(kbps: u32) -> u32 {
+    STANDARD_BITRATES
+        .into_iter()
+        .rev()
+        .min_by_key(|step| step.abs_diff(kbps))
+        .unwrap_or(kbps)
 }
 
 impl Quality {
@@ -100,7 +119,7 @@ impl Quality {
             bitrate_kbps: if variable_bitrate == Some(true) {
                 None
             } else {
-                reported(file.bit_rate)
+                reported(file.bit_rate).map(bitrate_step)
             },
             variable_bitrate,
         }
@@ -538,6 +557,49 @@ mod tests {
         assert_eq!(vbr_level("mp3", 300), 245);
         assert_eq!(vbr_level("mp3", 235), 245, "a tie goes to the higher level");
         assert_eq!(vbr_level("opus", 10), 32);
+    }
+
+    #[test]
+    fn bitrates_not_reported_as_variable_group_by_the_nearest_standard_step() {
+        let versions = group(
+            Scope::Track,
+            &responses(
+                r#"[{"username": "alice", "files": [
+                    {"filename": "A\\1.m4a", "size": 1, "bitRate": 161},
+                    {"filename": "A\\2.m4a", "size": 1, "bitRate": 162},
+                    {"filename": "A\\3.mp3", "size": 1, "bitRate": 226, "isVariableBitRate": false},
+                    {"filename": "A\\4.mp3", "size": 1, "bitRate": 235, "isVariableBitRate": false},
+                    {"filename": "A\\5.mp3", "size": 1, "bitRate": 320, "isVariableBitRate": false},
+                    {"filename": "A\\6.m4a", "size": 1}
+                ]}]"#,
+            ),
+        );
+        let mut found: Vec<(&str, usize, Option<u32>)> = versions
+            .iter()
+            .map(|version| {
+                (
+                    version.key.as_str(),
+                    version.sources.len(),
+                    version.quality.bitrate_kbps,
+                )
+            })
+            .collect();
+        found.sort_unstable();
+        assert_eq!(
+            found,
+            [
+                ("m4a-160-x", 2, Some(160)),
+                ("m4a-x-x", 1, None),
+                ("mp3-224-cbr", 2, Some(224)),
+                ("mp3-320-cbr", 1, Some(320)),
+            ]
+        );
+        assert_eq!(bitrate_step(144), 160, "a tie goes to the higher step");
+        assert_eq!(bitrate_step(8), 32);
+        assert_eq!(bitrate_step(500), 320);
+        for step in STANDARD_BITRATES {
+            assert_eq!(bitrate_step(step), step);
+        }
     }
 
     #[test]
