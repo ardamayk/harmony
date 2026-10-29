@@ -683,18 +683,23 @@ export function createApiClient(config: ApiClientConfig) {
 				`/api/v1/radio/stations/${stationId}/now-playing`,
 			),
 		/** Searches the External Source; `limit` defaults to the server's 10 (at most 20). */
-		searchExternalSource: (q: string, limit?: number) =>
+		searchExternalSource: (q: string, limit?: number, signal?: AbortSignal) =>
 			request<ExternalSearchResponse>(
 				`/api/v1/external/search?${new URLSearchParams({ q }).toString()}${limit != null ? `&limit=${limit}` : ""}`,
+				{ signal },
 			),
 		/** Resolves an External Track; play `streamPath` through getExternalStreamUrl. */
-		getExternalTrackPlayback: (externalTrackId: string) =>
+		getExternalTrackPlayback: (externalTrackId: string, signal?: AbortSignal) =>
 			request<ExternalTrackPlayback>(
 				`/api/v1/external/tracks/${encodeURIComponent(externalTrackId)}/playback`,
+				{ signal },
 			),
 		/** `streamPath` is an ExternalTrackPlayback's server path; keeps `.m3u8` for HLS detection. */
 		getExternalStreamUrl: (streamPath: string) =>
 			`${getStreamBaseUrl()}${streamPath}`,
+		/** Only for an External Track whose `hasArtwork` is true. */
+		getExternalTrackArtworkUrl: (externalTrackId: string) =>
+			`${getMediaBaseUrl()}/api/v1/external/tracks/${encodeURIComponent(externalTrackId)}/artwork`,
 		getRadioStationStreamUrl: (stationId: string) =>
 			`${getStreamBaseUrl()}/api/v1/radio/stations/${stationId}/stream`,
 		getRadioCatalogPreviewStreamUrl: (stationUuid: string) =>

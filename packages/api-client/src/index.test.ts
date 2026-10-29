@@ -197,6 +197,7 @@ describe("createApiClient", () => {
 			durationMs: 320_000,
 			webpageUrl: "https://soundcloud.com/daftpunk/one-more-time",
 			extractor: "Soundcloud",
+			hasArtwork: true,
 		};
 		const transport = vi
 			.fn<typeof fetch>()
@@ -229,6 +230,34 @@ describe("createApiClient", () => {
 		expect(client.getExternalStreamUrl(playback.streamPath)).toBe(
 			"http://127.0.0.1:43129/token/api/v1/external/tracks/eyJ1Ijoi.c2ln/playlist.m3u8",
 		);
+		// Artwork follows the media base (here the API base), like Album covers.
+		expect(client.getExternalTrackArtworkUrl(track.id)).toBe(
+			"http://music.test/api/v1/external/tracks/eyJ1Ijoi.c2ln/artwork",
+		);
+	});
+
+	it("passes an AbortSignal to External Source search and playback requests", async () => {
+		const transport = vi
+			.fn<typeof fetch>()
+			.mockResolvedValueOnce(Response.json({ source: "scsearch", items: [] }))
+			.mockResolvedValueOnce(
+				Response.json({
+					format: "progressive",
+					streamPath: "/api/v1/external/tracks/abc/stream",
+				}),
+			);
+		const client = createApiClient({ baseUrl: "http://music.test", transport });
+		const search = new AbortController();
+		const resolve = new AbortController();
+
+		await client.searchExternalSource("daft punk", undefined, search.signal);
+		await client.getExternalTrackPlayback("abc", resolve.signal);
+
+		expect(transport.mock.calls[0]?.[0]).toBe(
+			"http://music.test/api/v1/external/search?q=daft+punk",
+		);
+		expect(transport.mock.calls[0]?.[1]?.signal).toBe(search.signal);
+		expect(transport.mock.calls[1]?.[1]?.signal).toBe(resolve.signal);
 	});
 
 	it("previews and explicitly confirms Permanent Track Deletion", async () => {
@@ -932,6 +961,9 @@ describe("createApiClient", () => {
 		);
 		expect(client.getArtistPhotoUrl("artist-1")).toBe(
 			"earthly-media://localhost/api/v1/library/artists/artist-1/photo",
+		);
+		expect(client.getExternalTrackArtworkUrl("eyJ1Ijoi.c2ln")).toBe(
+			"earthly-media://localhost/api/v1/external/tracks/eyJ1Ijoi.c2ln/artwork",
 		);
 		expect(client.getTrackStreamUrl("track-1")).toBe(
 			"http://127.0.0.1:41000/token-1/api/v1/tracks/track-1/stream",

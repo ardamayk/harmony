@@ -1053,6 +1053,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/external/tracks/{externalTrackId}/artwork": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get an External Track's cover image through the Music Server
+         * @description Fetches the one cover image the search chose for the External Track (hasArtwork true): only the public HTTPS URL signed into its id, with the stream proxy's address checks on every redirect. The image is served as JPEG, PNG, or WebP of at most 2 MiB; anything else answers 502. Clients load it from here because they never contact the External Source's sites themselves.
+         */
+        get: operations["getExternalTrackArtwork"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1695,6 +1715,8 @@ export interface components {
             webpageUrl: string | null;
             /** @description yt-dlp extractor key, for example Soundcloud or Youtube */
             extractor: string;
+            /** @description True when /api/v1/external/tracks/{externalTrackId}/artwork serves a cover for it; show a placeholder otherwise. */
+            hasArtwork: boolean;
         };
         ExternalSearchResponse: {
             /** @description The configured yt-dlp search prefix, for example scsearch */
@@ -2112,6 +2134,15 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
+        /** @description The External Source is not configured (code external_source_disabled), or the External Track has no artwork (code external_track_artwork_missing). */
+        ExternalTrackArtworkNotFound: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
         /** @description The External Track has no usable audio: no http(s) audio format, DRM, or a live stream; also a progressive route asked for an HLS External Track or the other way round (code external_track_unplayable). */
         ExternalTrackUnplayable: {
             headers: {
@@ -2121,7 +2152,7 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
-        /** @description yt-dlp exited with an error or printed unparseable output, or the upstream audio request failed (code external_source_failed). The message carries yt-dlp's last ERROR line when there is one. */
+        /** @description yt-dlp exited with an error or printed unparseable output, or the upstream audio or artwork request failed (code external_source_failed). The message carries yt-dlp's last ERROR line when there is one. */
         ExternalSourceFailed: {
             headers: {
                 [name: string]: unknown;
@@ -2139,7 +2170,7 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
-        /** @description yt-dlp did not finish in time: 20 seconds for a search, 30 seconds for resolving an External Track (code external_source_timeout). */
+        /** @description yt-dlp did not finish in time: 20 seconds for a search, 30 seconds for resolving an External Track; or an External Track's artwork did not arrive within 15 seconds (code external_source_timeout). */
         ExternalSourceTimeout: {
             headers: {
                 [name: string]: unknown;
@@ -4202,6 +4233,36 @@ export interface operations {
                 content?: never;
             };
             502: components["responses"]["ExternalSourceFailed"];
+        };
+    };
+    getExternalTrackArtwork: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque External Track id from searchExternalSource */
+                externalTrackId: components["parameters"]["externalTrackId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cover image */
+            200: {
+                headers: {
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": string;
+                    "image/png": string;
+                    "image/webp": string;
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["ExternalTrackArtworkNotFound"];
+            502: components["responses"]["ExternalSourceFailed"];
+            504: components["responses"]["ExternalSourceTimeout"];
         };
     };
 }
