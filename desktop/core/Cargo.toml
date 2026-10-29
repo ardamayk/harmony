@@ -22,7 +22,7 @@ reqwest = { version = "=0.13.4", default-features = false, features = ["json", "
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.151"
 thiserror = "=2.0.20"
-tokio = { version = "=1.53.1", features = ["fs", "io-util", "net", "rt-multi-thread", "sync"] }
+tokio = { version = "=1.53.3", features = ["fs", "io-util", "net", "rt-multi-thread", "sync"] }
 tokio-util = { version = "=0.7.19", features = ["io", "rt"] }
 url = "=2.5.8"
 uuid = { version = "=1.25.0", features = ["v4"] }
@@ -53,5 +53,5 @@ windows = { version = "=0.62.2", features = [
 ] }
 
 [dev-dependencies]
-tokio = { version = "=1.53.1", features = ["macros", "rt-multi-thread", "time"] }
+tokio = { version = "=1.53.3", features = ["macros", "rt-multi-thread", "time"] }
 toml = "=0.9.12"
