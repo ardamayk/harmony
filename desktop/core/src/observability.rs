@@ -279,8 +279,9 @@ fn scrub_string(text: &mut String) {
 /// `text` with each URL replaced by `<url>` and each file path by
 /// `<path>`. A file path is any word holding a `/` or `\`, together with
 /// the words after it up to the last such word, since a path can hold
-/// spaces (`C:\Users\Jane Mary Smith\...`); prose with a slash may lose a
-/// few words with it.
+/// spaces (`C:\Users\Jane Mary Smith\...`), and then the words after that
+/// up to the end of the clause, since a file name can too
+/// (`Jane Smith - Song.flac`). Prose after a path may be lost with it.
 pub fn scrub_text(text: &str) -> Cow<'_, str> {
     if !text.contains(['/', '\\']) {
         return Cow::Borrowed(text);
@@ -307,6 +308,21 @@ pub fn scrub_text(text: &str) -> Cow<'_, str> {
                 Word::Path { .. } => last = next,
                 Word::Url { .. } => break,
                 Word::Plain => {}
+            }
+        }
+        // A file name after the last separator can hold spaces as well, so
+        // the path also takes the plain words up to the end of the clause: a
+        // word ending in `:`, `;`, `,` or a closing bracket or quote, or the
+        // end of the text.
+        if !ends_clause(words[last].0) {
+            for (next, (word, _)) in words.iter().enumerate().skip(last + 1) {
+                if !matches!(Word::of(word), Word::Plain) {
+                    break;
+                }
+                last = next;
+                if ends_clause(word) {
+                    break;
+                }
             }
         }
         let (word, space) = words[last];
@@ -345,6 +361,13 @@ fn trim(word: &str) -> (&str, &str) {
     let core = word.trim_start_matches(OPENING);
     let prefix = &word[..word.len() - core.len()];
     (prefix, core.trim_end_matches(CLOSING))
+}
+
+/// Whether `word` closes a clause, ending a path that runs through it.
+fn ends_clause(word: &str) -> bool {
+    word.ends_with([
+        ':', ';', ',', ')', ']', '}', '"', '\'', '\u{2019}', '\u{201d}',
+    ])
 }
 
 /// A word's closing punctuation.
@@ -460,7 +483,7 @@ mod tests {
         );
         assert_eq!(
             scrub_text(r"spawn C:\Users\me\AppData\mpv.exe failed: denied"),
-            "spawn <path> failed: denied"
+            "spawn <path>: denied"
         );
         assert_eq!(scrub_text("no paths"), Cow::Borrowed("no paths"));
     }
@@ -501,21 +524,28 @@ mod tests {
     fn paths_with_spaces_are_redacted_whole() {
         assert_eq!(
             scrub_text(r"spawn C:\Program Files\Jane Mary Smith\mpv.exe failed: denied"),
-            "spawn <path> failed: denied"
+            "spawn <path>: denied"
         );
         assert_eq!(
             scrub_text("read /home/jane/Music/Jane Mary Smith/a.flac failed"),
-            "read <path> failed"
+            "read <path>"
+        );
+        // A file name with spaces after the last separator goes with it, up
+        // to the end of the clause.
+        assert_eq!(
+            scrub_text("load /music/Jane Smith - Song Title.flac failed"),
+            "load <path>"
+        );
+        assert_eq!(
+            scrub_text("open /music/Jane Smith - Song Title.flac: denied, retrying"),
+            "open <path>: denied, retrying"
         );
         // Prose with a slash: over-redacting it is acceptable.
-        assert_eq!(
-            scrub_text("the a/b ratio is high"),
-            "the <path> ratio is high"
-        );
+        assert_eq!(scrub_text("the a/b ratio is high"), "the <path>");
         assert_eq!(scrub_text("a/b and c/d"), "<path>");
         assert_eq!(
             scrub_text("open /srv/a b/c.flac for https://a.example/x"),
-            "open <path> for <url>"
+            "open <path> <url>"
         );
     }
 
