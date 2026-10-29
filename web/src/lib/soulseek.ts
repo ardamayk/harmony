@@ -54,6 +54,30 @@ export function buildSoulseekQuery(
 	return `${artist} ${name}`;
 }
 
+/**
+ * A searched query without the artist. Soulseek's server filters some
+ * artist names, so any query naming one finds nothing: this is the Album
+ * (Album scope, when the site reports it) or the title, cleaned as in
+ * {@link buildSoulseekQuery} and without a leading artist. Empty when the
+ * query names no artist to drop.
+ */
+export function soulseekQueryWithoutArtist(
+	track: ExternalTrack,
+	scope: AcquisitionScope,
+	query: string,
+): string {
+	const artist = track.artistName
+		? cleanArtistName(track.artistName).toLowerCase()
+		: "";
+	if (!artist || !query.toLowerCase().includes(artist)) return "";
+	const album =
+		scope === "album" && track.album ? cleanQueryWords(track.album) : "";
+	let name = album || cleanQueryWords(track.title);
+	if (name.toLowerCase().startsWith(`${artist} `))
+		name = name.slice(artist.length).trim();
+	return name.toLowerCase() === query.trim().toLowerCase() ? "" : name;
+}
+
 function formatSampleRate(hz: number): string {
 	const khz = hz / 1000;
 	return `${Number.isInteger(khz) ? khz : khz.toFixed(1)} kHz`;

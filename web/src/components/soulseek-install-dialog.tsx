@@ -29,6 +29,7 @@ import {
 	formatSpeed,
 	soulseekErrorMessage,
 	soulseekQueryKeys,
+	soulseekQueryWithoutArtist,
 } from "#/lib/soulseek";
 import { cn } from "#/lib/utils";
 
@@ -100,6 +101,20 @@ export function SoulseekInstallDialog({
 		startSearch.isPending ||
 		(Boolean(searchId) && search.data?.state !== "complete" && !search.isError);
 	const searchError = startSearch.error ?? search.error;
+	const searched = startSearch.variables;
+	const foundNothing =
+		!isSearching &&
+		search.data?.state === "complete" &&
+		versions.length === 0 &&
+		!searchError;
+	const queryWithoutArtist =
+		foundNothing && searched
+			? soulseekQueryWithoutArtist(track, searched.scope, searched.query)
+			: "";
+	const runSearch = (request: { query: string; scope: AcquisitionScope }) => {
+		if (!request.query || startSearch.isPending) return;
+		startSearch.mutate(request);
+	};
 	const install = (version: AcquisitionVersion, source?: AcquisitionSource) => {
 		if (!searchId || startAcquisition.isPending) return;
 		startAcquisition.mutate({
@@ -133,8 +148,7 @@ export function SoulseekInstallDialog({
 					className="grid shrink-0 gap-4 border-border border-b px-4 py-4 sm:px-6"
 					onSubmit={(event) => {
 						event.preventDefault();
-						if (!trimmedQuery || startSearch.isPending) return;
-						startSearch.mutate({ query: trimmedQuery, scope });
+						runSearch({ query: trimmedQuery, scope });
 					}}
 				>
 					<fieldset className="grid gap-2">
@@ -190,6 +204,32 @@ export function SoulseekInstallDialog({
 						versionCount={versions.length}
 						error={searchError}
 					/>
+					{foundNothing ? (
+						<div className="flex flex-wrap items-center gap-3 px-4 pb-3 sm:px-6">
+							<p className="text-caption text-sm">
+								Soulseek filters some artist names, so a query naming one finds
+								nothing.
+							</p>
+							{queryWithoutArtist && searched ? (
+								<Button
+									type="button"
+									variant="outline"
+									size="sm"
+									disabled={startSearch.isPending}
+									onClick={() => {
+										setQuery(queryWithoutArtist);
+										setQueryEdited(true);
+										runSearch({
+											query: queryWithoutArtist,
+											scope: searched.scope,
+										});
+									}}
+								>
+									Search without the artist
+								</Button>
+							) : null}
+						</div>
+					) : null}
 					{startAcquisition.error ? (
 						<p
 							role="alert"

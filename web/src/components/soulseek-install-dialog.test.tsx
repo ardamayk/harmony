@@ -315,6 +315,80 @@ describe("SoulseekInstallDialog", () => {
 		);
 	});
 
+	describe("when a search finds nothing", () => {
+		const filtered: ExternalTrack = {
+			...track,
+			title: "Ariana Grande - Problem (Official Video)",
+			artistName: "Ariana Grande",
+		};
+
+		async function searchForNothing() {
+			mocks.startSoulseekSearch.mockResolvedValue({ searchId: SEARCH_ID });
+			mocks.getSoulseekSearch.mockResolvedValue(searchResponse("complete", []));
+			fireEvent.click(screen.getByRole("button", { name: "Search Soulseek" }));
+			await screen.findByText(
+				"No versions found. Edit the query and search again.",
+			);
+		}
+
+		it("searches the Album without the artist", async () => {
+			renderDialog(vi.fn(), { ...filtered, album: "My Everything" });
+			await searchForNothing();
+			expect(
+				screen.getByText(/Soulseek filters some artist names/),
+			).toBeTruthy();
+
+			fireEvent.click(
+				screen.getByRole("button", { name: "Search without the artist" }),
+			);
+
+			expect(
+				(screen.getByLabelText("Soulseek query") as HTMLInputElement).value,
+			).toBe("My Everything");
+			await waitFor(() =>
+				expect(mocks.startSoulseekSearch).toHaveBeenLastCalledWith(
+					"My Everything",
+					"album",
+				),
+			);
+		});
+
+		it("searches the title without the artist for the Track scope", async () => {
+			renderDialog(vi.fn(), { ...filtered, album: "My Everything" });
+			fireEvent.click(screen.getByRole("radio", { name: "Track" }));
+			expect(
+				(screen.getByLabelText("Soulseek query") as HTMLInputElement).value,
+			).toBe("Ariana Grande Problem");
+			await searchForNothing();
+
+			fireEvent.click(
+				screen.getByRole("button", { name: "Search without the artist" }),
+			);
+
+			await waitFor(() =>
+				expect(mocks.startSoulseekSearch).toHaveBeenLastCalledWith(
+					"Problem",
+					"track",
+				),
+			);
+		});
+
+		it("offers no search without the artist when the query names none", async () => {
+			renderDialog(vi.fn(), { ...filtered, album: "My Everything" });
+			fireEvent.change(screen.getByLabelText("Soulseek query"), {
+				target: { value: "My Everything" },
+			});
+			await searchForNothing();
+
+			expect(
+				screen.getByText(/Soulseek filters some artist names/),
+			).toBeTruthy();
+			expect(
+				screen.queryByRole("button", { name: "Search without the artist" }),
+			).toBeNull();
+		});
+	});
+
 	it("explains an unreachable or logged-out slskd", async () => {
 		renderDialog();
 		mocks.startSoulseekSearch.mockRejectedValueOnce(
