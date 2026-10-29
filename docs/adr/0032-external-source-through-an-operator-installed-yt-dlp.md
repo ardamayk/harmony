@@ -27,7 +27,7 @@ This lowers the risk; it does not remove it. The realistic outcome for the proje
 
 ## Installing yt-dlp
 
-The install is always the operator's explicit choice, from yt-dlp's own channels (PyPI, pipx, or the distribution's package):
+The install is always the operator's explicit choice, from yt-dlp's own channels (PyPI through uv, pipx or pip, or the distribution's package); the server README documents `uv tool install yt-dlp`:
 
 - **On a host**, the operator installs yt-dlp the way yt-dlp documents. A future server install script may offer it only behind an explicit opt-in flag, never by default, and only from those channels; it never vendors or pins a copy.
 - **In Docker**, the image is built locally from the repository. `WITH_YT_DLP` is a build argument, `false` by default; `docker build --build-arg WITH_YT_DLP=true .` installs yt-dlp from PyPI into the operator's own image. Updating it means rebuilding with `--no-cache` or running the venv's `pip install -U yt-dlp`.

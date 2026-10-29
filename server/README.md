@@ -35,6 +35,17 @@ The External Source is an optional search of one site through the operator's own
 
 You are responsible for what the source is used for and for the site's terms. Choose a source whose content you may play.
 
+### Installing yt-dlp on a host
+
+Install yt-dlp from PyPI with [uv](https://docs.astral.sh/uv/), so it gets its own environment and is easy to update:
+
+```bash
+uv tool install yt-dlp     # installs ~/.local/bin/yt-dlp
+uv tool upgrade yt-dlp     # when a site changes and searches or playback start failing
+```
+
+Put `~/.local/bin` on the server's `PATH`, or set `YT_DLP=$HOME/.local/bin/yt-dlp`. Sites change often, so keep yt-dlp current: an old release can fail on a site that a new one handles (for example, YouTube refusing its stream URLs). The installs yt-dlp itself documents (`pipx`, `pip`, the distribution's package) work the same way. Keep yt-dlp on the Linux filesystem: under WSL, a copy on a Windows drive (`/mnt/c`) starts about a second slower on every search and playback.
+
 ### Docker
 
 `server/Dockerfile` builds the Music Server image: the Web Client and docs, the release binary, ffmpeg (Opus and M4A inspection) and the migrations, which the server reads at startup. The build context is the repository root (`docker build -f server/Dockerfile .`, or `docker compose up -d --build` from the root).
