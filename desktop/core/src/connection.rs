@@ -1,11 +1,13 @@
 use futures_util::StreamExt;
 use reqwest::redirect::Policy;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt;
 use std::fs;
 use std::path::PathBuf;
+use std::sync::Mutex;
 use std::time::Duration;
+use tokio_util::sync::CancellationToken;
 use url::{Host, Url};
 
 const HEALTH_PATH: &str = "/api/v1/health";
@@ -105,6 +107,7 @@ pub enum ConnectionErrorCode {
     ProxyUnavailable,
     CapabilityMismatch,
     Storage,
+    Cancelled,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -332,6 +335,24 @@ impl HttpBridge {
         self.collect_response(response).await
     }
 
+    /// Sends like [`Self::send`] until `cancellation` fires, then drops the
+    /// request: its connection closes, so the Music Server stops the handler.
+    pub async fn send_cancellable(
+        &self,
+        origin: &ServerOrigin,
+        request: HttpRequest,
+        cancellation: &CancellationToken,
+    ) -> Result<HttpResponse, ConnectionError> {
+        tokio::select! {
+            biased;
+            _ = cancellation.cancelled() => Err(ConnectionError::new(
+                ConnectionErrorCode::Cancelled,
+                "Desktop HTTP request was cancelled.",
+            )),
+            response = self.send(origin, request) => response,
+        }
+    }
+
     pub async fn send_import(
         &self,
         origin: &ServerOrigin,
@@ -521,6 +542,41 @@ impl HttpBridge {
     }
 }
 
+/// Cancellation of in-flight renderer HTTP requests, by the renderer's
+/// request ID. A cancel for an ID that is not in flight does nothing, so the
+/// shell registers a request before it reads the next command (see `run`).
+#[derive(Default)]
+pub struct HttpRequestCancellations {
+    tokens: Mutex<HashMap<String, CancellationToken>>,
+}
+
+impl HttpRequestCancellations {
+    /// The request's token, created on first use.
+    pub fn begin(&self, request_id: &str) -> CancellationToken {
+        self.lock()
+            .entry(request_id.to_owned())
+            .or_default()
+            .clone()
+    }
+
+    pub fn cancel(&self, request_id: &str) {
+        if let Some(token) = self.lock().get(request_id) {
+            token.cancel();
+        }
+    }
+
+    pub fn finish(&self, request_id: &str) {
+        self.lock().remove(request_id);
+    }
+
+    fn lock(&self) -> std::sync::MutexGuard<'_, HashMap<String, CancellationToken>> {
+        // The map stays consistent even if a holder panicked.
+        self.tokens
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+}
+
 fn response_too_large_error() -> ConnectionError {
     ConnectionError::new(
         ConnectionErrorCode::ResponseTooLarge,
@@ -598,7 +654,10 @@ impl ConnectionStore {
 
 #[cfg(test)]
 mod tests {
-    use super::{ConnectionErrorCode, ConnectionStore, HttpBridge, HttpRequest, ServerOrigin};
+    use super::{
+        ConnectionErrorCode, ConnectionStore, HttpBridge, HttpRequest, HttpRequestCancellations,
+        ServerOrigin,
+    };
     use std::collections::BTreeMap;
     use std::fs;
     use std::io::{Read, Write};
@@ -1205,5 +1264,76 @@ mod tests {
 
         assert_eq!(error.code, ConnectionErrorCode::ResponseTooLarge);
         assert!(error.message.contains("32 MiB") || error.message.contains("limit"));
+    }
+
+    #[tokio::test]
+    async fn cancelled_request_closes_its_connection_to_the_server() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
+        let address = listener.local_addr().expect("test server address");
+        let (received_sender, received_receiver) = tokio::sync::oneshot::channel();
+        let (closed_sender, closed_receiver) = tokio::sync::oneshot::channel();
+        thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept request");
+            let mut request = [0_u8; 2048];
+            let _ = stream.read(&mut request).expect("read request");
+            let _ = received_sender.send(());
+            // Never answers, like a slow search; reading 0 bytes means the
+            // client closed the connection.
+            stream
+                .set_read_timeout(Some(Duration::from_secs(5)))
+                .expect("set read timeout");
+            let closed = matches!(stream.read(&mut request), Ok(0));
+            let _ = closed_sender.send(closed);
+        });
+        let configured = ServerOrigin::parse(&format!("http://{address}")).expect("valid origin");
+        let request = HttpRequest {
+            method: "GET".to_owned(),
+            url: "/api/v1/external/search?q=a".to_owned(),
+            headers: Default::default(),
+            body: None,
+        };
+        let cancellations = HttpRequestCancellations::default();
+        let cancellation = cancellations.begin("request-1");
+        // Kept alive to the end: the cancel alone must close the connection.
+        let bridge = HttpBridge::new().expect("create bridge");
+
+        let sending = bridge.send_cancellable(&configured, request, &cancellation);
+        tokio::pin!(sending);
+        tokio::select! {
+            _ = &mut sending => panic!("the server never answers"),
+            received = received_receiver => received.expect("server received the request"),
+        }
+        cancellations.cancel("request-1");
+        let error = tokio::time::timeout(Duration::from_secs(1), sending)
+            .await
+            .expect("cancel ends the request at once")
+            .expect_err("a cancelled request fails");
+
+        assert_eq!(error.code, ConnectionErrorCode::Cancelled);
+        assert!(
+            tokio::time::timeout(Duration::from_secs(5), closed_receiver)
+                .await
+                .expect("server sees the connection end")
+                .expect("server thread reports"),
+            "the outgoing request's connection must be closed"
+        );
+    }
+
+    #[test]
+    fn http_cancellation_reaches_only_in_flight_requests() {
+        let cancellations = HttpRequestCancellations::default();
+        cancellations.cancel("finished");
+        assert!(!cancellations.begin("finished").is_cancelled());
+        cancellations.finish("finished");
+
+        let first = cancellations.begin("request-1");
+        let other = cancellations.begin("request-2");
+        assert!(!cancellations.begin("request-1").is_cancelled());
+        cancellations.cancel("request-1");
+
+        assert!(first.is_cancelled());
+        assert!(!other.is_cancelled());
+        cancellations.finish("request-1");
+        assert!(!cancellations.begin("request-1").is_cancelled());
     }
 }

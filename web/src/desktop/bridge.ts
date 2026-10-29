@@ -205,16 +205,45 @@ export async function desktopFetch(
 				? new Uint8Array(await input.arrayBuffer())
 				: null,
 	);
-	const response = await invoke<BridgeHttpResponse>("desktop_http_request", {
-		request: {
-			method: init?.method ?? (input instanceof Request ? input.method : "GET"),
-			url,
-			headers: normalizedHeaders,
-			body,
-		},
-	});
+	const request = {
+		method: init?.method ?? (input instanceof Request ? input.method : "GET"),
+		url,
+		headers: normalizedHeaders,
+		body,
+	};
+	const signal =
+		init?.signal ?? (input instanceof Request ? input.signal : undefined);
+	if (!signal) {
+		return bridgeResponse(
+			await invoke<BridgeHttpResponse>("desktop_http_request", { request }),
+		);
+	}
+	signal.throwIfAborted();
 
-	return bridgeResponse(response);
+	// Like fetch, an abort rejects at once; the cancel makes the core drop its
+	// connection, so the Music Server stops work nobody is waiting for.
+	const requestId = crypto.randomUUID();
+	const pending = invoke<BridgeHttpResponse>("desktop_http_request", {
+		request,
+		requestId,
+	});
+	let handleAbort = () => {};
+	const aborted = new Promise<never>((_, reject) => {
+		handleAbort = () => {
+			reject(signal.reason);
+			invoke("desktop_cancel_http_request", { requestId }).catch((error) => {
+				console.error("Desktop HTTP request cancellation failed", error);
+			});
+		};
+	});
+	signal.addEventListener("abort", handleAbort, { once: true });
+	try {
+		return bridgeResponse(await Promise.race([pending, aborted]));
+	} finally {
+		signal.removeEventListener("abort", handleAbort);
+		// The cancelled request still settles; its outcome is not wanted.
+		pending.catch(() => {});
+	}
 }
 
 function bridgeResponse(response: BridgeHttpResponse): Response {

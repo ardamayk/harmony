@@ -418,7 +418,8 @@ fn error_response(error: ConnectionError) -> Response<Body> {
         ConnectionErrorCode::InvalidResponse
         | ConnectionErrorCode::ResponseTooLarge
         | ConnectionErrorCode::CapabilityMismatch
-        | ConnectionErrorCode::Storage => StatusCode::INTERNAL_SERVER_ERROR,
+        | ConnectionErrorCode::Storage
+        | ConnectionErrorCode::Cancelled => StatusCode::INTERNAL_SERVER_ERROR,
     };
     Response::builder()
         .status(status)
