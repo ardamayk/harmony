@@ -204,8 +204,14 @@ async function dev() {
 	await waitForDevServer(web);
 
 	// WSLENV lists the variables interop passes to Windows processes. No
-	// `/u` flag: WSL 2.6 drops a variable marked WSL-to-Windows-only.
-	const wslEnv = [process.env.WSLENV, "EARTHLY_AUDIO_DEV_SERVER_URL"]
+	// `/u` flag: WSL 2.6 drops a variable marked WSL-to-Windows-only. The
+	// owner's Sentry settings reach the core only when set (ADR 0033).
+	const sentry = [
+		"SENTRY_DSN",
+		"SENTRY_ENVIRONMENT",
+		"SENTRY_TRACES_SAMPLE_RATE",
+	].filter((name) => process.env[name]);
+	const wslEnv = [process.env.WSLENV, "EARTHLY_AUDIO_DEV_SERVER_URL", ...sentry]
 		.filter(Boolean)
 		.join(":");
 	const client = spawn(executable, [], {

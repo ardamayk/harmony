@@ -11,6 +11,7 @@ mod mpris;
 mod mpris;
 #[cfg(windows)]
 mod mpv_pipe;
+pub mod observability;
 pub mod output_device;
 mod playback;
 mod playback_app_actions;

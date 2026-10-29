@@ -7,7 +7,7 @@ use crate::output_device::{
 use crate::playback_lifecycle::{
     PlaybackLifecycle, PlaybackLifecycleAction, PlaybackSessionSnapshot,
 };
-use crate::playback_load_timing::{LoadMark, LoadTimer, LoadTrigger};
+use crate::playback_load_timing::{LoadMark, LoadReport, LoadTimer, LoadTrigger};
 use crate::playback_navigation::{PlaybackQueueContext, PlaybackSource, QueueDirection};
 use crate::processing::{
     AppliedMpvProcessingConfiguration, EffectiveReplayGainMode, MpvProcessingConfiguration,
@@ -2541,9 +2541,10 @@ fn report_load_timing(load_timer: &LoadTimer, event: &MpvEvent) {
     report_load_line(load_timer.observe(mark));
 }
 
-fn report_load_line(line: Option<String>) {
-    if let Some(line) = line {
-        eprintln!("{line}");
+fn report_load_line(report: Option<LoadReport>) {
+    if let Some(report) = report {
+        eprintln!("{}", report.line());
+        crate::observability::playback_load(&report);
     }
 }
 
@@ -4026,6 +4027,7 @@ fn set_error_state(state: &mut PlaybackSessionState, message: String) {
 
 fn report_native_playback_error(detail: &str) {
     eprintln!("Native playback process failed: {detail}");
+    crate::observability::playback_process_failed(detail);
 }
 
 fn playback_url(source: &Value) -> Result<String, PlaybackCommandError> {

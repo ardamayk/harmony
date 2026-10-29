@@ -3,7 +3,8 @@
 //! `file-loaded`, and to the first `playback-restart`, when audio actually
 //! plays. One stderr line per start, naming only the source type and what
 //! started it, never its URL. A load replaced by the next one before it
-//! plays gets its own line, so no start goes unreported.
+//! plays gets its own line, so no start goes unreported. With Sentry
+//! configured (ADR 0033), each report is also a transaction and metrics.
 
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -28,7 +29,7 @@ pub(crate) enum LoadTrigger {
 }
 
 impl LoadTrigger {
-    fn name(self) -> &'static str {
+    pub(crate) fn name(self) -> &'static str {
         match self {
             Self::Play => "play",
             Self::Queue => "queue",
@@ -61,9 +62,70 @@ struct Load {
     file_loaded: Option<Duration>,
 }
 
-impl Load {
-    fn fields(&self) -> String {
-        format!("type={} start={}", self.source_type, self.trigger.name())
+/// How a timed load ended.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum LoadOutcome {
+    /// Audio played.
+    Started,
+    /// mpv reported an error for the file.
+    Failed,
+    /// The next load replaced it before it played.
+    Replaced,
+}
+
+impl LoadOutcome {
+    pub(crate) fn name(self) -> &'static str {
+        match self {
+            Self::Started => "started",
+            Self::Failed => "failed",
+            Self::Replaced => "replaced",
+        }
+    }
+}
+
+/// One finished load: its source type and trigger, never its URL, and how
+/// long it took from `loadfile` to `file-loaded` and to its outcome.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct LoadReport {
+    pub(crate) outcome: LoadOutcome,
+    pub(crate) source_type: &'static str,
+    pub(crate) trigger: LoadTrigger,
+    pub(crate) file_loaded: Option<Duration>,
+    pub(crate) elapsed: Duration,
+}
+
+impl LoadReport {
+    fn new(load: Load, outcome: LoadOutcome) -> Self {
+        Self {
+            outcome,
+            source_type: load.source_type,
+            trigger: load.trigger,
+            file_loaded: load.file_loaded,
+            elapsed: load.sent_at.elapsed(),
+        }
+    }
+
+    /// The stderr line.
+    pub(crate) fn line(&self) -> String {
+        let fields = format!("type={} start={}", self.source_type, self.trigger.name());
+        let elapsed = self.elapsed.as_millis();
+        match self.outcome {
+            LoadOutcome::Replaced => format!(
+                "Playback Source replaced before it started: {fields} load_to_replaced_ms={elapsed}"
+            ),
+            LoadOutcome::Started => {
+                let file_loaded = self
+                    .file_loaded
+                    .map(|elapsed| format!(" load_to_file_loaded_ms={}", elapsed.as_millis()))
+                    .unwrap_or_default();
+                format!(
+                    "Playback Source started: {fields}{file_loaded} load_to_playing_ms={elapsed}"
+                )
+            }
+            LoadOutcome::Failed => {
+                format!("Playback Source failed to start: {fields} load_to_failed_ms={elapsed}")
+            }
+        }
     }
 }
 
@@ -80,7 +142,7 @@ impl LoadTimer {
         revision: Option<u64>,
         source_type: &'static str,
         trigger: LoadTrigger,
-    ) -> Option<String> {
+    ) -> Option<LoadReport> {
         let mut current = self.0.lock().ok()?;
         let replaced = current.replace(Load {
             revision,
@@ -89,15 +151,11 @@ impl LoadTimer {
             sent_at: Instant::now(),
             file_loaded: None,
         })?;
-        Some(format!(
-            "Playback Source replaced before it started: {} load_to_replaced_ms={}",
-            replaced.fields(),
-            replaced.sent_at.elapsed().as_millis()
-        ))
+        Some(LoadReport::new(replaced, LoadOutcome::Replaced))
     }
 
-    /// The line to report once the load plays or fails.
-    pub(crate) fn observe(&self, mark: LoadMark) -> Option<String> {
+    /// The report once the load plays or fails.
+    pub(crate) fn observe(&self, mark: LoadMark) -> Option<LoadReport> {
         let mut current = self.0.lock().ok()?;
         let load = current.as_mut()?;
         match mark {
@@ -112,26 +170,8 @@ impl LoadTimer {
                 load.file_loaded.get_or_insert(load.sent_at.elapsed());
                 None
             }
-            LoadMark::Playing => {
-                let load = current.take()?;
-                let file_loaded = load
-                    .file_loaded
-                    .map(|elapsed| format!(" load_to_file_loaded_ms={}", elapsed.as_millis()))
-                    .unwrap_or_default();
-                Some(format!(
-                    "Playback Source started: {}{file_loaded} load_to_playing_ms={}",
-                    load.fields(),
-                    load.sent_at.elapsed().as_millis()
-                ))
-            }
-            LoadMark::Failed => {
-                let load = current.take()?;
-                Some(format!(
-                    "Playback Source failed to start: {} load_to_failed_ms={}",
-                    load.fields(),
-                    load.sent_at.elapsed().as_millis()
-                ))
-            }
+            LoadMark::Playing => Some(LoadReport::new(current.take()?, LoadOutcome::Started)),
+            LoadMark::Failed => Some(LoadReport::new(current.take()?, LoadOutcome::Failed)),
         }
     }
 }
@@ -160,7 +200,10 @@ mod tests {
         assert_eq!(timer.observe(LoadMark::FileLoaded), None);
         assert_eq!(timer.observe(LoadMark::Accepted(2)), None);
         assert_eq!(timer.observe(LoadMark::FileLoaded), None);
-        let line = timer.observe(LoadMark::Playing).expect("line");
+        let report = timer.observe(LoadMark::Playing).expect("report");
+        assert_eq!(report.outcome, LoadOutcome::Started);
+        assert!(report.file_loaded.is_some());
+        let line = report.line();
         assert!(
             line.starts_with("Playback Source started: type=external-track start=play "),
             "{line}"
@@ -180,7 +223,8 @@ mod tests {
         timer.observe(LoadMark::Accepted(1));
         let replaced = timer
             .start(Some(2), "radio-station", LoadTrigger::Play)
-            .expect("replaced line");
+            .expect("replaced report")
+            .line();
         assert!(
             replaced.starts_with(
                 "Playback Source replaced before it started: type=track start=play load_to_replaced_ms="
@@ -188,7 +232,7 @@ mod tests {
             "{replaced}"
         );
         timer.observe(LoadMark::Accepted(2));
-        let line = timer.observe(LoadMark::Failed).expect("line");
+        let line = timer.observe(LoadMark::Failed).expect("report").line();
         assert!(
             line.starts_with(
                 "Playback Source failed to start: type=radio-station start=play load_to_failed_ms="
@@ -203,7 +247,7 @@ mod tests {
         let timer = LoadTimer::default();
         assert_eq!(timer.start(None, "track", LoadTrigger::Gapless), None);
         assert_eq!(timer.observe(LoadMark::FileLoaded), None);
-        let line = timer.observe(LoadMark::Playing).expect("line");
+        let line = timer.observe(LoadMark::Playing).expect("report").line();
         assert!(
             line.starts_with("Playback Source started: type=track start=gapless "),
             "{line}"
@@ -211,7 +255,7 @@ mod tests {
         // Another load's boundary does not hold it back.
         timer.start(None, "track", LoadTrigger::Queue);
         assert_eq!(timer.observe(LoadMark::Accepted(7)), None);
-        let line = timer.observe(LoadMark::Playing).expect("line");
+        let line = timer.observe(LoadMark::Playing).expect("report").line();
         assert!(line.contains(" start=queue "), "{line}");
     }
 }
