@@ -440,6 +440,9 @@ export function LibrarySearchDialog({
 	const isSearchingExternal =
 		showExternalGroup && (isDebouncingExternal || externalSearch.isFetching);
 	const externalLabel = externalSourceName ?? "External";
+	const externalHeader = externalSourceName
+		? `External – ${externalSourceName}`
+		: "External";
 	const externalCount =
 		canShowExternal && externalSearch.isSuccess
 			? externalResults.length
@@ -776,7 +779,7 @@ export function LibrarySearchDialog({
 						{showExternalGroup ? (
 							// biome-ignore lint/a11y/useSemanticElements: listbox option groups are not form fieldsets.
 							<div role="group" aria-label={externalLabel}>
-								<SectionHeader icon={Globe} label={externalLabel} />
+								<SectionHeader icon={Globe} label={externalHeader} />
 								{externalResults.length > 0 ? (
 									<ul className="flex flex-col">
 										{externalResults.map((result) =>
@@ -863,9 +866,9 @@ export function LibrarySearchDialog({
 }
 
 /**
- * A source section's header: Library or the External Source. Same look as the
- * kind headers inside the Library section; the larger gap between sections
- * sets them apart.
+ * A source section's header: Library or the External Source. It keeps its
+ * case, unlike the uppercase kind headers inside the Library section, so the
+ * two levels read apart.
  */
 function SectionHeader({
 	icon: Icon,
@@ -875,7 +878,7 @@ function SectionHeader({
 	label: string;
 }) {
 	return (
-		<p className="flex items-center gap-2 px-3 py-2 font-medium text-caption text-xs uppercase tracking-wider">
+		<p className="flex items-center gap-2 px-3 py-2 font-medium text-caption text-xs">
 			<Icon className="size-3.5" />
 			{label}
 		</p>

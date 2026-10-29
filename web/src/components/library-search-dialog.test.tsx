@@ -677,7 +677,9 @@ describe("LibrarySearchDialog", () => {
 			const library = await screen.findByRole("group", { name: "Library" });
 			const external = await screen.findByRole("group", { name: "SoundCloud" });
 			const libraryHeader = within(library).getByText("Library");
-			const externalHeader = within(external).getByText("SoundCloud");
+			const externalHeader = within(external).getByText(
+				"External – SoundCloud",
+			);
 			expect(libraryHeader.className).toBe(externalHeader.className);
 			expect(libraryHeader.querySelector("svg.lucide-library")).toBeTruthy();
 			expect(externalHeader.querySelector("svg.lucide-globe")).toBeTruthy();
