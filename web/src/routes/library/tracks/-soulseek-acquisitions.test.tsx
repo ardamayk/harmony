@@ -216,6 +216,45 @@ describe("Soulseek Acquisitions in Import Music", () => {
 		expect(screen.queryByText("Gone")).toBeNull();
 	});
 
+	it("dismisses a failed acquisition without confirmation", async () => {
+		const failed = acquisition({
+			state: "failed",
+			failureReason: "No source of this version is left.",
+		});
+		mocks.listSoulseekAcquisitions
+			.mockResolvedValueOnce({ items: [failed] })
+			.mockResolvedValue({ items: [] });
+		renderImportDialog();
+
+		fireEvent.click(
+			await screen.findByRole("button", {
+				name: "Dismiss Daft Punk Discovery",
+			}),
+		);
+
+		expect(window.confirm).not.toHaveBeenCalled();
+		await waitFor(() =>
+			expect(mocks.cancelSoulseekAcquisition).toHaveBeenCalledWith("acq-1"),
+		);
+		await waitFor(() => expect(screen.queryByText("From Soulseek")).toBeNull());
+	});
+
+	it("removes a dismissed acquisition before the list refreshes", async () => {
+		const failed = acquisition({ state: "failed" });
+		mocks.listSoulseekAcquisitions
+			.mockResolvedValueOnce({ items: [failed] })
+			.mockReturnValue(new Promise(() => {}));
+		renderImportDialog();
+
+		fireEvent.click(
+			await screen.findByRole("button", {
+				name: "Dismiss Daft Punk Discovery",
+			}),
+		);
+
+		await waitFor(() => expect(screen.queryByText("From Soulseek")).toBeNull());
+	});
+
 	it("cancels a download after confirmation", async () => {
 		mocks.listSoulseekAcquisitions
 			.mockResolvedValueOnce({ items: [acquisition()] })
@@ -255,7 +294,7 @@ describe("Soulseek Acquisitions in Import Music", () => {
 		mocks.cancelSoulseekAcquisition.mockRejectedValue(
 			new ApiError(409, {
 				error: "conflict",
-				code: "import_batch_committing",
+				code: "acquisition_state_conflict",
 				message: "committing",
 			}),
 		);

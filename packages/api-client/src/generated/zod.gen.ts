@@ -1516,7 +1516,7 @@ export const zListSoulseekAcquisitionsResponse = zSoulseekAcquisitionList;
 export const zStartSoulseekAcquisitionResponse = zSoulseekAcquisition;
 
 /**
- * Acquisition cancelled and its files removed
+ * Acquisition cancelled or dismissed and its downloads removed
  */
 export const zCancelSoulseekAcquisitionResponse = z.void();
 

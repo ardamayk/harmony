@@ -3,6 +3,7 @@ import {
 	SOULSEEK_ACQUISITION_CAPABILITY,
 	type SoulseekAcquisition,
 	type SoulseekAcquisitionFile,
+	type SoulseekAcquisitionList,
 } from "@repo/api-client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "#/components/ui/button";
@@ -89,15 +90,28 @@ function AcquisitionRow({
 	onReview: (acquisitionId: string, batchId: string) => void;
 }) {
 	const queryClient = useQueryClient();
+	const { acquisitionId, batchId, state } = acquisition;
+	// The same DELETE cancels an active acquisition and dismisses a finished one.
 	const cancel = useMutation({
-		mutationFn: () =>
-			apiClient.cancelSoulseekAcquisition(acquisition.acquisitionId),
+		mutationFn: () => apiClient.cancelSoulseekAcquisition(acquisitionId),
+		onSuccess: () => {
+			if (state !== "failed") return;
+			queryClient.setQueryData<SoulseekAcquisitionList>(
+				soulseekQueryKeys.acquisitions,
+				(list) =>
+					list && {
+						...list,
+						items: list.items.filter(
+							(item) => item.acquisitionId !== acquisitionId,
+						),
+					},
+			);
+		},
 		onSettled: () =>
 			queryClient.invalidateQueries({
 				queryKey: soulseekQueryKeys.acquisitions,
 			}),
 	});
-	const { batchId, state } = acquisition;
 	const canCancel =
 		state === "downloading" || state === "importing" || state === "review";
 	return (
@@ -126,7 +140,7 @@ function AcquisitionRow({
 							variant="outline"
 							size="sm"
 							disabled={isBusy}
-							onClick={() => onReview(acquisition.acquisitionId, batchId)}
+							onClick={() => onReview(acquisitionId, batchId)}
 						>
 							Review import
 						</Button>
@@ -145,6 +159,18 @@ function AcquisitionRow({
 							Cancel
 						</Button>
 					) : null}
+					{state === "failed" ? (
+						<Button
+							type="button"
+							variant="ghost"
+							size="sm"
+							aria-label={`Dismiss ${acquisition.query}`}
+							disabled={cancel.isPending}
+							onClick={() => cancel.mutate()}
+						>
+							Dismiss
+						</Button>
+					) : null}
 				</div>
 			</div>
 			{state === "downloading" ? (
@@ -156,7 +182,7 @@ function AcquisitionRow({
 			) : null}
 			{cancel.error ? (
 				<p role="alert" className="mt-2 text-destructive text-sm">
-					{cancelErrorMessage(cancel.error)}
+					{cancelErrorMessage(cancel.error, state === "failed")}
 				</p>
 			) : null}
 		</li>
@@ -245,8 +271,10 @@ function FileProgress({ file }: { file: SoulseekAcquisitionFile }) {
 	);
 }
 
-function cancelErrorMessage(error: unknown): string {
+function cancelErrorMessage(error: unknown, isDismiss: boolean): string {
 	if (error instanceof ApiError && error.status === 409)
-		return "This import is being committed and can no longer be cancelled.";
+		return isDismiss
+			? "This import is being committed and cannot be dismissed yet."
+			: "This import is being committed and can no longer be cancelled.";
 	return soulseekErrorMessage(error);
 }

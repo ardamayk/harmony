@@ -1166,8 +1166,8 @@ export interface paths {
         put?: never;
         post?: never;
         /**
-         * Cancel an acquisition and remove its downloads and staging
-         * @description Stops slskd's transfers, deletes partial and finished downloads and cancels the acquisition's Import Batch. Unavailable while the batch is committing, as for any Import Batch.
+         * Cancel an active acquisition or dismiss a finished one
+         * @description An active acquisition (downloading, importing or review) is cancelled: slskd's transfers stop, partial and finished downloads are deleted, its Import Batch is cancelled and the acquisition stays listed as cancelled. A finished one (failed, completed or cancelled) is dismissed: its leftover downloads and unconfirmed Import Batch are removed and the acquisition is deleted, so reading it afterwards answers 404. Tracks a completed acquisition imported stay in the library. Unavailable while the batch is committing, as for any Import Batch.
          */
         delete: operations["cancelSoulseekAcquisition"];
         options?: never;
@@ -2475,6 +2475,15 @@ export interface components {
         };
         /** @description Soulseek Acquisition is not configured (code soulseek_acquisition_disabled), or there is no such acquisition (code acquisition_not_found). */
         SoulseekAcquisitionNotFound: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description The acquisition's Import Batch is being committed, so it can be neither cancelled nor dismissed (code acquisition_state_conflict). */
+        SoulseekAcquisitionStateConflict: {
             headers: {
                 [name: string]: unknown;
             };
@@ -4731,7 +4740,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Acquisition cancelled and its files removed */
+            /** @description Acquisition cancelled or dismissed and its downloads removed */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -4739,7 +4748,7 @@ export interface operations {
                 content?: never;
             };
             404: components["responses"]["SoulseekAcquisitionNotFound"];
-            409: components["responses"]["Conflict"];
+            409: components["responses"]["SoulseekAcquisitionStateConflict"];
         };
     };
 }

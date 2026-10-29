@@ -89,7 +89,7 @@ const versions = [
 	},
 ];
 
-type AcquisitionState = "downloading" | "review" | "cancelled";
+type AcquisitionState = "downloading" | "review" | "failed" | "cancelled";
 
 function acquisition(state: AcquisitionState) {
 	return {
@@ -100,6 +100,9 @@ function acquisition(state: AcquisitionState) {
 		quality: flacQuality,
 		state,
 		...(state === "review" ? { batchId: BATCH_ID } : {}),
+		...(state === "failed"
+			? { failureReason: "No source of this version is left." }
+			: {}),
 		currentSource: {
 			sourceId: "source-a",
 			username: "alice",
@@ -110,11 +113,13 @@ function acquisition(state: AcquisitionState) {
 		files: [
 			{
 				filename: "01 One More Time.flac",
-				state: state === "downloading" ? "downloading" : "staged",
+				state: state === "downloading" || state === "failed" ? state : "staged",
 				bytesTransferred:
 					state === "downloading" ? 20 * 1024 * 1024 : 40 * 1024 * 1024,
 				totalBytes: 40 * 1024 * 1024,
-				...(state === "downloading" ? {} : { jobId: JOB_ID }),
+				...(state === "downloading" || state === "failed"
+					? {}
+					: { jobId: JOB_ID }),
 			},
 		],
 		createdAt: "2026-10-29T10:00:00Z",
@@ -169,15 +174,19 @@ const reviewBatch = {
 };
 
 type Stub = {
-	state: AcquisitionState;
+	/** "dismissed": the server deleted the finished acquisition. */
+	state: AcquisitionState | "dismissed";
 	acquisitionStarts: unknown[];
 	cancels: number;
 	batchCancels: number;
 };
 
-async function stubSoulseek(page: Page): Promise<Stub> {
+async function stubSoulseek(
+	page: Page,
+	initialState: AcquisitionState = "downloading",
+): Promise<Stub> {
 	const stub: Stub = {
-		state: "downloading",
+		state: initialState,
 		acquisitionStarts: [],
 		cancels: 0,
 		batchCancels: 0,
@@ -227,11 +236,13 @@ async function stubSoulseek(page: Page): Promise<Stub> {
 	await page.route("**/api/v1/soulseek/acquisitions", async (route) => {
 		if (route.request().method() === "POST") {
 			stub.acquisitionStarts.push(route.request().postDataJSON());
-			await route.fulfill({ status: 201, json: acquisition(stub.state) });
+			await route.fulfill({ status: 201, json: acquisition("downloading") });
 			return;
 		}
 		await route.fulfill({
-			json: { items: [acquisition(stub.state)] },
+			json: {
+				items: stub.state === "dismissed" ? [] : [acquisition(stub.state)],
+			},
 		});
 	});
 	await page.route(
@@ -239,8 +250,23 @@ async function stubSoulseek(page: Page): Promise<Stub> {
 		async (route) => {
 			if (route.request().method() === "DELETE") {
 				stub.cancels += 1;
-				stub.state = "cancelled";
+				// An active acquisition is cancelled; a finished one is deleted.
+				stub.state =
+					stub.state === "failed" || stub.state === "cancelled"
+						? "dismissed"
+						: "cancelled";
 				await route.fulfill({ status: 204 });
+				return;
+			}
+			if (stub.state === "dismissed") {
+				await route.fulfill({
+					status: 404,
+					json: {
+						error: "not found",
+						code: "acquisition_not_found",
+						message: "acquisition not found",
+					},
+				});
 				return;
 			}
 			await route.fulfill({ json: acquisition(stub.state) });
@@ -350,6 +376,36 @@ test("installs an External Track from Soulseek and reviews it in Import Music", 
 	});
 	await importDialog.getByRole("button", { name: `Cancel ${QUERY}` }).click();
 	await expect(importDialog.getByText("From Soulseek")).toBeHidden();
+	expect(stub.cancels).toBe(1);
+	expect(stub.batchCancels).toBe(0);
+});
+
+test("dismisses a failed Soulseek Acquisition from Import Music", async ({
+	page,
+}) => {
+	const stub = await stubSoulseek(page, "failed");
+	await page.goto("/library/tracks");
+	await expect(page.getByRole("heading", { name: "Tracks" })).toBeVisible({
+		timeout: 15_000,
+	});
+
+	await page.getByRole("button", { name: "Import Music" }).click();
+	const importDialog = page.getByRole("dialog", { name: "Import Music" });
+	const row = importDialog.getByRole("listitem", { name: QUERY });
+	await expect(row).toContainText("Failed: No source of this version is left.");
+	await expect(
+		row.getByRole("button", { name: `Cancel ${QUERY}` }),
+	).toHaveCount(0);
+
+	// Dismissing a failure touches no Tracks, so it does not ask first.
+	let dialogs = 0;
+	page.on("dialog", (dialog) => {
+		dialogs += 1;
+		void dialog.dismiss();
+	});
+	await row.getByRole("button", { name: `Dismiss ${QUERY}` }).click();
+	await expect(importDialog.getByText("From Soulseek")).toBeHidden();
+	expect(dialogs).toBe(0);
 	expect(stub.cancels).toBe(1);
 	expect(stub.batchCancels).toBe(0);
 });

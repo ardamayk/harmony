@@ -2090,20 +2090,26 @@ paths:
     delete:
       tags: [soulseek-acquisition]
       operationId: cancelSoulseekAcquisition
-      summary: Cancel an acquisition and remove its downloads and staging
+      summary: Cancel an active acquisition or dismiss a finished one
       description: >-
-        Stops slskd's transfers, deletes partial and finished downloads and
-        cancels the acquisition's Import Batch. Unavailable while the batch
-        is committing, as for any Import Batch.
+        An active acquisition (downloading, importing or review) is
+        cancelled: slskd's transfers stop, partial and finished downloads are
+        deleted, its Import Batch is cancelled and the acquisition stays
+        listed as cancelled. A finished one (failed, completed or cancelled)
+        is dismissed: its leftover downloads and unconfirmed Import Batch are
+        removed and the acquisition is deleted, so reading it afterwards
+        answers 404. Tracks a completed acquisition imported stay in the
+        library. Unavailable while the batch is committing, as for any
+        Import Batch.
       parameters:
         - $ref: "#/components/parameters/acquisitionId"
       responses:
         "204":
-          description: Acquisition cancelled and its files removed
+          description: Acquisition cancelled or dismissed and its downloads removed
         "404":
           $ref: "#/components/responses/SoulseekAcquisitionNotFound"
         "409":
-          $ref: "#/components/responses/Conflict"
+          $ref: "#/components/responses/SoulseekAcquisitionStateConflict"
 components:
   securitySchemes:
     bearerAuth:
@@ -2238,6 +2244,14 @@ components:
         Soulseek Acquisition is not configured (code
         soulseek_acquisition_disabled), or there is no such acquisition (code
         acquisition_not_found).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    SoulseekAcquisitionStateConflict:
+      description: >-
+        The acquisition's Import Batch is being committed, so it can be
+        neither cancelled nor dismissed (code acquisition_state_conflict).
       content:
         application/json:
           schema:
