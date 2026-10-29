@@ -37,7 +37,7 @@ For **Figma**, **Google Stitch**, or visual design work, start here:
 mise install
 pnpm install
 mise run generate   # OpenAPI client and sqlx query data
-mise run dev    # Music Server :8090 + Vite :3000
+mise run dev:web    # Music Server :8090 + Vite :3000
 ```
 
 Open http://localhost:3000/library/tracks and use **Import Music** to upload files or a local folder. The Music Server validates every file, shows an Import Preview, and stores accepted files in Managed Storage only after you confirm.
@@ -108,7 +108,7 @@ The Music Server reads its settings from environment variables only; it does not
 
 Where to set them:
 
-- **Development** (`mise run dev`, `mise run desktop:dev`): put them in `mise.local.toml`, which is git-ignored and which mise applies to every task. Keep keys such as `LASTFM_API_KEY` there, never in a tracked file:
+- **Development** (`mise run dev`, `dev:web`, `server:dev`, `desktop:dev`): put them in `mise.local.toml`, which is git-ignored and which mise applies to every task. Keep keys such as `LASTFM_API_KEY` there, never in a tracked file:
 
   ```toml
   [env]
@@ -131,20 +131,30 @@ docker compose up -d --build
 
 Open http://localhost:8090. The container uses the host's network and binds to `127.0.0.1:8090`, because the server accepts only loopback addresses. The database and imported music live in the `app-data` volume (`/data`); add any variable from [Configuration](#configuration) under `environment:`. The image has no yt-dlp by default; to use the External Source, set the `WITH_YT_DLP` build argument to `true` (in Compose: `build.args`) and rebuild, see [server/README.md](server/README.md#external-source-yt-dlp). Docker Compose runs only the Music Server; the Desktop Client runs on the host and connects to it.
 
-## Build
+## Build and run
 
 ```bash
-mise run build
+mise run build    # Music Server (bin/server) and Desktop Client
+mise run start    # both, as built
 ```
 
-Mise is the canonical command interface. Use `mise run web:build`, `mise run server:build`, or `mise run desktop:build` for one artifact. `mise tasks` lists everything.
+Mise is the canonical command interface; `mise tasks` lists everything.
+
+| | dev | build | start |
+|---|---|---|---|
+| Music Server | `server:dev` | `server:build` | `server:start` |
+| Desktop Client | `desktop:dev` | `desktop:build` | `desktop:start` |
+| both | `dev` | `build` | `start` |
+| Music Server + Web Client (Vite :3000, browser) | `dev:web` | | |
+
+The Music Server tasks run it from `server/`, so development and the built binary share `server/data`. `desktop:dev` and `desktop:start` connect to a Music Server that is already running; `dev`, `dev:web` and `start` start their own and stop it when the client exits (`EARTHLY_REUSE_MUSIC_SERVER=1` attaches to one already running instead). In WSL the Desktop Client is the Windows one, elsewhere the Linux one; `EARTHLY_DESKTOP_TARGET=linux` or `windows` overrides that ([desktop/README.md](desktop/README.md#windows)). `mise run web:build` builds the Web Client alone.
 
 ## Linux Desktop Client
 
 Run the Music Server and the Electron Desktop Client together in development mode (Vite HMR, debug Rust core):
 
 ```bash
-mise run desktop:dev
+mise run dev
 ```
 
 Build and start the release Desktop Client:

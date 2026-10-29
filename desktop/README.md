@@ -11,13 +11,13 @@ core/          Rust core, started as a child process: mpv playback, media proxy,
 
 The shell and the core speak line-delimited JSON-RPC over the core's stdin and stdout (`core/src/rpc.rs`, `src/main/core-process.ts`). The renderer sends the same commands it always has; the main process forwards those on the allowlist in `packages/desktop-bridge` to the core and answers window, picker and link commands itself. Closing the core's stdin makes it save the Playback Session and stop mpv, so quitting the shell (tray, Ctrl+C, session end) always goes through it.
 
-Run the Music Server and Desktop Client together (Vite HMR, debug core):
+Run the Music Server and Desktop Client together (Vite HMR, debug core); `mise run desktop:dev` runs the client alone against a Music Server that is already running:
 
 ```bash
-mise run desktop:dev
+mise run dev
 ```
 
-Build and run the release Desktop Client with the Music Server:
+Build and run the release Desktop Client with the Music Server (`mise run desktop:start` starts the client alone):
 
 ```bash
 mise run build
@@ -67,14 +67,16 @@ resources/core/      earthly-audio-core.exe, mpv.exe and its DLLs
 
 Requirements: WSL with mingw-w64 (`sudo apt install mingw-w64`), the Rust target (`rustup target add x86_64-pc-windows-gnu`), and the repository's mise toolchain. The Music Server runs in WSL or elsewhere; the connection screen takes its loopback origin, such as WSL's forwarded `http://127.0.0.1:8090`.
 
+In WSL the `desktop:*` tasks, and `dev`, `build` and `start` with them, build and run this Windows client; elsewhere they use the Linux one. `EARTHLY_DESKTOP_TARGET=linux` picks the Linux client in WSL too; `windows` works only in WSL.
+
 ```bash
-mise run desktop:windows         # web/dist, shell, release core, pinned mpv; package and install
-mise run desktop:windows:start   # launch the installed client
-mise run desktop:windows:dev     # installed client with a fresh shell, debug core, and Vite HMR from WSL
-mise run desktop:windows:clean   # remove target/desktop-windows and the installed client
+mise run desktop:build   # web/dist, shell, release core, pinned mpv; package and install
+mise run desktop:start   # launch the installed client
+mise run desktop:dev     # installed client with a fresh shell, debug core, and Vite HMR from WSL
+mise run desktop:clean   # remove target/desktop-windows and the installed client
 ```
 
-`desktop:windows:dev` needs a previous `desktop:windows`. It replaces the shell bundle and the core inside the installed client and passes `EARTHLY_AUDIO_DEV_SERVER_URL` to it through `WSLENV`. Quit the client before rebuilding: Windows locks the files of a running program.
+`mise run dev` and `mise run start` also run the Music Server in WSL and stop it when the client exits. `desktop:dev` needs a previous `desktop:build`. It replaces the shell bundle and the core inside the installed client and passes `EARTHLY_AUDIO_DEV_SERVER_URL` to it through `WSLENV`. Quit the client before rebuilding: Windows locks the files of a running program.
 
 Installers are not built yet; an electron-builder NSIS target would come later.
 
@@ -83,6 +85,6 @@ Installers are not built yet; an electron-builder NSIS target would come later.
 The core reports panics, mpv process failures and each Playback Source load (source type and trigger, never its URL) to your own Sentry only when `SENTRY_DSN` is set; `SENTRY_ENVIRONMENT` and `SENTRY_TRACES_SAMPLE_RATE` work as for the Music Server ([server/README.md](../server/README.md#sentry-optional), [ADR 0033](../docs/adr/0033-opt-in-sentry-for-the-rust-programs.md)). The shell starts the core with its own environment, unfiltered:
 
 - **Linux:** set them where the client starts, for example in `mise.local.toml` for `mise run desktop:dev`.
-- **Windows:** set them as user environment variables for the installed client (`mise run desktop:windows:start` passes none from WSL). `mise run desktop:windows:dev` forwards those set in WSL through `WSLENV`.
+- **Windows:** set them as user environment variables for the installed client (`mise run desktop:start` passes none from WSL). `mise run desktop:dev` forwards those set in WSL through `WSLENV`.
 
 An invalid value leaves Sentry off and the core running; it says so on stderr.

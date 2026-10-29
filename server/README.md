@@ -3,13 +3,15 @@
 The Music Server, written in Rust (crate `earthly-music-server`; axum on tokio, sqlx over SQLite). It serves the HTTP contract in `packages/contracts/openapi.yaml`, applies the goose migrations in `migrations/` at startup, and embeds the built Web Client and docs (`static/`, filled by `mise run server:build`).
 
 ```bash
+mise run server:dev        # development server (cargo run) on :8090
 mise run server:build      # web + docs, then the release binary at bin/server
+mise run server:start      # the built bin/server on :8090
 mise run server:test       # unit tests and the contract tests (tests/contract.rs)
 mise run server:check      # rustfmt, clippy, sqlx offline query data
 mise run server:prepare    # regenerate .sqlx after changing a query or migration
 ```
 
-`cargo run -p earthly-music-server` runs it in development; `src/bin/repair-artist-credits.rs` is the Artist credit repair command (`docs/operations/repair-artist-credits.md`).
+`server:dev` and `server:start` run it from `server/`, so both use `./data` and `migrations/` here; `src/bin/repair-artist-credits.rs` is the Artist credit repair command (`docs/operations/repair-artist-credits.md`).
 
 ## Layout
 

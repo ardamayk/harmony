@@ -6,7 +6,7 @@ To run this application:
 
 ```bash
 pnpm install
-mise run web:dev
+mise run dev:web
 ```
 
 # Building For Production

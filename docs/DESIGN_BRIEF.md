@@ -286,7 +286,7 @@ Tasarımı mevcut koda map ederken:
 3. **Variants:** Theme light/dark; panel collapsed; empty / loading / error states
 4. **Auto-layout:** Album grid responsive (4→3→2 kolon); widget stack vertical gap 12px
 5. **İsimlendirme:** Frame’ler İngilizce (`Library/AlbumGrid`, `Global/PlayerBar`) — kod route’larıyla uyumlu
-6. Bu brief + canlı dev server (`mise run dev` → `http://localhost:3000/library`) birlikte kullanılabilir
+6. Bu brief + canlı dev server (`mise run dev:web` → `http://localhost:3000/library`) birlikte kullanılabilir
 
 ---
 
