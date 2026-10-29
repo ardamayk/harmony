@@ -326,7 +326,7 @@ fn quality_json(quality: &Quality) -> String {
         bitrate_kbps: quality.bitrate_kbps,
         variable_bitrate: quality.variable_bitrate,
     };
-    serde_json::to_string(&stored).expect("quality JSON")
+    crate::gojson::to_string(&stored)
 }
 
 fn parse_quality(json: &str) -> Result<Quality> {
@@ -373,7 +373,7 @@ fn sources_json(sources: &[AcquisitionSource]) -> String {
             artwork: stored_files(&source.artwork),
         })
         .collect();
-    serde_json::to_string(&stored).expect("sources JSON")
+    crate::gojson::to_string(&stored)
 }
 
 fn parse_sources(json: &str) -> Result<Vec<AcquisitionSource>> {
@@ -389,4 +389,29 @@ fn parse_sources(json: &str) -> Result<Vec<AcquisitionSource>> {
             artwork: remote_files(source.artwork),
         })
         .collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stored_sources_use_the_go_json_encoding_and_round_trip() {
+        let sources = vec![AcquisitionSource {
+            id: "abc".to_owned(),
+            username: "a&b".to_owned(),
+            folder: r"Music\<Live> & More".to_owned(),
+            files: vec![RemoteFile {
+                filename: r"Music\<Live> & More\01.flac".to_owned(),
+                size: 1,
+            }],
+            artwork: Vec::new(),
+        }];
+        let json = sources_json(&sources);
+        assert!(
+            json.contains("u003cLive") && !json.contains(['<', '>', '&']),
+            "{json}"
+        );
+        assert_eq!(parse_sources(&json).unwrap(), sources);
+    }
 }
