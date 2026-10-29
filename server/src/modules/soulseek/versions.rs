@@ -168,8 +168,8 @@ pub struct Source {
     /// Cover images in the same folder, for the Album Artwork.
     pub artwork: Vec<RemoteFile>,
     pub total_bytes: u64,
-    /// False for an Album source with fewer files than the largest source
-    /// of its version.
+    /// False for an Album source with fewer files than its version's
+    /// expected file count.
     pub complete: bool,
     pub has_free_upload_slot: bool,
     pub queue_length: u64,
@@ -181,12 +181,14 @@ pub struct Source {
 pub struct Version {
     pub key: String,
     pub quality: Quality,
-    /// The largest file count among the sources.
+    /// The expected file count: for an Album, the most common count among
+    /// sources with more than one file (see [expected_file_count]).
     pub file_count: usize,
     /// The size of the largest source.
     pub total_bytes: u64,
     pub complete_source_count: usize,
-    /// Complete first, then free upload slot, shorter queue, faster speed.
+    /// Complete first, then incomplete ones with more files, then free
+    /// upload slot, shorter queue, faster speed.
     pub sources: Vec<Source>,
 }
 
@@ -323,20 +325,56 @@ fn sources(scope: Scope, username: &str, user: &UserFiles<'_>) -> Vec<(Quality, 
         .collect()
 }
 
+/// The file count an Album source is expected to have: the most common
+/// count among the sources with more than one file, the larger on a tie, so
+/// that one source with bonus tracks does not leave every other source
+/// incomplete. Without such sources, the largest count.
+fn expected_file_count(sources: &[Source]) -> usize {
+    let mut counts: BTreeMap<usize, usize> = BTreeMap::new();
+    for source in sources.iter().filter(|source| source.files.len() > 1) {
+        *counts.entry(source.files.len()).or_default() += 1;
+    }
+    counts
+        .into_iter()
+        .max_by_key(|&(count, sources)| (sources, count))
+        .map(|(count, _)| count)
+        .unwrap_or_else(|| {
+            sources
+                .iter()
+                .map(|source| source.files.len())
+                .max()
+                .unwrap_or_default()
+        })
+}
+
 fn version(scope: Scope, key: String, quality: Quality, mut sources: Vec<Source>) -> Version {
-    let (file_count, total_bytes) = sources
+    let (largest_count, total_bytes) = sources
         .iter()
         .map(|source| (source.files.len(), source.total_bytes))
         .max()
         .unwrap_or_default();
+    let file_count = match scope {
+        Scope::Album => expected_file_count(&sources),
+        Scope::Track => largest_count,
+    };
     if scope == Scope::Album {
         for source in &mut sources {
-            source.complete = source.files.len() == file_count;
+            source.complete = source.files.len() >= file_count;
         }
     }
+    // Among incomplete sources, the one with more files comes first;
+    // complete sources keep one group however many files they hold.
+    let missing_rank = |source: &Source| {
+        Reverse(if source.complete {
+            0
+        } else {
+            source.files.len()
+        })
+    };
     sources.sort_by(|a, b| {
         (
             Reverse(a.complete),
+            missing_rank(a),
             Reverse(a.has_free_upload_slot),
             a.queue_length,
             Reverse(a.upload_speed),
@@ -346,6 +384,7 @@ fn version(scope: Scope, key: String, quality: Quality, mut sources: Vec<Source>
         )
             .cmp(&(
                 Reverse(b.complete),
+                missing_rank(b),
                 Reverse(b.has_free_upload_slot),
                 b.queue_length,
                 Reverse(b.upload_speed),
@@ -646,6 +685,84 @@ mod tests {
                 ("busy", true),
                 ("partial", false),
             ]
+        );
+    }
+
+    /// One FLAC Album source per `(username, file count, upload speed)`.
+    fn album_sources(sources: &[(&str, usize, u64)]) -> Vec<SearchResponse> {
+        let responses: Vec<serde_json::Value> = sources
+            .iter()
+            .map(|(username, count, speed)| {
+                let files: Vec<serde_json::Value> = (1..=*count)
+                    .map(|n| {
+                        serde_json::json!({
+                            "filename": format!("{username}\\Album\\{n:02}.flac"),
+                            "size": 1,
+                            "bitDepth": 16,
+                            "sampleRate": 44100,
+                        })
+                    })
+                    .collect();
+                serde_json::json!({
+                    "username": username,
+                    "hasFreeUploadSlot": true,
+                    "queueLength": 0,
+                    "uploadSpeed": speed,
+                    "files": files,
+                })
+            })
+            .collect();
+        serde_json::from_value(serde_json::Value::Array(responses)).expect("fixture")
+    }
+
+    #[test]
+    fn the_most_common_file_count_is_the_expected_one() {
+        let versions = group(
+            Scope::Album,
+            &album_sources(&[
+                ("a", 22, 30),
+                ("b", 22, 20),
+                ("c", 22, 10),
+                ("bonus", 25, 5),
+                ("single", 1, 9999),
+                ("half", 10, 1),
+            ]),
+        );
+        let version = &versions[0];
+        assert_eq!((version.file_count, version.complete_source_count), (22, 4));
+        let order: Vec<(&str, bool)> = version
+            .sources
+            .iter()
+            .map(|source| (source.username.as_str(), source.complete))
+            .collect();
+        assert_eq!(
+            order,
+            [
+                ("a", true),
+                ("b", true),
+                ("c", true),
+                ("bonus", true),
+                ("half", false),
+                ("single", false),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_tied_file_count_expects_the_larger_and_single_files_do_not_count() {
+        let tied = group(
+            Scope::Album,
+            &album_sources(&[("a", 10, 1), ("b", 10, 1), ("c", 12, 1), ("d", 12, 1)]),
+        );
+        assert_eq!((tied[0].file_count, tied[0].complete_source_count), (12, 2));
+
+        let singles = group(
+            Scope::Album,
+            &album_sources(&[("a", 1, 1), ("b", 1, 1), ("c", 1, 1), ("d", 5, 1)]),
+        );
+        assert_eq!(
+            (singles[0].file_count, singles[0].complete_source_count),
+            (5, 1)
         );
     }
 

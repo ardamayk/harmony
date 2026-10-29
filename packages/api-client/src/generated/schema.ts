@@ -1122,7 +1122,7 @@ export interface paths {
         };
         /**
          * Read a Soulseek search's state and its Acquisition Versions so far
-         * @description Clients poll this while state is searching. Versions and their sources are ordered for display only (versions by complete-source count, then source count; sources complete first, then free upload slot, then queue length, then speed); no version is ranked by quality.
+         * @description Clients poll this while state is searching. Versions and their sources are ordered for display only (versions by complete-source count, then source count; sources complete first, then incomplete ones with more files, then free upload slot, then queue length, then speed); no version is ranked by quality.
          */
         get: operations["getSoulseekSearch"];
         put?: never;
@@ -1908,7 +1908,7 @@ export interface components {
             /** @description Opaque key of the format and quality within this search. */
             versionKey: string;
             quality: components["schemas"]["AcquisitionQuality"];
-            /** @description The largest file count among the version's sources. */
+            /** @description The expected file count of the version. For album scope, the most common file count among its sources with more than one file (the larger on a tie); for track scope, 1. */
             fileCount: number;
             /**
              * Format: int64
@@ -1929,7 +1929,7 @@ export interface components {
             fileCount: number;
             /** Format: int64 */
             totalBytes: number;
-            /** @description False when the source has fewer files than the largest source of its version, for example 12 of 19; always true for track scope. */
+            /** @description False when the source has fewer files than its version's expected fileCount, for example 12 of 19; a source with more files is complete. Always true for track scope. */
             complete: boolean;
             hasFreeUploadSlot: boolean;
             queueLength: number;

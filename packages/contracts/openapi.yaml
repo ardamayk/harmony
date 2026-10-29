@@ -2007,8 +2007,9 @@ paths:
       description: >-
         Clients poll this while state is searching. Versions and their
         sources are ordered for display only (versions by complete-source
-        count, then source count; sources complete first, then free upload
-        slot, then queue length, then speed); no version is ranked by
+        count, then source count; sources complete first, then incomplete
+        ones with more files, then free upload slot, then queue length, then
+        speed); no version is ranked by
         quality.
       parameters:
         - $ref: "#/components/parameters/searchId"
@@ -3844,7 +3845,10 @@ components:
         fileCount:
           type: integer
           minimum: 1
-          description: The largest file count among the version's sources.
+          description: >-
+            The expected file count of the version. For album scope, the most
+            common file count among its sources with more than one file (the
+            larger on a tie); for track scope, 1.
         totalBytes:
           type: integer
           format: int64
@@ -3893,8 +3897,9 @@ components:
         complete:
           type: boolean
           description: >-
-            False when the source has fewer files than the largest source of
-            its version, for example 12 of 19; always true for track scope.
+            False when the source has fewer files than its version's expected
+            fileCount, for example 12 of 19; a source with more files is
+            complete. Always true for track scope.
         hasFreeUploadSlot:
           type: boolean
         queueLength:
