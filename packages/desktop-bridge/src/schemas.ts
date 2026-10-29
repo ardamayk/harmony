@@ -10,6 +10,8 @@ import type { DesktopCommand, WindowAction } from "./index";
 const noArgs = z.strictObject({}).optional();
 
 const id = z.string();
+/** A `crypto.randomUUID()` the renderer generates per cancellable request. */
+const requestId = z.uuid();
 const finite = z.number();
 const nonNegativeInteger = z.int().nonnegative();
 
@@ -19,7 +21,7 @@ const nonNegativeInteger = z.int().nonnegative();
  * kept as the renderer sent it.
  */
 const playbackSource = z.looseObject({
-	type: z.enum(["track", "radio-station", "catalog-preview"]),
+	type: z.enum(["track", "radio-station", "catalog-preview", "external-track"]),
 	playbackUrl: z.string(),
 });
 
@@ -49,7 +51,10 @@ export const DESKTOP_COMMAND_ARGS = {
 			headers: z.record(z.string(), z.string()).optional(),
 			body: bytes.nullable(),
 		}),
+		// Present when the renderer may cancel the request (it has a signal).
+		requestId: requestId.optional(),
 	}),
+	desktop_cancel_http_request: z.strictObject({ requestId }),
 	desktop_upload_import_file: z.strictObject({
 		selectionId: id,
 		uploadId: id,

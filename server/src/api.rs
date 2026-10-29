@@ -24,7 +24,11 @@ const SERVER_CAPABILITIES: &[&str] = &[
 /// the managed file on first request.
 pub const TRACK_WAVEFORM_CAPABILITY: &str = "track-waveform.v1";
 
-pub fn server_capabilities(report: &dependencies::Report) -> Vec<String> {
+/// Advertised only when the operator configured `EXTERNAL_SOURCE_SEARCH`
+/// (ADR 0032). A missing yt-dlp shows as its Server Dependency instead.
+pub const EXTERNAL_SOURCE_CAPABILITY: &str = "external-source.v1";
+
+pub fn server_capabilities(report: &dependencies::Report, external_source: bool) -> Vec<String> {
     let mut capabilities: Vec<String> = SERVER_CAPABILITIES
         .iter()
         .map(|&capability| capability.to_owned())
@@ -32,23 +36,45 @@ pub fn server_capabilities(report: &dependencies::Report) -> Vec<String> {
     if report.has(dependencies::FFMPEG) {
         capabilities.push(TRACK_WAVEFORM_CAPABILITY.to_owned());
     }
+    if external_source {
+        capabilities.push(EXTERNAL_SOURCE_CAPABILITY.to_owned());
+    }
     capabilities
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct HealthResponse {
     status: &'static str,
     version: String,
     capabilities: Vec<String>,
     dependencies: Vec<Dependency>,
+    /// Present only with `external-source.v1`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    external_source: Option<ExternalSourceInfo>,
+}
+
+/// What the clients show of the External Source (ADR 0032).
+#[derive(Serialize)]
+pub struct ExternalSourceInfo {
+    name: String,
 }
 
 pub async fn get_health(State(state): State<AppState>) -> Json<HealthResponse> {
+    let external_source_enabled = state.external_source.is_enabled();
     Json(HealthResponse {
         status: "ok",
         version: state.config.version.clone(),
-        capabilities: server_capabilities(&state.dependencies),
+        capabilities: server_capabilities(&state.dependencies, external_source_enabled),
         dependencies: state.dependencies.0.clone(),
+        external_source: state
+            .config
+            .external_source
+            .as_ref()
+            .filter(|_| external_source_enabled)
+            .map(|source| ExternalSourceInfo {
+                name: source.name.clone(),
+            }),
     })
 }
 

@@ -23,3 +23,63 @@ testdata/               audio fixtures shared with the Web E2E and Desktop impor
 ```
 
 `tests/search_text_parity.rs` recomputes every Library Search text a database holds (`EARTHLY_PARITY_DB=<copy> cargo test -p earthly-music-server --test search_text_parity -- --ignored`).
+
+## External Source (yt-dlp)
+
+The External Source is an optional search of one site through the operator's own [yt-dlp](https://github.com/yt-dlp/yt-dlp); its results play in full through the server and are never stored ([ADR 0032](../docs/adr/0032-external-source-through-an-operator-installed-yt-dlp.md)). It is off by default. The project does not ship yt-dlp: you install it and keep it current.
+
+| Variable | Meaning |
+| --- | --- |
+| `EXTERNAL_SOURCE_SEARCH` | A yt-dlp search prefix, for example `scsearch` (SoundCloud). Unset, the feature is off and the server never runs yt-dlp. |
+| `YT_DLP` | The yt-dlp binary, when it is not on `PATH`. |
+| `EXTERNAL_SOURCE_EXTRACTOR_ARGS` | yt-dlp extractor arguments, passed as `--extractor-args`; separate several with spaces. Unset, none. |
+| `EXTERNAL_SOURCE_NAME` | The site's name in the clients, such as `Internet Archive` (1 to 40 printable characters). Unset, a known prefix names it (`ytsearch` YouTube, `scsearch` SoundCloud, `bilisearch` BiliBili, `nicosearch` Niconico, `gvsearch` Google Video, `yvsearch` Yahoo Video, `rkfnsearch` Rokfin), else `External`. |
+
+For example, with `EXTERNAL_SOURCE_SEARCH=ytsearch`, `EXTERNAL_SOURCE_EXTRACTOR_ARGS=youtube:skip=hls,dash` skips YouTube's HLS and DASH manifests the server does not use, so playback starts about 0.3 s sooner. Do not set `player_skip=webpage`: YouTube then asks to sign in to confirm you are not a bot.
+
+You are responsible for what the source is used for and for the site's terms. Choose a source whose content you may play.
+
+### Installing yt-dlp on a host
+
+Install yt-dlp from PyPI with [uv](https://docs.astral.sh/uv/), so it gets its own environment and is easy to update:
+
+```bash
+uv tool install yt-dlp     # installs ~/.local/bin/yt-dlp
+uv tool upgrade yt-dlp     # when a site changes and searches or playback start failing
+```
+
+Put `~/.local/bin` on the server's `PATH`, or set `YT_DLP=$HOME/.local/bin/yt-dlp`. Sites change often, so keep yt-dlp current: an old release can fail on a site that a new one handles (for example, YouTube refusing its stream URLs). The installs yt-dlp itself documents (`pipx`, `pip`, the distribution's package) work the same way. Keep yt-dlp on the Linux filesystem: under WSL, a copy on a Windows drive (`/mnt/c`) starts about a second slower on every search and playback.
+
+### Docker
+
+`server/Dockerfile` builds the Music Server image: the Web Client and docs, the release binary, ffmpeg (Opus and M4A inspection) and the migrations, which the server reads at startup. The build context is the repository root (`docker build -f server/Dockerfile .`, or `docker compose up -d --build` from the root).
+
+The image is built locally and has no yt-dlp by default. The `WITH_YT_DLP` build argument installs it from PyPI into your own image:
+
+```bash
+docker build -f server/Dockerfile --build-arg WITH_YT_DLP=true -t earthly-music-server .
+```
+
+Then set `EXTERNAL_SOURCE_SEARCH` at run time. To update yt-dlp, rebuild with `--no-cache`, or run `/opt/yt-dlp/bin/pip install -U yt-dlp` in the container.
+
+### Publishing an image
+
+An image pushed to a registry is a release of the project, so:
+
+- Build it with the default `WITH_YT_DLP=false`. A published image never contains yt-dlp, and there is no `with-yt-dlp` tag.
+- Keep secrets such as `LASTFM_API_KEY` out of the image; pass them at run time.
+- Tag it with the release version, not only `latest`.
+- Keep ffmpeg's license notices; the image redistributes Alpine's ffmpeg package.
+
+An operator who uses a published image and wants the External Source derives their own image:
+
+```dockerfile
+FROM <registry>/earthly-music-server:<version>
+RUN apk add --no-cache python3 \
+    && python3 -m venv /opt/yt-dlp \
+    && /opt/yt-dlp/bin/pip install --no-cache-dir yt-dlp \
+    && ln -s /opt/yt-dlp/bin/yt-dlp /usr/local/bin/yt-dlp
+ENV EXTERNAL_SOURCE_SEARCH=scsearch
+```
+
+Or they install yt-dlp into a mounted volume and point `YT_DLP` at it.

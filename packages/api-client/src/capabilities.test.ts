@@ -108,3 +108,23 @@ describe("track waveform capability", () => {
 		);
 	});
 });
+
+describe("external source capability", () => {
+	it("is gated on the exact advertised name", async () => {
+		const { EXTERNAL_SOURCE_CAPABILITY, hasServerCapability } =
+			await import("./capabilities");
+		expect(EXTERNAL_SOURCE_CAPABILITY).toBe("external-source.v1");
+		expect(
+			hasServerCapability(
+				["api.v1", "external-source.v1"],
+				EXTERNAL_SOURCE_CAPABILITY,
+			),
+		).toBe(true);
+		expect(
+			hasServerCapability(
+				["api.v1", "external-source.v2"],
+				EXTERNAL_SOURCE_CAPABILITY,
+			),
+		).toBe(false);
+	});
+});

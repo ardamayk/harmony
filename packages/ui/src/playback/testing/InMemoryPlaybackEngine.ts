@@ -51,10 +51,7 @@ export class InMemoryPlaybackEngine implements PlaybackEngine {
 			source: nextSource,
 			status: "playing",
 			currentTime: source ? 0 : this.state.currentTime,
-			duration:
-				nextSource.type === "track" && nextSource.track.durationMs > 0
-					? nextSource.track.durationMs / 1000
-					: 0,
+			duration: sourceDurationSeconds(nextSource),
 			error: null,
 		});
 	}
@@ -169,4 +166,14 @@ export class InMemoryPlaybackEngine implements PlaybackEngine {
 		this.state = { ...this.state, ...next };
 		for (const listener of this.listeners) listener(this.state);
 	}
+}
+
+function sourceDurationSeconds(source: PlaybackSource) {
+	const durationMs =
+		source.type === "track"
+			? source.track.durationMs
+			: source.type === "external-track"
+				? source.externalTrack.durationMs
+				: null;
+	return durationMs && durationMs > 0 ? durationMs / 1000 : 0;
 }

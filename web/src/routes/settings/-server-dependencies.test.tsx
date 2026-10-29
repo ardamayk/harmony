@@ -88,6 +88,38 @@ describe("ServerDependenciesSection", () => {
 		expect(screen.queryByText(/Recording Identification/)).toBeNull();
 	});
 
+	it("says who answers for the External Source only when it is offered", () => {
+		const { unmount } = render(
+			<ServerDependenciesSection health={health} desktopMpv={null} />,
+		);
+		expect(screen.queryByText(/External Source/)).toBeNull();
+		unmount();
+
+		render(
+			<ServerDependenciesSection
+				health={{
+					...health,
+					capabilities: ["api.v1", "external-source.v1"],
+					dependencies: [
+						...health.dependencies,
+						{
+							name: "yt-dlp",
+							required: false,
+							available: true,
+							version: "2026.10.26",
+						},
+					],
+				}}
+				desktopMpv={null}
+			/>,
+		);
+		expect(screen.getByText(/configured by the operator/).textContent).toMatch(
+			/responsible for the source and for following the site’s terms/,
+		);
+		const ytDlp = screen.getByRole("row", { name: /yt-dlp/ });
+		expect(ytDlp.textContent).toContain("Optional");
+	});
+
 	it("renders a loading state without health data", () => {
 		render(<ServerDependenciesSection health={undefined} desktopMpv={null} />);
 

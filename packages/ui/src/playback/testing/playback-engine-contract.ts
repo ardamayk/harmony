@@ -1,4 +1,9 @@
-import type { RadioSearchResult, RadioStation, Track } from "@repo/api-client";
+import type {
+	ExternalTrack,
+	RadioSearchResult,
+	RadioStation,
+	Track,
+} from "@repo/api-client";
 import { describe, expect, it } from "vite-plus/test";
 import type { PlaybackEngine } from "../PlaybackEngine";
 
@@ -35,6 +40,16 @@ const catalogResult: RadioSearchResult = {
 	name: "Catalog 1",
 	streamUrl: "https://example.com/preview",
 	tags: [],
+};
+
+const externalTrack: ExternalTrack = {
+	id: "external-1",
+	title: "External 1",
+	artistName: "Uploader",
+	durationMs: 90000,
+	webpageUrl: "https://example.com/track",
+	extractor: "Soundcloud",
+	hasArtwork: false,
 };
 
 export type PlaybackEngineContractDriver = {
@@ -95,6 +110,28 @@ export function playbackEngineContract(
 				source: catalogSource,
 				status: "playing",
 				duration: 0,
+			});
+			engine.destroy();
+		});
+
+		it("plays an External Track with its duration and seeks in it", async () => {
+			const { engine } = createDriver();
+			const externalSource = {
+				type: "external-track" as const,
+				externalTrack,
+				playbackUrl: "/api/v1/external/tracks/external-1/stream",
+				sourceUrl: "/api/v1/external/tracks/external-1/stream",
+			};
+
+			await engine.play(externalSource);
+			engine.seek(30);
+
+			expect(engine.getState()).toMatchObject({
+				source: externalSource,
+				status: "playing",
+				currentTime: 30,
+				duration: 90,
+				error: null,
 			});
 			engine.destroy();
 		});

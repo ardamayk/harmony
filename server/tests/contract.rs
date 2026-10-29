@@ -143,7 +143,12 @@ async fn advertises_only_documented_capabilities() {
     let documentation = contract["components"]["schemas"]["HealthResponse"]["properties"]["capabilities"]["description"]
         .as_str()
         .expect("capabilities description");
-    for capability in &advertised {
+    // Conditional capabilities are documented even when this server does
+    // not advertise them.
+    for capability in advertised.iter().copied().chain([
+        earthly_music_server::api::TRACK_WAVEFORM_CAPABILITY,
+        earthly_music_server::api::EXTERNAL_SOURCE_CAPABILITY,
+    ]) {
         assert!(
             documentation.contains(capability),
             "capability {capability:?} is not documented"

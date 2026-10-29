@@ -168,10 +168,7 @@ export class BrowserPlaybackEngine implements PlaybackEngine {
 				status: "paused",
 				currentTime: 0,
 				bufferedEnd: null,
-				duration:
-					source.type === "track" && source.track.durationMs > 0
-						? source.track.durationMs / 1000
-						: 0,
+				duration: sourceDurationSeconds(source),
 				error: null,
 			});
 			this.applyMediaSessionMetadata(source);
@@ -419,7 +416,12 @@ export class BrowserPlaybackEngine implements PlaybackEngine {
 			this.update({ status: "paused", stopAfterCurrent: false });
 			return;
 		}
-		if (this.state.repeatMode === "once" || this.state.repeatMode === "loop") {
+		// An External Track never repeats; the stored repeat mode stays for the
+		// next Track.
+		if (
+			this.state.source?.type !== "external-track" &&
+			(this.state.repeatMode === "once" || this.state.repeatMode === "loop")
+		) {
 			const repeatMode =
 				this.state.repeatMode === "once" ? "off" : this.state.repeatMode;
 			this.media.currentTime = 0;
@@ -638,6 +640,14 @@ function mediaMetadataFor(source: PlaybackSource): MediaMetadataFields {
 			artwork: source.artworkUrl ? [{ src: source.artworkUrl }] : [],
 		};
 	}
+	if (source.type === "external-track") {
+		return {
+			title: source.externalTrack.title,
+			artist: source.externalTrack.artistName ?? "",
+			album: "",
+			artwork: source.artworkUrl ? [{ src: source.artworkUrl }] : [],
+		};
+	}
 	const radio =
 		source.type === "radio-station" ? source.station : source.result;
 	return {
@@ -660,6 +670,18 @@ function createMediaMetadata(
 	} catch {
 		return null;
 	}
+}
+
+// Until the media element reports its own duration, the Track's or External
+// Track's known length keeps the seek bar usable; live radio has none.
+function sourceDurationSeconds(source: PlaybackSource) {
+	const durationMs =
+		source.type === "track"
+			? source.track.durationMs
+			: source.type === "external-track"
+				? source.externalTrack.durationMs
+				: null;
+	return durationMs && durationMs > 0 ? durationMs / 1000 : 0;
 }
 
 function isLiveSource(

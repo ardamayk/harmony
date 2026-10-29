@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { cn } from "../lib/utils";
 
 /** A failed image is asked for once more after this: a restarting Music Server is back by then. */
@@ -8,10 +8,13 @@ export function AlbumArt({
 	coverUrl,
 	title,
 	className,
+	fallback,
 }: {
 	coverUrl?: string | null;
 	title: string;
 	className?: string;
+	/** Shown instead of the title's initial when there is no image. */
+	fallback?: ReactNode;
 }) {
 	// Failures belong to one URL, so a new cover (the Player Bar's next
 	// track, a reused row) is tried afresh.
@@ -63,7 +66,7 @@ export function AlbumArt({
 			)}
 			aria-hidden
 		>
-			{title.trim().slice(0, 1) || "♪"}
+			{fallback ?? (title.trim().slice(0, 1) || "♪")}
 		</div>
 	);
 }

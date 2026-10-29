@@ -30,6 +30,15 @@ pub(crate) enum PlaybackSource {
         #[serde(flatten)]
         _extra: Map<String, Value>,
     },
+    #[serde(rename = "external-track")]
+    ExternalTrack {
+        #[serde(rename = "externalTrack")]
+        external_track: ExternalTrackSource,
+        #[serde(rename = "playbackUrl")]
+        playback_url: String,
+        #[serde(flatten)]
+        _extra: Map<String, Value>,
+    },
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -56,6 +65,15 @@ pub(crate) struct CatalogSource {
     _extra: Map<String, Value>,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ExternalTrackSource {
+    id: String,
+    duration_ms: Option<f64>,
+    #[serde(flatten)]
+    _extra: Map<String, Value>,
+}
+
 impl PlaybackSource {
     pub(crate) fn parse(source: &Value) -> Result<Self, String> {
         serde_json::from_value(source.clone())
@@ -66,19 +84,31 @@ impl PlaybackSource {
         let url = match self {
             Self::Track { playback_url, .. }
             | Self::RadioStation { playback_url, .. }
-            | Self::CatalogPreview { playback_url, .. } => playback_url,
+            | Self::CatalogPreview { playback_url, .. }
+            | Self::ExternalTrack { playback_url, .. } => playback_url,
         };
         (!url.is_empty())
             .then_some(url.as_str())
             .ok_or_else(|| "Playback Source URL is missing.".to_owned())
     }
 
+    /// The source's `type`, which names it in logs instead of its URL.
+    pub(crate) fn kind(&self) -> &'static str {
+        match self {
+            Self::Track { .. } => "track",
+            Self::RadioStation { .. } => "radio-station",
+            Self::CatalogPreview { .. } => "catalog-preview",
+            Self::ExternalTrack { .. } => "external-track",
+        }
+    }
+
     pub(crate) fn duration_seconds(&self) -> f64 {
-        let Self::Track { track, .. } = self else {
-            return 0.0;
+        let duration_ms = match self {
+            Self::Track { track, .. } => track.duration_ms,
+            Self::ExternalTrack { external_track, .. } => external_track.duration_ms,
+            Self::RadioStation { .. } | Self::CatalogPreview { .. } => return 0.0,
         };
-        track
-            .duration_ms
+        duration_ms
             .filter(|duration| duration.is_finite() && *duration > 0.0)
             .map_or(0.0, |duration| duration / 1000.0)
     }
@@ -92,6 +122,7 @@ impl PlaybackSource {
             } => queue_item_id.as_deref().unwrap_or(&track.id),
             Self::RadioStation { station, .. } => &station.id,
             Self::CatalogPreview { result, .. } => &result.station_uuid,
+            Self::ExternalTrack { external_track, .. } => &external_track.id,
         }
     }
 }

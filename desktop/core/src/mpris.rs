@@ -197,6 +197,39 @@ impl MprisTrack {
                     can_seek: true,
                 })
             }
+            "external-track" => {
+                let id = source
+                    .pointer("/externalTrack/id")
+                    .and_then(Value::as_str)?;
+                let title = source
+                    .pointer("/externalTrack/title")
+                    .and_then(Value::as_str)?;
+                let length_seconds = if duration_seconds > 0.0 {
+                    Some(duration_seconds)
+                } else {
+                    source
+                        .pointer("/externalTrack/durationMs")
+                        .and_then(Value::as_f64)
+                        .filter(|ms| *ms > 0.0)
+                        .map(|ms| ms / 1000.0)
+                };
+                Some(Self {
+                    track_id: track_object_path(&format!("external-{id}")),
+                    title: title.to_owned(),
+                    artist: source
+                        .pointer("/externalTrack/artistName")
+                        .and_then(Value::as_str)
+                        .map(str::to_owned),
+                    album: None,
+                    art_url: (source
+                        .pointer("/externalTrack/hasArtwork")
+                        .and_then(Value::as_bool)
+                        == Some(true))
+                    .then(|| format!("{art_base_url}/api/v1/external/tracks/{id}/artwork")),
+                    length_micros: length_seconds.map(seconds_to_micros),
+                    can_seek: true,
+                })
+            }
             "radio-station" | "catalog-preview" => {
                 let pointer = if source.get("type").and_then(Value::as_str) == Some("radio-station")
                 {
@@ -650,6 +683,52 @@ mod tests {
             Some("https://rp.example/icon.png")
         );
         assert!(!track.can_seek);
+    }
+
+    #[test]
+    fn external_tracks_are_seekable_with_title_artist_and_known_length() {
+        let mut state = PlaybackSessionState::default();
+        state.status = SessionStatus::Playing;
+        state.source = Some(json!({
+            "type": "external-track",
+            "externalTrack": {
+                "id": "eyJ1Ijoi.c2ln",
+                "title": "Around the World",
+                "artistName": "Daft Punk",
+                "durationMs": 427000,
+                "webpageUrl": "https://soundcloud.com/daftpunk/around-the-world",
+                "extractor": "Soundcloud",
+                "hasArtwork": false
+            },
+            "playbackUrl": "http://127.0.0.1:43129/token/api/v1/external/tracks/eyJ1Ijoi.c2ln/playlist.m3u8",
+            "sourceUrl": "http://music.example/api/v1/external/tracks/eyJ1Ijoi.c2ln/playlist.m3u8"
+        }));
+        let view = MprisView::from_state(&state, "http://x");
+        let track = view.track.expect("external track");
+        assert_eq!(track.track_id, track_object_path("external-eyJ1Ijoi.c2ln"));
+        assert_eq!(track.title, "Around the World");
+        assert_eq!(track.artist.as_deref(), Some("Daft Punk"));
+        assert!(track.album.is_none());
+        assert!(track.art_url.is_none());
+        assert_eq!(track.length_micros, Some(427_000_000));
+        assert!(track.can_seek);
+
+        state.source.as_mut().expect("source")["externalTrack"]["hasArtwork"] = Value::Bool(true);
+        let with_artwork = MprisView::from_state(&state, "http://127.0.0.1:43129/token")
+            .track
+            .expect("external track with artwork");
+        assert_eq!(
+            with_artwork.art_url.as_deref(),
+            Some("http://127.0.0.1:43129/token/api/v1/external/tracks/eyJ1Ijoi.c2ln/artwork")
+        );
+
+        state.source.as_mut().expect("source")["externalTrack"]["durationMs"] = Value::Null;
+        state.source.as_mut().expect("source")["externalTrack"]["artistName"] = Value::Null;
+        let unknown = MprisView::from_state(&state, "http://x")
+            .track
+            .expect("external track without metadata");
+        assert!(unknown.artist.is_none());
+        assert!(unknown.length_micros.is_none());
     }
 
     #[test]

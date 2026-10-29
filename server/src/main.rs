@@ -35,7 +35,12 @@ async fn run() -> Result<(), String> {
         .await
         .map_err(|error| format!("database init failed: {error}"))?;
 
-    let report = dependencies::probe_system().await;
+    let mut report = dependencies::probe_system().await;
+    if let Some(external_source) = &config.external_source {
+        report
+            .0
+            .push(dependencies::probe_yt_dlp(&external_source.yt_dlp).await);
+    }
     for dependency in &report.0 {
         if dependency.available {
             tracing::info!(name = %dependency.name, required = dependency.required, version = %dependency.version, "server dependency found");

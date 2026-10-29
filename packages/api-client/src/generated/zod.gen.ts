@@ -2,6 +2,13 @@
 
 import * as z from 'zod';
 
+/**
+ * The External Source the operator configured (ADR 0032). Present only when external-source.v1 is advertised.
+ */
+export const zExternalSourceInfo = z.object({
+    name: z.string()
+});
+
 export const zServerDependency = z.object({
     name: z.string(),
     required: z.boolean(),
@@ -13,7 +20,8 @@ export const zHealthResponse = z.object({
     status: z.enum(['ok']),
     version: z.string(),
     capabilities: z.array(z.string()),
-    dependencies: z.array(zServerDependency)
+    dependencies: z.array(zServerDependency),
+    externalSource: zExternalSourceInfo.optional()
 });
 
 export const zUser = z.object({
@@ -547,6 +555,29 @@ export const zLibrarySearchResponse = z.object({
     playlists: z.array(zLibrarySearchResult)
 });
 
+/**
+ * One playable result from the External Source. It is not stored in the Library and cannot join the Playback Queue or a Playlist.
+ */
+export const zExternalTrack = z.object({
+    id: z.string().max(2048),
+    title: z.string(),
+    artistName: z.string().nullable(),
+    durationMs: z.int().gte(0).nullable(),
+    webpageUrl: z.string().nullable(),
+    extractor: z.string(),
+    hasArtwork: z.boolean()
+});
+
+export const zExternalSearchResponse = z.object({
+    source: z.string(),
+    items: z.array(zExternalTrack).max(20)
+});
+
+export const zExternalTrackPlayback = z.object({
+    format: z.enum(['progressive', 'hls']),
+    streamPath: z.string()
+});
+
 export const zPlaylist = z.object({
     id: z.guid(),
     name: z.string(),
@@ -967,6 +998,11 @@ export const zPlaylistId = z.guid();
 export const zStationId = z.guid();
 
 /**
+ * Opaque External Track id from searchExternalSource
+ */
+export const zExternalTrackId = z.string().max(2048).regex(/^[A-Za-z0-9_.-]+$/);
+
+/**
  * Service is healthy
  */
 export const zGetHealthResponse = zHealthResponse;
@@ -1285,3 +1321,33 @@ export const zStreamRadioStationResponse = z.string();
  * Now-playing metadata
  */
 export const zGetRadioNowPlayingResponse = zRadioNowPlaying;
+
+/**
+ * External Tracks found by the External Source
+ */
+export const zSearchExternalSourceResponse = zExternalSearchResponse;
+
+/**
+ * How to play the External Track
+ */
+export const zGetExternalTrackPlaybackResponse = zExternalTrackPlayback;
+
+/**
+ * Full audio stream
+ */
+export const zStreamExternalTrackResponse = z.string();
+
+/**
+ * Rewritten HLS playlist
+ */
+export const zGetExternalTrackPlaylistResponse = z.string();
+
+/**
+ * HLS media playlist, segment, or key
+ */
+export const zGetExternalTrackResourceResponse = z.string();
+
+/**
+ * Cover image
+ */
+export const zGetExternalTrackArtworkResponse = z.string();

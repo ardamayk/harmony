@@ -10,6 +10,14 @@ Navidrome Replacement is a self-hosted music app for browsing local library cont
 A query across library Tracks, Albums, Artists, Genres, and Playlists. Every result must match at least one query word in its own title or name; remaining words may match its searchable credits or other related fields. Relationships alone never add results. Radio search is separate.
 _Avoid_: Radio search, global catalog search, per-page filter
 
+**External Source**:
+An optional, operator-configured search of one site through the operator's own yt-dlp (ADR 0032). It is off unless the operator configures it, and it is separate from Library Search.
+_Avoid_: YouTube search, online library, catalog
+
+**External Track**:
+A result of the External Source that is not in the library. It can be played in full through the Music Server, but it is never stored, and adding it to the library is the listener's own import.
+_Avoid_: Library Track, preview clip, download
+
 **Best Match**:
 The single library result highlighted above search groups because it strongly matches the query directly. It also appears first in its own category, counting toward that category's five-result limit. A result found only through typo correction is not a Best Match.
 _Avoid_: First Track, most popular result, related result
@@ -205,7 +213,7 @@ Track or album loudness adjustment metadata owned by a library Track and indexed
 _Avoid_: Player preference, volume setting, inferred loudness
 
 **Playback Source**:
-Content a Player can load, currently a library Track, saved Radio Station, or Catalog Preview.
+Content a Player can load, currently a library Track, saved Radio Station, Catalog Preview, or External Track.
 _Avoid_: Queue item, playlist, Output Device
 
 **Playback Parity**:

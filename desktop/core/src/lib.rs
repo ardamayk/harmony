@@ -15,6 +15,7 @@ pub mod output_device;
 mod playback;
 mod playback_app_actions;
 mod playback_lifecycle;
+mod playback_load_timing;
 mod playback_navigation;
 mod playback_publish;
 mod playback_restore;
@@ -38,7 +39,7 @@ use adaptive_system_rate::{
 };
 use connection::{
     ConnectionCheck, ConnectionError, ConnectionErrorCode, ConnectionStore, HttpBridge,
-    HttpRequest, HttpResponse, ServerOrigin,
+    HttpRequest, HttpRequestCancellations, HttpResponse, ServerOrigin,
 };
 use desktop_import::{
     DesktopImportError, ImportSelection, ImportSelectionStore, ImportUploadProgress, ProgressSink,
@@ -104,6 +105,7 @@ struct AppState {
     media_proxy: MediaProxy,
     queue_events: QueueEventService,
     import_selections: ImportSelectionStore,
+    http_requests: HttpRequestCancellations,
     output: Arc<Output>,
     /// Set once the core has asked the shell to exit, so closing stdin after
     /// an explicit Quit does not quit (and snapshot) a second time.
@@ -163,6 +165,7 @@ async fn save_server_connection(
 async fn desktop_http_request(
     state: &AppState,
     request: HttpRequest,
+    request_id: Option<String>,
 ) -> Result<HttpResponse, ConnectionError> {
     let origin = state
         .origin
@@ -174,8 +177,33 @@ async fn desktop_http_request(
                 ConnectionErrorCode::InvalidOrigin,
                 "Configure a Music Server before sending desktop HTTP requests.",
             )
-        })?;
-    state.bridge.send(&origin, request).await
+        });
+    let Some(request_id) = request_id else {
+        return state.bridge.send(&origin?, request).await;
+    };
+    let cancellation = state.http_requests.begin(&request_id);
+    let response = match origin {
+        Ok(origin) => {
+            state
+                .bridge
+                .send_cancellable(&origin, request, &cancellation)
+                .await
+        }
+        Err(error) => Err(error),
+    };
+    state.http_requests.finish(&request_id);
+    response
+}
+
+/// Registers a cancellable `desktop_http_request` while its line is read, so
+/// a cancel on a later line always finds it, however the spawned commands
+/// are scheduled.
+fn register_http_request(state: &AppState, request: &Request) {
+    if request.method == "desktop_http_request"
+        && let Some(request_id) = request.params.get("requestId").and_then(Value::as_str)
+    {
+        state.http_requests.begin(request_id);
+    }
 }
 
 /// Registers what the shell's native picker returned. Only the shell calls
@@ -935,7 +963,13 @@ async fn dispatch(state: Arc<AppState>, method: &str, params: Value) -> Reply {
         }
         "desktop_http_request" => {
             let request = param(&params, "request")?;
-            reply(desktop_http_request(&state, request).await)
+            let request_id = param(&params, "requestId")?;
+            reply(desktop_http_request(&state, request, request_id).await)
+        }
+        "desktop_cancel_http_request" => {
+            let request_id: String = param(&params, "requestId")?;
+            state.http_requests.cancel(&request_id);
+            Ok(Value::Null)
         }
         "desktop_register_import_paths" => {
             let paths = param(&params, "paths")?;
@@ -1339,6 +1373,7 @@ impl AppState {
             media_proxy,
             queue_events,
             import_selections: ImportSelectionStore::default(),
+            http_requests: HttpRequestCancellations::default(),
             output,
             exiting: AtomicBool::new(false),
             exit,
@@ -1385,6 +1420,7 @@ pub fn run(config_directory: &Path) -> Result<(), String> {
                 let Some(state) = reader_state.upgrade() else {
                     break;
                 };
+                register_http_request(&state, &request);
                 let output = reader_output.clone();
                 runtime::spawn(async move {
                     let reply = dispatch(state, &request.method, request.params).await;

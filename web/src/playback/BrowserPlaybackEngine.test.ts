@@ -183,6 +183,38 @@ describe("BrowserPlaybackEngine", () => {
 		},
 	);
 
+	it.each(["once", "loop"] as const)(
+		"ends an External Track instead of repeating it in %s repeat mode, keeping the mode",
+		async (repeatMode) => {
+			const engine = new BrowserPlaybackEngine({ createMedia: () => media });
+			while (engine.getState().repeatMode !== repeatMode) {
+				engine.cycleRepeatMode();
+			}
+			const streamUrl = "/api/v1/external/tracks/external-1/stream";
+			await engine.play({
+				type: "external-track",
+				externalTrack: {
+					id: "external-1",
+					title: "External Song",
+					artistName: null,
+					durationMs: 30000,
+					webpageUrl: "https://soundcloud.com/uploader/external-song",
+					extractor: "Soundcloud",
+					hasArtwork: false,
+				},
+				playbackUrl: streamUrl,
+				sourceUrl: streamUrl,
+			});
+			media.paused = true;
+
+			media.dispatchEvent(new Event("ended"));
+
+			expect(engine.getState()).toMatchObject({ status: "ended", repeatMode });
+			expect(media.play).toHaveBeenCalledOnce();
+			engine.destroy();
+		},
+	);
+
 	it("publishes the buffered range end on progress events", async () => {
 		const engine = new BrowserPlaybackEngine({ createMedia: () => media });
 		await engine.play(trackSource);
@@ -454,6 +486,70 @@ describe("BrowserPlaybackEngine", () => {
 		expect(engine.getState().status).toBe("reconnecting");
 		await vi.advanceTimersByTimeAsync(1000);
 		expect(media.play).toHaveBeenCalledTimes(2);
+		engine.destroy();
+	});
+
+	it("plays an HLS External Track through hls.js and ends instead of reconnecting", async () => {
+		vi.useFakeTimers();
+		const hls = {
+			attachMedia: vi.fn(),
+			destroy: vi.fn(),
+			loadSource: vi.fn(),
+		};
+		const session = {
+			metadata: null as MediaMetadata | null,
+			playbackState: "none" as MediaSessionPlaybackState,
+			setActionHandler: vi.fn(),
+			setPositionState: vi.fn(),
+		};
+		vi.stubGlobal(
+			"MediaMetadata",
+			class {
+				constructor(public init: MediaMetadataInit) {}
+			},
+		);
+		const engine = new BrowserPlaybackEngine({
+			createMedia: () => media,
+			mediaSession: session,
+			hls: {
+				isSupported: () => true,
+				create: () => hls,
+			},
+		});
+		const streamUrl = "/api/v1/external/tracks/external-1/playlist.m3u8";
+
+		await engine.play({
+			type: "external-track",
+			externalTrack: {
+				id: "external-1",
+				title: "External Song",
+				artistName: null,
+				durationMs: 30500,
+				webpageUrl: "https://soundcloud.com/uploader/external-song",
+				extractor: "Soundcloud",
+				hasArtwork: true,
+			},
+			playbackUrl: streamUrl,
+			sourceUrl: streamUrl,
+			artworkUrl: "/api/v1/external/tracks/external-1/artwork",
+		});
+
+		expect(hls.loadSource).toHaveBeenCalledWith(streamUrl);
+		expect(engine.getState().duration).toBe(30.5);
+		expect(
+			(session.metadata as unknown as { init: MediaMetadataInit }).init,
+		).toMatchObject({
+			title: "External Song",
+			artist: "",
+			artwork: [{ src: "/api/v1/external/tracks/external-1/artwork" }],
+		});
+
+		media.paused = true;
+		media.dispatchEvent(new Event("ended"));
+		await vi.advanceTimersByTimeAsync(2000);
+
+		expect(engine.getState().status).toBe("ended");
+		expect(media.play).toHaveBeenCalledOnce();
 		engine.destroy();
 	});
 

@@ -58,6 +58,7 @@ type WireQueue = Schemas["Queue"];
 type WireQueueItem = Schemas["QueueItem"];
 
 export type HealthResponse = Schemas["HealthResponse"];
+export type ExternalSourceInfo = Schemas["ExternalSourceInfo"];
 export type ThemePreferences = Schemas["ThemePreferences"];
 export type LayoutPreferences = Schemas["LayoutPreferences"];
 export type PlaybackPreferences = Schemas["PlaybackPreferences"];
@@ -153,6 +154,9 @@ export type RadioSearchResultList = Schemas["RadioSearchResultList"];
 export type RadioCatalogOption = Schemas["RadioCatalogOption"];
 export type RadioCatalogOptionList = Schemas["RadioCatalogOptionList"];
 export type RadioImportRequest = Schemas["RadioImportRequest"];
+export type ExternalTrack = Schemas["ExternalTrack"];
+export type ExternalSearchResponse = Schemas["ExternalSearchResponse"];
+export type ExternalTrackPlayback = Schemas["ExternalTrackPlayback"];
 
 export class ApiError extends Error {
 	constructor(
@@ -820,6 +824,26 @@ export function createApiClient(config: ApiClientConfig) {
 				"getRadioNowPlaying",
 				`/api/v1/radio/stations/${stationId}/now-playing`,
 			),
+		/** Searches the External Source; `limit` defaults to the server's 10 (at most 20). */
+		searchExternalSource: (q: string, limit?: number, signal?: AbortSignal) =>
+			request<ExternalSearchResponse>(
+				"searchExternalSource",
+				`/api/v1/external/search?${new URLSearchParams({ q }).toString()}${limit != null ? `&limit=${limit}` : ""}`,
+				{ signal },
+			),
+		/** Resolves an External Track; play `streamPath` through getExternalStreamUrl. */
+		getExternalTrackPlayback: (externalTrackId: string, signal?: AbortSignal) =>
+			request<ExternalTrackPlayback>(
+				"getExternalTrackPlayback",
+				`/api/v1/external/tracks/${encodeURIComponent(externalTrackId)}/playback`,
+				{ signal },
+			),
+		/** `streamPath` is an ExternalTrackPlayback's server path; keeps `.m3u8` for HLS detection. */
+		getExternalStreamUrl: (streamPath: string) =>
+			`${getStreamBaseUrl()}${streamPath}`,
+		/** Only for an External Track whose `hasArtwork` is true. */
+		getExternalTrackArtworkUrl: (externalTrackId: string) =>
+			`${getMediaBaseUrl()}/api/v1/external/tracks/${encodeURIComponent(externalTrackId)}/artwork`,
 		getRadioStationStreamUrl: (stationId: string) =>
 			`${getStreamBaseUrl()}/api/v1/radio/stations/${stationId}/stream`,
 		getRadioCatalogPreviewStreamUrl: (stationUuid: string) =>

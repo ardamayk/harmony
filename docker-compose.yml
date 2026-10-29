@@ -1,6 +1,8 @@
 services:
   server:
-    build: .
+    build:
+      context: .
+      dockerfile: server/Dockerfile
     network_mode: host
     environment:
       SERVER_ADDR: "127.0.0.1:8090"

@@ -1,4 +1,8 @@
-import type { HealthResponse } from "@repo/api-client";
+import {
+	EXTERNAL_SOURCE_CAPABILITY,
+	type HealthResponse,
+	hasServerCapability,
+} from "@repo/api-client";
 import type { DesktopMpvStatus } from "#/desktop/bridge";
 
 type Props = {
@@ -18,7 +22,9 @@ type Row = {
 
 /**
  * Read-only view of the Server Dependencies probed by the Music Server and,
- * on the Desktop Client only, the pinned mpv sidecar.
+ * on the Desktop Client only, the pinned mpv sidecar. The yt-dlp row comes
+ * from the server like any other; the notice below it says who answers for
+ * the External Source (ADR 0032).
  */
 export function ServerDependenciesSection({ health, desktopMpv }: Props) {
 	if (!health) {
@@ -81,6 +87,13 @@ export function ServerDependenciesSection({ health, desktopMpv }: Props) {
 					</tbody>
 				</table>
 			</div>
+			{hasServerCapability(health, EXTERNAL_SOURCE_CAPABILITY) ? (
+				<p className="text-muted-foreground text-sm">
+					The External Source is configured by the operator of this Music
+					Server, who is responsible for the source and for following the site’s
+					terms.
+				</p>
+			) : null}
 		</section>
 	);
 }

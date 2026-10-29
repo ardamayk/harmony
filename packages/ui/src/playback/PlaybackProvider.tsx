@@ -1,5 +1,7 @@
 import type {
 	CoverSize,
+	ExternalTrack,
+	ExternalTrackPlayback,
 	Playlist,
 	PlaylistDetail,
 	PlaylistList,
@@ -22,6 +24,7 @@ import {
 	useState,
 	useSyncExternalStore,
 } from "react";
+import { startTiming } from "../lib/dev-timing";
 import type {
 	PlaybackEngine,
 	PlaybackError,
@@ -87,10 +90,20 @@ export type RadioPlaybackApi = {
 	getRadioNowPlaying: (stationId: string) => Promise<RadioNowPlaying>;
 };
 
+export type ExternalSourcePlaybackApi = {
+	getExternalTrackPlayback: (
+		externalTrackId: string,
+	) => Promise<ExternalTrackPlayback>;
+	getExternalStreamUrl: (streamPath: string) => string;
+	/** The Music Server's copy of an External Track's cover (`hasArtwork`). */
+	getExternalTrackArtworkUrl: (externalTrackId: string) => string;
+};
+
 export type PlaybackApi = PlaybackQueueApi &
 	PlaybackAssetApi &
 	PlaylistLibraryApi &
-	RadioPlaybackApi;
+	RadioPlaybackApi &
+	ExternalSourcePlaybackApi;
 
 type PlaybackContextValue = {
 	queue: QueueItem[];
@@ -102,6 +115,7 @@ type PlaybackContextValue = {
 	currentTrack: Track | null;
 	currentRadioStation: RadioStation | null;
 	radioNowPlaying: RadioNowPlaying | null;
+	currentExternalTrack: ExternalTrack | null;
 	isPlaying: boolean;
 	isReconnecting: boolean;
 	currentTime: number;
@@ -128,6 +142,8 @@ type PlaybackContextValue = {
 	) => Promise<void>;
 	playRadioStation: (station: RadioStation) => Promise<void>;
 	playRadioCatalogPreview: (result: RadioSearchResult) => Promise<void>;
+	/** Resolves an External Track through the Music Server and plays it. */
+	playExternalTrack: (track: ExternalTrack) => Promise<void>;
 	queueTracks: (trackIds: string[], source?: QueueItemSource) => Promise<void>;
 	playQueueIndex: (index: number) => Promise<void>;
 	playNext: (trackId: string) => Promise<void>;
@@ -157,6 +173,8 @@ type PlaybackContextValue = {
 	refreshQueue: () => Promise<void>;
 	stopPlayback: () => void;
 	getAlbumCoverUrl: (albumId: string, size?: CoverSize) => string;
+	/** Null while the External Track has no artwork. */
+	getExternalTrackArtworkUrl: (track: ExternalTrack) => string | null;
 	getTrack: (trackId: string) => Promise<Track | null>;
 	/** Resolves null when the host exposes no lyrics endpoint. */
 	getTrackLyrics: (trackId: string) => Promise<{ lyrics: string } | null>;
@@ -179,6 +197,49 @@ const PREVIOUS_RESTARTS_AFTER_SECONDS = 30;
 
 const PlaybackContext = createContext<PlaybackContextValue | null>(null);
 const PlaylistLibraryContext = createContext<PlaylistLibraryApi | null>(null);
+
+/** An External Track playing this long without progress stops being watched. */
+const EXTERNAL_START_WATCH_MS = 60_000;
+
+/**
+ * Calls `onPlaying` once `engine` plays the External Track with progress:
+ * both engines report "playing" as soon as they are asked to, so the first
+ * advancing playhead marks audio actually playing. Gives up when the Track
+ * fails, ends or is replaced first.
+ */
+function whenExternalTrackPlays(
+	engine: PlaybackEngine,
+	externalTrackId: string,
+	onPlaying: () => void,
+) {
+	let hasStarted = false;
+	let isDone = false;
+	const finish = () => {
+		isDone = true;
+		window.clearTimeout(timeout);
+		unsubscribe();
+	};
+	const check = (state: PlaybackSessionState) => {
+		if (isDone) return;
+		const isThisTrack =
+			state.source?.type === "external-track" &&
+			state.source.externalTrack.id === externalTrackId;
+		if (!isThisTrack) {
+			if (hasStarted) finish();
+			return;
+		}
+		hasStarted = true;
+		if (state.status === "error" || state.status === "ended") {
+			finish();
+		} else if (state.status === "playing" && state.currentTime > 0) {
+			finish();
+			onPlaying();
+		}
+	};
+	const timeout = window.setTimeout(finish, EXTERNAL_START_WATCH_MS);
+	const unsubscribe = engine.subscribe(check);
+	check(engine.getState());
+}
 
 export function PlaybackProvider({
 	children,
@@ -217,6 +278,13 @@ export function PlaybackProvider({
 	const currentQueueItemIdRef = useRef<string | null>(null);
 	const currentQueueIndexRef = useRef<number | null>(null);
 	const repeatCancellationRequestedModeRef = useRef<RepeatMode | null>(null);
+	// Every playback choice and Stop bumps this; a slow External Track resolve
+	// compares it after the await so a newer choice is never replaced.
+	const playbackIntentRef = useRef(0);
+	const beginPlaybackIntent = useCallback(
+		() => ++playbackIntentRef.current,
+		[],
+	);
 	const [radioNowPlaying, setRadioNowPlaying] =
 		useState<RadioNowPlaying | null>(null);
 	useLayoutEffect(() => {
@@ -234,6 +302,10 @@ export function PlaybackProvider({
 		() => getCurrentRadioStation(session.source),
 		[session.source],
 	);
+	const currentExternalTrack =
+		session.source?.type === "external-track"
+			? session.source.externalTrack
+			: null;
 	const radioNowPlayingStationId =
 		session.source?.type === "radio-station" ? session.source.station.id : null;
 
@@ -267,6 +339,7 @@ export function PlaybackProvider({
 			const activeQueue = queueOverride ?? queueRef.current;
 			const itemIndex = activeQueue.findIndex((entry) => entry.id === item.id);
 			if (itemIndex < 0) return;
+			beginPlaybackIntent();
 			currentQueueItemIdRef.current = item.id;
 			currentQueueIndexRef.current = itemIndex;
 			setRequestedQueueItemId(item.id);
@@ -287,7 +360,7 @@ export function PlaybackProvider({
 				// PlaybackEngine exposes the error through observable session state.
 			}
 		},
-		[queueRef, engine],
+		[queueRef, engine, beginPlaybackIntent],
 	);
 
 	useEffect(() => {
@@ -510,6 +583,8 @@ export function PlaybackProvider({
 			queueTrackIds?: string[],
 			source?: QueueItemSource,
 		) => {
+			// The Queue writes below can take a while; the choice counts from now.
+			beginPlaybackIntent();
 			let nextQueue = queueRef.current;
 			if (queueTrackIds) {
 				const data = await replaceQueue(queueTrackIds, {
@@ -525,11 +600,18 @@ export function PlaybackProvider({
 			}
 			await playTrackInternal(trackId, nextQueue);
 		},
-		[queueRef, appendQueueItem, playTrackInternal, replaceQueue],
+		[
+			queueRef,
+			appendQueueItem,
+			playTrackInternal,
+			replaceQueue,
+			beginPlaybackIntent,
+		],
 	);
 
 	const playRadioStation = useCallback(
 		async (station: RadioStation) => {
+			beginPlaybackIntent();
 			setRadioNowPlaying(station.lastNowPlaying ?? null);
 			try {
 				await engine.play({
@@ -545,11 +627,12 @@ export function PlaybackProvider({
 				});
 			}
 		},
-		[engine],
+		[engine, beginPlaybackIntent],
 	);
 
 	const playRadioCatalogPreview = useCallback(
 		async (result: RadioSearchResult) => {
+			beginPlaybackIntent();
 			setRadioNowPlaying(null);
 			try {
 				await engine.play({
@@ -568,7 +651,50 @@ export function PlaybackProvider({
 				throw error;
 			}
 		},
-		[engine],
+		[engine, beginPlaybackIntent],
+	);
+
+	// An External Track plays on its own: it never joins the Queue, so its
+	// end stops playback instead of advancing (the ended effect is Track-only).
+	// The resolve can take seconds; a choice made meanwhile (another Track,
+	// station or External Track, or Stop) wins, and this one is dropped.
+	const playExternalTrack = useCallback(
+		async (track: ExternalTrack) => {
+			const intent = beginPlaybackIntent();
+			setRadioNowPlaying(null);
+			const stopClickToPlaying = startTiming("external:click-to-playing");
+			try {
+				const stopResolve = startTiming("external:resolve");
+				const playback = await apiRef.current.getExternalTrackPlayback(
+					track.id,
+				);
+				stopResolve();
+				if (playbackIntentRef.current !== intent) return;
+				const streamUrl = apiRef.current.getExternalStreamUrl(
+					playback.streamPath,
+				);
+				await engine.play({
+					type: "external-track",
+					externalTrack: track,
+					playbackUrl: streamUrl,
+					sourceUrl: streamUrl,
+					...(track.hasArtwork
+						? {
+								artworkUrl: apiRef.current.getExternalTrackArtworkUrl(track.id),
+							}
+						: {}),
+				});
+				whenExternalTrackPlays(engine, track.id, () => stopClickToPlaying());
+			} catch (error) {
+				if (playbackIntentRef.current !== intent) return;
+				console.warn("Failed to start External Track playback", {
+					extractor: track.extractor,
+					error,
+				});
+				throw error;
+			}
+		},
+		[engine, beginPlaybackIntent],
 	);
 
 	const queueTracks = useCallback(
@@ -626,6 +752,7 @@ export function PlaybackProvider({
 			currentTrack,
 			currentRadioStation,
 			radioNowPlaying,
+			currentExternalTrack,
 			isPlaying:
 				session.status === "playing" || session.status === "reconnecting",
 			isReconnecting: session.status === "reconnecting",
@@ -649,14 +776,22 @@ export function PlaybackProvider({
 			playTrack,
 			playRadioStation,
 			playRadioCatalogPreview,
+			playExternalTrack,
 			queueTracks,
 			playQueueIndex,
 			playNext,
-			navigatePrevious: () =>
-				session.currentTime > PREVIOUS_RESTARTS_AFTER_SECONDS
-					? engine.seek(0)
-					: engine.previous(),
-			navigateNext: () => engine.next(),
+			navigatePrevious: () => {
+				if (session.currentTime > PREVIOUS_RESTARTS_AFTER_SECONDS) {
+					engine.seek(0);
+					return;
+				}
+				beginPlaybackIntent();
+				engine.previous();
+			},
+			navigateNext: () => {
+				beginPlaybackIntent();
+				engine.next();
+			},
 			togglePlay: () => engine.togglePlay(),
 			toggleShuffle: () => engine.toggleShuffle(),
 			cycleRepeatMode: () => engine.cycleRepeatMode(),
@@ -681,9 +816,16 @@ export function PlaybackProvider({
 			reorderQueue,
 			clearQueue,
 			refreshQueue,
-			stopPlayback: () => engine.stop(),
+			stopPlayback: () => {
+				beginPlaybackIntent();
+				engine.stop();
+			},
 			getAlbumCoverUrl: (albumId, size) =>
 				apiRef.current.getAlbumCoverUrl(albumId, size),
+			getExternalTrackArtworkUrl: (track) =>
+				track.hasArtwork
+					? apiRef.current.getExternalTrackArtworkUrl(track.id)
+					: null,
 			getTrack,
 			getTrackLyrics,
 			getTrackWaveform,
@@ -694,6 +836,7 @@ export function PlaybackProvider({
 			currentTrack,
 			currentRadioStation,
 			radioNowPlaying,
+			currentExternalTrack,
 			session,
 			errorCause,
 			errorRecovery,
@@ -705,6 +848,7 @@ export function PlaybackProvider({
 			playTrack,
 			playRadioStation,
 			playRadioCatalogPreview,
+			playExternalTrack,
 			queueTracks,
 			playQueueIndex,
 			playNext,
@@ -713,6 +857,7 @@ export function PlaybackProvider({
 			reorderQueue,
 			clearQueue,
 			refreshQueue,
+			beginPlaybackIntent,
 		],
 	);
 

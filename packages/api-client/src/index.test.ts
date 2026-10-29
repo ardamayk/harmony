@@ -193,6 +193,83 @@ describe("createApiClient", () => {
 		expect(headers.get("Authorization")).toBe("Bearer secret");
 	});
 
+	it("searches the External Source and resolves an External Track's stream URL", async () => {
+		type ExternalTrack = components["schemas"]["ExternalTrack"];
+		expectTypeOf<ExternalTrack["artistName"]>().toEqualTypeOf<string | null>();
+		expectTypeOf<ExternalTrack["durationMs"]>().toEqualTypeOf<number | null>();
+		expectTypeOf<
+			components["schemas"]["ExternalTrackPlayback"]["format"]
+		>().toEqualTypeOf<"progressive" | "hls">();
+		const track: ExternalTrack = {
+			id: "eyJ1Ijoi.c2ln",
+			title: "One More Time",
+			artistName: "Daft Punk",
+			durationMs: 320_000,
+			webpageUrl: "https://soundcloud.com/daftpunk/one-more-time",
+			extractor: "Soundcloud",
+			hasArtwork: true,
+		};
+		const transport = vi
+			.fn<typeof fetch>()
+			.mockResolvedValueOnce(
+				Response.json({ source: "scsearch", items: [track] }),
+			)
+			.mockResolvedValueOnce(Response.json({ source: "scsearch", items: [] }))
+			.mockResolvedValueOnce(
+				Response.json({
+					format: "hls",
+					streamPath: `/api/v1/external/tracks/${track.id}/playlist.m3u8`,
+				}),
+			);
+		const client = createApiClient({
+			baseUrl: "http://music.test",
+			streamBaseUrl: "http://127.0.0.1:43129/token",
+			transport,
+		});
+
+		await expect(
+			client.searchExternalSource("daft punk & co"),
+		).resolves.toEqual({ source: "scsearch", items: [track] });
+		await client.searchExternalSource("daft punk", 5);
+		const playback = await client.getExternalTrackPlayback(track.id);
+		expect(transport.mock.calls.map(([input]) => input)).toEqual([
+			"http://music.test/api/v1/external/search?q=daft+punk+%26+co",
+			"http://music.test/api/v1/external/search?q=daft+punk&limit=5",
+			"http://music.test/api/v1/external/tracks/eyJ1Ijoi.c2ln/playback",
+		]);
+		expect(client.getExternalStreamUrl(playback.streamPath)).toBe(
+			"http://127.0.0.1:43129/token/api/v1/external/tracks/eyJ1Ijoi.c2ln/playlist.m3u8",
+		);
+		// Artwork follows the media base (here the API base), like Album covers.
+		expect(client.getExternalTrackArtworkUrl(track.id)).toBe(
+			"http://music.test/api/v1/external/tracks/eyJ1Ijoi.c2ln/artwork",
+		);
+	});
+
+	it("passes an AbortSignal to External Source search and playback requests", async () => {
+		const transport = vi
+			.fn<typeof fetch>()
+			.mockResolvedValueOnce(Response.json({ source: "scsearch", items: [] }))
+			.mockResolvedValueOnce(
+				Response.json({
+					format: "progressive",
+					streamPath: "/api/v1/external/tracks/abc/stream",
+				}),
+			);
+		const client = createApiClient({ baseUrl: "http://music.test", transport });
+		const search = new AbortController();
+		const resolve = new AbortController();
+
+		await client.searchExternalSource("daft punk", undefined, search.signal);
+		await client.getExternalTrackPlayback("abc", resolve.signal);
+
+		expect(transport.mock.calls[0]?.[0]).toBe(
+			"http://music.test/api/v1/external/search?q=daft+punk",
+		);
+		expect(transport.mock.calls[0]?.[1]?.signal).toBe(search.signal);
+		expect(transport.mock.calls[1]?.[1]?.signal).toBe(resolve.signal);
+	});
+
 	it("previews and explicitly confirms Permanent Track Deletion", async () => {
 		const preview = {
 			trackId: "00000000-0000-4000-8000-000000000001",
@@ -935,6 +1012,9 @@ describe("createApiClient", () => {
 			client.getArtistPhotoUrl("00000000-0000-4000-8000-000000000005"),
 		).toBe(
 			"earthly-media://localhost/api/v1/library/artists/00000000-0000-4000-8000-000000000005/photo",
+		);
+		expect(client.getExternalTrackArtworkUrl("eyJ1Ijoi.c2ln")).toBe(
+			"earthly-media://localhost/api/v1/external/tracks/eyJ1Ijoi.c2ln/artwork",
 		);
 		expect(
 			client.getTrackStreamUrl("00000000-0000-4000-8000-000000000001"),

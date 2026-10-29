@@ -59,6 +59,8 @@ export function useQueueDrawerWidth(
 		searchWidth: number;
 		searchCenter: number;
 		searchTop: number;
+		/** From the field's top to the top bar's bottom edge, its border included. */
+		searchRowHeight?: number;
 	}>();
 	useLayoutEffect(() => {
 		const shell = shellRef.current;
@@ -76,9 +78,9 @@ export function useQueueDrawerWidth(
 				Number.parseFloat(
 					getComputedStyle(document.documentElement).fontSize,
 				) || 16;
-			const field = shell
-				.querySelector("[data-library-search-field]")
-				?.getBoundingClientRect();
+			const fieldElement = shell.querySelector("[data-library-search-field]");
+			const field = fieldElement?.getBoundingClientRect();
+			const header = fieldElement?.closest("header")?.getBoundingClientRect();
 			setMetrics({
 				queueWidth: calculateQueueDrawerWidth(
 					shellWidth,
@@ -89,6 +91,8 @@ export function useQueueDrawerWidth(
 				searchWidth: field?.width ?? 0,
 				searchCenter: field ? field.left + field.width / 2 : 0,
 				searchTop: field?.top ?? 0,
+				searchRowHeight:
+					field && header ? header.bottom - field.top : undefined,
 			});
 		};
 		measure();
