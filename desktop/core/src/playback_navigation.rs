@@ -92,6 +92,16 @@ impl PlaybackSource {
             .ok_or_else(|| "Playback Source URL is missing.".to_owned())
     }
 
+    /// The source's `type`, which names it in logs instead of its URL.
+    pub(crate) fn kind(&self) -> &'static str {
+        match self {
+            Self::Track { .. } => "track",
+            Self::RadioStation { .. } => "radio-station",
+            Self::CatalogPreview { .. } => "catalog-preview",
+            Self::ExternalTrack { .. } => "external-track",
+        }
+    }
+
     pub(crate) fn duration_seconds(&self) -> f64 {
         let duration_ms = match self {
             Self::Track { track, .. } => track.duration_ms,

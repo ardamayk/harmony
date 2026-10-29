@@ -15,6 +15,7 @@ pub mod output_device;
 mod playback;
 mod playback_app_actions;
 mod playback_lifecycle;
+mod playback_load_timing;
 mod playback_navigation;
 mod playback_publish;
 mod playback_restore;

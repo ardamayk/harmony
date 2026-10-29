@@ -7,6 +7,7 @@ use crate::output_device::{
 use crate::playback_lifecycle::{
     PlaybackLifecycle, PlaybackLifecycleAction, PlaybackSessionSnapshot,
 };
+use crate::playback_load_timing::{LoadMark, LoadTimer};
 use crate::playback_navigation::{PlaybackQueueContext, PlaybackSource, QueueDirection};
 use crate::processing::{
     AppliedMpvProcessingConfiguration, EffectiveReplayGainMode, MpvProcessingConfiguration,
@@ -245,6 +246,10 @@ pub(crate) enum MpvEvent {
     BufferedEnd(f64),
     Paused(bool),
     Decoder(ObservedMpvProperties),
+    /// mpv's `file-loaded`: the file opened and its audio was found.
+    FileLoaded,
+    /// mpv's `playback-restart`: audio plays after a load or seek.
+    PlaybackRestart,
     Ended,
     Error(String),
     ExitedUnexpectedly(String),
@@ -1115,6 +1120,8 @@ fn drain_mpv_event(reader: &mut MpvIpcReader, events: &Sender<MpvEvent>) {
 fn emit_mpv_event(events: &Sender<MpvEvent>, message: &Value) {
     let event = match message.get("event").and_then(Value::as_str) {
         Some("property-change") => property_event(message),
+        Some("file-loaded") => Some(MpvEvent::FileLoaded),
+        Some("playback-restart") => Some(MpvEvent::PlaybackRestart),
         Some("end-file") if message.get("reason").and_then(Value::as_str) == Some("eof") => {
             Some(MpvEvent::Ended)
         }
@@ -1225,6 +1232,7 @@ pub(crate) struct PlaybackController {
     command_revision: Arc<AtomicU64>,
     load_revision: Arc<AtomicU64>,
     published_load_revision: Arc<AtomicU64>,
+    load_timer: Arc<LoadTimer>,
     transition_fade_ms: Arc<AtomicU64>,
     event_thread: Option<JoinHandle<()>>,
     listener: StateListener,
@@ -1407,6 +1415,7 @@ impl PlaybackController {
         let command_revision = Arc::new(AtomicU64::new(0));
         let load_revision = Arc::new(AtomicU64::new(0));
         let published_load_revision = Arc::new(AtomicU64::new(0));
+        let load_timer = Arc::new(LoadTimer::default());
         let listener: StateListener = Arc::new(listener);
         let output_devices = output_device_adapter
             .map(OutputDeviceCatalog::new)
@@ -1422,6 +1431,7 @@ impl PlaybackController {
                 command_revision: command_revision.clone(),
                 load_revision: load_revision.clone(),
                 published_load_revision: published_load_revision.clone(),
+                load_timer: load_timer.clone(),
                 listener: listener.clone(),
                 lifecycle: lifecycle.clone(),
                 starter,
@@ -1442,6 +1452,7 @@ impl PlaybackController {
             command_revision,
             load_revision,
             published_load_revision,
+            load_timer,
             transition_fade_ms: Arc::new(AtomicU64::new(0)),
             event_thread: Some(event_thread),
             listener,
@@ -1538,6 +1549,8 @@ impl PlaybackController {
         }
         let url = playback_url(source).map_err(|error| error.message)?;
         let load_revision = self.next_load_revision();
+        let source_type = PlaybackSource::parse(source).map_or("unknown", |source| source.kind());
+        self.load_timer.start(load_revision, source_type);
         self.with_process(|process| {
             process.load_with_event_boundary(&url, load_revision)?;
             process.set_paused(false)
@@ -2350,6 +2363,7 @@ struct PlaybackEventContext {
     command_revision: Arc<AtomicU64>,
     load_revision: Arc<AtomicU64>,
     published_load_revision: Arc<AtomicU64>,
+    load_timer: Arc<LoadTimer>,
     listener: StateListener,
     lifecycle: Arc<Mutex<PlaybackLifecycle>>,
     starter: Option<ProcessStarter>,
@@ -2447,6 +2461,7 @@ fn dispatch_regular_playback_event(
     last_path_refresh: &mut Instant,
     live_reconnect: &mut LiveReconnectState,
 ) {
+    report_load_timing(&context.load_timer, &event);
     if let MpvEvent::LoadBoundary(load_revision) = &event {
         handle_load_boundary(context, live_reconnect, *load_revision);
         return;
@@ -2470,6 +2485,19 @@ fn dispatch_regular_playback_event(
     }
     if process_mpv_event(context, event, *last_path_refresh) {
         *last_path_refresh = Instant::now();
+    }
+}
+
+fn report_load_timing(load_timer: &LoadTimer, event: &MpvEvent) {
+    let mark = match event {
+        MpvEvent::LoadBoundary(load_revision) => LoadMark::Accepted(*load_revision),
+        MpvEvent::FileLoaded => LoadMark::FileLoaded,
+        MpvEvent::PlaybackRestart => LoadMark::Playing,
+        MpvEvent::Error(_) => LoadMark::Failed,
+        _ => return,
+    };
+    if let Some(line) = load_timer.observe(mark) {
+        eprintln!("{line}");
     }
 }
 
@@ -3355,6 +3383,8 @@ fn reduce_mpv_event(
         MpvEvent::Ended => handle_ended_event(process, state, queue, adaptive_system_rate),
         MpvEvent::Error(message) => handle_mpv_error(process, state, adaptive_system_rate, message),
         MpvEvent::LoadBoundary(_)
+        | MpvEvent::FileLoaded
+        | MpvEvent::PlaybackRestart
         | MpvEvent::ExitedUnexpectedly(_)
         | MpvEvent::Time(_)
         | MpvEvent::Duration(_)
