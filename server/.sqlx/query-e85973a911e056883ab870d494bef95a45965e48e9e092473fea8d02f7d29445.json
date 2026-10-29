@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO soulseek_acquisition_files (\n                acquisition_id, position, kind, name, source_index, remote_filename, size,\n                transfer_id, state, bytes_transferred, job_id, outcome\n            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 12
+    },
+    "nullable": []
+  },
+  "hash": "e85973a911e056883ab870d494bef95a45965e48e9e092473fea8d02f7d29445"
+}

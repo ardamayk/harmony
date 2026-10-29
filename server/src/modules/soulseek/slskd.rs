@@ -25,6 +25,60 @@ pub enum SlskdError {
     /// slskd does not know the search.
     #[error("slskd does not know this search")]
     NotFound,
+    /// slskd answered but would not do what was asked, such as queueing a
+    /// download from a user who is offline; the message says why.
+    #[error("{0}")]
+    Refused(String),
+}
+
+/// One download as slskd lists it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Transfer {
+    pub id: String,
+    /// The remote path it was queued with.
+    pub filename: String,
+    pub state: TransferState,
+    pub bytes_transferred: u64,
+}
+
+/// What slskd's state flags (such as `Completed, Succeeded` or
+/// `Queued, Remotely`) mean for an acquisition.
+#[derive(Clone, Debug, PartialEq)]
+pub enum TransferState {
+    /// Requested, queued locally or remotely, or initializing.
+    Queued,
+    InProgress,
+    /// The file is in slskd's download directory.
+    Succeeded,
+    /// Completed without the file: errored, rejected, timed out, cancelled
+    /// or failed, as slskd's flags say.
+    Failed(String),
+}
+
+impl TransferState {
+    fn parse(flags: &str) -> Self {
+        let flags: Vec<&str> = flags.split(',').map(str::trim).collect();
+        if flags.contains(&"Completed") {
+            if flags.contains(&"Succeeded") {
+                return Self::Succeeded;
+            }
+            let reason: Vec<&str> = flags
+                .iter()
+                .copied()
+                .filter(|flag| *flag != "Completed" && !flag.is_empty())
+                .collect();
+            return Self::Failed(if reason.is_empty() {
+                "Completed".to_owned()
+            } else {
+                reason.join(", ")
+            });
+        }
+        if flags.contains(&"InProgress") {
+            Self::InProgress
+        } else {
+            Self::Queued
+        }
+    }
 }
 
 /// A search as slskd keeps it, with the responses received so far.
@@ -148,6 +202,90 @@ impl Slskd {
         check(response).map(drop)
     }
 
+    /// `POST /api/v0/transfers/downloads/{username}`: asks slskd to download
+    /// these files of one user. slskd answers an error status when it
+    /// cannot (for example the user is offline): that is
+    /// [`SlskdError::Refused`], a failure of the source rather than of slskd.
+    pub async fn enqueue(&self, username: &str, files: &[(&str, u64)]) -> Result<(), SlskdError> {
+        let body: Vec<serde_json::Value> = files
+            .iter()
+            .map(|(filename, size)| serde_json::json!({ "filename": filename, "size": size }))
+            .collect();
+        let request = self
+            .client
+            .post(self.user_downloads_url(username, None)?)
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .body(serde_json::Value::Array(body).to_string());
+        let response = self.send_raw(request).await?;
+        let status = response.status();
+        if status.is_success()
+            || matches!(
+                status,
+                reqwest::StatusCode::UNAUTHORIZED | reqwest::StatusCode::FORBIDDEN
+            )
+        {
+            return check(response).map(drop);
+        }
+        let message = response.text().await.unwrap_or_default();
+        Err(SlskdError::Refused(format!(
+            "slskd could not queue the download (HTTP {}): {}",
+            status.as_u16(),
+            message.trim().trim_matches('"')
+        )))
+    }
+
+    /// `GET /api/v0/transfers/downloads/{username}`: the user's downloads
+    /// that slskd still lists. slskd answers 404 when there are none.
+    pub async fn downloads(&self, username: &str) -> Result<Vec<Transfer>, SlskdError> {
+        let response = self
+            .send_raw(self.client.get(self.user_downloads_url(username, None)?))
+            .await?;
+        if response.status() == reqwest::StatusCode::NOT_FOUND {
+            return Ok(Vec::new());
+        }
+        let user: UserTransfers = read_json(check(response)?).await?;
+        Ok(user
+            .directories
+            .into_iter()
+            .flat_map(|directory| directory.files)
+            .map(|file| Transfer {
+                state: TransferState::parse(&file.state),
+                id: file.id,
+                filename: file.filename,
+                bytes_transferred: file.bytes_transferred,
+            })
+            .collect())
+    }
+
+    /// `DELETE /api/v0/transfers/downloads/{username}/{id}?remove=true`:
+    /// cancels the transfer when it still runs and removes it from slskd's
+    /// list. A transfer slskd no longer knows is already gone.
+    pub async fn remove_download(&self, username: &str, id: &str) -> Result<(), SlskdError> {
+        let mut url = self.user_downloads_url(username, Some(id))?;
+        url.set_query(Some("remove=true"));
+        let response = self.send_raw(self.client.delete(url)).await?;
+        if response.status() == reqwest::StatusCode::NOT_FOUND {
+            return Ok(());
+        }
+        check(response).map(drop)
+    }
+
+    /// `api/v0/transfers/downloads/{username}[/{id}]` with the user name as
+    /// one escaped path segment.
+    fn user_downloads_url(&self, username: &str, id: Option<&str>) -> Result<url::Url, SlskdError> {
+        let mut url = self.url("api/v0/transfers/downloads")?;
+        {
+            let mut segments = url
+                .path_segments_mut()
+                .map_err(|()| SlskdError::Unreachable("invalid address".to_owned()))?;
+            segments.push(username);
+            if let Some(id) = id {
+                segments.push(id);
+            }
+        }
+        Ok(url)
+    }
+
     /// `GET /api/v0/searches/{id}` with its responses.
     pub async fn search(&self, id: uuid::Uuid) -> Result<Search, SlskdError> {
         let mut url = self.url(&format!("api/v0/searches/{id}"))?;
@@ -250,6 +388,27 @@ struct ServerState {
 #[serde(default, rename_all = "camelCase")]
 struct UserState {
     username: Option<String>,
+}
+
+#[derive(Default, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+struct UserTransfers {
+    directories: Vec<DirectoryTransfers>,
+}
+
+#[derive(Default, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+struct DirectoryTransfers {
+    files: Vec<TransferFile>,
+}
+
+#[derive(Default, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+struct TransferFile {
+    id: String,
+    filename: String,
+    state: String,
+    bytes_transferred: u64,
 }
 
 #[derive(Default, Deserialize)]

@@ -16,6 +16,7 @@ use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use tower::ServiceExt;
 
 const CAPABILITY: &str = "soulseek-acquisition.v1";
@@ -36,6 +37,81 @@ struct FakeState {
     /// Replies by `"<METHOD> <path>"`; anything else answers 404.
     replies: HashMap<String, (StatusCode, Value)>,
     requests: Vec<Recorded>,
+    /// slskd's download list, in the order queued.
+    transfers: Vec<FakeTransfer>,
+    /// What a queued download does, by remote path, else by user.
+    file_behaviors: HashMap<String, Behavior>,
+    user_behaviors: HashMap<String, Behavior>,
+    /// The bytes a successful download writes, by file name.
+    contents: HashMap<String, Vec<u8>>,
+    /// slskd's download directory.
+    downloads: Option<PathBuf>,
+}
+
+/// What the fake does with a queued download.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Behavior {
+    /// Completes at once and writes the file.
+    Succeed,
+    /// Completes with slskd's `Errored` flag.
+    Fail,
+    /// Stays queued at the remote user.
+    Stall,
+    /// Stays in progress with some bytes until [`FakeSlskd::finish_held`].
+    Hold,
+    /// slskd refuses to queue it (the user is offline).
+    Offline,
+}
+
+#[derive(Clone, Debug)]
+struct FakeTransfer {
+    id: String,
+    username: String,
+    filename: String,
+    size: u64,
+    state: &'static str,
+    bytes: u64,
+}
+
+impl FakeTransfer {
+    fn json(&self) -> Value {
+        json!({
+            "id": self.id,
+            "username": self.username,
+            "direction": "Download",
+            "filename": self.filename,
+            "size": self.size,
+            "state": self.state,
+            "bytesTransferred": self.bytes,
+            "percentComplete": 0
+        })
+    }
+}
+
+impl FakeState {
+    fn behavior(&self, username: &str, filename: &str) -> Behavior {
+        self.file_behaviors
+            .get(filename)
+            .or_else(|| self.user_behaviors.get(username))
+            .copied()
+            .unwrap_or(Behavior::Succeed)
+    }
+
+    /// Writes a finished download where slskd puts it by default:
+    /// `<downloads>/<remote folder name>/<file name>`.
+    fn land(&self, filename: &str) {
+        let downloads = self.downloads.as_ref().expect("downloads directory");
+        let mut parts = filename.rsplit('\\');
+        let name = parts.next().unwrap();
+        let folder = downloads.join(parts.next().unwrap());
+        std::fs::create_dir_all(&folder).unwrap();
+        let content = self
+            .contents
+            .get(name)
+            .cloned()
+            .unwrap_or_else(|| name.as_bytes().to_vec());
+        std::fs::write(folder.join(name), content).unwrap();
+    }
 }
 
 /// A fake slskd on 127.0.0.1 with an ephemeral port.
@@ -74,6 +150,62 @@ impl FakeSlskd {
         self.state.lock().unwrap().requests.clone()
     }
 
+    fn requests_to(&self, method: Method, prefix: &str) -> Vec<Recorded> {
+        self.requests()
+            .into_iter()
+            .filter(|request| request.method == method && request.uri.starts_with(prefix))
+            .collect()
+    }
+
+    fn serve_downloads(&self, downloads: &Path) {
+        self.state.lock().unwrap().downloads = Some(downloads.to_owned());
+    }
+
+    fn user_behaves(&self, username: &str, behavior: Behavior) {
+        self.state
+            .lock()
+            .unwrap()
+            .user_behaviors
+            .insert(username.to_owned(), behavior);
+    }
+
+    fn file_behaves(&self, filename: &str, behavior: Behavior) {
+        self.state
+            .lock()
+            .unwrap()
+            .file_behaviors
+            .insert(filename.to_owned(), behavior);
+    }
+
+    fn transfers(&self) -> Vec<FakeTransfer> {
+        self.state.lock().unwrap().transfers.clone()
+    }
+
+    /// Completes every held download and writes its file.
+    fn finish_held(&self) {
+        let mut state = self.state.lock().unwrap();
+        let held: Vec<usize> = (0..state.transfers.len())
+            .filter(|index| state.transfers[*index].state == "InProgress")
+            .collect();
+        for index in held {
+            let filename = state.transfers[index].filename.clone();
+            state.land(&filename);
+            let transfer = &mut state.transfers[index];
+            transfer.state = "Completed, Succeeded";
+            transfer.bytes = transfer.size;
+        }
+    }
+
+    /// Answers a search for the Album with [`album_responses`].
+    fn knows_album_search(&self, search_id: &str) {
+        self.reply(
+            Method::GET,
+            &format!("/api/v0/searches/{search_id}"),
+            StatusCode::OK,
+            search(search_id, "Daft Punk Discovery", true, album_responses()),
+        );
+    }
+
     /// slskd logged in to Soulseek as `earthly-listener`.
     fn logged_in(&self) {
         self.reply(
@@ -102,9 +234,88 @@ async fn answer(
             .map(str::to_owned),
         body: serde_json::from_slice(&body).unwrap_or(Value::Null),
     });
+    if let Some(rest) = uri.path().strip_prefix("/api/v0/transfers/downloads/") {
+        return transfers(&mut state, &method, rest, &body);
+    }
     match state.replies.get(&format!("{method} {}", uri.path())) {
         Some((status, body)) => (*status, axum::Json(body.clone())).into_response(),
         None => StatusCode::NOT_FOUND.into_response(),
+    }
+}
+
+/// slskd's transfers API: queue, list and remove one user's downloads.
+fn transfers(state: &mut FakeState, method: &Method, rest: &str, body: &[u8]) -> Response {
+    let mut segments = rest.split('/');
+    let username = segments.next().unwrap_or_default().replace("%20", " ");
+    let id = segments.next();
+    match (method.clone(), id) {
+        (Method::POST, None) => {
+            let files: Vec<Value> = serde_json::from_slice(body).unwrap_or_default();
+            let mut enqueued = Vec::new();
+            for file in files {
+                let filename = file["filename"].as_str().unwrap().to_owned();
+                let size = file["size"].as_u64().unwrap();
+                let behavior = state.behavior(&username, &filename);
+                if behavior == Behavior::Offline {
+                    return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        axum::Json(json!(format!("User {username} appears to be offline"))),
+                    )
+                        .into_response();
+                }
+                let (transfer_state, bytes) = match behavior {
+                    Behavior::Succeed => {
+                        state.land(&filename);
+                        ("Completed, Succeeded", size)
+                    }
+                    Behavior::Fail => ("Completed, Errored", 0),
+                    Behavior::Stall => ("Queued, Remotely", 0),
+                    Behavior::Hold => ("InProgress", size / 2),
+                    Behavior::Offline => unreachable!(),
+                };
+                let transfer = FakeTransfer {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    username: username.clone(),
+                    filename,
+                    size,
+                    state: transfer_state,
+                    bytes,
+                };
+                enqueued.push(transfer.json());
+                state.transfers.push(transfer);
+            }
+            (
+                StatusCode::CREATED,
+                axum::Json(json!({"enqueued": enqueued, "failed": []})),
+            )
+                .into_response()
+        }
+        (Method::GET, None) => {
+            let files: Vec<Value> = state
+                .transfers
+                .iter()
+                .filter(|transfer| transfer.username == username)
+                .map(FakeTransfer::json)
+                .collect();
+            if files.is_empty() {
+                return StatusCode::NOT_FOUND.into_response();
+            }
+            axum::Json(json!({
+                "username": username,
+                "directories": [{"directory": "any", "fileCount": files.len(), "files": files}]
+            }))
+            .into_response()
+        }
+        (Method::DELETE, Some(id)) => {
+            let before = state.transfers.len();
+            state.transfers.retain(|transfer| transfer.id != id);
+            if state.transfers.len() == before {
+                StatusCode::NOT_FOUND.into_response()
+            } else {
+                StatusCode::NO_CONTENT.into_response()
+            }
+        }
+        _ => StatusCode::NOT_FOUND.into_response(),
     }
 }
 
@@ -148,15 +359,30 @@ struct Harness {
     router: axum::Router,
     state: AppState,
     managed: PathBuf,
-    _directory: tempfile::TempDir,
-    _downloads: tempfile::TempDir,
+    downloads: PathBuf,
+    slskd: Option<url::Url>,
+    /// The acquisition worker, once started.
+    worker: Option<tokio::task::AbortHandle>,
+    directory: Arc<tempfile::TempDir>,
+    _downloads: Arc<tempfile::TempDir>,
 }
 
 /// The router, with Soulseek Acquisition configured against `slskd` when
 /// given.
 async fn harness(slskd: Option<&url::Url>) -> Harness {
-    let directory = tempfile::tempdir().unwrap();
-    let downloads = tempfile::tempdir().unwrap();
+    let directory = Arc::new(tempfile::tempdir().unwrap());
+    let downloads = Arc::new(tempfile::tempdir().unwrap());
+    std::fs::create_dir(directory.path().join("managed")).unwrap();
+    app_in(directory, downloads, slskd.cloned()).await
+}
+
+/// An app on the database, Managed Storage and slskd download directory
+/// of `directory` and `downloads`, as after a restart.
+async fn app_in(
+    directory: Arc<tempfile::TempDir>,
+    downloads: Arc<tempfile::TempDir>,
+    slskd: Option<url::Url>,
+) -> Harness {
     let migrations = Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations");
     let pool = db::open_and_migrate(
         directory.path().join("app.db").to_str().unwrap(),
@@ -165,7 +391,6 @@ async fn harness(slskd: Option<&url::Url>) -> Harness {
     .await
     .expect("database");
     let managed = directory.path().join("managed");
-    std::fs::create_dir(&managed).unwrap();
     let mut config = Config::from_lookup(|name| match name {
         "MANAGED_STORAGE_PATH" => Some(managed.to_string_lossy().into_owned()),
         "RADIO_BROWSER_BASE_URL" => Some("http://127.0.0.1:9".to_owned()),
@@ -173,14 +398,60 @@ async fn harness(slskd: Option<&url::Url>) -> Harness {
         _ => None,
     })
     .expect("config");
-    config.soulseek = slskd.map(|url| soulseek_config(url, downloads.path()));
+    config.soulseek = slskd
+        .as_ref()
+        .map(|url| soulseek_config(url, downloads.path()));
     let state = AppState::new(config, Report::default(), pool);
     Harness {
         router: app::router(state.clone()),
         state,
         managed,
-        _directory: directory,
+        downloads: downloads.path().to_owned(),
+        slskd,
+        worker: None,
+        directory,
         _downloads: downloads,
+    }
+}
+
+/// Polls fast; a source stalls only after `stall`.
+fn timing(stall: Duration) -> soulseek::WorkerTiming {
+    soulseek::WorkerTiming {
+        poll_interval: Duration::from_millis(20),
+        stall_timeout: stall,
+    }
+}
+
+impl Harness {
+    /// Starts the acquisition worker, as the server does at startup.
+    async fn start_worker(&mut self, stall: Duration) {
+        self.state
+            .managed_import
+            .start()
+            .await
+            .expect("Managed Import startup");
+        self.worker = self.state.soulseek.start(timing(stall));
+    }
+
+    /// Stops this app's worker and opens a new app on the same files.
+    async fn restart(mut self) -> Harness {
+        if let Some(worker) = self.worker.take() {
+            worker.abort();
+        }
+        app_in(
+            self.directory.clone(),
+            self._downloads.clone(),
+            self.slskd.clone(),
+        )
+        .await
+    }
+}
+
+impl Drop for Harness {
+    fn drop(&mut self) {
+        if let Some(worker) = self.worker.take() {
+            worker.abort();
+        }
     }
 }
 
@@ -975,4 +1246,440 @@ async fn a_version_resolves_to_its_ordered_sources_and_their_files() {
             "{key} {source:?}"
         );
     }
+}
+
+const ALICE_ONE: &str = r"@@alice\Daft Punk\Discovery [24-48]\01 One More Time.flac";
+const ALICE_TWO: &str = r"@@alice\Daft Punk\Discovery [24-48]\02 Aerodynamic.flac";
+const BOB_ONE: &str = r"Music\Discovery\01 One More Time.flac";
+/// Long enough that no source stalls unless a test wants it to.
+const NO_STALL: Duration = Duration::from_secs(60);
+
+/// A configured app with its worker running and a finished search for the
+/// Album; returns the search id.
+async fn acquiring(slskd: &FakeSlskd, stall: Duration) -> (Harness, String) {
+    let mut harness = harness(Some(&slskd.url)).await;
+    slskd.serve_downloads(&harness.downloads);
+    harness.start_worker(stall).await;
+    let search_id = start_search(&harness, slskd, "Daft Punk Discovery", "album").await;
+    slskd.knows_album_search(&search_id);
+    (harness, search_id)
+}
+
+async fn start_acquisition(harness: &Harness, body: Value) -> (StatusCode, Value) {
+    send_json(
+        &harness.router,
+        Method::POST,
+        "/api/v1/soulseek/acquisitions",
+        Some(body),
+    )
+    .await
+}
+
+/// Starts acquiring the 24-bit FLAC version; returns its id.
+async fn acquire_hi_res(harness: &Harness, search_id: &str) -> String {
+    let (status, body) = start_acquisition(
+        harness,
+        json!({"searchId": search_id, "versionKey": "flac-24-48000"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+    body["acquisitionId"].as_str().unwrap().to_owned()
+}
+
+async fn acquisition(harness: &Harness, id: &str) -> Value {
+    let (status, body) = send(
+        &harness.router,
+        Method::GET,
+        &format!("/api/v1/soulseek/acquisitions/{id}"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    body
+}
+
+/// Reads the acquisition until `done` holds, for at most 15 seconds.
+async fn wait_for(harness: &Harness, id: &str, what: &str, done: impl Fn(&Value) -> bool) -> Value {
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(15);
+    loop {
+        let body = acquisition(harness, id).await;
+        if done(&body) {
+            return body;
+        }
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "waiting for {what}: {body:#}"
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+}
+
+fn file_states(body: &Value) -> Vec<(String, String)> {
+    body["files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|file| {
+            (
+                file["filename"].as_str().unwrap().to_owned(),
+                file["state"].as_str().unwrap().to_owned(),
+            )
+        })
+        .collect()
+}
+
+fn states(body: &Value) -> Vec<String> {
+    file_states(body)
+        .into_iter()
+        .map(|(_, state)| state)
+        .collect()
+}
+
+fn files_in(directory: &Path) -> Vec<String> {
+    fn walk(path: &Path, root: &Path, out: &mut Vec<String>) {
+        for entry in std::fs::read_dir(path).into_iter().flatten().flatten() {
+            if entry.file_type().unwrap().is_dir() {
+                walk(&entry.path(), root, out);
+            } else {
+                out.push(
+                    entry
+                        .path()
+                        .strip_prefix(root)
+                        .unwrap()
+                        .to_string_lossy()
+                        .into_owned(),
+                );
+            }
+        }
+    }
+    let mut files = Vec::new();
+    walk(directory, directory, &mut files);
+    files.sort();
+    files
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn an_acquisition_starts_with_the_first_source_and_downloads_its_files() {
+    let slskd = FakeSlskd::start().await;
+    slskd.file_behaves(ALICE_TWO, Behavior::Hold);
+    let (harness, search_id) = acquiring(&slskd, NO_STALL).await;
+    let (status, started) = start_acquisition(
+        &harness,
+        json!({"searchId": search_id, "versionKey": "flac-24-48000"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{started}");
+    let id = started["acquisitionId"].as_str().unwrap();
+    assert!(uuid::Uuid::parse_str(id).is_ok());
+    assert_eq!(started["query"], "Daft Punk Discovery");
+    assert_eq!(started["scope"], "album");
+    assert_eq!(started["versionKey"], "flac-24-48000");
+    assert_eq!(
+        started["quality"],
+        json!({"format": "flac", "lossless": true, "bitDepth": 24, "sampleRateHz": 48000})
+    );
+    assert_eq!(started["state"], "downloading");
+    assert_eq!(started["sourceCount"], 3);
+    assert_eq!(started["sourcesTried"], 1);
+    assert_eq!(started["currentSource"]["username"], "alice");
+    assert_eq!(
+        started["currentSource"]["folder"],
+        r"@@alice\Daft Punk\Discovery [24-48]"
+    );
+    assert_eq!(
+        started["files"],
+        json!([
+            {"filename": "01 One More Time.flac", "state": "queued", "bytesTransferred": 0, "totalBytes": 100},
+            {"filename": "02 Aerodynamic.flac", "state": "queued", "bytesTransferred": 0, "totalBytes": 200}
+        ])
+    );
+    assert!(started.get("batchId").is_none(), "{started}");
+    assert!(started["createdAt"].as_str().unwrap().ends_with('Z'));
+
+    let progress = wait_for(&harness, id, "per-file progress", |body| {
+        states(body) == ["downloaded", "downloading"]
+    })
+    .await;
+    assert_eq!(progress["files"][1]["bytesTransferred"], 100);
+    let queued = slskd.requests_to(Method::POST, "/api/v0/transfers/downloads/alice");
+    assert_eq!(queued.len(), 1, "one request queues the source's files");
+    assert_eq!(
+        queued[0].body,
+        json!([{"filename": ALICE_ONE, "size": 100}, {"filename": ALICE_TWO, "size": 200}])
+    );
+    assert_eq!(queued[0].api_key.as_deref(), Some(API_KEY));
+
+    let (status, list) = send(
+        &harness.router,
+        Method::GET,
+        "/api/v1/soulseek/acquisitions",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(list["items"].as_array().unwrap().len(), 1);
+    assert_eq!(list["items"][0]["acquisitionId"], id);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn starting_the_same_version_again_returns_the_active_acquisition() {
+    let slskd = FakeSlskd::start().await;
+    slskd.user_behaves("alice", Behavior::Hold);
+    let (harness, search_id) = acquiring(&slskd, NO_STALL).await;
+    let id = acquire_hi_res(&harness, &search_id).await;
+    // Another search for the same query reopens it too.
+    let again_id = start_search(&harness, &slskd, "Daft Punk Discovery", "album").await;
+    slskd.knows_album_search(&again_id);
+    let (status, again) = start_acquisition(
+        &harness,
+        json!({"searchId": again_id, "versionKey": "flac-24-48000"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{again}");
+    assert_eq!(again["acquisitionId"], id.as_str());
+    // Another version is another acquisition.
+    let (status, other) = start_acquisition(
+        &harness,
+        json!({"searchId": search_id, "versionKey": "flac-x-x"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{other}");
+    assert_ne!(other["acquisitionId"], id.as_str());
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_bad_acquisition_request_is_refused() {
+    let slskd = FakeSlskd::start().await;
+    let (harness, search_id) = acquiring(&slskd, NO_STALL).await;
+    for (body, status, code) in [
+        (
+            json!({"versionKey": "flac-24-48000"}),
+            StatusCode::BAD_REQUEST,
+            "bad_request",
+        ),
+        (
+            json!({"searchId": search_id}),
+            StatusCode::BAD_REQUEST,
+            "bad_request",
+        ),
+        (
+            json!({"searchId": search_id, "versionKey": "flac-8-8000"}),
+            StatusCode::NOT_FOUND,
+            "version_not_found",
+        ),
+        (
+            json!({"searchId": search_id, "versionKey": "flac-24-48000", "sourceId": "nope"}),
+            StatusCode::NOT_FOUND,
+            "version_not_found",
+        ),
+        (
+            json!({"searchId": "0b5d5d5e-8a3f-4c11-9d3e-5b0c3f2a1e77", "versionKey": "flac-24-48000"}),
+            StatusCode::NOT_FOUND,
+            "search_not_found",
+        ),
+    ] {
+        let (answered, answer) = start_acquisition(&harness, body.clone()).await;
+        assert_eq!(answered, status, "{body}");
+        assert_eq!(answer["code"], code, "{body}");
+    }
+    for method in [Method::GET, Method::DELETE] {
+        let (status, body) = send(
+            &harness.router,
+            method.clone(),
+            "/api/v1/soulseek/acquisitions/0b5d5d5e-8a3f-4c11-9d3e-5b0c3f2a1e77",
+        )
+        .await;
+        assert_eq!(status, StatusCode::NOT_FOUND, "{method}");
+        assert_eq!(body["code"], "acquisition_not_found", "{method}");
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_chosen_source_is_tried_first() {
+    let slskd = FakeSlskd::start().await;
+    slskd.user_behaves("erin", Behavior::Hold);
+    let (harness, search_id) = acquiring(&slskd, NO_STALL).await;
+    let (_, body) = send(
+        &harness.router,
+        Method::GET,
+        &format!("/api/v1/soulseek/searches/{search_id}"),
+    )
+    .await;
+    let erin = body["versions"][0]["sources"][1]["sourceId"].clone();
+    let (status, started) = start_acquisition(
+        &harness,
+        json!({"searchId": search_id, "versionKey": "flac-24-48000", "sourceId": erin}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{started}");
+    assert_eq!(started["currentSource"]["username"], "erin");
+    assert_eq!(started["currentSource"]["sourceId"], erin);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_failing_source_falls_over_to_the_next_source_of_the_version() {
+    let slskd = FakeSlskd::start().await;
+    slskd.file_behaves(ALICE_TWO, Behavior::Fail);
+    slskd.user_behaves("erin", Behavior::Hold);
+    let (harness, search_id) = acquiring(&slskd, NO_STALL).await;
+    let id = acquire_hi_res(&harness, &search_id).await;
+    let body = wait_for(&harness, &id, "erin's download", |body| {
+        body["currentSource"]["username"] == "erin" && body["files"][1]["state"] == "downloading"
+    })
+    .await;
+    assert_eq!(body["state"], "downloading");
+    assert_eq!(body["sourcesTried"], 2);
+    // alice's file that arrived is kept; only the missing one comes from erin.
+    assert_eq!(body["files"][0]["state"], "downloaded");
+    let queued = slskd.requests_to(Method::POST, "/api/v0/transfers/downloads/erin");
+    assert_eq!(queued.len(), 1);
+    assert_eq!(
+        queued[0].body,
+        json!([{"filename": r"E\Discovery\02 Aerodynamic.flac", "size": 200}])
+    );
+    // alice's failed transfer is gone from slskd.
+    assert!(
+        slskd
+            .transfers()
+            .iter()
+            .all(|transfer| transfer.filename != ALICE_TWO),
+        "{:?}",
+        slskd.transfers()
+    );
+    slskd.finish_held();
+    let done = wait_for(&harness, &id, "every file", |body| {
+        body["state"] != "downloading"
+    })
+    .await;
+    assert_eq!(states(&done), ["downloaded", "downloaded"], "{done}");
+    assert!(
+        files_in(&harness.downloads).contains(&"Discovery/02 Aerodynamic.flac".to_owned()),
+        "{:?}",
+        files_in(&harness.downloads)
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn exhausted_sources_fail_the_acquisition_with_the_files_that_arrived() {
+    let slskd = FakeSlskd::start().await;
+    slskd.file_behaves(ALICE_ONE, Behavior::Fail);
+    slskd.file_behaves(ALICE_TWO, Behavior::Fail);
+    slskd.user_behaves("erin", Behavior::Offline);
+    // bob has only the first file.
+    let (harness, search_id) = acquiring(&slskd, NO_STALL).await;
+    let id = acquire_hi_res(&harness, &search_id).await;
+    let body = wait_for(&harness, &id, "failure", |body| body["state"] == "failed").await;
+    assert_eq!(body["sourcesTried"], 3);
+    assert!(body.get("currentSource").is_none(), "{body}");
+    assert_eq!(states(&body)[1], "failed", "{body}");
+    let reason = body["failureReason"].as_str().unwrap();
+    assert!(reason.contains("1 of 2 files"), "{reason}");
+    assert_eq!(
+        slskd.requests_to(Method::POST, "/api/v0/transfers/downloads/bob")[0].body,
+        json!([{"filename": BOB_ONE, "size": 300}])
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn deleting_a_failed_acquisition_dismisses_it() {
+    let slskd = FakeSlskd::start().await;
+    for user in ["alice", "erin", "bob"] {
+        slskd.user_behaves(user, Behavior::Fail);
+    }
+    let (harness, search_id) = acquiring(&slskd, NO_STALL).await;
+    let id = acquire_hi_res(&harness, &search_id).await;
+    wait_for(&harness, &id, "failure", |body| body["state"] == "failed").await;
+    let uri = format!("/api/v1/soulseek/acquisitions/{id}");
+    let (status, _) = send(&harness.router, Method::DELETE, &uri).await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (status, _) = send(&harness.router, Method::GET, &uri).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let (_, list) = send(
+        &harness.router,
+        Method::GET,
+        "/api/v1/soulseek/acquisitions",
+    )
+    .await;
+    assert_eq!(list["items"], json!([]));
+    let (status, _) = send(&harness.router, Method::DELETE, &uri).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_stalled_source_falls_over() {
+    let slskd = FakeSlskd::start().await;
+    slskd.user_behaves("alice", Behavior::Stall);
+    slskd.user_behaves("erin", Behavior::Hold);
+    let (harness, search_id) = acquiring(&slskd, Duration::from_millis(400)).await;
+    let id = acquire_hi_res(&harness, &search_id).await;
+    let body = wait_for(&harness, &id, "erin", |body| {
+        body["currentSource"]["username"] == "erin"
+    })
+    .await;
+    assert_eq!(body["sourcesTried"], 2);
+    assert!(
+        slskd
+            .transfers()
+            .iter()
+            .all(|transfer| transfer.username != "alice"),
+        "the stalled source's transfers are removed"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn cancelling_removes_transfers_and_downloaded_copies() {
+    let slskd = FakeSlskd::start().await;
+    slskd.file_behaves(ALICE_TWO, Behavior::Hold);
+    let (harness, search_id) = acquiring(&slskd, NO_STALL).await;
+    let id = acquire_hi_res(&harness, &search_id).await;
+    wait_for(&harness, &id, "first file", |body| {
+        states(body) == ["downloaded", "downloading"]
+    })
+    .await;
+    assert_eq!(files_in(&harness.downloads).len(), 1);
+    let uri = format!("/api/v1/soulseek/acquisitions/{id}");
+    let (status, _) = send(&harness.router, Method::DELETE, &uri).await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    assert_eq!(acquisition(&harness, &id).await["state"], "cancelled");
+    assert!(slskd.transfers().is_empty(), "{:?}", slskd.transfers());
+    assert!(files_in(&harness.downloads).is_empty());
+    // Deleting a cancelled acquisition dismisses it.
+    let (status, _) = send(&harness.router, Method::DELETE, &uri).await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (status, body) = send(&harness.router, Method::GET, &uri).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(body["code"], "acquisition_not_found");
+    // A cancelled acquisition does not block a new one.
+    let (status, _) = start_acquisition(
+        &harness,
+        json!({"searchId": search_id, "versionKey": "flac-24-48000"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn an_acquisition_continues_after_a_restart_from_slskd_state() {
+    let slskd = FakeSlskd::start().await;
+    slskd.user_behaves("alice", Behavior::Hold);
+    let (harness, search_id) = acquiring(&slskd, NO_STALL).await;
+    let id = acquire_hi_res(&harness, &search_id).await;
+    wait_for(&harness, &id, "downloads in progress", |body| {
+        states(body) == ["downloading", "downloading"]
+    })
+    .await;
+    let mut restarted = harness.restart().await;
+    // slskd finishes while the Music Server is down.
+    slskd.finish_held();
+    restarted.start_worker(NO_STALL).await;
+    let body = wait_for(&restarted, &id, "both files", |body| {
+        body["state"] != "downloading"
+    })
+    .await;
+    assert_eq!(states(&body), ["downloaded", "downloaded"], "{body}");
+    assert_eq!(
+        slskd
+            .requests_to(Method::POST, "/api/v0/transfers/downloads/alice")
+            .len(),
+        1,
+        "nothing is queued twice"
+    );
 }

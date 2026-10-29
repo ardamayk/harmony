@@ -65,6 +65,7 @@ impl AppState {
         let soulseek = modules::soulseek::Soulseek::new(
             config.soulseek.as_ref(),
             &config.managed_storage_path,
+            db.clone(),
         );
         Self {
             config: Arc::new(config),

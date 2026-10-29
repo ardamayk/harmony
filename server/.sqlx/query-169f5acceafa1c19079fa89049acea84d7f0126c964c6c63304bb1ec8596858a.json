@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT user_id, id AS \"id!\" FROM soulseek_acquisitions\n            WHERE state IN ('downloading', 'importing', 'review') ORDER BY created_at, rowid",
+  "describe": {
+    "columns": [
+      {
+        "name": "user_id",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "soulseek_acquisitions",
+            "name": "user_id"
+          }
+        }
+      },
+      {
+        "name": "id!",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "soulseek_acquisitions",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "169f5acceafa1c19079fa89049acea84d7f0126c964c6c63304bb1ec8596858a"
+}

@@ -1,0 +1,146 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT position, kind, name, source_index, remote_filename, size, transfer_id,\n                state, bytes_transferred, job_id, outcome\n            FROM soulseek_acquisition_files WHERE acquisition_id = ? ORDER BY position",
+  "describe": {
+    "columns": [
+      {
+        "name": "position",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "soulseek_acquisition_files",
+            "name": "position"
+          }
+        }
+      },
+      {
+        "name": "kind",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "soulseek_acquisition_files",
+            "name": "kind"
+          }
+        }
+      },
+      {
+        "name": "name",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "soulseek_acquisition_files",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "name": "source_index",
+        "ordinal": 3,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "soulseek_acquisition_files",
+            "name": "source_index"
+          }
+        }
+      },
+      {
+        "name": "remote_filename",
+        "ordinal": 4,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "soulseek_acquisition_files",
+            "name": "remote_filename"
+          }
+        }
+      },
+      {
+        "name": "size",
+        "ordinal": 5,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "soulseek_acquisition_files",
+            "name": "size"
+          }
+        }
+      },
+      {
+        "name": "transfer_id",
+        "ordinal": 6,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "soulseek_acquisition_files",
+            "name": "transfer_id"
+          }
+        }
+      },
+      {
+        "name": "state",
+        "ordinal": 7,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "soulseek_acquisition_files",
+            "name": "state"
+          }
+        }
+      },
+      {
+        "name": "bytes_transferred",
+        "ordinal": 8,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "soulseek_acquisition_files",
+            "name": "bytes_transferred"
+          }
+        }
+      },
+      {
+        "name": "job_id",
+        "ordinal": 9,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "soulseek_acquisition_files",
+            "name": "job_id"
+          }
+        }
+      },
+      {
+        "name": "outcome",
+        "ordinal": 10,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "soulseek_acquisition_files",
+            "name": "outcome"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "cc1ebf42c393693f355c17a2ef040078ecd354c8cf5780965089608c476cc1f6"
+}

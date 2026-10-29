@@ -1,0 +1,170 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id AS \"id!\", query, scope, version_key, quality_json, sources_json,\n                source_index, state, batch_id, failure_reason, progress_at_ms,\n                created_at AS \"created_at: String\", updated_at AS \"updated_at: String\"\n            FROM soulseek_acquisitions WHERE id = ? AND user_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "soulseek_acquisitions",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "query",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "soulseek_acquisitions",
+            "name": "query"
+          }
+        }
+      },
+      {
+        "name": "scope",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "soulseek_acquisitions",
+            "name": "scope"
+          }
+        }
+      },
+      {
+        "name": "version_key",
+        "ordinal": 3,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "soulseek_acquisitions",
+            "name": "version_key"
+          }
+        }
+      },
+      {
+        "name": "quality_json",
+        "ordinal": 4,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "soulseek_acquisitions",
+            "name": "quality_json"
+          }
+        }
+      },
+      {
+        "name": "sources_json",
+        "ordinal": 5,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "soulseek_acquisitions",
+            "name": "sources_json"
+          }
+        }
+      },
+      {
+        "name": "source_index",
+        "ordinal": 6,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "soulseek_acquisitions",
+            "name": "source_index"
+          }
+        }
+      },
+      {
+        "name": "state",
+        "ordinal": 7,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "soulseek_acquisitions",
+            "name": "state"
+          }
+        }
+      },
+      {
+        "name": "batch_id",
+        "ordinal": 8,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "soulseek_acquisitions",
+            "name": "batch_id"
+          }
+        }
+      },
+      {
+        "name": "failure_reason",
+        "ordinal": 9,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "soulseek_acquisitions",
+            "name": "failure_reason"
+          }
+        }
+      },
+      {
+        "name": "progress_at_ms",
+        "ordinal": 10,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "soulseek_acquisitions",
+            "name": "progress_at_ms"
+          }
+        }
+      },
+      {
+        "name": "created_at: String",
+        "ordinal": 11,
+        "type_info": "Datetime",
+        "origin": {
+          "Table": {
+            "table": "soulseek_acquisitions",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "name": "updated_at: String",
+        "ordinal": 12,
+        "type_info": "Datetime",
+        "origin": {
+          "Table": {
+            "table": "soulseek_acquisitions",
+            "name": "updated_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "2caf86429bf58030fef702f0c1b95c43b58d903a758119fe0e6fc7b96eaa2343"
+}

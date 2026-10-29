@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id AS \"id!\" FROM soulseek_acquisitions\n            WHERE user_id = ? AND query = ? AND scope = ? AND version_key = ?\n                AND state IN ('downloading', 'importing', 'review')\n            ORDER BY created_at DESC, rowid DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "soulseek_acquisitions",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "81a3cd5b2fe1f3007c57f6a483e8892f902a96c5e7102a6d816904c303410bed"
+}

@@ -1,6 +1,7 @@
 //! Soulseek Acquisition's domain rules: whether the operator configured
 //! slskd, and what slskd's state means for the listener.
 
+use super::repository::Repository;
 use super::slskd::{Application, Share, Slskd, SlskdError};
 use super::versions::{self, Scope, Version};
 use crate::config::SoulseekConfig;
@@ -15,8 +16,6 @@ const MAX_QUERY_CHARS: usize = 200;
 pub enum SoulseekError {
     #[error("Soulseek Acquisition is not configured on this server")]
     Disabled,
-    #[error("Soulseek Acquisition is not implemented yet")]
-    NotImplemented,
     #[error("{0}")]
     BadRequest(String),
     /// slskd did not answer; the message says why.
@@ -28,12 +27,22 @@ pub enum SoulseekError {
     SearchNotFound,
     #[error("the search has no such Acquisition Version or source")]
     VersionNotFound,
+    #[error("there is no such Soulseek Acquisition")]
+    AcquisitionNotFound,
+    /// The acquisition cannot do that now; the message says why.
+    #[error("{0}")]
+    Conflict(String),
+    /// A database or Managed Import failure, logged and answered as 500.
+    #[error("{0}")]
+    Internal(String),
 }
 
 impl From<SlskdError> for SoulseekError {
     fn from(error: SlskdError) -> Self {
         match error {
-            SlskdError::Unreachable(_) => Self::SlskdUnreachable(error.to_string()),
+            SlskdError::Unreachable(_) | SlskdError::Refused(_) => {
+                Self::SlskdUnreachable(error.to_string())
+            }
             SlskdError::NotLoggedIn => Self::NotLoggedIn,
             SlskdError::NotFound => Self::SearchNotFound,
         }
@@ -86,15 +95,47 @@ pub struct Soulseek {
     config: Option<SoulseekConfig>,
     slskd: Option<Slskd>,
     managed_storage_path: PathBuf,
+    repo: Repository,
+    /// Serializes the worker's steps with starting and cancelling, so each
+    /// sees an acquisition between steps.
+    acquisitions: tokio::sync::Mutex<()>,
+    /// Wakes the worker early, when an acquisition starts.
+    pub(super) wake: tokio::sync::Notify,
 }
 
 impl Soulseek {
-    pub fn new(config: Option<&SoulseekConfig>, managed_storage_path: &str) -> Self {
+    pub fn new(
+        config: Option<&SoulseekConfig>,
+        managed_storage_path: &str,
+        pool: sqlx::SqlitePool,
+    ) -> Self {
         Self {
             config: config.cloned(),
             slskd: config.map(Slskd::new),
             managed_storage_path: PathBuf::from(managed_storage_path),
+            repo: Repository::new(pool),
+            acquisitions: tokio::sync::Mutex::new(()),
+            wake: tokio::sync::Notify::new(),
         }
+    }
+
+    pub(super) fn repo(&self) -> &Repository {
+        &self.repo
+    }
+
+    pub(super) async fn acquisition_lock(&self) -> tokio::sync::MutexGuard<'_, ()> {
+        self.acquisitions.lock().await
+    }
+
+    pub(super) fn slskd_client(&self) -> Option<&Slskd> {
+        self.slskd.as_ref()
+    }
+
+    /// slskd's completed downloads as this server sees them.
+    pub(super) fn downloads_path(&self) -> Option<&Path> {
+        self.config
+            .as_ref()
+            .map(|config| config.downloads_path.as_path())
     }
 
     pub fn is_enabled(&self) -> bool {

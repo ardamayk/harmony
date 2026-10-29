@@ -2,6 +2,7 @@
 //! respond. Every route answers 404 `soulseek_acquisition_disabled` while
 //! slskd is not configured.
 
+use super::acquisitions::{Acquisition, AcquisitionState, FileKind};
 use super::service::{Sharing, SoulseekError, SoulseekSearch, Status};
 use super::versions::{Quality, Scope, Source, Version};
 use crate::app::AppState;
@@ -10,7 +11,6 @@ use crate::respond::{ApiError, ApiResult};
 use axum::body::Bytes;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
-use axum::response::Response;
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
@@ -22,11 +22,11 @@ pub fn routes() -> Router<AppState> {
         .route("/api/v1/soulseek/searches/{search_id}", get(search))
         .route(
             "/api/v1/soulseek/acquisitions",
-            get(unimplemented).post(unimplemented),
+            get(list_acquisitions).post(start_acquisition),
         )
         .route(
             "/api/v1/soulseek/acquisitions/{acquisition_id}",
-            get(unimplemented).delete(unimplemented),
+            get(get_acquisition).delete(cancel_acquisition),
         )
 }
 
@@ -34,8 +34,10 @@ impl From<SoulseekError> for ApiError {
     fn from(error: SoulseekError) -> Self {
         let (status, code) = match &error {
             SoulseekError::Disabled => (StatusCode::NOT_FOUND, "soulseek_acquisition_disabled"),
-            SoulseekError::NotImplemented => (StatusCode::NOT_IMPLEMENTED, "not_implemented"),
             SoulseekError::BadRequest(_) => (StatusCode::BAD_REQUEST, "bad_request"),
+            SoulseekError::AcquisitionNotFound => (StatusCode::NOT_FOUND, "acquisition_not_found"),
+            SoulseekError::Conflict(_) => (StatusCode::CONFLICT, "acquisition_state_conflict"),
+            SoulseekError::Internal(cause) => return ApiError::internal(cause),
             SoulseekError::SlskdUnreachable(_) => {
                 (StatusCode::SERVICE_UNAVAILABLE, "slskd_unreachable")
             }
@@ -47,11 +49,6 @@ impl From<SoulseekError> for ApiError {
         };
         ApiError::new(status, code, error.to_string())
     }
-}
-
-async fn unimplemented(State(state): State<AppState>) -> ApiResult<Response> {
-    state.soulseek.ensure_enabled()?;
-    Err(SoulseekError::NotImplemented.into())
 }
 
 #[derive(Serialize)]
@@ -224,7 +221,7 @@ async fn search(
     }))
 }
 
-fn version_response(version: Version) -> VersionResponse {
+fn quality_response(quality: Quality) -> QualityResponse {
     let Quality {
         format,
         lossless,
@@ -232,17 +229,21 @@ fn version_response(version: Version) -> VersionResponse {
         sample_rate_hz,
         bitrate_kbps,
         variable_bitrate,
-    } = version.quality;
+    } = quality;
+    QualityResponse {
+        format,
+        lossless,
+        bit_depth,
+        sample_rate_hz,
+        bitrate_kbps,
+        variable_bitrate,
+    }
+}
+
+fn version_response(version: Version) -> VersionResponse {
     VersionResponse {
         version_key: version.key,
-        quality: QualityResponse {
-            format,
-            lossless,
-            bit_depth,
-            sample_rate_hz,
-            bitrate_kbps,
-            variable_bitrate,
-        },
+        quality: quality_response(version.quality),
         file_count: version.file_count,
         total_bytes: version.total_bytes,
         source_count: version.sources.len(),
@@ -263,4 +264,151 @@ fn source_response(source: Source) -> SourceResponse {
         queue_length: source.queue_length,
         upload_speed_bytes_per_second: source.upload_speed,
     }
+}
+
+#[derive(Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AcquisitionCreate {
+    #[serde(default, deserialize_with = "gojson::nullable")]
+    search_id: String,
+    #[serde(default, deserialize_with = "gojson::nullable")]
+    version_key: String,
+    #[serde(default, deserialize_with = "gojson::nullable")]
+    source_id: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AcquisitionResponse {
+    acquisition_id: String,
+    query: String,
+    scope: &'static str,
+    version_key: String,
+    quality: QualityResponse,
+    state: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    batch_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    current_source: Option<SourceReference>,
+    sources_tried: usize,
+    source_count: usize,
+    files: Vec<AcquisitionFileResponse>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    failure_reason: Option<String>,
+    created_at: String,
+    updated_at: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SourceReference {
+    source_id: String,
+    username: String,
+    folder: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AcquisitionFileResponse {
+    filename: String,
+    state: &'static str,
+    bytes_transferred: u64,
+    total_bytes: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    job_id: Option<String>,
+}
+
+#[derive(Serialize)]
+struct AcquisitionList {
+    items: Vec<AcquisitionResponse>,
+}
+
+fn acquisition_response(acquisition: Acquisition) -> AcquisitionResponse {
+    let current_source = acquisition
+        .state
+        .eq(&AcquisitionState::Downloading)
+        .then(|| acquisition.current_source())
+        .flatten()
+        .map(|source| SourceReference {
+            source_id: source.id.clone(),
+            username: source.username.clone(),
+            folder: source.folder.clone(),
+        });
+    let sources_tried = acquisition.sources_tried();
+    // The batch shows once Managed Import has taken a file into it.
+    let importing = acquisition.files.iter().any(|file| file.job_id.is_some());
+    AcquisitionResponse {
+        acquisition_id: acquisition.id,
+        query: acquisition.query,
+        scope: acquisition.scope.name(),
+        version_key: acquisition.version_key,
+        quality: quality_response(acquisition.quality),
+        state: acquisition.state.name(),
+        batch_id: acquisition.batch_id.filter(|_| importing),
+        current_source,
+        sources_tried,
+        source_count: acquisition.sources.len(),
+        files: acquisition
+            .files
+            .into_iter()
+            .filter(|file| file.kind == FileKind::Audio)
+            .map(|file| AcquisitionFileResponse {
+                filename: file.name,
+                state: file.state.name(),
+                bytes_transferred: file.bytes_transferred.min(file.size),
+                total_bytes: file.size,
+                job_id: file.job_id,
+            })
+            .collect(),
+        failure_reason: acquisition.failure_reason,
+        created_at: gojson::time(&acquisition.created_at),
+        updated_at: gojson::time(&acquisition.updated_at),
+    }
+}
+
+async fn start_acquisition(
+    State(state): State<AppState>,
+    body: Bytes,
+) -> ApiResult<(StatusCode, Json<AcquisitionResponse>)> {
+    state.soulseek.ensure_enabled()?;
+    let input: AcquisitionCreate = gojson::decode_body(&body, "invalid JSON body")?;
+    if input.search_id.is_empty() || input.version_key.is_empty() {
+        return Err(
+            SoulseekError::BadRequest("searchId and versionKey are required".to_owned()).into(),
+        );
+    }
+    let source_id = input.source_id.filter(|id| !id.is_empty());
+    let (acquisition, created) = state
+        .soulseek
+        .start_acquisition(&input.search_id, &input.version_key, source_id.as_deref())
+        .await?;
+    let status = if created {
+        StatusCode::CREATED
+    } else {
+        StatusCode::OK
+    };
+    Ok((status, Json(acquisition_response(acquisition))))
+}
+
+async fn list_acquisitions(State(state): State<AppState>) -> ApiResult<Json<AcquisitionList>> {
+    let acquisitions = state.soulseek.list_acquisitions().await?;
+    Ok(Json(AcquisitionList {
+        items: acquisitions.into_iter().map(acquisition_response).collect(),
+    }))
+}
+
+async fn get_acquisition(
+    State(state): State<AppState>,
+    Path(acquisition_id): Path<String>,
+) -> ApiResult<Json<AcquisitionResponse>> {
+    let acquisition = state.soulseek.get_acquisition(&acquisition_id).await?;
+    Ok(Json(acquisition_response(acquisition)))
+}
+
+async fn cancel_acquisition(
+    State(state): State<AppState>,
+    Path(acquisition_id): Path<String>,
+) -> ApiResult<StatusCode> {
+    state.soulseek.cancel_acquisition(&acquisition_id).await?;
+    Ok(StatusCode::NO_CONTENT)
 }

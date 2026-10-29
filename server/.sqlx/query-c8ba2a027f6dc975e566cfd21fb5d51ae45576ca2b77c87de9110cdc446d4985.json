@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO soulseek_acquisitions (\n                id, user_id, query, scope, version_key, quality_json, sources_json,\n                source_index, state, batch_id, failure_reason, progress_at_ms\n            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 12
+    },
+    "nullable": []
+  },
+  "hash": "c8ba2a027f6dc975e566cfd21fb5d51ae45576ca2b77c87de9110cdc446d4985"
+}

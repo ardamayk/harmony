@@ -84,6 +84,11 @@ async fn run(config: Config) -> Result<(), String> {
     if let Err(error) = state.managed_import.start().await {
         tracing::error!(%error, "Managed Import startup cleanup failed");
     }
+    // Soulseek Acquisition's worker resumes after Managed Import's restart
+    // cleanup.
+    let _ = state
+        .soulseek
+        .start(modules::soulseek::WorkerTiming::default());
     let router = app::router(state.clone());
     // Go's net.Listen asks for net.core.somaxconn; tokio's bind asks for 1024 and
     // overflowed at 512 concurrent clients. The kernel caps this at somaxconn.

@@ -3,11 +3,17 @@
 //! Import. The feature is off until `SLSKD_URL`, `SLSKD_API_KEY` and
 //! `SLSKD_DOWNLOADS_PATH` are configured.
 
+mod acquisitions;
 mod handlers;
+mod repository;
 mod service;
 mod slskd;
 mod versions;
 
+pub use acquisitions::{
+    Acquisition, AcquisitionFile, AcquisitionSource, AcquisitionState, FileKind, FileState,
+    WorkerTiming,
+};
 pub use handlers::routes;
 pub use service::{
     ResolvedVersion, Sharing, Soulseek, SoulseekError, SoulseekSearch, Status, probe_dependency,

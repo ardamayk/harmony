@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM soulseek_acquisitions WHERE id = ? AND user_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "fc4548bc382880ad742c30ea38d5f8ad823604e81a7ff60ecc8b3a444455b83f"
+}
