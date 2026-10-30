@@ -26,7 +26,11 @@ function DialogOverlay({
 	return (
 		<DialogPrimitive.Backdrop
 			data-slot="dialog-overlay"
-			className={cn("fixed inset-0 z-50 bg-background/70", className)}
+			// Over the Desktop Client's drag regions, which would take its clicks.
+			className={cn(
+				"fixed inset-0 z-50 bg-background/70 [-webkit-app-region:no-drag]",
+				className,
+			)}
 			{...props}
 		/>
 	);
