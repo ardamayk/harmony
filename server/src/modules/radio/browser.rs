@@ -89,8 +89,8 @@ impl RawStation {
             station_uuid: self.stationuuid,
             name: self.name.trim().to_owned(),
             stream_url,
-            homepage_url: self.homepage,
-            favicon_url: self.favicon,
+            homepage_url: http_url_or_blank(self.homepage),
+            favicon_url: http_url_or_blank(self.favicon),
             country: self.country,
             language: self.language,
             tags: Some(split_tags(&self.tags)),
@@ -145,6 +145,22 @@ fn health_status(value: &Value) -> &'static str {
         Value::String(text) if text == "1" || text.eq_ignore_ascii_case("true") => "healthy",
         Value::String(text) if text == "0" || text.eq_ignore_ascii_case("false") => "broken",
         _ => "unknown",
+    }
+}
+
+/// Catalog entries carry free text in URL fields, such as "null".
+fn is_http_url(value: &str) -> bool {
+    url::Url::parse(value).is_ok_and(|parsed| {
+        matches!(parsed.scheme(), "http" | "https")
+            && parsed.host_str().is_some_and(|host| !host.is_empty())
+    })
+}
+
+fn http_url_or_blank(value: String) -> String {
+    if is_http_url(&value) {
+        value
+    } else {
+        String::new()
     }
 }
 
@@ -348,7 +364,12 @@ impl RadioBrowserClient {
 
     async fn fetch_search(&self, path: &str) -> Result<List<SearchResult>, BrowserError> {
         let raw: Vec<RawStation> = self.fetch_json(path).await?;
-        let items: Vec<SearchResult> = raw.into_iter().map(RawStation::into_result).collect();
+        // A station without a playable address has nothing to offer.
+        let items: Vec<SearchResult> = raw
+            .into_iter()
+            .map(RawStation::into_result)
+            .filter(|result| is_http_url(&result.stream_url))
+            .collect();
         Ok(List {
             total: items.len(),
             items,
@@ -390,6 +411,26 @@ impl RadioBrowserClient {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn drops_catalog_urls_that_are_not_http() {
+        let raw: RawStation = serde_json::from_value(json!({
+            "stationuuid": "u1", "name": "Jazz FM", "url": "http://a.example/x",
+            "favicon": "null", "homepage": "www.a.example"
+        }))
+        .expect("station");
+        let result = raw.into_result();
+        assert_eq!(result.favicon_url, "");
+        assert_eq!(result.homepage_url, "");
+
+        let kept: RawStation = serde_json::from_value(json!({
+            "favicon": "https://a.example/i.png", "homepage": "http://a.example/"
+        }))
+        .expect("station");
+        let result = kept.into_result();
+        assert_eq!(result.favicon_url, "https://a.example/i.png");
+        assert_eq!(result.homepage_url, "http://a.example/");
+    }
 
     #[test]
     fn maps_catalog_stations_like_the_go_client() {
