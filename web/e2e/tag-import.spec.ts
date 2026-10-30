@@ -57,6 +57,8 @@ test("new Album cover and file alternatives lead to an explicit batch Track Repl
 	await dialog.getByRole("button", { name: "Confirm Import" }).click();
 	await expect(dialog.getByText("Imported", { exact: true })).toBeVisible();
 	await dialog.getByRole("button", { name: "Done" }).click();
+	// The closing dialog stays mounted for its exit transition; reopen after.
+	await expect(dialog).toBeHidden();
 	const library = await (
 		await request.get("/api/v1/library/tracks", { params: { q: album } })
 	).json();

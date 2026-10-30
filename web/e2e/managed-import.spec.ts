@@ -533,6 +533,11 @@ test("Import Music dialog is keyboard accessible and cancelling cleans staging",
 	).toBeVisible({
 		timeout: 20_000,
 	});
+	// The live preview can show Accepted before the upload request settles;
+	// closing while it is still uploading leaves the batch running unasked.
+	await expect(
+		dialog.getByRole("button", { name: "Confirm Import" }),
+	).toBeEnabled();
 	const prompts: string[] = [];
 	page.once("dialog", (prompt) => {
 		prompts.push(prompt.message());
