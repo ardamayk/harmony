@@ -185,6 +185,7 @@ async fn join(
     headers: HeaderMap,
     body: Body,
 ) -> Result<Response, ApiError> {
+    state.listen_together.take_join()?;
     let JoinBody { token } = decode(body, MAX_JOIN_BYTES).await?;
     if token.is_empty() || token.chars().count() > MAX_TOKEN_CHARS {
         return Err(ApiError::bad_request("token has the wrong length").with_field("token"));

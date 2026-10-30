@@ -1,16 +1,18 @@
 //! The Guest Listener's allowlist. Anything not named here is refused, so a
 //! route added later stays out of a Guest's reach until someone adds it.
 
-use super::service::GuestSession;
+use super::limits::Budget;
+use super::service::{AudioStreamSlot, GuestSession};
 use crate::app::AppState;
 use crate::respond::ApiError;
 use axum::body::Body;
 use axum::extract::{MatchedPath, Request, State};
-use axum::http::{HeaderMap, StatusCode, header};
+use axum::http::{HeaderMap, Method, StatusCode, header};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use futures_util::StreamExt;
 use serde_json::Value;
+use tokio::sync::oneshot;
 
 /// Open to anyone who reaches the Guest Listener, as (method, route).
 const PUBLIC_ROUTES: &[(&str, &str)] = &[
@@ -20,6 +22,17 @@ const PUBLIC_ROUTES: &[(&str, &str)] = &[
 ];
 
 const TRACK_STREAM: &str = "/api/v1/tracks/{track_id}/stream";
+const ARTIST_PHOTO: &str = "/api/v1/library/artists/{artist_id}/photo";
+
+/// Reads that run ffmpeg or may call an outside service.
+const LOOKUP_ROUTES: &[&str] = &[
+    "/api/v1/library/artists/{artist_id}/biography",
+    "/api/v1/library/artists/{artist_id}/popular-tracks",
+    "/api/v1/library/albums/{album_id}/online-genres",
+    "/api/v1/library/tracks/play-counts",
+    "/api/v1/library/tracks/{track_id}/lyrics",
+    "/api/v1/library/tracks/{track_id}/waveform",
+];
 
 /// Open to a live Guest session, as (method, route).
 const SESSION_ROUTES: &[(&str, &str)] = &[
@@ -27,7 +40,7 @@ const SESSION_ROUTES: &[(&str, &str)] = &[
     ("GET", "/api/v1/preferences"),
     ("GET", "/api/v1/library/artists"),
     ("GET", "/api/v1/library/artists/{artist_id}"),
-    ("GET", "/api/v1/library/artists/{artist_id}/photo"),
+    ("GET", ARTIST_PHOTO),
     ("GET", "/api/v1/library/artists/{artist_id}/biography"),
     ("GET", "/api/v1/library/artists/{artist_id}/popular-tracks"),
     ("GET", "/api/v1/library/albums"),
@@ -73,6 +86,24 @@ fn classify(method: &str, route: Option<&str>, path: &str) -> Access {
     } else {
         Access::Denied
     }
+}
+
+/// What a session route draws on, for `SESSION_ROUTES` only. Room commands
+/// have their own limit, and leaving ends the session. A read this does not
+/// name counts as a library read, so a route added later has a limit too.
+fn budget(method: &str, route: &str) -> Option<Budget> {
+    if method == "POST" {
+        return None;
+    }
+    Some(if route == ARTIST_PHOTO {
+        Budget::Photos
+    } else if LOOKUP_ROUTES.contains(&route) {
+        Budget::Lookups
+    } else if route.starts_with("/api/v1/listen-together/") {
+        Budget::Room
+    } else {
+        Budget::Library
+    })
 }
 
 fn is_web_client_path(path: &str) -> bool {
@@ -149,10 +180,32 @@ pub async fn guest_gate(
                 )
                 .into_response();
             };
+            let spent = route
+                .as_deref()
+                .and_then(|route| budget(request.method().as_str(), route))
+                .map_or(Ok(()), |budget| {
+                    state.listen_together.take_read(&session, budget)
+                });
+            if let Err(error) = spent {
+                return ApiError::from(error).into_response();
+            }
+            // HEAD sends no audio, so it needs no place.
+            let audio = if route.as_deref() == Some(TRACK_STREAM) && request.method() == Method::GET
+            {
+                match state
+                    .listen_together
+                    .open_audio_stream(&session, request.uri().path())
+                {
+                    Ok(audio) => Some(audio),
+                    Err(error) => return ApiError::from(error).into_response(),
+                }
+            } else {
+                None
+            };
             request.extensions_mut().insert(session.clone());
             let response = next.run(request).await;
             match route.as_deref() {
-                Some(TRACK_STREAM) => end_with_session(response, session),
+                Some(TRACK_STREAM) => end_with_session(response, session, audio),
                 Some(route) if route.starts_with("/api/v1/library/") => {
                     without_file_paths(response).await
                 }
@@ -162,12 +215,24 @@ pub async fn guest_gate(
     }
 }
 
-/// A Track can take hours to send; revoking a Guest stops it as well.
-fn end_with_session(response: Response, session: GuestSession) -> Response {
+/// A Track can take hours to send; revoking a Guest stops it as well. The
+/// audio stream's place lasts as long as the body does.
+fn end_with_session(
+    response: Response,
+    session: GuestSession,
+    audio: Option<(AudioStreamSlot, oneshot::Receiver<()>)>,
+) -> Response {
     let (parts, body) = response.into_parts();
     let stream = body
         .into_data_stream()
         .take_until(Box::pin(session.revoked()));
+    let Some((slot, superseded)) = audio else {
+        return Response::from_parts(parts, Body::from_stream(stream));
+    };
+    let stream = stream.take_until(superseded).map(move |chunk| {
+        let _held = &slot;
+        chunk
+    });
     Response::from_parts(parts, Body::from_stream(stream))
 }
 
@@ -233,6 +298,27 @@ mod tests {
             classify("DELETE", "/api/v1/listen-together/room"),
             Access::Denied
         );
+    }
+
+    #[test]
+    fn every_session_read_has_a_budget_and_only_named_routes_are_lookups() {
+        for &(method, route) in SESSION_ROUTES {
+            let expected = match (method, route) {
+                ("POST", _) => None,
+                (_, ARTIST_PHOTO) => Some(Budget::Photos),
+                (_, "/api/v1/listen-together/room")
+                | (_, "/api/v1/listen-together/room/events")
+                | (_, "/api/v1/listen-together/room/clock") => Some(Budget::Room),
+                (_, route) if LOOKUP_ROUTES.contains(&route) => Some(Budget::Lookups),
+                _ => Some(Budget::Library),
+            };
+            assert_eq!(budget(method, route), expected, "{method} {route}");
+        }
+        for route in LOOKUP_ROUTES {
+            assert!(SESSION_ROUTES.contains(&("GET", route)), "{route}");
+        }
+        assert_eq!(budget("HEAD", TRACK_STREAM), Some(Budget::Library));
+        assert_eq!(budget("GET", TRACK_STREAM), Some(Budget::Library));
     }
 
     #[test]

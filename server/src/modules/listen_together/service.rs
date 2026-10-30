@@ -2,8 +2,9 @@
 //! behind one lock that is never held across an await, which is what makes
 //! the Guest limit atomic. Nothing here is written to disk or logged.
 
+use super::limits::{self, Budget, MAX_AUDIO_STREAMS, ReadBudgets, TokenBucket};
 use super::room_state::{Command, RoomState};
-use crate::config::Config;
+use crate::config::{Config, DEFAULT_LISTEN_TOGETHER_ROOM_HOURS};
 use crate::gojson;
 use crate::modules::library::{LibraryError, LibraryService};
 use base64::Engine;
@@ -14,11 +15,8 @@ use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, Weak};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use tokio::sync::watch;
+use tokio::sync::{oneshot, watch};
 use tokio::time::Instant;
-
-/// A burst of this many commands passes; then this many per second.
-const COMMANDS_PER_SECOND: f64 = 20.0;
 
 /// How long things last. Tests shorten these.
 #[derive(Clone, Copy, Debug)]
@@ -34,11 +32,24 @@ pub struct Timings {
 impl Default for Timings {
     fn default() -> Self {
         Self {
-            room_lifetime: Duration::from_secs(24 * 60 * 60),
+            room_lifetime: room_lifetime(DEFAULT_LISTEN_TOGETHER_ROOM_HOURS),
             guest_grace: Duration::from_secs(60),
             sweep_interval: Duration::from_secs(1),
         }
     }
+}
+
+impl Timings {
+    pub fn for_config(config: &Config) -> Self {
+        Self {
+            room_lifetime: room_lifetime(config.listen_together_room_hours),
+            ..Self::default()
+        }
+    }
+}
+
+fn room_lifetime(hours: u64) -> Duration {
+    Duration::from_secs(hours * 60 * 60)
 }
 
 #[derive(Debug, thiserror::Error, PartialEq)]
@@ -55,7 +66,7 @@ pub enum RoomError {
     Full,
     #[error("the Guest session has ended")]
     SessionEnded,
-    #[error("too many commands")]
+    #[error("too many requests")]
     RateLimited,
     #[error("{0}")]
     BadCommand(&'static str),
@@ -127,30 +138,28 @@ impl Drop for Presence {
     }
 }
 
-struct TokenBucket {
-    tokens: f64,
-    refilled_at: Instant,
+/// A place among a Guest's audio streams, given back when dropped.
+pub struct AudioStreamSlot {
+    service: Weak<ListenTogether>,
+    generation: u64,
+    key: String,
+    id: u64,
 }
 
-impl TokenBucket {
-    fn new(now: Instant) -> Self {
-        Self {
-            tokens: COMMANDS_PER_SECOND,
-            refilled_at: now,
+impl Drop for AudioStreamSlot {
+    fn drop(&mut self) {
+        if let Some(service) = self.service.upgrade() {
+            service.audio_stream_ended(self.generation, &self.key, self.id);
         }
     }
+}
 
-    fn take(&mut self, now: Instant) -> bool {
-        let elapsed = now.saturating_duration_since(self.refilled_at);
-        self.tokens =
-            (self.tokens + elapsed.as_secs_f64() * COMMANDS_PER_SECOND).min(COMMANDS_PER_SECOND);
-        self.refilled_at = now;
-        let allowed = self.tokens >= 1.0;
-        if allowed {
-            self.tokens -= 1.0;
-        }
-        allowed
-    }
+/// An open audio stream. Dropping `_superseded` tells its body to stop.
+struct AudioStream {
+    id: u64,
+    /// The request path, which names the Track.
+    target: String,
+    _superseded: oneshot::Sender<()>,
 }
 
 struct Guest {
@@ -158,6 +167,9 @@ struct Guest {
     /// When the last stream ended; the join counts as the first such moment.
     disconnected_at: Instant,
     commands: TokenBucket,
+    reads: ReadBudgets,
+    /// Oldest first.
+    audio_streams: Vec<AudioStream>,
     revoked: watch::Sender<bool>,
 }
 
@@ -247,12 +259,15 @@ pub struct ListenTogether {
     max_guests: usize,
     timings: Timings,
     next_generation: AtomicU64,
+    next_audio_stream: AtomicU64,
+    /// Outlives every Room, and is spent even when none is open.
+    joins: Mutex<TokenBucket>,
     room: Mutex<Option<Room>>,
 }
 
 impl ListenTogether {
     pub fn new(config: &Config, library: LibraryService) -> Self {
-        Self::with_timings(config, library, Timings::default())
+        Self::with_timings(config, library, Timings::for_config(config))
     }
 
     pub fn with_timings(config: &Config, library: LibraryService, timings: Timings) -> Self {
@@ -265,6 +280,8 @@ impl ListenTogether {
             max_guests: config.listen_together_max_guests,
             timings,
             next_generation: AtomicU64::new(1),
+            next_audio_stream: AtomicU64::new(1),
+            joins: Mutex::new(TokenBucket::new(limits::JOINS, Instant::now())),
             room: Mutex::new(None),
         }
     }
@@ -313,7 +330,7 @@ impl ListenTogether {
             invite_key,
             invite_tag,
             guests: HashMap::new(),
-            owner_commands: TokenBucket::new(now),
+            owner_commands: TokenBucket::new(limits::COMMANDS, now),
             feed,
         };
         let view = room.owner_view();
@@ -345,6 +362,81 @@ impl ListenTogether {
         })
     }
 
+    /// One join attempt from anyone, valid or not.
+    pub fn take_join(&self) -> Result<(), RoomError> {
+        let mut joins = self.joins.lock().expect("join limit lock");
+        if joins.take(Instant::now()) {
+            Ok(())
+        } else {
+            Err(RoomError::RateLimited)
+        }
+    }
+
+    /// Spends one of the Guest's reads.
+    pub fn take_read(&self, session: &GuestSession, budget: Budget) -> Result<(), RoomError> {
+        self.with_room(|room| {
+            let guest = room
+                .guests
+                .get_mut(&session.key)
+                .ok_or(RoomError::SessionEnded)?;
+            if guest.reads.take(budget, Instant::now()) {
+                Ok(())
+            } else {
+                Err(RoomError::RateLimited)
+            }
+        })
+    }
+
+    /// A place for an audio stream of `target`, and the signal to end it. At
+    /// the limit, a new request for a Track already streaming replaces that
+    /// Track's oldest stream: a seek is such a request, and a player or proxy
+    /// may not have let go of the previous one yet, so a seek is never refused.
+    pub fn open_audio_stream(
+        self: &Arc<Self>,
+        session: &GuestSession,
+        target: &str,
+    ) -> Result<(AudioStreamSlot, oneshot::Receiver<()>), RoomError> {
+        self.with_room(|room| {
+            let guest = room
+                .guests
+                .get_mut(&session.key)
+                .ok_or(RoomError::SessionEnded)?;
+            if guest.audio_streams.len() >= MAX_AUDIO_STREAMS {
+                let oldest = guest
+                    .audio_streams
+                    .iter()
+                    .position(|stream| stream.target == target)
+                    .ok_or(RoomError::RateLimited)?;
+                guest.audio_streams.remove(oldest);
+            }
+            let id = self.next_audio_stream.fetch_add(1, Ordering::Relaxed);
+            let (superseded, ended) = oneshot::channel();
+            guest.audio_streams.push(AudioStream {
+                id,
+                target: target.to_owned(),
+                _superseded: superseded,
+            });
+            let slot = AudioStreamSlot {
+                service: Arc::downgrade(self),
+                generation: room.generation,
+                key: session.key.clone(),
+                id,
+            };
+            Ok((slot, ended))
+        })
+    }
+
+    fn audio_stream_ended(&self, generation: u64, key: &str, id: u64) {
+        let mut slot = self.lock();
+        if let Some(guest) = slot
+            .as_mut()
+            .filter(|room| room.generation == generation)
+            .and_then(|room| room.guests.get_mut(key))
+        {
+            guest.audio_streams.retain(|stream| stream.id != id);
+        }
+    }
+
     /// Exchanges an invite token for a Guest session. A browser that already
     /// holds a live session keeps it, so opening the link twice does not
     /// take a second place.
@@ -371,7 +463,9 @@ impl ListenTogether {
                 Guest {
                     open_streams: 0,
                     disconnected_at: now,
-                    commands: TokenBucket::new(now),
+                    commands: TokenBucket::new(limits::COMMANDS, now),
+                    reads: ReadBudgets::new(now),
+                    audio_streams: Vec::new(),
                     revoked: watch::channel(false).0,
                 },
             );
@@ -569,18 +663,5 @@ mod tests {
         assert_eq!(first.len(), 43);
         assert_eq!(URL_SAFE_NO_PAD.decode(&first).unwrap().len(), 32);
         assert_ne!(first, random_token());
-    }
-
-    #[test]
-    fn the_bucket_allows_a_burst_then_refills() {
-        let start = Instant::now();
-        let mut bucket = TokenBucket::new(start);
-        for _ in 0..20 {
-            assert!(bucket.take(start));
-        }
-        assert!(!bucket.take(start));
-        assert!(bucket.take(start + Duration::from_millis(100)));
-        assert!(bucket.take(start + Duration::from_millis(100)));
-        assert!(!bucket.take(start + Duration::from_millis(100)));
     }
 }

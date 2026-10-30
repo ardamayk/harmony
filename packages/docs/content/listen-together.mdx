@@ -11,6 +11,7 @@ Your Music Server stays on loopback, so friends cannot reach it yet. Listen Toge
 | `GUEST_ADDR` | `127.0.0.1:8091` | The Guest Listener's address. Must be a loopback address. |
 | `PUBLIC_URL` | `https://music.example.com` | The public HTTPS address. Invite Links are built from it, and the Guest Listener accepts only this host and origin. |
 | `LISTEN_TOGETHER_MAX_GUESTS` | `4` | Optional. Lowers the Guest limit of 8. |
+| `LISTEN_TOGETHER_ROOM_HOURS` | `6` | Optional. How many hours a Room lasts, from 1 to 168. Unset, 24. |
 
 Without both `GUEST_ADDR` and `PUBLIC_URL`, the Listen Together page explains what is missing and offers no link.
 
@@ -47,5 +48,7 @@ Joining from the Desktop Client is not available yet. Friends join from a browse
 ## Sharing responsibly
 
 - A Room admits at most **8 Guests**. A Guest who arrives at a full Room is refused, and a Guest who leaves frees their place.
+- A Room closes itself after 24 hours, or after `LISTEN_TOGETHER_ROOM_HOURS` if you set it.
 - Anyone with the Invite Link joins until it expires or you close the Room, so share it like a password, and only with friends.
+- Your Music Server limits how much each Guest can ask of it, so a link in the wrong hands cannot keep it busy for long. Browsing, playing and seeking stay well within those limits. Joining has one limit shared by everyone, so a flood of attempts on the join page can hold your friends back until it stops.
 - Share only music you have the right to listen to. You are responsible for what you share.

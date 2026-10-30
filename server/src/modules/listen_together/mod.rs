@@ -5,6 +5,7 @@
 
 mod gate;
 mod handlers;
+mod limits;
 mod room_state;
 mod service;
 

@@ -8,13 +8,13 @@ use earthly_music_server::app::{self, AppState};
 use earthly_music_server::config::Config;
 use earthly_music_server::modules::library::LibraryService;
 use earthly_music_server::modules::listen_together::{ListenTogether, Timings};
-use earthly_music_server::{db, dependencies};
+use earthly_music_server::{db, dependencies, gojson};
 use futures_util::StreamExt;
 use http_body_util::BodyExt;
 use serde_json::{Value, json};
 use std::path::Path;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 use tower::ServiceExt;
 
 const PUBLIC_HOST: &str = "music.example.com";
@@ -821,7 +821,7 @@ async fn concurrent_joins_never_pass_the_limit() {
     let harness = harness_with(Timings::default(), "3").await;
     let room = open_room(&harness).await;
     let invite = token(&room);
-    let attempts: Vec<_> = (0..32)
+    let attempts: Vec<_> = (0..16)
         .map(|_| {
             let router = harness.guest.clone();
             let invite = invite.clone();
@@ -837,7 +837,7 @@ async fn concurrent_joins_never_pass_the_limit() {
             status => panic!("unexpected status {status}"),
         }
     }
-    assert_eq!((joined, refused), (3, 29));
+    assert_eq!((joined, refused), (3, 13));
     let (_, _, owner) = send(&harness.owner, on_owner(Method::GET, ROOM, None)).await;
     assert_eq!(owner["guestCount"], 3);
 }
@@ -1397,4 +1397,383 @@ async fn plain_http_on_loopback_uses_the_plain_cookie() {
     let cookie = headers[header::SET_COOKIE].to_str().unwrap();
     assert!(cookie.starts_with("harmony_guest="), "{cookie}");
     assert!(!cookie.contains("Secure"), "{cookie}");
+}
+
+/// Reads `uri` as a Guest until the limit answers, and returns how many passed.
+async fn passes_until_limited(harness: &Harness, cookie: &str, uri: &str, at_most: usize) -> usize {
+    for sent in 0..at_most {
+        let request = on_guest(Method::GET, uri, Some(cookie), None);
+        let (status, _, body) = send(&harness.guest, request).await;
+        if status == StatusCode::TOO_MANY_REQUESTS {
+            assert_eq!(body["code"], "rate_limited", "{uri}");
+            return sent;
+        }
+    }
+    panic!("{uri} is still open after {at_most} reads");
+}
+
+async fn guest_read(harness: &Harness, cookie: &str, uri: &str) -> StatusCode {
+    status_of(
+        &harness.guest,
+        on_guest(Method::GET, uri, Some(cookie), None),
+    )
+    .await
+}
+
+const LOOKUPS: &[&str] = &[
+    "/api/v1/library/artists/ar/biography",
+    "/api/v1/library/artists/ar/popular-tracks",
+    "/api/v1/library/albums/al/online-genres",
+    "/api/v1/library/tracks/play-counts?ids=x",
+];
+const ME: &str = "/api/v1/me";
+const CLOCK: &str = "/api/v1/listen-together/room/clock";
+const ARTIST_PHOTO: &str = "/api/v1/library/artists/ar/photo";
+
+fn waveform_uri() -> String {
+    format!("/api/v1/library/tracks/{TRACK_A}/waveform")
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn library_reads_are_limited_per_guest_and_never_on_the_owners_listener() {
+    let harness = harness().await;
+    let room = open_room(&harness).await;
+    let invite = token(&room);
+    let (first, _) = join(&harness, &invite).await;
+    let (second, _) = join(&harness, &invite).await;
+
+    let passed = passes_until_limited(&harness, &first, ME, 20_000).await;
+    assert!(passed >= 1000, "only {passed} reads passed");
+
+    assert_eq!(guest_read(&harness, &second, ME).await, StatusCode::OK);
+    for _ in 0..1100 {
+        assert_eq!(
+            status_of(&harness.owner, on_owner(Method::GET, ME, None)).await,
+            StatusCode::OK
+        );
+    }
+    // Browsing cannot cost a Guest their place in the Room's sync.
+    assert_eq!(guest_read(&harness, &first, CLOCK).await, StatusCode::OK);
+    assert_eq!(guest_room(&harness, &first).await.0, StatusCode::OK);
+    assert_eq!(
+        guest_command(&harness, &first, json!({ "type": "pause" }))
+            .await
+            .0,
+        StatusCode::OK
+    );
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert_eq!(guest_read(&harness, &first, ME).await, StatusCode::OK);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn work_and_outside_lookups_share_a_stricter_limit() {
+    let harness = harness().await;
+    let room = open_room(&harness).await;
+    let invite = token(&room);
+    let (first, _) = join(&harness, &invite).await;
+    let (second, _) = join(&harness, &invite).await;
+
+    let waveform = waveform_uri();
+    let passed = passes_until_limited(&harness, &first, &waveform, 200).await;
+    assert!((40..100).contains(&passed), "{passed} waveforms passed");
+
+    let lyrics = format!("/api/v1/library/tracks/{TRACK_A}/lyrics");
+    for uri in LOOKUPS.iter().copied().chain([lyrics.as_str()]) {
+        let (status, _, body) = send(
+            &harness.guest,
+            on_guest(Method::GET, uri, Some(&first), None),
+        )
+        .await;
+        assert_eq!(status, StatusCode::TOO_MANY_REQUESTS, "{uri}");
+        assert_eq!(body["code"], "rate_limited", "{uri}");
+    }
+    // A Guest out of lookups still browses, and the others are untouched.
+    assert_eq!(guest_read(&harness, &first, ME).await, StatusCode::OK);
+    assert_ne!(
+        guest_read(&harness, &first, ARTIST_PHOTO).await,
+        StatusCode::TOO_MANY_REQUESTS
+    );
+    for uri in LOOKUPS {
+        assert_ne!(
+            guest_read(&harness, &second, uri).await,
+            StatusCode::TOO_MANY_REQUESTS,
+            "{uri}"
+        );
+    }
+    tokio::time::sleep(Duration::from_millis(600)).await;
+    assert_ne!(
+        guest_read(&harness, &first, &waveform).await,
+        StatusCode::TOO_MANY_REQUESTS
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_page_of_artist_photos_fits_and_leaves_lookups_alone() {
+    let harness = harness().await;
+    let room = open_room(&harness).await;
+    let (cookie, _) = join(&harness, &token(&room)).await;
+    // The Artists page asks for 100 photos at once.
+    for _ in 0..100 {
+        assert_ne!(
+            guest_read(&harness, &cookie, ARTIST_PHOTO).await,
+            StatusCode::TOO_MANY_REQUESTS
+        );
+    }
+    let passed = passes_until_limited(&harness, &cookie, ARTIST_PHOTO, 200).await;
+    assert!(passed >= 20, "only {passed} more photos passed");
+    assert_ne!(
+        guest_read(&harness, &cookie, &waveform_uri()).await,
+        StatusCode::TOO_MANY_REQUESTS
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn waveform_polling_and_room_reads_stay_within_their_limits() {
+    let harness = harness().await;
+    let room = open_room(&harness).await;
+    let (cookie, _) = join(&harness, &token(&room)).await;
+    // A Guest spends their whole library budget; clock samples still pass.
+    passes_until_limited(&harness, &cookie, ME, 20_000).await;
+    for _ in 0..10 {
+        assert_eq!(guest_read(&harness, &cookie, CLOCK).await, StatusCode::OK);
+    }
+    // useTrackWaveform stops at 30 polls.
+    let waveform = waveform_uri();
+    for _ in 0..31 {
+        assert_ne!(
+            guest_read(&harness, &cookie, &waveform).await,
+            StatusCode::TOO_MANY_REQUESTS
+        );
+    }
+}
+
+/// Tracks with files of their own; `file_path` is unique.
+async fn playable_tracks(harness: &Harness, count: usize) -> Vec<String> {
+    let mut tracks = Vec::new();
+    for number in 0..count {
+        let id = format!("0190c5a0-0000-7000-8000-0000000001{number:02}");
+        let file = harness._directory.path().join(format!("{number}.flac"));
+        std::fs::write(&file, vec![0_u8; 1024 * 1024]).unwrap();
+        sqlx::query(
+            "INSERT INTO tracks (id, album_id, title, title_sort, artist_name, format, file_path, duration_ms, lyrics)
+             VALUES (?, 'al', 'Song', 'song', 'Skillet', 'flac', ?, 1000, '')",
+        )
+        .bind(&id)
+        .bind(file.to_string_lossy().into_owned())
+        .execute(&harness.state.db)
+        .await
+        .unwrap();
+        tracks.push(id);
+    }
+    tracks
+}
+
+async fn open_stream(
+    harness: &Harness,
+    cookie: &str,
+    track: &str,
+    range: &str,
+) -> axum::http::Response<Body> {
+    let uri = format!("/api/v1/tracks/{track}/stream");
+    let mut request = on_guest(Method::GET, &uri, Some(cookie), None);
+    request
+        .headers_mut()
+        .insert(header::RANGE, range.parse().unwrap());
+    harness.guest.clone().oneshot(request).await.unwrap()
+}
+
+/// Reads to the end, and returns how many bytes came.
+async fn drain(response: axum::http::Response<Body>) -> usize {
+    let mut body = response.into_body().into_data_stream();
+    let mut received = 0;
+    while let Some(chunk) = tokio::time::timeout(Duration::from_secs(5), body.next())
+        .await
+        .expect("the body ends")
+    {
+        received += chunk.expect("audio").len();
+    }
+    received
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn audio_streams_are_limited_per_guest_and_a_closed_one_frees_its_place() {
+    let harness = harness().await;
+    let room = open_room(&harness).await;
+    let invite = token(&room);
+    let (cookie, _) = join(&harness, &invite).await;
+    let (other, _) = join(&harness, &invite).await;
+    let tracks = playable_tracks(&harness, 5).await;
+
+    let mut open = Vec::new();
+    for track in &tracks[..4] {
+        let response = open_stream(&harness, &cookie, track, "bytes=0-").await;
+        assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT);
+        open.push(response);
+    }
+    let refused = open_stream(&harness, &cookie, &tracks[4], "bytes=0-").await;
+    assert_eq!(refused.status(), StatusCode::TOO_MANY_REQUESTS);
+    let body = refused.into_body().collect().await.unwrap().to_bytes();
+    let body: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(body["code"], "rate_limited");
+
+    // HEAD sends no audio, another Guest has their own places, and the Owner
+    // has no limit.
+    let head = on_guest(
+        Method::HEAD,
+        &format!("/api/v1/tracks/{}/stream", tracks[4]),
+        Some(&cookie),
+        None,
+    );
+    assert_eq!(status_of(&harness.guest, head).await, StatusCode::OK);
+    let response = open_stream(&harness, &other, &tracks[4], "bytes=0-").await;
+    assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT);
+    let mut owner_streams = Vec::new();
+    for _ in 0..8 {
+        let uri = format!("/api/v1/tracks/{}/stream", tracks[4]);
+        let response = harness
+            .owner
+            .clone()
+            .oneshot(on_owner(Method::GET, &uri, None))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        owner_streams.push(response);
+    }
+
+    // A connection that goes away, or a Track sent to its end, frees a place.
+    drop(open.pop());
+    let replacement = open_stream(&harness, &cookie, &tracks[4], "bytes=0-").await;
+    assert_eq!(replacement.status(), StatusCode::PARTIAL_CONTENT);
+    let refused = open_stream(&harness, &cookie, &tracks[3], "bytes=0-").await;
+    assert_eq!(refused.status(), StatusCode::TOO_MANY_REQUESTS);
+    assert_eq!(drain(open.pop().unwrap()).await, 1024 * 1024);
+    let reopened = open_stream(&harness, &cookie, &tracks[3], "bytes=0-").await;
+    assert_eq!(reopened.status(), StatusCode::PARTIAL_CONTENT);
+}
+
+/// A seek is a new range request, and the previous one may stay open for a
+/// while in the player or the proxy. It is never refused.
+#[tokio::test(flavor = "multi_thread")]
+async fn seeking_is_never_refused_and_replaces_the_oldest_stream_of_that_track() {
+    let harness = harness().await;
+    let room = open_room(&harness).await;
+    let (cookie, _) = join(&harness, &token(&room)).await;
+    let others = playable_tracks(&harness, 1).await;
+    let hold = open_stream(&harness, &cookie, &others[0], "bytes=0-").await;
+
+    let mut seeks = Vec::new();
+    for position in 0..40 {
+        let range = format!("bytes={}-", position * 1024);
+        let response = open_stream(&harness, &cookie, LARGE_TRACK, &range).await;
+        assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT, "{position}");
+        seeks.push(response);
+    }
+    let latest = seeks.pop().unwrap();
+    let superseded = seeks.remove(0);
+    assert!(drain(superseded).await < LARGE_TRACK_BYTES);
+    assert_eq!(drain(latest).await, LARGE_TRACK_BYTES - 39 * 1024);
+    // The other Track's stream was not the one replaced.
+    assert_eq!(drain(hold).await, 1024 * 1024);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn revoking_a_guest_still_ends_a_counted_stream() {
+    let harness = harness().await;
+    let room = open_room(&harness).await;
+    let (cookie, _) = join(&harness, &token(&room)).await;
+    let response = open_stream(&harness, &cookie, LARGE_TRACK, "bytes=0-").await;
+    assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT);
+    assert_eq!(
+        status_of(&harness.owner, on_owner(Method::DELETE, ROOM, None)).await,
+        StatusCode::NO_CONTENT
+    );
+    assert!(drain(response).await < LARGE_TRACK_BYTES);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn joins_share_one_limit_whoever_sends_them() {
+    let harness = harness().await;
+    let room = open_room(&harness).await;
+    let invite = token(&room);
+    let mut passed = 0;
+    let (status, body) = loop {
+        let (status, _, body) = try_join(&harness.guest, "wrong").await;
+        if status != StatusCode::NOT_FOUND {
+            break (status, body);
+        }
+        passed += 1;
+        assert!(passed <= 20, "still open after {passed} joins");
+    };
+    assert_eq!(passed, 20);
+    assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+    assert_eq!(body["code"], "rate_limited");
+    // The limit is on the route, so even the right token waits.
+    let (status, headers, body) = try_join(&harness.guest, &invite).await;
+    assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+    assert_eq!(body["code"], "rate_limited");
+    assert!(!headers.contains_key(header::SET_COOKIE));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_join_limit_outlives_a_room() {
+    let harness = harness().await;
+    // With no Room open, attempts still count.
+    for _ in 0..20 {
+        assert_eq!(
+            try_join(&harness.guest, "anything").await.0,
+            StatusCode::NOT_FOUND
+        );
+    }
+    assert_eq!(
+        try_join(&harness.guest, "anything").await.0,
+        StatusCode::TOO_MANY_REQUESTS
+    );
+    let room = open_room(&harness).await;
+    assert_eq!(
+        try_join(&harness.guest, &token(&room)).await.0,
+        StatusCode::TOO_MANY_REQUESTS
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_room_lasts_as_long_as_the_operator_set() {
+    let directory = tempfile::tempdir().unwrap();
+    let migrations = Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations");
+    let pool = db::open_and_migrate(
+        directory.path().join("app.db").to_str().unwrap(),
+        &migrations,
+    )
+    .await
+    .expect("database");
+    let managed = directory.path().join("managed");
+    let config = Config::from_lookup(|name| match name {
+        "MANAGED_STORAGE_PATH" => Some(managed.to_string_lossy().into_owned()),
+        "GUEST_ADDR" => Some("127.0.0.1:18091".to_owned()),
+        "PUBLIC_URL" => Some(PUBLIC_ORIGIN.to_owned()),
+        "LISTEN_TOGETHER_ROOM_HOURS" => Some("2".to_owned()),
+        _ => None,
+    })
+    .expect("config");
+    assert_eq!(
+        Timings::for_config(&config).room_lifetime,
+        Duration::from_secs(2 * 60 * 60)
+    );
+    assert_eq!(
+        Timings::default().room_lifetime,
+        Duration::from_secs(24 * 60 * 60)
+    );
+    let state = AppState::new(config, dependencies::probe_system().await, pool);
+    let earliest = SystemTime::now() + Duration::from_secs(2 * 60 * 60 - 60);
+    let latest = SystemTime::now() + Duration::from_secs(2 * 60 * 60 + 60);
+    let (_, _, room) = send(&app::router(state), on_owner(Method::POST, ROOM, None)).await;
+    // RFC 3339 times in UTC order as text at this distance.
+    let expires_at = room["expiresAt"].as_str().unwrap();
+    assert!(
+        expires_at > gojson::rfc3339_nano(earliest).as_str(),
+        "{expires_at}"
+    );
+    assert!(
+        expires_at < gojson::rfc3339_nano(latest).as_str(),
+        "{expires_at}"
+    );
 }

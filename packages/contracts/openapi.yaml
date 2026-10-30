@@ -27,6 +27,11 @@ tags:
       listen-together.v1 capability, only when GUEST_ADDR and PUBLIC_URL are
       configured. Opening and closing a Room exist only on the Owner's
       listener; the Guest Listener answers only the routes a Guest may use.
+      There, every read a Guest session makes is rate limited, a Guest holds
+      at most 4 audio streams, and a request for a further Track answers 429
+      rate_limited; a request for a Track already streaming, such as a seek,
+      replaces that Track's oldest stream instead. Joining has one limit
+      shared by all clients.
 paths:
   /api/v1/health:
     get:
@@ -56,6 +61,8 @@ paths:
                 $ref: "#/components/schemas/User"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimited"
   /api/v1/preferences:
     get:
       tags: [preferences]
@@ -72,6 +79,8 @@ paths:
                 $ref: "#/components/schemas/UserPreferences"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimited"
     patch:
       tags: [preferences]
       operationId: patchPreferences
@@ -115,6 +124,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ArtistList"
+        "429":
+          $ref: "#/components/responses/RateLimited"
   /api/v1/library/artists/{artistId}:
     get:
       tags: [library]
@@ -132,6 +143,8 @@ paths:
                 $ref: "#/components/schemas/Artist"
         "404":
           $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
   /api/v1/library/artists/{artistId}/photo:
     get:
       tags: [library]
@@ -153,6 +166,8 @@ paths:
                 format: binary
         "404":
           $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
   /api/v1/library/artists/{artistId}/biography:
     get:
       tags: [library]
@@ -174,6 +189,8 @@ paths:
                 $ref: "#/components/schemas/ArtistBiography"
         "404":
           $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
   /api/v1/library/artists/{artistId}/popular-tracks:
     get:
       tags: [library]
@@ -203,6 +220,8 @@ paths:
                 $ref: "#/components/schemas/PopularTrackList"
         "404":
           $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
   /api/v1/library/tracks/play-counts:
     get:
       tags: [library]
@@ -230,6 +249,8 @@ paths:
                 $ref: "#/components/schemas/PlayCountList"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "429":
+          $ref: "#/components/responses/RateLimited"
   /api/v1/library/albums:
     get:
       tags: [library]
@@ -255,6 +276,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AlbumList"
+        "429":
+          $ref: "#/components/responses/RateLimited"
   /api/v1/library/albums/{albumId}/online-genres:
     get:
       tags: [library]
@@ -276,6 +299,8 @@ paths:
                 $ref: "#/components/schemas/GenreNameList"
         "404":
           $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
   /api/v1/library/albums/{albumId}:
     get:
       tags: [library]
@@ -292,6 +317,8 @@ paths:
                 $ref: "#/components/schemas/AlbumDetail"
         "404":
           $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
     delete:
       tags: [library]
       operationId: deleteAlbum
@@ -382,6 +409,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "404":
           $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
   /api/v1/library/tracks:
     get:
       tags: [library]
@@ -408,6 +437,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/TrackList"
+        "429":
+          $ref: "#/components/responses/RateLimited"
   /api/v1/library/tracks/{trackId}:
     get:
       tags: [library]
@@ -424,6 +455,8 @@ paths:
                 $ref: "#/components/schemas/Track"
         "404":
           $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
     delete:
       tags: [library]
       operationId: deleteTrack
@@ -496,6 +529,8 @@ paths:
                 $ref: "#/components/schemas/LibrarySearchResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "429":
+          $ref: "#/components/responses/RateLimited"
   /api/v1/library/tracks/{trackId}/lyrics:
     get:
       tags: [library]
@@ -518,6 +553,8 @@ paths:
                 $ref: "#/components/schemas/TrackLyrics"
         "404":
           $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
   /api/v1/library/tracks/{trackId}/waveform:
     get:
       tags: [library]
@@ -554,6 +591,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
   /api/v1/library/tracks/{trackId}/deletion:
     get:
       tags: [library]
@@ -1199,6 +1238,8 @@ paths:
           $ref: "#/components/responses/NotFound"
         "416":
           $ref: "#/components/responses/RangeNotSatisfiable"
+        "429":
+          $ref: "#/components/responses/RateLimited"
   /api/v1/playlists:
     get:
       tags: [playlists]
@@ -2000,6 +2041,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
   /api/v1/listen-together/leave:
     post:
       tags: [listen-together]
@@ -2030,6 +2073,8 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
     post:
       tags: [listen-together]
       operationId: openListenTogetherRoom
@@ -2116,6 +2161,8 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
   /api/v1/listen-together/room/clock:
     get:
       tags: [listen-together]
@@ -2130,6 +2177,8 @@ paths:
                 $ref: "#/components/schemas/ListenTogetherClock"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimited"
 components:
   securitySchemes:
     bearerAuth:
@@ -2139,6 +2188,14 @@ components:
   responses:
     Unauthorized:
       description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    RateLimited:
+      description: >-
+        Only on the Guest Listener. Too many requests from this Guest, or too
+        many join attempts from everyone (rate_limited)
       content:
         application/json:
           schema:
