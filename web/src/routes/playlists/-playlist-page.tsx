@@ -115,7 +115,6 @@ export function PlaylistDetailContent({ playlistId }: { playlistId: string }) {
 						tracks={collection.visibleTracks}
 						contextTracks={collection.visibleTracks}
 						source={source}
-						playMode="double"
 						numbering="list"
 						showFavorite
 						showMeta

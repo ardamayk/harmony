@@ -220,7 +220,6 @@ export function ArtistDetailContent({ artistId }: { artistId: string }) {
 					<TrackList
 						tracks={shownPopular}
 						contextTracks={popularTracks}
-						playMode="double"
 						numbering="list"
 						showFavorite
 						compact

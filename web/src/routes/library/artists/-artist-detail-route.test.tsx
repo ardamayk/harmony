@@ -49,8 +49,14 @@ vi.mock("#/components/album-shelf", () => ({
 
 // The Track list has its own tests; here it only lists what it was given.
 vi.mock("#/components/track-list", () => ({
-	TrackList: ({ tracks }: { tracks: Array<{ id: string; title: string }> }) => (
-		<ol aria-label="Popular tracks">
+	TrackList: ({
+		tracks,
+		playMode = "single",
+	}: {
+		tracks: Array<{ id: string; title: string }>;
+		playMode?: string;
+	}) => (
+		<ol aria-label="Popular tracks" data-play-mode={playMode}>
 			{tracks.map((track) => (
 				<li key={track.id}>{track.title}</li>
 			))}
@@ -237,6 +243,7 @@ describe("artist detail route", () => {
 		const list = await screen.findByRole("list", { name: "Popular tracks" });
 		expect(mocks.listArtistPopularTracks).toHaveBeenCalledWith("artist-1", 10);
 		expect(list.children).toHaveLength(5);
+		expect(list.getAttribute("data-play-mode")).toBe("single");
 		fireEvent.click(screen.getByRole("button", { name: "See more" }));
 		expect(
 			screen.getByRole("list", { name: "Popular tracks" }).children,

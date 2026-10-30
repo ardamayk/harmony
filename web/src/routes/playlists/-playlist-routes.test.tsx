@@ -347,7 +347,7 @@ describe("playlist routes", () => {
 			expect.arrayContaining(["t1", "t2", "t3", "t4"]),
 			{ kind: "playlist", playlistId: "p1", name: "Favorites" },
 		);
-		fireEvent.doubleClick(screen.getByText("Blue Monday"));
+		fireEvent.click(screen.getByText("Blue Monday"));
 		expect(mocks.playTrack).toHaveBeenLastCalledWith(
 			"t1",
 			["t1", "t2", "t3", "t4"],
