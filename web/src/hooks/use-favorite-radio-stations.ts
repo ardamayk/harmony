@@ -1,3 +1,4 @@
+import { useHiddenFromGuest } from "@repo/ui/guest-access";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
 import { apiClient } from "#/lib/api";
@@ -9,9 +10,11 @@ import { radioQueryKeys } from "#/lib/radio-query-keys";
  */
 export function useFavoriteRadioStations() {
 	const queryClient = useQueryClient();
+	const hideRadio = useHiddenFromGuest("radio");
 	const stations = useQuery({
 		queryKey: radioQueryKeys.stations,
 		queryFn: () => apiClient.listRadioStations(),
+		enabled: !hideRadio,
 	});
 
 	const update = useMutation({

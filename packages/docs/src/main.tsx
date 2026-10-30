@@ -5,6 +5,7 @@ import GettingStarted from "../content/getting-started.mdx";
 import ApiReference from "../content/api-reference.mdx";
 import Architecture from "../content/architecture.mdx";
 import LayoutCustomization from "../content/layout-customization.mdx";
+import ListenTogether from "../content/listen-together.mdx";
 
 const pages = {
 	index: { title: "Home", Component: IndexPage },
@@ -14,13 +15,20 @@ const pages = {
 		title: "Layout Customization",
 		Component: LayoutCustomization,
 	},
+	"listen-together": { title: "Listen Together", Component: ListenTogether },
 	"api-reference": { title: "API Reference", Component: ApiReference },
 } as const;
 
 type PageKey = keyof typeof pages;
 
+/** A link can open a page directly, as the Listen Together page's does. */
+function initialPage(): PageKey {
+	const key = window.location.hash.slice(1);
+	return Object.hasOwn(pages, key) ? (key as PageKey) : "index";
+}
+
 function App() {
-	const [page, setPage] = useState<PageKey>("index");
+	const [page, setPage] = useState<PageKey>(initialPage);
 	const { Component } = pages[page];
 
 	return (

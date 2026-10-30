@@ -1,4 +1,5 @@
 import { clearTrackWaveformCache } from "@repo/ui";
+import { useHiddenFromGuest } from "@repo/ui/guest-access";
 import { useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useState } from "react";
 import { ImportSessionContext } from "#/components/import-session-context";
@@ -8,15 +9,18 @@ import { ImportMusicDialog } from "#/routes/library/tracks/-import-music-dialog"
 
 export function ImportSessionProvider({ children }: { children: ReactNode }) {
 	const session = useImportSession();
+	const hideImport = useHiddenFromGuest("managed-import");
 	return (
 		<ImportSessionContext.Provider value={session}>
 			{children}
-			<ImportMusicDialog
-				isOpen={session.isOpen}
-				onOpenChange={session.handleOpenChange}
-				onCommitted={session.refresh}
-				finalFocus={session.restoreFocus}
-			/>
+			{hideImport ? null : (
+				<ImportMusicDialog
+					isOpen={session.isOpen}
+					onOpenChange={session.handleOpenChange}
+					onCommitted={session.refresh}
+					finalFocus={session.restoreFocus}
+				/>
+			)}
 		</ImportSessionContext.Provider>
 	);
 }

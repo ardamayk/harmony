@@ -2005,11 +2005,15 @@ paths:
       tags: [listen-together]
       operationId: leaveListenTogetherRoom
       summary: End this Guest session and free its place
+      description: >-
+        Only on the Guest Listener.
       responses:
         "204":
           description: Left; the Guest session cookie is cleared
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /api/v1/listen-together/room:
     get:
       tags: [listen-together]
@@ -2064,7 +2068,8 @@ paths:
       description: >-
         The last command to reach the Music Server wins. A skip carrying a
         fromTrackId that is no longer current changes nothing, so every client
-        may report the end of a Track.
+        may report the end of a Track. A playTracks naming a Track outside
+        the library answers 400 with field trackIds.
       requestBody:
         required: true
         content:
@@ -2097,9 +2102,9 @@ paths:
       summary: Stream Room State snapshots
       description: >-
         Emits a room-state event with the full Room State on connecting and
-        after every change, and room-closed once when the Room ends. A Guest
-        whose stream stays disconnected for 60 seconds loses their session and
-        their place.
+        after every change, and room-closed once, with an empty JSON object
+        as its data, when the Room ends. A Guest whose stream stays
+        disconnected for 60 seconds loses their session and their place.
       responses:
         "200":
           description: Room event stream
@@ -2498,7 +2503,11 @@ components:
             track-waveform.v1 (only when ffmpeg is installed), and External
             Source search and playback through yt-dlp as external-source.v1
             (only when EXTERNAL_SOURCE_SEARCH is configured; a missing yt-dlp
-            shows in dependencies and answers 503). Clients gate optional
+            shows in dependencies and answers 503), and Rooms as
+            listen-together.v1 (only when GUEST_ADDR and PUBLIC_URL are
+            configured). On the Guest Listener, health lists only api.v1,
+            listen-together.v1 and track-waveform.v1, with empty dependencies
+            and no externalSource. Clients gate optional
             behavior on the exact capability name and must ignore unknown
             entries so newer servers stay compatible with older clients.
         dependencies:
@@ -3630,7 +3639,9 @@ components:
           description: Normalized title the library sorts and matches by.
         filePath:
           type: string
-          description: Canonical Library Path of the authoritative audio file in Managed Storage.
+          description: >-
+            Canonical Library Path of the authoritative audio file in Managed
+            Storage. Empty on the Guest Listener.
         fileMtime:
           type: integer
           format: int64

@@ -18,13 +18,21 @@ import {
 	useCallback,
 	useContext,
 	useEffect,
+	useEffectEvent,
 	useLayoutEffect,
 	useMemo,
 	useRef,
 	useState,
 	useSyncExternalStore,
 } from "react";
+import { toast } from "sonner";
 import { startTiming } from "../lib/dev-timing";
+import { playTrackCommand } from "../listen-together/room-commands";
+import {
+	hasOwnerAccess,
+	useRoomPlayback,
+} from "../listen-together/RoomPlaybackContext";
+import { isRoomQueueItemId } from "../listen-together/roomSync";
 import type {
 	PlaybackEngine,
 	PlaybackError,
@@ -195,6 +203,11 @@ export type PlaybackErrorRecovery = {
 // Past this point Previous restarts the Track instead of going back one.
 const PREVIOUS_RESTARTS_AFTER_SECONDS = 30;
 
+const ROOM_TRACKS_ONLY_MESSAGE = "A Room plays library Tracks only.";
+const ROOM_QUEUE_MESSAGE = "The Room Queue changes by playing a Track.";
+const ROOM_SHARED_PLAYBACK_MESSAGE = "The Room plays for everyone alike.";
+const GUEST_NEEDS_ROOM_MESSAGE = "Join a Room to play this library.";
+
 const PlaybackContext = createContext<PlaybackContextValue | null>(null);
 const PlaylistLibraryContext = createContext<PlaylistLibraryApi | null>(null);
 
@@ -257,8 +270,15 @@ export function PlaybackProvider({
 	shouldCoordinateQueue?: boolean;
 }) {
 	const apiRef = useRef(api);
+	const roomPlayback = useRoomPlayback();
+	const room = roomPlayback?.room ?? null;
+	const sendRoomCommand = roomPlayback?.sendCommand;
+	const isInRoom = room !== null;
+	const canPlayAlone = hasOwnerAccess(roomPlayback);
+	const roomRef = useRef(room);
+	const sendRoomCommandRef = useRef(sendRoomCommand);
 	const {
-		queue,
+		queue: personalQueue,
 		queueRef,
 		queueConflict,
 		refreshQueue,
@@ -267,7 +287,14 @@ export function PlaybackProvider({
 		removeFromQueue,
 		clearQueue: clearQueueAfter,
 		reorderQueue,
-	} = useSynchronizedQueue(api);
+	} = useSynchronizedQueue(api, canPlayAlone);
+	// The Owner's own Queue stays as it is underneath; what shows is the Room's.
+	const roomQueue = roomPlayback?.queue;
+	const queue = useMemo(
+		() => (isInRoom ? (roomQueue ?? []) : personalQueue),
+		[isInRoom, roomQueue, personalQueue],
+	);
+	const roomQueueRef = useRef(queue);
 	const subscribeToEngine = useCallback(
 		(onChange: () => void) => engine.subscribe(onChange),
 		[engine],
@@ -289,6 +316,9 @@ export function PlaybackProvider({
 		useState<RadioNowPlaying | null>(null);
 	useLayoutEffect(() => {
 		apiRef.current = api;
+		roomRef.current = room;
+		roomQueueRef.current = queue;
+		sendRoomCommandRef.current = sendRoomCommand;
 	});
 	// The queue item a play request started; the session reports its own once
 	// the engine confirms it.
@@ -367,6 +397,10 @@ export function PlaybackProvider({
 		if (engine.syncQueueContext || !engine.subscribeNavigation)
 			return undefined;
 		return engine.subscribeNavigation((direction) => {
+			if (roomRef.current) {
+				void sendRoomCommandRef.current?.({ type: "skip", direction });
+				return;
+			}
 			const currentIndex = queueRef.current.findIndex(
 				(item) => item.id === currentQueueItemIdRef.current,
 			);
@@ -378,7 +412,8 @@ export function PlaybackProvider({
 	}, [queueRef, engine, playQueueItemInternal]);
 
 	useEffect(() => {
-		if (!shouldCoordinateQueue || !engine.syncQueueContext) return;
+		// During a Room the sync layer gives the engine its Queue context.
+		if (isInRoom || !shouldCoordinateQueue || !engine.syncQueueContext) return;
 		const currentIndex = queue.findIndex(
 			(item) => item.id === currentQueueItemIdRef.current,
 		);
@@ -390,7 +425,7 @@ export function PlaybackProvider({
 			.catch((error) => {
 				console.warn("Failed to sync native playback Queue context", { error });
 			});
-	}, [engine, queue, shouldCoordinateQueue]);
+	}, [engine, isInRoom, queue, shouldCoordinateQueue]);
 
 	const playTrackInternal = useCallback(
 		async (trackId: string, queueOverride?: QueueItem[]) => {
@@ -405,8 +440,11 @@ export function PlaybackProvider({
 
 	useEffect(() => {
 		if (session.source?.type !== "track") return;
-		if (session.source.queueItemId) {
-			currentQueueItemIdRef.current = session.source.queueItemId;
+		const sourceItemId = session.source.queueItemId;
+		// A Room's Track is no item of the personal Queue.
+		if (sourceItemId && isRoomQueueItemId(sourceItemId)) return;
+		if (sourceItemId) {
+			currentQueueItemIdRef.current = sourceItemId;
 		}
 		const itemIndex = queue.findIndex(
 			(item) => item.id === currentQueueItemIdRef.current,
@@ -452,7 +490,8 @@ export function PlaybackProvider({
 	}, [queueRef, engine, playQueueItemInternal]);
 
 	useEffect(() => {
-		if (engine.syncQueueContext) return;
+		// During a Room the sync layer reports the end and the Room moves on.
+		if (isInRoom || engine.syncQueueContext) return;
 		if (session.status !== "ended" || session.source?.type !== "track") return;
 		if (session.stopAfterCurrent) {
 			// Sleep timer "after this track": stay on the ended Track and disarm.
@@ -461,10 +500,18 @@ export function PlaybackProvider({
 			return;
 		}
 		advanceToNextQueueItem();
-	}, [advanceToNextQueueItem, engine, session]);
+	}, [advanceToNextQueueItem, engine, isInRoom, session]);
 
 	const sleepTimer = useSleepTimer(engine, session);
 	const abRepeat = useAbRepeat(engine, session);
+	// Both act on the engine alone, which a Room would take for commands.
+	const stopLocalTimers = useEffectEvent(() => {
+		if (shouldCoordinateQueue) sleepTimer.setSleepTimer({ kind: "off" });
+		abRepeat.clear();
+	});
+	useEffect(() => {
+		if (isInRoom) stopLocalTimers();
+	}, [isInRoom]);
 	// Stable identity so the waveform hook does not refetch on every render.
 	const getTrackWaveform = useMemo<TrackWaveformLoader | null>(
 		() =>
@@ -501,19 +548,31 @@ export function PlaybackProvider({
 		setDiagnosedTrackId(failedTrackId);
 		setErrorCause(failedTrackId && !api.headTrackStream ? "unknown" : null);
 		setCountdownSeconds(
-			failedTrackId && shouldCoordinateQueue && autoSkipOnErrorSeconds > 0
+			failedTrackId &&
+				shouldCoordinateQueue &&
+				autoSkipOnErrorSeconds > 0 &&
+				// One Player's failure does not skip the Track for everyone.
+				!isInRoom
 				? autoSkipOnErrorSeconds
 				: null,
 		);
 	}
 	const skipFailedTrack = useCallback(() => {
 		setCountdownSeconds(null);
+		if (roomRef.current) {
+			void sendRoomCommandRef.current?.({
+				type: "skip",
+				direction: "next",
+				...(failedTrackId ? { fromTrackId: failedTrackId } : {}),
+			});
+			return;
+		}
 		if (engine.syncQueueContext) {
 			engine.next();
 			return;
 		}
 		advanceToNextQueueItem();
-	}, [advanceToNextQueueItem, engine]);
+	}, [advanceToNextQueueItem, engine, failedTrackId]);
 	const retryFailedTrack = useCallback(() => {
 		setCountdownSeconds(null);
 		if (!failedSource) return;
@@ -583,6 +642,16 @@ export function PlaybackProvider({
 			queueTrackIds?: string[],
 			source?: QueueItemSource,
 		) => {
+			if (roomRef.current) {
+				await sendRoomCommandRef.current?.(
+					playTrackCommand(roomRef.current, trackId, queueTrackIds),
+				);
+				return;
+			}
+			if (!canPlayAlone) {
+				toast.error(GUEST_NEEDS_ROOM_MESSAGE);
+				return;
+			}
 			// The Queue writes below can take a while; the choice counts from now.
 			beginPlaybackIntent();
 			let nextQueue = queueRef.current;
@@ -606,11 +675,16 @@ export function PlaybackProvider({
 			playTrackInternal,
 			replaceQueue,
 			beginPlaybackIntent,
+			canPlayAlone,
 		],
 	);
 
 	const playRadioStation = useCallback(
 		async (station: RadioStation) => {
+			if (roomRef.current) {
+				toast.error(ROOM_TRACKS_ONLY_MESSAGE);
+				return;
+			}
 			beginPlaybackIntent();
 			setRadioNowPlaying(station.lastNowPlaying ?? null);
 			try {
@@ -632,6 +706,10 @@ export function PlaybackProvider({
 
 	const playRadioCatalogPreview = useCallback(
 		async (result: RadioSearchResult) => {
+			if (roomRef.current) {
+				toast.error(ROOM_TRACKS_ONLY_MESSAGE);
+				return;
+			}
 			beginPlaybackIntent();
 			setRadioNowPlaying(null);
 			try {
@@ -660,6 +738,10 @@ export function PlaybackProvider({
 	// station or External Track, or Stop) wins, and this one is dropped.
 	const playExternalTrack = useCallback(
 		async (track: ExternalTrack) => {
+			if (roomRef.current) {
+				toast.error(ROOM_TRACKS_ONLY_MESSAGE);
+				return;
+			}
 			const intent = beginPlaybackIntent();
 			setRadioNowPlaying(null);
 			const stopClickToPlaying = startTiming("external:click-to-playing");
@@ -699,6 +781,10 @@ export function PlaybackProvider({
 
 	const queueTracks = useCallback(
 		async (trackIds: string[], source: QueueItemSource = { kind: "user" }) => {
+			if (roomRef.current) {
+				toast.error(ROOM_QUEUE_MESSAGE);
+				return;
+			}
 			for (const trackId of trackIds) {
 				await appendQueueItem(trackId, source);
 			}
@@ -708,6 +794,16 @@ export function PlaybackProvider({
 
 	const playQueueIndex = useCallback(
 		async (index: number) => {
+			if (roomRef.current) {
+				const position = roomQueueRef.current[index]?.position;
+				if (position === undefined) return;
+				await sendRoomCommandRef.current?.({
+					type: "playTracks",
+					trackIds: roomRef.current.trackIds,
+					index: position,
+				});
+				return;
+			}
 			const item = queueRef.current[index];
 			if (item) await playQueueItemInternal(item);
 		},
@@ -716,6 +812,10 @@ export function PlaybackProvider({
 
 	const playNext = useCallback(
 		async (trackId: string) => {
+			if (roomRef.current) {
+				toast.error(ROOM_QUEUE_MESSAGE);
+				return;
+			}
 			const data = await appendQueueItem(trackId, { kind: "user" });
 			const itemIds = data.items.map((item) => item.id);
 			const appendedItemId = itemIds.pop();
@@ -736,10 +836,36 @@ export function PlaybackProvider({
 	// Like Spotify and Apple Music, Clear removes only what is up next: the
 	// playing Track keeps its queue item and played Tracks stay for Previous.
 	const clearQueue = useCallback(async () => {
+		if (roomRef.current) {
+			toast.error(ROOM_QUEUE_MESSAGE);
+			return;
+		}
 		await clearQueueAfter(
 			session.source?.type === "track" ? currentQueueItemId : null,
 		);
 	}, [clearQueueAfter, session.source?.type, currentQueueItemId]);
+
+	const removeQueueItem = useCallback(
+		async (itemId: string) => {
+			if (roomRef.current) {
+				toast.error(ROOM_QUEUE_MESSAGE);
+				return;
+			}
+			await removeFromQueue(itemId);
+		},
+		[removeFromQueue],
+	);
+
+	const reorderQueueItems = useCallback(
+		async (itemIds: string[]) => {
+			if (roomRef.current) {
+				toast.error(ROOM_QUEUE_MESSAGE);
+				return;
+			}
+			await reorderQueue(itemIds);
+		},
+		[reorderQueue],
+	);
 
 	const value = useMemo<PlaybackContextValue>(
 		() => ({
@@ -782,22 +908,55 @@ export function PlaybackProvider({
 			playNext,
 			navigatePrevious: () => {
 				if (session.currentTime > PREVIOUS_RESTARTS_AFTER_SECONDS) {
-					engine.seek(0);
+					if (room) void sendRoomCommand?.({ type: "seek", positionMs: 0 });
+					else engine.seek(0);
+					return;
+				}
+				if (room) {
+					void sendRoomCommand?.({ type: "skip", direction: "previous" });
 					return;
 				}
 				beginPlaybackIntent();
 				engine.previous();
 			},
 			navigateNext: () => {
+				if (room) {
+					void sendRoomCommand?.({ type: "skip", direction: "next" });
+					return;
+				}
 				beginPlaybackIntent();
 				engine.next();
 			},
-			togglePlay: () => engine.togglePlay(),
-			toggleShuffle: () => engine.toggleShuffle(),
-			cycleRepeatMode: () => engine.cycleRepeatMode(),
-			seek: (seconds) => engine.seek(seconds),
+			togglePlay: () => {
+				if (room) {
+					void sendRoomCommand?.({ type: room.playing ? "pause" : "resume" });
+					return;
+				}
+				engine.togglePlay();
+			},
+			toggleShuffle: () => {
+				if (room) toast.error(ROOM_SHARED_PLAYBACK_MESSAGE);
+				else engine.toggleShuffle();
+			},
+			cycleRepeatMode: () => {
+				if (room) toast.error(ROOM_SHARED_PLAYBACK_MESSAGE);
+				else engine.cycleRepeatMode();
+			},
+			seek: (seconds) => {
+				if (room) {
+					void sendRoomCommand?.({
+						type: "seek",
+						positionMs: Math.max(0, Math.round(seconds * 1000)),
+					});
+					return;
+				}
+				engine.seek(seconds);
+			},
 			setVolume: (value) => engine.setVolume(value),
-			setPlaybackRate: (rate) => engine.setPlaybackRate?.(rate),
+			// Speed stays 1 during a Room, and the preference waits for its end.
+			setPlaybackRate: (rate) => {
+				if (!room) engine.setPlaybackRate?.(rate);
+			},
 			setTransitionFade: (milliseconds) =>
 				engine.setTransitionFade?.(milliseconds),
 			addToQueue: (trackId) => queueTracks([trackId]),
@@ -812,11 +971,15 @@ export function PlaybackProvider({
 			selectExclusiveOutput: () => engine.selectExclusiveOutput?.(),
 			fallbackToSystemOutput: () => engine.fallbackToSystemOutput?.(),
 			enableAdaptiveSystemRate: () => engine.enableAdaptiveSystemRate?.(),
-			removeFromQueue,
-			reorderQueue,
+			removeFromQueue: removeQueueItem,
+			reorderQueue: reorderQueueItems,
 			clearQueue,
 			refreshQueue,
 			stopPlayback: () => {
+				if (room) {
+					void sendRoomCommand?.({ type: "pause" });
+					return;
+				}
 				beginPlaybackIntent();
 				engine.stop();
 			},
@@ -853,11 +1016,13 @@ export function PlaybackProvider({
 			playQueueIndex,
 			playNext,
 			engine,
-			removeFromQueue,
-			reorderQueue,
+			removeQueueItem,
+			reorderQueueItems,
 			clearQueue,
 			refreshQueue,
 			beginPlaybackIntent,
+			room,
+			sendRoomCommand,
 		],
 	);
 

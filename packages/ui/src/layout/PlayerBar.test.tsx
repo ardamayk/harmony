@@ -1,10 +1,15 @@
-import type { ExternalTrack, RadioStation } from "@repo/api-client";
+import type {
+	ExternalTrack,
+	ListenTogetherRoom,
+	RadioStation,
+} from "@repo/api-client";
 import {
 	act,
 	cleanup,
 	fireEvent,
 	render,
 	screen,
+	waitFor,
 	within,
 } from "@testing-library/react";
 import {
@@ -15,6 +20,10 @@ import {
 	it,
 	vi,
 } from "vite-plus/test";
+import {
+	RoomPlaybackContext,
+	type RoomPlayback,
+} from "../listen-together/RoomPlaybackContext";
 import {
 	type PlaybackApi,
 	PlaybackProvider,
@@ -1405,5 +1414,140 @@ describe("PlayerBar", () => {
 		await act(async () => engine.fail({ code, message }));
 
 		expect(screen.getByRole("alert").textContent).toContain(message);
+	});
+});
+
+describe("PlayerBar during a Room", () => {
+	const room: ListenTogetherRoom = {
+		revision: 1,
+		trackIds: [track.id],
+		currentIndex: 0,
+		playing: true,
+		positionMs: 0,
+		positionAtMs: 0,
+		lyricsOpen: false,
+		guestCount: 1,
+		maxGuests: 8,
+		expiresAt: "2026-10-31T12:00:00Z",
+	};
+	const sendCommand = vi.fn(async () => undefined);
+
+	function roomPlayback(overrides: Partial<RoomPlayback> = {}): RoomPlayback {
+		return { role: "owner", room, queue: [], sendCommand, ...overrides };
+	}
+
+	function tree(engine: InMemoryPlaybackEngine, value: RoomPlayback) {
+		return (
+			<LayoutProvider initialPreferences={defaultPreferences}>
+				<RoomPlaybackContext.Provider value={value}>
+					<PlaybackProvider api={api} engine={engine}>
+						<PlayerBar />
+					</PlaybackProvider>
+				</RoomPlaybackContext.Provider>
+			</LayoutProvider>
+		);
+	}
+
+	async function renderInRoom(value = roomPlayback()) {
+		const engine = new InMemoryPlaybackEngine();
+		await engine.play({
+			type: "track",
+			track,
+			playbackUrl: `/stream/${track.id}`,
+		});
+		const view = render(tree(engine, value));
+		await act(async () => undefined);
+		return { ...view, engine };
+	}
+
+	afterEach(() => {
+		cleanup();
+		vi.clearAllMocks();
+	});
+
+	it("takes whether the lyrics are open from the Room", async () => {
+		const { rerender, engine } = await renderInRoom(
+			roomPlayback({ room: { ...room, lyricsOpen: true } }),
+		);
+		expect(screen.getByRole("dialog", { name: "Lyrics" })).toBeTruthy();
+
+		rerender(tree(engine, roomPlayback()));
+
+		expect(screen.queryByRole("dialog", { name: "Lyrics" })).toBeNull();
+	});
+
+	it("sends opening the lyrics to the Room instead of opening them here", async () => {
+		await renderInRoom();
+
+		fireEvent.click(screen.getByRole("button", { name: "Lyrics" }));
+
+		expect(sendCommand).toHaveBeenCalledWith({
+			type: "setLyricsOpen",
+			open: true,
+		});
+		expect(screen.queryByRole("dialog", { name: "Lyrics" })).toBeNull();
+	});
+
+	it("sends closing the lyrics to the Room", async () => {
+		await renderInRoom(roomPlayback({ room: { ...room, lyricsOpen: true } }));
+
+		fireEvent.keyDown(document, { key: "Escape" });
+		await waitFor(() =>
+			expect(sendCommand).toHaveBeenCalledWith({
+				type: "setLyricsOpen",
+				open: false,
+			}),
+		);
+	});
+
+	it("toggles the lyrics from the keyboard through the Room", async () => {
+		await renderInRoom();
+
+		fireEvent.keyDown(document, { key: "l" });
+
+		expect(sendCommand).toHaveBeenCalledWith({
+			type: "setLyricsOpen",
+			open: true,
+		});
+	});
+
+	it("makes a click on a synced line a Room seek", async () => {
+		vi.mocked(api.getTrackLyrics)?.mockResolvedValueOnce({
+			lyrics: "[00:10.00] First line\n[00:20.00] Second line",
+		});
+		const { engine } = await renderInRoom(
+			roomPlayback({ room: { ...room, lyricsOpen: true } }),
+		);
+		const seek = vi.spyOn(engine, "seek");
+
+		fireEvent.click(await screen.findByRole("button", { name: "Second line" }));
+
+		expect(sendCommand).toHaveBeenCalledWith({
+			type: "seek",
+			positionMs: 20_000,
+		});
+		expect(seek).not.toHaveBeenCalled();
+	});
+
+	it("keeps the lyrics local outside a Room", async () => {
+		await renderInRoom(roomPlayback({ room: null }));
+
+		fireEvent.click(screen.getByRole("button", { name: "Lyrics" }));
+
+		expect(screen.getByRole("dialog", { name: "Lyrics" })).toBeTruthy();
+		expect(sendCommand).not.toHaveBeenCalled();
+	});
+
+	it("offers no Queue, speed or timer actions in a Room", async () => {
+		await renderInRoom();
+
+		fireEvent.click(screen.getByRole("button", { name: "Track actions" }));
+
+		expect(screen.queryByRole("menuitem", { name: "Play next" })).toBeNull();
+		expect(screen.queryByRole("menuitem", { name: "Add to queue" })).toBeNull();
+		expect(screen.queryByRole("group", { name: "Speed" })).toBeNull();
+		expect(screen.queryByRole("group", { name: "Sleep timer" })).toBeNull();
+		expect(screen.queryByRole("group", { name: "A-B repeat" })).toBeNull();
+		expect(screen.getByRole("menuitem", { name: "Go to album" })).toBeTruthy();
 	});
 });

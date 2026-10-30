@@ -34,7 +34,11 @@ export type PlaybackQueueApi = {
 	) => () => void;
 };
 
-export function useSynchronizedQueue(api: PlaybackQueueApi) {
+/**
+ * With `enabled` false, as for a Guest who has no Queue on the Music Server,
+ * this reads nothing and listens to nothing.
+ */
+export function useSynchronizedQueue(api: PlaybackQueueApi, enabled = true) {
 	const apiRef = useRef(api);
 	const queueRef = useRef<QueueItem[]>([]);
 	const queueRevisionRef = useRef("0");
@@ -71,13 +75,14 @@ export function useSynchronizedQueue(api: PlaybackQueueApi) {
 	}, [runQueueRequest]);
 
 	useEffect(() => {
+		if (!enabled) return;
 		void refreshQueue().catch((error) => {
 			console.warn("Failed to refresh Queue", { error });
 		});
-	}, [refreshQueue]);
+	}, [enabled, refreshQueue]);
 
 	useEffect(() => {
-		if (!apiRef.current.subscribeQueueEvents) return undefined;
+		if (!enabled || !apiRef.current.subscribeQueueEvents) return undefined;
 		return apiRef.current.subscribeQueueEvents(
 			(event) => {
 				const sequence = BigInt(event.sequence);
@@ -117,7 +122,7 @@ export function useSynchronizedQueue(api: PlaybackQueueApi) {
 				console.warn("Queue event stream disconnected", { error });
 			},
 		);
-	}, [refreshQueue]);
+	}, [enabled, refreshQueue]);
 
 	/** Refetch the Queue and re-issue one mutation against the fresh revision. */
 	const retryWithFreshRevision = useCallback(

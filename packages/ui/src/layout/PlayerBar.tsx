@@ -29,6 +29,7 @@ import { createPortal } from "react-dom";
 import { parseRecentPlaylistIds } from "../lib/stored-preferences";
 import { useFocusTrap } from "../lib/use-focus-trap";
 import { cn } from "../lib/utils";
+import { useRoomPlayback } from "../listen-together/RoomPlaybackContext";
 import { NowPlayingAnnouncer } from "../playback/NowPlayingAnnouncer";
 import { usePlayback, usePlaylistLibrary } from "../playback/PlaybackProvider";
 import { createFallbackPlaybackTelemetry } from "../playback/telemetry";
@@ -46,6 +47,7 @@ import { useTrackWaveform } from "../playback/use-track-waveform";
 import { useResolvedThemeMode } from "../theme/use-resolved-theme-mode";
 import { getQueuePanel } from "../widgets/layout-utils";
 import { AlbumArt } from "./AlbumArt";
+import { useHiddenFromGuest } from "./guest-access";
 import { useLayout } from "./LayoutProvider";
 import { LyricsOverlay } from "./LyricsOverlay";
 import { NowPlayingView } from "./NowPlayingView";
@@ -153,7 +155,21 @@ export function PlayerBar({
 	const [menuPosition, setMenuPosition] = useState<MenuPosition | null>(null);
 	const [playlistSubmenuOpen, setPlaylistSubmenuOpen] = useState(false);
 	const [infoOpen, setInfoOpen] = useState(false);
-	const [lyricsOpen, setLyricsOpen] = useState(false);
+	const [localLyricsOpen, setLocalLyricsOpen] = useState(false);
+	const roomPlayback = useRoomPlayback();
+	const room = roomPlayback?.room ?? null;
+	const sendRoomCommand = roomPlayback?.sendCommand;
+	const isInRoom = room !== null;
+	const hidePlaylists = useHiddenFromGuest("playlists");
+	// During a Room the lyrics open for everyone (ADR 0037).
+	const lyricsOpen = room ? room.lyricsOpen : localLyricsOpen;
+	const setLyricsOpen = useCallback(
+		(open: boolean) => {
+			if (isInRoom) void sendRoomCommand?.({ type: "setLyricsOpen", open });
+			else setLocalLyricsOpen(open);
+		},
+		[isInRoom, sendRoomCommand],
+	);
 	const [helpOpen, setHelpOpen] = useState(false);
 	const [nowPlayingOpen, setNowPlayingOpen] = useState(false);
 	const [playlists, setPlaylists] = useState<Playlist[]>([]);
@@ -254,8 +270,8 @@ export function PlayerBar({
 	);
 	const toggleLyrics = useCallback(() => {
 		if (!currentTrack) return;
-		setLyricsOpen((open) => !open);
-	}, [currentTrack]);
+		setLyricsOpen(!lyricsOpen);
+	}, [currentTrack, lyricsOpen, setLyricsOpen]);
 	const toggleQueue = useCallback(
 		() => togglePanel(queuePanelSide),
 		[togglePanel, queuePanelSide],
@@ -367,7 +383,9 @@ export function PlayerBar({
 	}
 
 	useEffect(() => {
-		if (!isActionsMenuActive || !currentTrackId) return undefined;
+		if (!isActionsMenuActive || !currentTrackId || hidePlaylists) {
+			return undefined;
+		}
 		let cancelled = false;
 		void listPlaylists().then(({ items }) => {
 			if (cancelled) return undefined;
@@ -386,6 +404,7 @@ export function PlayerBar({
 	}, [
 		isActionsMenuActive,
 		currentTrackId,
+		hidePlaylists,
 		listPlaylists,
 		fetchPlaylistMembership,
 	]);
@@ -825,32 +844,38 @@ export function PlayerBar({
 									}
 									role="menu"
 								>
-									<AddToPlaylistMenuItem
-										open={playlistSubmenuOpen}
-										onOpen={openPlaylistSubmenu}
-										onClose={schedulePlaylistSubmenuClose}
-										query={playlistQuery}
-										onQueryChange={setPlaylistQuery}
-										createOpen={createPlaylistOpen}
-										onCreateOpen={() => setCreatePlaylistOpen(true)}
-										newPlaylistName={newPlaylistName}
-										onNewPlaylistNameChange={setNewPlaylistName}
-										playlists={visiblePlaylists}
-										memberPlaylistIds={memberPlaylistIds}
-										isSearching={Boolean(playlistSearchQuery)}
-										onToggle={(playlistId) =>
-											void handleTogglePlaylist(playlistId)
-										}
-										onCreate={() => void handleCreatePlaylist()}
-									/>
-									<MenuButton onClick={handlePlayNext}>
-										<ListEnd className="size-3.5" />
-										Play next
-									</MenuButton>
-									<MenuButton onClick={handleAddToQueue}>
-										<ListPlus className="size-3.5" />
-										Add to queue
-									</MenuButton>
+									{hidePlaylists ? null : (
+										<AddToPlaylistMenuItem
+											open={playlistSubmenuOpen}
+											onOpen={openPlaylistSubmenu}
+											onClose={schedulePlaylistSubmenuClose}
+											query={playlistQuery}
+											onQueryChange={setPlaylistQuery}
+											createOpen={createPlaylistOpen}
+											onCreateOpen={() => setCreatePlaylistOpen(true)}
+											newPlaylistName={newPlaylistName}
+											onNewPlaylistNameChange={setNewPlaylistName}
+											playlists={visiblePlaylists}
+											memberPlaylistIds={memberPlaylistIds}
+											isSearching={Boolean(playlistSearchQuery)}
+											onToggle={(playlistId) =>
+												void handleTogglePlaylist(playlistId)
+											}
+											onCreate={() => void handleCreatePlaylist()}
+										/>
+									)}
+									{isInRoom ? null : (
+										<>
+											<MenuButton onClick={handlePlayNext}>
+												<ListEnd className="size-3.5" />
+												Play next
+											</MenuButton>
+											<MenuButton onClick={handleAddToQueue}>
+												<ListPlus className="size-3.5" />
+												Add to queue
+											</MenuButton>
+										</>
+									)}
 									<MenuButton onClick={handleGoToAlbum}>Go to album</MenuButton>
 									{artists.length > 1 ? (
 										<MenuSection icon={null} label="Go to artist" value="">
@@ -870,77 +895,86 @@ export function PlayerBar({
 											Go to artist
 										</MenuButton>
 									)}
-									<MenuSection
-										icon={<Gauge className="size-3.5" />}
-										label="Speed"
-										value={`${playbackRate}×`}
-									>
-										{PLAYBACK_RATES.map((rate) => (
-											<MenuChoice
-												key={rate}
-												checked={playbackRate === rate}
-												label={`${rate}×`}
-												onClick={() => setPlaybackRate(rate)}
-											/>
-										))}
-									</MenuSection>
-									<MenuSection
-										icon={<Repeat1 className="size-3.5" />}
-										label="A-B repeat"
-										value={
-											abRepeat.isActive
-												? `${formatMenuTime(abRepeat.a)}–${formatMenuTime(abRepeat.b)}`
-												: abRepeat.a !== null
-													? `A ${formatMenuTime(abRepeat.a)}`
-													: "Off"
-										}
-									>
-										<MenuChoice
-											label="Set A"
-											onClick={() => abRepeat.setPoint("a")}
-										/>
-										<MenuChoice
-											label="Set B"
-											disabled={abRepeat.a === null}
-											onClick={() => abRepeat.setPoint("b")}
-										/>
-										<MenuChoice
-											label="Clear"
-											disabled={abRepeat.a === null && abRepeat.b === null}
-											onClick={abRepeat.clear}
-										/>
-									</MenuSection>
-									<MenuSection
-										icon={<MoonStar className="size-3.5" />}
-										label="Sleep timer"
-										value={sleepTimerLabel}
-									>
-										<MenuChoice
-											checked={sleepTimer.mode.kind === "off"}
-											label="Off"
-											onClick={() => sleepTimer.setSleepTimer({ kind: "off" })}
-										/>
-										<MenuChoice
-											checked={sleepTimer.mode.kind === "after-track"}
-											label="After track"
-											onClick={() =>
-												sleepTimer.setSleepTimer({ kind: "after-track" })
-											}
-										/>
-										{SLEEP_TIMER_MINUTES.map((minutes) => (
-											<MenuChoice
-												key={minutes}
-												checked={
-													sleepTimer.mode.kind === "minutes" &&
-													sleepTimer.mode.minutes === minutes
+									{isInRoom ? null : (
+										<>
+											<MenuSection
+												icon={<Gauge className="size-3.5" />}
+												label="Speed"
+												value={`${playbackRate}×`}
+											>
+												{PLAYBACK_RATES.map((rate) => (
+													<MenuChoice
+														key={rate}
+														checked={playbackRate === rate}
+														label={`${rate}×`}
+														onClick={() => setPlaybackRate(rate)}
+													/>
+												))}
+											</MenuSection>
+											<MenuSection
+												icon={<Repeat1 className="size-3.5" />}
+												label="A-B repeat"
+												value={
+													abRepeat.isActive
+														? `${formatMenuTime(abRepeat.a)}–${formatMenuTime(abRepeat.b)}`
+														: abRepeat.a !== null
+															? `A ${formatMenuTime(abRepeat.a)}`
+															: "Off"
 												}
-												label={`${minutes} min`}
-												onClick={() =>
-													sleepTimer.setSleepTimer({ kind: "minutes", minutes })
-												}
-											/>
-										))}
-									</MenuSection>
+											>
+												<MenuChoice
+													label="Set A"
+													onClick={() => abRepeat.setPoint("a")}
+												/>
+												<MenuChoice
+													label="Set B"
+													disabled={abRepeat.a === null}
+													onClick={() => abRepeat.setPoint("b")}
+												/>
+												<MenuChoice
+													label="Clear"
+													disabled={abRepeat.a === null && abRepeat.b === null}
+													onClick={abRepeat.clear}
+												/>
+											</MenuSection>
+											<MenuSection
+												icon={<MoonStar className="size-3.5" />}
+												label="Sleep timer"
+												value={sleepTimerLabel}
+											>
+												<MenuChoice
+													checked={sleepTimer.mode.kind === "off"}
+													label="Off"
+													onClick={() =>
+														sleepTimer.setSleepTimer({ kind: "off" })
+													}
+												/>
+												<MenuChoice
+													checked={sleepTimer.mode.kind === "after-track"}
+													label="After track"
+													onClick={() =>
+														sleepTimer.setSleepTimer({ kind: "after-track" })
+													}
+												/>
+												{SLEEP_TIMER_MINUTES.map((minutes) => (
+													<MenuChoice
+														key={minutes}
+														checked={
+															sleepTimer.mode.kind === "minutes" &&
+															sleepTimer.mode.minutes === minutes
+														}
+														label={`${minutes} min`}
+														onClick={() =>
+															sleepTimer.setSleepTimer({
+																kind: "minutes",
+																minutes,
+															})
+														}
+													/>
+												))}
+											</MenuSection>
+										</>
+									)}
 									<MenuButton disabled>
 										<Download className="size-3.5" />
 										Download

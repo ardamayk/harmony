@@ -20,12 +20,15 @@ import {
 import {
 	type CSSProperties,
 	type ReactNode,
+	useContext,
 	useEffect,
 	useLayoutEffect,
 	useRef,
 	useState,
 } from "react";
 import { cn } from "../lib/utils";
+import { ListenTogetherContext } from "../listen-together/ListenTogetherContext";
+import { useHiddenFromGuest } from "./guest-access";
 import type { RepeatMode } from "../playback/PlaybackProvider";
 import {
 	type QualityDetailRow,
@@ -101,6 +104,10 @@ function TransportControls({
 	onPrevious,
 	onNext,
 }: PlaybackControlsProps) {
+	const isHiddenFromGuest = useHiddenFromGuest("queue-editing");
+	const isInRoom = useContext(ListenTogetherContext)?.room != null;
+	// A Room has no shuffle or repeat, for the Owner either.
+	const hideQueueEditing = isHiddenFromGuest || isInRoom;
 	const playButton = (
 		<PrimaryPlaybackButton
 			isPlaying={isPlaying}
@@ -117,11 +124,13 @@ function TransportControls({
 	}
 	return (
 		<div className="flex items-center gap-6 group-data-stage/controls:w-full group-data-stage/controls:justify-between group-data-stage/controls:gap-2">
-			<ShuffleButton
-				isEnabled={shuffleEnabled}
-				disabled={!hasCurrentTrack}
-				onClick={onToggleShuffle}
-			/>
+			{hideQueueEditing ? null : (
+				<ShuffleButton
+					isEnabled={shuffleEnabled}
+					disabled={!hasCurrentTrack}
+					onClick={onToggleShuffle}
+				/>
+			)}
 			<QueueNavigationButton
 				label="Previous"
 				disabled={!hasCurrentTrack}
@@ -133,11 +142,13 @@ function TransportControls({
 				disabled={!hasCurrentTrack}
 				onPlay={onNext}
 			/>
-			<RepeatButton
-				repeatMode={repeatMode}
-				disabled={!hasCurrentTrack}
-				onClick={onCycleRepeatMode}
-			/>
+			{hideQueueEditing ? null : (
+				<RepeatButton
+					repeatMode={repeatMode}
+					disabled={!hasCurrentTrack}
+					onClick={onCycleRepeatMode}
+				/>
+			)}
 		</div>
 	);
 }

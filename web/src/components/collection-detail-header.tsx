@@ -1,5 +1,6 @@
 import type { Track } from "@repo/api-client";
 import { AlbumArt } from "@repo/ui";
+import { useHiddenFromGuest } from "@repo/ui/guest-access";
 import { SearchField } from "#/components/search-field";
 import {
 	ListMusic,
@@ -49,6 +50,7 @@ export function CollectionDetailHeader({
 	const disabled = trackCount === 0;
 	const Icon = kind === "Genre" ? Tags : ListMusic;
 	const showSearch = searchValue !== undefined && onSearchChange;
+	const hideQueueEditing = useHiddenFromGuest("queue-editing");
 	const [setActionRow, actionsScrolledPast] = useScrolledPast();
 	const firstCoverTrack = coverTracks?.[0];
 
@@ -88,12 +90,14 @@ export function CollectionDetailHeader({
 					disabled={disabled}
 					onClick={onShuffle}
 				/>
-				<DetailStickyAction
-					icon={SkipForward}
-					label="Queue"
-					disabled={disabled}
-					onClick={onQueue}
-				/>
+				{hideQueueEditing ? null : (
+					<DetailStickyAction
+						icon={SkipForward}
+						label="Queue"
+						disabled={disabled}
+						onClick={onQueue}
+					/>
+				)}
 			</DetailStickyBar>
 			<div>
 				{/* `isolate` keeps the stacked covers' z-index under the sticky bar. */}
@@ -144,15 +148,17 @@ export function CollectionDetailHeader({
 									<Shuffle className="size-4" />
 									Shuffle
 								</Button>
-								<Button
-									type="button"
-									variant="outline"
-									disabled={disabled}
-									onClick={onQueue}
-								>
-									<SkipForward className="size-4" />
-									Queue
-								</Button>
+								{hideQueueEditing ? null : (
+									<Button
+										type="button"
+										variant="outline"
+										disabled={disabled}
+										onClick={onQueue}
+									>
+										<SkipForward className="size-4" />
+										Queue
+									</Button>
+								)}
 							</div>
 							{showSearch ? (
 								<SearchField

@@ -190,6 +190,13 @@ export class BrowserPlaybackEngine implements PlaybackEngine {
 		}
 	}
 
+	unlockAudio() {
+		if (this.state.source) return;
+		// Browsers remember an element that a click tried to play. Without a
+		// source this attempt fails, which is all it needs to do.
+		void this.media.play().catch(() => undefined);
+	}
+
 	pause() {
 		this.cancelLiveReconnect();
 		this.sourceRevision += 1;

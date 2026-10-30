@@ -1122,7 +1122,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** End this Guest session and free its place */
+        /**
+         * End this Guest session and free its place
+         * @description Only on the Guest Listener.
+         */
         post: operations["leaveListenTogetherRoom"];
         delete?: never;
         options?: never;
@@ -1166,7 +1169,7 @@ export interface paths {
         put?: never;
         /**
          * Change the Room State
-         * @description The last command to reach the Music Server wins. A skip carrying a fromTrackId that is no longer current changes nothing, so every client may report the end of a Track.
+         * @description The last command to reach the Music Server wins. A skip carrying a fromTrackId that is no longer current changes nothing, so every client may report the end of a Track. A playTracks naming a Track outside the library answers 400 with field trackIds.
          */
         post: operations["sendListenTogetherCommand"];
         delete?: never;
@@ -1184,7 +1187,7 @@ export interface paths {
         };
         /**
          * Stream Room State snapshots
-         * @description Emits a room-state event with the full Room State on connecting and after every change, and room-closed once when the Room ends. A Guest whose stream stays disconnected for 60 seconds loses their session and their place.
+         * @description Emits a room-state event with the full Room State on connecting and after every change, and room-closed once, with an empty JSON object as its data, when the Room ends. A Guest whose stream stays disconnected for 60 seconds loses their session and their place.
          */
         get: operations["streamListenTogetherRoomEvents"];
         put?: never;
@@ -1317,7 +1320,7 @@ export interface components {
             /** @enum {string} */
             status: "ok";
             version: string;
-            /** @description Named server behaviors supported by this release. The versioned /api/v1 surface itself is advertised as api.v1. Queue event streaming is advertised as playback.queue-events.v1 and the first strict FLAC Managed Import tracer bullet as managed-import.v1. Multi-file Managed Import Batches are advertised as managed-import-batches.v1, Permanent Track Deletion as managed-track-deletion.v1, explicit Track Replacement as managed-track-replacement.v1, Album deletion (one Permanent Track Deletion per Track, previewed once) as managed-album-deletion.v1, lazily generated waveform peaks as track-waveform.v1 (only when ffmpeg is installed), and External Source search and playback through yt-dlp as external-source.v1 (only when EXTERNAL_SOURCE_SEARCH is configured; a missing yt-dlp shows in dependencies and answers 503). Clients gate optional behavior on the exact capability name and must ignore unknown entries so newer servers stay compatible with older clients. */
+            /** @description Named server behaviors supported by this release. The versioned /api/v1 surface itself is advertised as api.v1. Queue event streaming is advertised as playback.queue-events.v1 and the first strict FLAC Managed Import tracer bullet as managed-import.v1. Multi-file Managed Import Batches are advertised as managed-import-batches.v1, Permanent Track Deletion as managed-track-deletion.v1, explicit Track Replacement as managed-track-replacement.v1, Album deletion (one Permanent Track Deletion per Track, previewed once) as managed-album-deletion.v1, lazily generated waveform peaks as track-waveform.v1 (only when ffmpeg is installed), and External Source search and playback through yt-dlp as external-source.v1 (only when EXTERNAL_SOURCE_SEARCH is configured; a missing yt-dlp shows in dependencies and answers 503), and Rooms as listen-together.v1 (only when GUEST_ADDR and PUBLIC_URL are configured). On the Guest Listener, health lists only api.v1, listen-together.v1 and track-waveform.v1, with empty dependencies and no externalSource. Clients gate optional behavior on the exact capability name and must ignore unknown entries so newer servers stay compatible with older clients. */
             capabilities: string[];
             /** @description Server Dependencies probed once at startup, in a stable order (ffmpeg, ffprobe, then the optional yt-dlp only when EXTERNAL_SOURCE_SEARCH is configured). They describe the deployment environment so an operator can see what the installation supports. */
             dependencies: components["schemas"]["ServerDependency"][];
@@ -1885,7 +1888,7 @@ export interface components {
             replayGain?: components["schemas"]["ReplayGainMetadata"];
             /** @description Normalized title the library sorts and matches by. */
             titleSort?: string;
-            /** @description Canonical Library Path of the authoritative audio file in Managed Storage. */
+            /** @description Canonical Library Path of the authoritative audio file in Managed Storage. Empty on the Guest Listener. */
             filePath?: string;
             /**
              * Format: int64
@@ -4577,6 +4580,7 @@ export interface operations {
                 content?: never;
             };
             401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
         };
     };
     getListenTogetherRoom: {

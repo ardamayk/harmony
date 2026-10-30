@@ -1,7 +1,8 @@
 //! The complete HTTP surface: every module on one router, with the Go
-//! server's middleware (server/cmd/server/router.go).
+//! server's middleware (server/cmd/server/router.go), and the Guest
+//! Listener's far smaller one (ADR 0037).
 
-use crate::config::Config;
+use crate::config::{Config, ListenTogetherConfig};
 use crate::dependencies::Report;
 use crate::respond::ApiError;
 use crate::{api, modules, observability, static_assets};
@@ -33,6 +34,7 @@ pub struct AppState {
     pub queue_events: Arc<modules::playback::QueueEventBroker>,
     pub managed_import: Arc<modules::managed_import::ManagedImport>,
     pub external_source: Arc<modules::external_source::ExternalSource>,
+    pub listen_together: Arc<modules::listen_together::ListenTogether>,
 }
 
 impl AppState {
@@ -61,6 +63,10 @@ impl AppState {
             modules::managed_import::ManagedImport::new(db.clone(), &config, queue_events.clone());
         let external_source =
             modules::external_source::ExternalSource::new(config.external_source.as_ref());
+        let listen_together = modules::listen_together::ListenTogether::new(
+            &config,
+            modules::library::LibraryService::new(db.clone()),
+        );
         Self {
             config: Arc::new(config),
             dependencies: Arc::new(dependencies),
@@ -73,6 +79,7 @@ impl AppState {
             queue_events,
             managed_import: Arc::new(managed_import),
             external_source: Arc::new(external_source),
+            listen_together: Arc::new(listen_together),
         }
     }
 }
@@ -94,6 +101,7 @@ pub fn router(state: AppState) -> Router {
         .merge(modules::playback::routes())
         .merge(modules::managed_import::routes())
         .merge(modules::external_source::routes())
+        .merge(modules::listen_together::owner_routes())
         .fallback(static_assets::web)
         .layer(middleware::from_fn(stream_aware_timeout))
         .layer(middleware::from_fn(no_simple_writes))
@@ -108,6 +116,45 @@ pub fn router(state: AppState) -> Router {
         // and a caught panic is reported within it. A no-op without Sentry.
         .layer(middleware::from_fn(observability::http_transaction))
         .with_state(state)
+}
+
+/// What the Guest Listener serves, or `None` when Listen Together is not
+/// configured. Only modules with a route a Guest may use are mounted, and
+/// `guest_gate` still refuses all but the allowlist. There is no CORS layer:
+/// the Web Client and the API share `PUBLIC_URL`'s origin.
+pub fn guest_router(state: AppState) -> Option<Router> {
+    let settings = Arc::new(state.config.listen_together.clone()?);
+    let host_settings = settings.clone();
+    Some(
+        Router::new()
+            .route("/api/v1/health", get(api::get_guest_health))
+            .route("/api/v1/me", get(api::get_me))
+            .merge(modules::preferences::routes())
+            .merge(modules::library::routes())
+            .merge(modules::artist_info::routes())
+            .merge(modules::lyrics::routes())
+            .merge(modules::search::routes())
+            .merge(modules::playback::routes())
+            .merge(modules::listen_together::guest_routes())
+            .fallback(static_assets::web)
+            .layer(middleware::from_fn(stream_aware_timeout))
+            .layer(middleware::from_fn_with_state(
+                state.clone(),
+                modules::listen_together::guest_gate,
+            ))
+            .layer(middleware::from_fn(no_simple_writes))
+            .layer(middleware::from_fn(move |request: Request, next: Next| {
+                let settings = settings.clone();
+                async move { public_origin(&settings, request, next).await }
+            }))
+            .layer(middleware::from_fn(move |request: Request, next: Next| {
+                let settings = host_settings.clone();
+                async move { public_host(&settings, request, next).await }
+            }))
+            .layer(CatchPanicLayer::new())
+            .layer(middleware::from_fn(observability::http_transaction))
+            .with_state(state),
+    )
 }
 
 fn cors(origins: &[String]) -> CorsLayer {
@@ -182,6 +229,49 @@ fn is_loopback_host(host: &str) -> bool {
         || name
             .parse::<std::net::IpAddr>()
             .is_ok_and(|address| address.is_loopback())
+}
+
+/// The Guest Listener's `loopback_host`: a proxied request comes from
+/// loopback too, so only `PUBLIC_URL`'s host is accepted. Unlike the Owner's
+/// listener, a request without one is refused.
+async fn public_host(settings: &ListenTogetherConfig, request: Request, next: Next) -> Response {
+    if is_public_host(settings, request.headers()) {
+        return next.run(request).await;
+    }
+    ApiError::new(
+        StatusCode::FORBIDDEN,
+        "forbidden_host",
+        "the Guest Listener only answers requests addressed to PUBLIC_URL",
+    )
+    .into_response()
+}
+
+fn is_public_host(settings: &ListenTogetherConfig, headers: &HeaderMap) -> bool {
+    let mut hosts = headers.get_all(header::HOST).iter();
+    match (hosts.next(), hosts.next()) {
+        (Some(host), None) => host.to_str().is_ok_and(|host| settings.accepts_host(host)),
+        _ => false,
+    }
+}
+
+/// Refuses any request a page on another origin sent, reads included: the
+/// Guest Listener has no reason to answer another site. A request without
+/// Origin does not come from another site's page and passes.
+async fn public_origin(settings: &ListenTogetherConfig, request: Request, next: Next) -> Response {
+    let foreign = request
+        .headers()
+        .get_all(header::ORIGIN)
+        .iter()
+        .any(|origin| origin.as_bytes() != settings.public_origin.as_bytes());
+    if foreign {
+        return ApiError::new(
+            StatusCode::FORBIDDEN,
+            "forbidden_origin",
+            "the Guest Listener only accepts requests from PUBLIC_URL's pages",
+        )
+        .into_response();
+    }
+    next.run(request).await
 }
 
 /// Refuses a state-changing request from a page on another origin. Browsers
@@ -316,7 +406,7 @@ fn is_unbounded_request(request: &Request) -> bool {
 }
 
 fn is_stream_path(path: &str) -> bool {
-    if path == "/api/v1/playback/queue/events" {
+    if path == "/api/v1/playback/queue/events" || path == "/api/v1/listen-together/room/events" {
         return true;
     }
     if path.starts_with("/api/v1/imports/") && path.ends_with("/file") {
@@ -337,6 +427,12 @@ fn is_stream_path(path: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::is_stream_path;
+
+    #[test]
+    fn room_events_are_unbounded() {
+        assert!(is_stream_path("/api/v1/listen-together/room/events"));
+        assert!(!is_stream_path("/api/v1/listen-together/room"));
+    }
 
     #[test]
     fn external_track_audio_is_unbounded_but_its_artwork_is_not() {

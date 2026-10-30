@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./guest-access": "./src/layout/guest-access.ts",
     "./layout": "./src/layout/index.ts",
     "./playback/testing": "./src/playback/testing/index.ts",
     "./widgets": "./src/widgets/index.ts"

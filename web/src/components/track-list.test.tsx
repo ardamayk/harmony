@@ -1,4 +1,5 @@
 import type { QueueItemSource, Track } from "@repo/api-client";
+import { ListenTogetherContext } from "@repo/ui";
 import {
 	cleanup,
 	fireEvent,
@@ -155,6 +156,40 @@ describe("TrackList", () => {
 				});
 			},
 		);
+	});
+
+	it("hides what a Guest may not use and keeps the details", async () => {
+		const guest = {
+			role: "guest",
+			isAvailable: true,
+			room: null,
+			ending: null,
+			openRoom: vi.fn(),
+			closeRoom: vi.fn(),
+			leaveRoom: vi.fn(),
+			joinRoom: vi.fn(),
+		} as const;
+		render(
+			<ListenTogetherContext.Provider value={guest}>
+				<TrackList tracks={[sampleTrack]} showFavorite />
+			</ListenTogetherContext.Provider>,
+		);
+		const row = screen.getByRole("row", { name: /Welcome to New York/ });
+
+		expect(screen.queryByRole("button", { name: /favorites/ })).toBeNull();
+		fireEvent.contextMenu(row);
+
+		expect(
+			await screen.findByRole("menuitem", { name: "Details" }),
+		).toBeTruthy();
+		for (const name of [
+			"Play next",
+			"Add to queue",
+			"Replace file",
+			"Delete track",
+		]) {
+			expect(screen.queryByRole("menuitem", { name })).toBeNull();
+		}
 	});
 
 	it("renders album tracks with only the title line", () => {

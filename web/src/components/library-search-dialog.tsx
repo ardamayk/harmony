@@ -2,9 +2,11 @@ import {
 	ApiError,
 	EXTERNAL_SOURCE_CAPABILITY,
 	type ExternalTrack,
+	type LibrarySearchResponse,
 	type LibrarySearchResult,
 } from "@repo/api-client";
 import { AlbumArt, startTiming, toast, usePlayback } from "@repo/ui";
+import { useHiddenFromGuest } from "@repo/ui/guest-access";
 import {
 	keepPreviousData,
 	useQuery,
@@ -173,7 +175,11 @@ export function LibrarySearchDialog({
 	const returnFocus = useReturnFocus();
 	const navigate = useNavigate();
 	const { playTrack, addToQueue, playExternalTrack } = usePlayback();
-	const hasExternalSource = useServerCapability(EXTERNAL_SOURCE_CAPABILITY);
+	const hideExternalSource = useHiddenFromGuest("external-source");
+	const hidePlaylists = useHiddenFromGuest("playlists");
+	const hideQueueEditing = useHiddenFromGuest("queue-editing");
+	const hasExternalSource =
+		useServerCapability(EXTERNAL_SOURCE_CAPABILITY) && !hideExternalSource;
 	const externalSourceName = useExternalSourceName();
 	const searchLabel =
 		hasExternalSource && externalSourceName
@@ -220,7 +226,7 @@ export function LibrarySearchDialog({
 
 	useLibrarySearchShortcut(open, onOpenChange);
 
-	const search = useQuery({
+	const librarySearch = useQuery({
 		queryKey: [...libraryQueryKeys.search(debouncedQuery), { all: showAll }],
 		queryFn: () =>
 			showAll
@@ -232,6 +238,14 @@ export function LibrarySearchDialog({
 		placeholderData: keepPreviousData,
 		retry: false,
 	});
+	const searchData = useMemo(
+		() =>
+			hidePlaylists && librarySearch.data
+				? withoutPlaylists(librarySearch.data)
+				: librarySearch.data,
+		[hidePlaylists, librarySearch.data],
+	);
+	const search = { ...librarySearch, data: searchData };
 
 	// No placeholder data: yt-dlp takes seconds, and the previous query's
 	// External Tracks would sit under the new query for that long. The signal
@@ -317,7 +331,7 @@ export function LibrarySearchDialog({
 	const close = useCallback(() => onOpenChange(false), [onOpenChange]);
 
 	const groups = useMemo<SearchGroup[]>(() => {
-		if (!canShowResults || !search.data) return [];
+		if (!canShowResults || !searchData) return [];
 		const toResult = (
 			result: LibrarySearchResult,
 			group: string,
@@ -366,7 +380,7 @@ export function LibrarySearchDialog({
 				close();
 			},
 		});
-		const data = search.data;
+		const data = searchData;
 		const best = data.bestMatch;
 		const categories = [
 			{ label: "Track", icon: Music2, results: data.tracks },
@@ -392,7 +406,7 @@ export function LibrarySearchDialog({
 					.map((result) => toResult(result, group.label.toLowerCase())),
 			})),
 		].filter((group) => group.results.length > 0);
-	}, [canShowResults, search.data, navigate, playTrack, close, showAll]);
+	}, [canShowResults, searchData, navigate, playTrack, close, showAll]);
 
 	const externalResults = useMemo<SearchResult[]>(() => {
 		if (!canShowExternal || !externalSearch.data) return [];
@@ -514,8 +528,8 @@ export function LibrarySearchDialog({
 		} else if (event.key === "Enter") {
 			event.preventDefault();
 			if (event.repeat) return;
-			if (event.shiftKey) void queueResult(activeResult);
-			else activeResult.action();
+			if (!event.shiftKey) activeResult.action();
+			else if (!hideQueueEditing) void queueResult(activeResult);
 		}
 	};
 
@@ -602,7 +616,7 @@ export function LibrarySearchDialog({
 						/>
 					</span>
 				</button>
-				{result.trackId ? (
+				{result.trackId && !hideQueueEditing ? (
 					<button
 						type="button"
 						aria-label={`Add ${result.title} to queue`}
@@ -834,12 +848,14 @@ export function LibrarySearchDialog({
 							</kbd>{" "}
 							Play / open
 						</span>
-						<span className="inline-flex items-center gap-2">
-							<kbd className="rounded-sm border border-border px-2 py-1">
-								Shift ↵
-							</kbd>{" "}
-							Add to queue
-						</span>
+						{hideQueueEditing ? null : (
+							<span className="inline-flex items-center gap-2">
+								<kbd className="rounded-sm border border-border px-2 py-1">
+									Shift ↵
+								</kbd>{" "}
+								Add to queue
+							</span>
+						)}
 					</div>
 					{hasQuery ? (
 						<button
@@ -883,6 +899,16 @@ function SectionHeader({
 			{label}
 		</p>
 	);
+}
+
+/** A Guest has no Playlists, so the search does not name them. */
+function withoutPlaylists(data: LibrarySearchResponse): LibrarySearchResponse {
+	return {
+		...data,
+		playlists: [],
+		bestMatch: data.bestMatch?.type === "playlist" ? undefined : data.bestMatch,
+		total: undefined,
+	};
 }
 
 function optionId(listboxId: string, key: string): string {

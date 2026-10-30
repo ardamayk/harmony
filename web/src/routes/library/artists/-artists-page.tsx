@@ -7,6 +7,7 @@ import {
 	CollectionGridState,
 	CollectionPageContainer,
 } from "#/components/collection-grid-layout";
+import { useHiddenFromGuest } from "@repo/ui/guest-access";
 import { PageHeader, PageShell } from "#/components/page-layout";
 import { apiClient } from "#/lib/api";
 
@@ -24,6 +25,7 @@ export function ArtistsPage({
 			apiClient.listArtists({ limit: 100, q: search || undefined }),
 	});
 	const artistItems = artists.data?.items ?? [];
+	const hideImport = useHiddenFromGuest("managed-import");
 	const isInitialLoading = artists.isLoading && !artists.data;
 	const hasError = artists.isError && !artists.data;
 
@@ -60,7 +62,9 @@ export function ArtistsPage({
 						description={
 							search.trim()
 								? "Try adjusting your search."
-								: "Import music to get started."
+								: hideImport
+									? "This library has no music yet."
+									: "Import music to get started."
 						}
 					/>
 				) : (

@@ -117,3 +117,7 @@ export {
 	ListenTogetherContext,
 	useListenTogether,
 } from "./listen-together/ListenTogetherContext";
+export {
+	type ListenTogetherApi,
+	ListenTogetherProvider,
+} from "./listen-together/ListenTogetherProvider";

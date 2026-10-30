@@ -1,6 +1,7 @@
 use earthly_music_server::app::{self, AppState};
 use earthly_music_server::config::{self, Config};
 use earthly_music_server::{db, dependencies, observability};
+use std::net::SocketAddr;
 use std::path::PathBuf;
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::layer::SubscriberExt;
@@ -77,29 +78,67 @@ async fn run(config: Config) -> Result<(), String> {
     }
     state.artist_info.clone().spawn_explicit_sweep();
     let router = app::router(state.clone());
-    // Go's net.Listen asks for net.core.somaxconn; tokio's bind asks for 1024 and
-    // overflowed at 512 concurrent clients. The kernel caps this at somaxconn.
-    let listener = {
-        let socket = if address.is_ipv4() {
-            tokio::net::TcpSocket::new_v4()
-        } else {
-            tokio::net::TcpSocket::new_v6()
-        };
-        socket
-            .and_then(|socket| {
-                socket.set_reuseaddr(true)?;
-                socket.bind(address)?;
-                socket.listen(4096)
-            })
-            .map_err(|error| format!("server error: listen tcp {address}: {error}"))?
-    };
+    let listener = listen(address)?;
     tracing::info!(addr = %state.config.addr, "server listening");
-    axum::serve(listener, router)
-        .with_graceful_shutdown(shutdown_signal())
-        .await
-        .map_err(|error| format!("server error: {error}"))?;
+    let owner = serve(listener, router, state.clone());
+    match guest_listener(&state)? {
+        Some((listener, router)) => {
+            tokio::try_join!(owner, serve(listener, router, state.clone()))?;
+        }
+        None => owner.await?,
+    }
     pool.close().await;
     Ok(())
+}
+
+/// The Guest Listener's socket and router, when Listen Together is
+/// configured. Config has already checked that the address is loopback.
+fn guest_listener(
+    state: &AppState,
+) -> Result<Option<(tokio::net::TcpListener, axum::Router)>, String> {
+    let (Some(settings), Some(router)) = (
+        &state.config.listen_together,
+        app::guest_router(state.clone()),
+    ) else {
+        return Ok(None);
+    };
+    let address = config::bind_address(&settings.guest_addr)
+        .ok_or_else(|| format!("unsafe Guest address: {}", settings.guest_addr))?;
+    let listener = listen(address)?;
+    tracing::info!(addr = %settings.guest_addr, "Guest Listener listening");
+    Ok(Some((listener, router)))
+}
+
+// Go's net.Listen asks for net.core.somaxconn; tokio's bind asks for 1024 and
+// overflowed at 512 concurrent clients. The kernel caps this at somaxconn.
+fn listen(address: SocketAddr) -> Result<tokio::net::TcpListener, String> {
+    let socket = if address.is_ipv4() {
+        tokio::net::TcpSocket::new_v4()
+    } else {
+        tokio::net::TcpSocket::new_v6()
+    };
+    socket
+        .and_then(|socket| {
+            socket.set_reuseaddr(true)?;
+            socket.bind(address)?;
+            socket.listen(4096)
+        })
+        .map_err(|error| format!("server error: listen tcp {address}: {error}"))
+}
+
+async fn serve(
+    listener: tokio::net::TcpListener,
+    router: axum::Router,
+    state: AppState,
+) -> Result<(), String> {
+    axum::serve(listener, router)
+        .with_graceful_shutdown(async move {
+            shutdown_signal().await;
+            // A Room's event streams would otherwise hold the shutdown open.
+            let _ = state.listen_together.close();
+        })
+        .await
+        .map_err(|error| format!("server error: {error}"))
 }
 
 async fn shutdown_signal() {
