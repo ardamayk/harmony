@@ -60,8 +60,7 @@ fn is_due(outcome: Outcome, age_seconds: i64, plain: bool) -> bool {
 impl Lyrics {
     pub fn new(pool: sqlx::SqlitePool, base_url: &str, enabled: bool, version: &str) -> Self {
         // LRCLIB requires clients to name themselves and a project page.
-        let user_agent =
-            format!("EarthlyAudio/{version} (https://github.com/ardamayk/test-project-with-ai)");
+        let user_agent = format!("EarthlyAudio/{version} (https://github.com/ardamayk/harmony)");
         let client = reqwest::Client::builder()
             .timeout(REQUEST_TIMEOUT)
             .user_agent(user_agent)

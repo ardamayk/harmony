@@ -120,8 +120,7 @@ impl ArtistInfo {
         lastfm_key: Option<String>,
     ) -> Self {
         // MusicBrainz asks every client to name itself and how to reach it.
-        let user_agent =
-            format!("EarthlyAudio/{version} ( https://github.com/ardamayk/test-project-with-ai )");
+        let user_agent = format!("EarthlyAudio/{version} ( https://github.com/ardamayk/harmony )");
         let client = reqwest::Client::builder()
             .timeout(REQUEST_TIMEOUT)
             .user_agent(user_agent)
