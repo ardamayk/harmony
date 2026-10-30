@@ -94,14 +94,14 @@ fn parse_theme_column(raw: &str) -> ThemePreferences {
         && !theme.mode.is_empty()
     {
         if theme.preset.is_empty() {
-            theme.preset = "earthly".to_owned();
+            theme.preset = "noir-red".to_owned();
         }
         return theme;
     }
     match raw {
         "light" | "dark" | "system" => ThemePreferences {
             mode: raw.to_owned(),
-            preset: "earthly".to_owned(),
+            preset: "noir-red".to_owned(),
         },
         _ => default_theme(),
     }
@@ -114,7 +114,7 @@ fn theme_to_column(theme: &ThemePreferences) -> String {
         theme.clone()
     };
     if theme.preset.is_empty() {
-        theme.preset = "earthly".to_owned();
+        theme.preset = "noir-red".to_owned();
     }
     crate::gojson::to_string(&theme)
 }
@@ -139,14 +139,14 @@ mod tests {
             parse_theme_column(r#"{"mode":"dark"}"#),
             ThemePreferences {
                 mode: "dark".into(),
-                preset: "earthly".into()
+                preset: "noir-red".into()
             }
         );
         assert_eq!(parse_theme_column("light").mode, "light");
         assert_eq!(parse_theme_column("purple"), default_theme());
         assert_eq!(
             theme_to_column(&ThemePreferences::default()),
-            r#"{"mode":"system","preset":"earthly"}"#
+            r#"{"mode":"system","preset":"noir-red"}"#
         );
     }
 

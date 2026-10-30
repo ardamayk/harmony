@@ -121,7 +121,7 @@ pub struct UserPreferencesPatch {
 pub fn default_theme() -> ThemePreferences {
     ThemePreferences {
         mode: "system".to_owned(),
-        preset: "earthly".to_owned(),
+        preset: "noir-red".to_owned(),
     }
 }
 

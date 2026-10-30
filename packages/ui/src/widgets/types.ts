@@ -26,7 +26,7 @@ export const defaultLayout: LayoutPreferences = {
 
 export const defaultTheme: ThemePreferences = {
 	mode: "system",
-	preset: "earthly",
+	preset: "noir-red",
 };
 
 export const defaultPlayback: PlaybackPreferences = {

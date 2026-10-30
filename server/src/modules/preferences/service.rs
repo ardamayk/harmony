@@ -298,7 +298,7 @@ mod tests {
         apply_patch(&mut current, &patch);
 
         assert_eq!(current.theme.mode, "dark");
-        assert_eq!(current.theme.preset, "earthly");
+        assert_eq!(current.theme.preset, "noir-red");
         assert_eq!(current.layout.panels["left"], Vec::<String>::new());
         assert_eq!(current.layout.panels["right"], ["discover"]);
         assert!(!current.layout.collapsed["right"]);
