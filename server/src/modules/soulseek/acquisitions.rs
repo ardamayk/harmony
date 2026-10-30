@@ -13,10 +13,14 @@ use super::service::{Soulseek, SoulseekError};
 use super::slskd::{SlskdError, TransferState};
 use super::versions::{Quality, RemoteFile, Scope};
 use crate::auth::DEFAULT_USER_ID;
+use crate::inspect::artwork::MAX_ARTWORK_SIZE_BYTES;
 use crate::modules::managed_import::service::BatchProgress;
+use futures_util::StreamExt;
+use futures_util::stream::FuturesUnordered;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
+use tokio::io::AsyncReadExt;
 use tokio_util::sync::CancellationToken;
 
 /// How often the worker polls slskd, and how long a source's transfer in
@@ -724,9 +728,10 @@ impl Soulseek {
     }
 
     /// Offers the cover image for every Album the batch's preview groups.
-    /// An image Managed Import does not accept is skipped silently.
+    /// An image Managed Import does not accept is skipped silently; one over
+    /// its size limit is not even read.
     async fn attach_artwork(&self, batch_id: &str, path: &Path) -> bool {
-        let Ok(data) = tokio::fs::read(path).await else {
+        let Some(data) = read_artwork(path).await else {
             return false;
         };
         let import = self.managed_import();
@@ -965,6 +970,21 @@ impl Soulseek {
     fn downloaded_copy(&self, remote: &str) -> Option<PathBuf> {
         confined_copy(self.downloads_path()?, remote)
     }
+}
+
+/// The bytes of a downloaded cover image, at most Managed Import's artwork
+/// limit; `None` for a larger one, judged by its size before reading and
+/// by a bounded read, as the file may grow meanwhile.
+async fn read_artwork(path: &Path) -> Option<Vec<u8>> {
+    let limit = MAX_ARTWORK_SIZE_BYTES as u64;
+    let file = tokio::fs::File::open(path).await.ok()?;
+    let size = file.metadata().await.ok()?.len();
+    if size > limit {
+        return None;
+    }
+    let mut data = Vec::with_capacity(usize::try_from(size).ok()?);
+    file.take(limit + 1).read_to_end(&mut data).await.ok()?;
+    (data.len() as u64 <= limit).then_some(data)
 }
 
 /// Stops waiting for a cover image that has not arrived; its transfer, if

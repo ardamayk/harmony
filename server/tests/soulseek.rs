@@ -1889,9 +1889,15 @@ async fn reviewed_strict_album(slskd: &FakeSlskd) -> (Harness, String, Value) {
 
 /// Starts acquiring the fixture Album from frank.
 async fn strict_album_acquisition(slskd: &FakeSlskd) -> (Harness, String) {
+    strict_album_acquisition_with_cover(slskd, COVER).await
+}
+
+/// Starts acquiring the fixture Album from frank, whose `cover.png`
+/// download writes `cover`; slskd reports the fixture cover's size.
+async fn strict_album_acquisition_with_cover(slskd: &FakeSlskd, cover: &[u8]) -> (Harness, String) {
     slskd.content("03 Inspection Fixture.flac", FLAC);
     slskd.content("04 Broken.flac", NOT_AUDIO);
-    slskd.content("cover.png", COVER);
+    slskd.content("cover.png", cover);
     let mut harness = harness(Some(&slskd.url)).await;
     slskd.serve_downloads(&harness.downloads);
     harness.start_worker(NO_STALL).await;
@@ -2217,4 +2223,33 @@ async fn a_peer_path_out_of_the_download_directory_is_never_offered_or_deleted()
         "a file outside slskd's download directory is never deleted"
     );
     std::fs::remove_file(&outside).unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_cover_over_the_artwork_limit_is_skipped_unread() {
+    let slskd = FakeSlskd::start().await;
+    // slskd reported the fixture cover's size; the download is larger
+    // than Managed Import accepts.
+    let oversized = vec![0u8; 20 * 1024 * 1024 + 1];
+    let (harness, id) = strict_album_acquisition_with_cover(&slskd, &oversized).await;
+    let review = wait_for(&harness, &id, "review", |body| body["state"] == "review").await;
+    let batch_id = review["batchId"].as_str().expect("batchId");
+    let (status, batch) = send(
+        &harness.router,
+        Method::GET,
+        &format!("/api/v1/import-batches/{batch_id}"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{batch}");
+    let albums = batch["albums"].as_array().unwrap();
+    assert_eq!(albums.len(), 1, "{batch}");
+    assert!(
+        albums[0]["artworks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|artwork| !artwork["id"].as_str().unwrap().starts_with("upload-")),
+        "{batch:#}"
+    );
+    assert!(files_in(&harness.downloads).is_empty());
 }

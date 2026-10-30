@@ -278,7 +278,10 @@ fn sources(scope: Scope, username: &str, user: &UserFiles<'_>) -> Vec<(Quality, 
             size: file.size,
         };
         if ARTWORK_EXTENSIONS.contains(&extension.as_str()) {
-            artwork.entry(folder).or_default().push(remote);
+            // Managed Import refuses a larger cover, so it is not fetched.
+            if file.size <= MAX_ARTWORK_SIZE_BYTES as u64 {
+                artwork.entry(folder).or_default().push(remote);
+            }
             continue;
         }
         if !AUDIO_FORMATS.contains(&extension.as_str()) {
@@ -491,6 +494,36 @@ mod tests {
             .map(|file| file.filename.as_str())
             .collect();
         assert_eq!(artwork, [r"@@a\Album\Folder.JPG", r"@@a\Album\back.png"]);
+    }
+
+    #[test]
+    fn paths_that_leave_the_downloads_directory_and_oversized_covers_are_not_offered() {
+        let versions = group(
+            Scope::Album,
+            &responses(
+                r#"[{"username": "mallory", "hasFreeUploadSlot": true, "queueLength": 0, "uploadSpeed": 10, "files": [
+                    {"filename": "@@m\\Album\\01.flac", "size": 5, "bitDepth": 16, "sampleRate": 44100},
+                    {"filename": "@@m\\..\\existing.flac", "size": 5, "bitDepth": 16, "sampleRate": 44100},
+                    {"filename": "@@m\\Album\\..\\02.flac", "size": 5, "bitDepth": 16, "sampleRate": 44100},
+                    {"filename": "@@m\\Album\\cover.jpg", "size": 20971521},
+                    {"filename": "@@m\\Album\\folder.jpg", "size": 20971520}
+                ]}]"#,
+            ),
+        );
+        assert_eq!(keys(&versions), ["flac-16-44100"]);
+        let source = &versions[0].sources[0];
+        let files: Vec<&str> = source
+            .files
+            .iter()
+            .map(|file| file.filename.as_str())
+            .collect();
+        assert_eq!(files, [r"@@m\Album\01.flac"]);
+        let artwork: Vec<&str> = source
+            .artwork
+            .iter()
+            .map(|file| file.filename.as_str())
+            .collect();
+        assert_eq!(artwork, [r"@@m\Album\folder.jpg"]);
     }
 
     #[test]
