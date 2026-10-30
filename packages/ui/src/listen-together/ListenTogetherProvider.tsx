@@ -53,15 +53,17 @@ export type ListenTogetherApi = Pick<
 /** Room Queue Tracks read at once; a Room Queue can hold 500. */
 const TRACK_LOAD_CONCURRENCY = 6;
 
-async function fetchRole(api: ListenTogetherApi): Promise<ListenTogetherRole> {
+/** Null when the Music Server gave no usable answer. */
+async function fetchRole(
+	api: ListenTogetherApi,
+): Promise<ListenTogetherRole | null> {
 	try {
 		return (await api.getListenTogetherSession()).role;
 	} catch (error) {
 		// A Music Server from before Listen Together has no Guests to tell apart.
 		if (error instanceof ApiError && error.status === 404) return "owner";
-		// Anything else must not show a visitor the Owner's interface.
 		console.warn("Failed to read the Listen Together session", { error });
-		return "none";
+		return null;
 	}
 }
 
@@ -198,7 +200,7 @@ export function ListenTogetherProvider({
 	useEffect(() => {
 		let cancelled = false;
 		void (async () => {
-			const [nextRole, health] = await Promise.all([
+			const [sessionRole, health] = await Promise.all([
 				fetchRole(apiRef.current),
 				apiRef.current.getHealth().catch(() => null),
 			]);
@@ -206,6 +208,10 @@ export function ListenTogetherProvider({
 				health,
 				LISTEN_TOGETHER_CAPABILITY,
 			);
+			// Every Guest Listener advertises the capability. Without it this is
+			// the Owner's, even on an older Music Server, which answers the unknown
+			// session route with the Web Client's page.
+			const nextRole = sessionRole ?? (hasCapability ? "none" : "owner");
 			const openRoom =
 				nextRole === "guest" || (nextRole === "owner" && hasCapability)
 					? await fetchRoom(apiRef.current)

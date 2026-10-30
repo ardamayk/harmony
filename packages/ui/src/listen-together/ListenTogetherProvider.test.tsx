@@ -214,6 +214,28 @@ describe("ListenTogetherProvider", () => {
 		expect(fixture.calls.getListenTogetherRoom).not.toHaveBeenCalled();
 	});
 
+	it("keeps the Owner in when an older server answers with a page", async () => {
+		const fixture = createApi({ capabilities: [] });
+		fixture.calls.getListenTogetherSession.mockRejectedValue(
+			new SyntaxError("Unexpected token '<'"),
+		);
+		renderProvider(fixture);
+
+		await roleIs("owner");
+		expect(context.role).toBe("owner");
+	});
+
+	it("shows a visitor nothing when a Guest Listener's session fails", async () => {
+		const fixture = createApi();
+		fixture.calls.getListenTogetherSession.mockRejectedValue(
+			new Error("network down"),
+		);
+		renderProvider(fixture);
+
+		await roleIs("none");
+		expect(context.role).toBe("none");
+	});
+
 	it("treats a server without the session endpoint as the Owner's", async () => {
 		const fixture = createApi();
 		fixture.calls.getListenTogetherSession.mockRejectedValue(notFound());
@@ -283,6 +305,11 @@ describe("ListenTogetherProvider", () => {
 		renderProvider(fixture);
 		await waitFor(() =>
 			expect(screen.getByTestId("revision").textContent).toBe("5"),
+		);
+		await waitFor(() =>
+			expect(
+				fixture.calls.subscribeListenTogetherRoomEvents,
+			).toHaveBeenCalled(),
 		);
 
 		act(() =>
