@@ -164,8 +164,8 @@ fn pw_dump_reports_graph_format_and_the_routed_output_device() {
             "info": {
                 "props": {
                     "media.class": "Stream/Output/Audio",
-                    "application.name": "Earthly Audio",
-                    "node.name": "Earthly Audio"
+                    "application.name": "Harmony",
+                    "node.name": "Harmony"
                 },
                 "params": {
                     "Format": [{

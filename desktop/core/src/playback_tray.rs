@@ -150,16 +150,16 @@ impl PlaybackTrayView {
             previous_label: "Previous",
             toggle_label: if is_playing { "Pause" } else { "Play" },
             next_label: "Next",
-            open_label: "Open Earthly Audio",
+            open_label: "Open Harmony",
             mini_label: "Mini player",
-            quit_label: "Quit Earthly Audio",
+            quit_label: "Quit Harmony",
         }
     }
 
     /// "Title – Artist · 1:23 / 4:56", "Paused: …", or the app name.
     pub(crate) fn tooltip(&self, position: PlaybackPosition) -> String {
         if !self.has_source {
-            return "Earthly Audio".to_owned();
+            return "Harmony".to_owned();
         }
         let mut heading = self.source_label.clone();
         if let Some(artist) = self.artist_label.as_deref() {
@@ -183,11 +183,11 @@ impl PlaybackTrayView {
     /// Main window title: the track while something plays, else the app name.
     pub(crate) fn window_title(&self) -> String {
         if !self.has_source {
-            return "Earthly Audio".to_owned();
+            return "Harmony".to_owned();
         }
         match self.artist_label.as_deref() {
-            Some(artist) => format!("{} – {artist} · Earthly Audio", self.source_label),
-            None => format!("{} · Earthly Audio", self.source_label),
+            Some(artist) => format!("{} – {artist} · Harmony", self.source_label),
+            None => format!("{} · Harmony", self.source_label),
         }
     }
 }
@@ -243,7 +243,7 @@ mod tests {
         );
         assert_eq!(
             PlaybackTrayView::from_playback(None, false).tooltip(PlaybackPosition::default()),
-            "Earthly Audio"
+            "Harmony"
         );
     }
 
@@ -251,11 +251,11 @@ mod tests {
     fn window_title_follows_the_source() {
         assert_eq!(
             PlaybackTrayView::from_playback(Some(&track()), true).window_title(),
-            "Nemo – Nightwish · Earthly Audio"
+            "Nemo – Nightwish · Harmony"
         );
         assert_eq!(
             PlaybackTrayView::from_playback(None, false).window_title(),
-            "Earthly Audio"
+            "Harmony"
         );
     }
 
@@ -267,7 +267,7 @@ mod tests {
         });
         assert_eq!(
             PlaybackTrayView::from_playback(Some(&external), true).window_title(),
-            "Around the World – Daft Punk · Earthly Audio"
+            "Around the World – Daft Punk · Harmony"
         );
     }
 

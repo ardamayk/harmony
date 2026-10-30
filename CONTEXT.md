@@ -1,6 +1,6 @@
-# Navidrome Replacement
+# Harmony
 
-Navidrome Replacement is a self-hosted music app for browsing local library content and listening to live radio streams.
+Harmony is a self-hosted music app for browsing local library content and listening to live radio streams.
 
 ## Language
 

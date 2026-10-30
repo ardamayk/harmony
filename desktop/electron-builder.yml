@@ -2,7 +2,7 @@
 # scripts/desktop-windows/cli.ts. Only the unpacked `dir` target for now;
 # installers (NSIS) come later.
 appId: audio.earthly.desktop
-productName: Earthly Audio
+productName: Harmony
 # Unpacked, so the shell's paths stay plain folders beside resources/core.
 asar: false
 # The shell bundles everything it imports, so no node_modules ship.

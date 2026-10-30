@@ -1,7 +1,7 @@
-# Earthly Audio — Ürün & Tasarım Brief
+# Harmony — Ürün & Tasarım Brief
 
-**Marka:** Earthly Audio — *The Modern Craftsman*  
-**Repo:** Navidrome Replacement (self-hosted music server)
+**Marka:** Harmony — *The Modern Craftsman*  
+**Repo:** Harmony (self-hosted music server)
 
 Bu doküman, projenin ne olduğunu, nereye gittiğini ve nasıl bir arayüz hedeflendiğini anlatır.
 
@@ -17,7 +17,7 @@ Bu doküman, projenin ne olduğunu, nereye gittiğini ve nasıl bir arayüz hede
 
 ## 1. Proje nedir?
 
-**Navidrome Replacement**, kendi sunucunda çalışan, kendi müzik kütüphaneni stream eden bir **self-hosted müzik sunucusu**dur. Navidrome’dan ilham alır ama onun bir kopyası değildir:
+**Harmony**, kendi sunucunda çalışan, kendi müzik kütüphaneni stream eden bir **self-hosted müzik sunucusu**dur. Navidrome’dan ilham alır ama onun bir kopyası değildir:
 
 - Eski **Subsonic API** kullanılmaz; modern **OpenAPI** tabanlı özel API
 - **Modüler monolith** backend (Go) + **widget tabanlı** özelleştirilebilir arayüz

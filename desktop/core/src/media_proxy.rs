@@ -76,7 +76,7 @@ impl MediaProxy {
                 })
                 .await
             {
-                eprintln!("Earthly Audio media proxy failed: {error}");
+                eprintln!("Harmony media proxy failed: {error}");
             }
         });
         if !ready_receiver
@@ -432,7 +432,7 @@ fn proxy_start_error() -> ConnectionError {
     ConnectionError::new(
         ConnectionErrorCode::ProxyUnavailable,
         format!(
-            "Desktop media proxy could not bind 127.0.0.1:{MEDIA_PROXY_PORT}. Close another Earthly Audio instance or process using that port, then restart the Desktop Client."
+            "Desktop media proxy could not bind 127.0.0.1:{MEDIA_PROXY_PORT}. Close another Harmony instance or process using that port, then restart the Desktop Client."
         ),
     )
 }

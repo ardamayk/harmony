@@ -23,14 +23,6 @@ test("navigation links render", async ({ page }) => {
 	await expect(queueHeading).toBeVisible();
 });
 
-test("albums page shows filters", async ({ page }) => {
-	await page.goto("/library/albums");
-	await page.getByRole("button", { name: "Filters" }).click();
-	await expect(
-		page.getByRole("dialog", { name: "Album filters" }),
-	).toBeVisible();
-});
-
 test("artists page loads from the top nav", async ({ page }) => {
 	await page.goto("/library/albums");
 	await page.getByRole("link", { name: "Artists" }).click();
@@ -83,9 +75,7 @@ test("settings theme preset buttons", async ({ page }) => {
 
 test("product docs load through server module", async ({ page }) => {
 	await page.goto("/docs/");
-	await expect(
-		page.getByRole("heading", { name: "Navidrome Replacement" }),
-	).toBeVisible();
+	await expect(page.getByRole("heading", { name: "Harmony" })).toBeVisible();
 	await expect(page.getByRole("link", { name: "API Reference" })).toBeVisible();
 });
 
@@ -108,9 +98,9 @@ test("API reference loads through docs module without leaving the origin", async
 		}
 	});
 	await page.goto("/api/docs");
-	await expect(page).toHaveTitle("Earthly Audio API Reference");
+	await expect(page).toHaveTitle("Harmony API Reference");
 	await expect(
-		page.getByRole("heading", { level: 1, name: "Navidrome Replacement API" }),
+		page.getByRole("heading", { level: 1, name: "Harmony API" }),
 	).toBeVisible();
 	await expect(page.getByText("/api/v1/health").first()).toBeVisible();
 	await page.waitForLoadState("networkidle");

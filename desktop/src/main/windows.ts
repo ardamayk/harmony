@@ -50,7 +50,7 @@ export class WindowManager {
 	createMainWindow(): BrowserWindow {
 		const window = new BrowserWindow({
 			...MAIN_WINDOW,
-			title: "Earthly Audio",
+			title: "Harmony",
 			icon: this.options.icon,
 			// The page draws its own frame: rounded corners, drag region and
 			// window controls in the Top Nav (see DesktopWindowFrame).
@@ -107,7 +107,7 @@ export class WindowManager {
 		const window = new BrowserWindow({
 			...MINI_WINDOW,
 			...(placement ?? {}),
-			title: "Earthly Audio",
+			title: "Harmony",
 			icon: this.options.icon,
 			resizable: false,
 			maximizable: false,

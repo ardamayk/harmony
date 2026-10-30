@@ -1,4 +1,4 @@
-// Electron main process of the Earthly Audio Desktop Client. It owns the
+// Electron main process of the Harmony Desktop Client. It owns the
 // windows, tray, native pickers and the app's lifetime, and starts the Rust
 // core (native playback, media proxy, Managed Import) as a child process.
 // See docs/adr/0024-electron-shell-with-rust-core.md.
@@ -33,7 +33,7 @@ import { WindowManager } from "./windows";
 const CONFIG_DIRECTORY_NAME = "audio.earthly.desktop";
 const FORWARDED_EVENTS = new Set<string>(Object.values(DESKTOP_EVENTS));
 
-app.setName("Earthly Audio");
+app.setName("Harmony");
 protocol.registerSchemesAsPrivileged([
 	{
 		scheme: RENDERER_SCHEME,
@@ -131,7 +131,7 @@ async function start() {
 		if (quitting) return;
 		quitting = true;
 		dialog.showErrorBox(
-			"Earthly Audio stopped",
+			"Harmony stopped",
 			`The Desktop core exited (${signal ?? `code ${code}`}).\n\n${core.diagnostics}`,
 		);
 		app.exit(1);

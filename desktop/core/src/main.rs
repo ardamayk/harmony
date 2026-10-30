@@ -8,19 +8,19 @@ fn main() {
     // Only with SENTRY_DSN in the environment (ADR 0033); a bad setting
     // leaves Sentry off rather than playback.
     let sentry = observability::init_from_env().unwrap_or_else(|error| {
-        eprintln!("Earthly Audio core: Sentry stays off: {error}");
+        eprintln!("Harmony core: Sentry stays off: {error}");
         None
     });
     let config_directory = match config_directory() {
         Ok(directory) => directory,
         Err(error) => {
-            eprintln!("Earthly Audio core: {error}");
+            eprintln!("Harmony core: {error}");
             drop(sentry);
             std::process::exit(2);
         }
     };
     if let Err(error) = earthly_audio_core::run(&config_directory) {
-        eprintln!("Earthly Audio core failed: {error}");
+        eprintln!("Harmony core failed: {error}");
         observability::core_failed(&error, &config_directory);
         // Sends what is queued before exiting.
         drop(sentry);

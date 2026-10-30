@@ -1,4 +1,4 @@
-//! Earthly Audio Music Server in Rust. It replaces the Go server in
+//! Harmony Music Server in Rust. It replaces the Go server in
 //! server/ module by module over the same SQLite database and HTTP
 //! contract (packages/contracts/openapi.yaml); see ADR 0025.
 

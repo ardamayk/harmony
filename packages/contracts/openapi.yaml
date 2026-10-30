@@ -1,6 +1,6 @@
 openapi: 3.0.3
 info:
-  title: Navidrome Replacement API
+  title: Harmony API
   version: 0.1.0
   description: Self-hosted music server API
 servers:

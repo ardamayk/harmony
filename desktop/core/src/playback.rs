@@ -900,7 +900,7 @@ fn configure_mpv_command(command: &mut Command, socket_path: &Path, extra_argume
         .arg("--idle=yes")
         .arg("--no-video")
         .arg("--audio-display=no")
-        .arg("--audio-client-name=Earthly Audio")
+        .arg("--audio-client-name=Harmony")
         .arg("--force-window=no")
         .arg("--terminal=no")
         .arg("--input-terminal=no")

@@ -31,7 +31,7 @@ export class PlaybackTray {
 		private readonly onAction: (action: TrayAction) => void,
 	) {
 		this.tray = new Tray(nativeImage.createFromPath(icon));
-		this.tray.setToolTip("Earthly Audio");
+		this.tray.setToolTip("Harmony");
 		// Clicking the icon itself opens the window where the host allows it.
 		this.tray.on("click", () => this.onAction("open-main-window"));
 	}

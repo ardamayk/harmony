@@ -1,4 +1,4 @@
-# Navidrome Replacement
+# Harmony
 
 Self-hosted music server: own your library, stream anywhere on your network, customize the UI with movable panels and widgets.
 

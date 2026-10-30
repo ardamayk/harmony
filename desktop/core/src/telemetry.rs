@@ -401,7 +401,7 @@ fn find_earthly_audio_stream(objects: &[Value]) -> Option<&Value> {
                 object
                     .pointer(&format!("/info/props/{key}"))
                     .and_then(Value::as_str)
-                    == Some("Earthly Audio")
+                    == Some("Harmony")
             })
     })
 }

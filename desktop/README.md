@@ -1,4 +1,4 @@
-# Earthly Audio Desktop
+# Harmony Desktop
 
 Linux Electron development client (see [ADR 0024](../docs/adr/0024-electron-shell-with-rust-core.md)). It renders the shared React source from `web/` and serves it from `app://earthly`; it never loads UI assets from a Music Server.
 
@@ -59,7 +59,7 @@ The Windows client is built entirely inside WSL; there is no Windows clone or Wi
 - The result is copied to `%LOCALAPPDATA%\EarthlyAudio` (`EARTHLY_AUDIO_WINDOWS_OUT` overrides it) and started from there through WSL interop.
 
 ```text
-Earthly Audio.exe
+Harmony.exe
 resources/app/       package.json, dist/ (shell bundle), resources/icon.png
 resources/web/dist/  the Web Client
 resources/core/      earthly-audio-core.exe, mpv.exe and its DLLs

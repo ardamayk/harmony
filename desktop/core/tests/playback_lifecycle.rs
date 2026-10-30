@@ -303,8 +303,8 @@ fn tray_exposes_the_current_source_and_complete_playback_controls() {
     assert_eq!(tray.previous_label, "Previous");
     assert_eq!(tray.toggle_label, "Pause");
     assert_eq!(tray.next_label, "Next");
-    assert_eq!(tray.open_label, "Open Earthly Audio");
-    assert_eq!(tray.quit_label, "Quit Earthly Audio");
+    assert_eq!(tray.open_label, "Open Harmony");
+    assert_eq!(tray.quit_label, "Quit Harmony");
 }
 
 fn temporary_path(name: &str) -> PathBuf {

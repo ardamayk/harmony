@@ -2,7 +2,7 @@
   "name": "@repo/desktop",
   "version": "0.1.0",
   "private": true,
-  "description": "Earthly Audio Desktop Client: Electron shell around the shared web UI and the Rust core",
+  "description": "Harmony Desktop Client: Electron shell around the shared web UI and the Rust core",
   "main": "dist/main.cjs",
   "scripts": {
     "dev": "bash ../scripts/run-desktop.sh dev",
@@ -30,5 +30,5 @@
     "web": "workspace:*",
     "zod": "^4.6.7"
   },
-  "productName": "Earthly Audio"
+  "productName": "Harmony"
 }

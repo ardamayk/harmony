@@ -136,7 +136,7 @@ fn core_failure(error: &str, config_directory: &Path) -> String {
     } else {
         Cow::Owned(error.replace(&directory, "/"))
     };
-    format!("Earthly Audio core failed: {}", scrub_text(&error))
+    format!("Harmony core failed: {}", scrub_text(&error))
 }
 
 /// The mpv process failed or could not be recovered; one issue however
@@ -536,20 +536,20 @@ mod tests {
 
     #[test]
     fn a_core_failure_names_no_part_of_the_config_directory() {
-        let directory = Path::new(r"C:\Users\Jane Mary Smith\AppData\Roaming\Earthly Audio");
+        let directory = Path::new(r"C:\Users\Jane Mary Smith\AppData\Roaming\Harmony");
         let error = format!(
             "failed to read {}\\processing-profile.json: denied",
             directory.display()
         );
         assert_eq!(
             core_failure(&error, directory),
-            "Earthly Audio core failed: failed to read <path>"
+            "Harmony core failed: failed to read <path>"
         );
         // A trailing name part with no separator after it is still caught.
         let error = format!("cannot create {}", directory.display());
         assert_eq!(
             core_failure(&error, directory),
-            "Earthly Audio core failed: cannot create <path>"
+            "Harmony core failed: cannot create <path>"
         );
     }
 

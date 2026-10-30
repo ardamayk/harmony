@@ -20,7 +20,7 @@ use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
 
 const BUS_NAME_SUFFIX: &str = "earthly_audio";
-const IDENTITY: &str = "Earthly Audio";
+const IDENTITY: &str = "Harmony";
 const DESKTOP_ENTRY: &str = "earthly-audio";
 const TRACK_ID_PREFIX: &str = "/org/earthly_audio/track/";
 /// Position changes larger than this between two state updates are reported
@@ -416,7 +416,7 @@ impl PlayerInterface for MprisPlayer {
 
     async fn open_uri(&self, _uri: String) -> fdo::Result<()> {
         Err(fdo::Error::NotSupported(
-            "Earthly Audio plays from its own library.".to_owned(),
+            "Harmony plays from its own library.".to_owned(),
         ))
     }
 

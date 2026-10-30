@@ -39,7 +39,7 @@ import { buildCore } from "./core.ts";
 import { buildShell, buildWeb } from "./frontend.ts";
 import { stageMpv } from "./mpv.ts";
 
-const executableName = "Earthly Audio.exe";
+const executableName = "Harmony.exe";
 const coreName = "earthly-audio-core.exe";
 // IPv4 on purpose: Windows resolves `localhost` to ::1 first, and WSL2
 // forwards only the IPv4 loopback to the Vite server in WSL.
@@ -58,7 +58,7 @@ function isLocked(error: unknown): boolean {
 
 function lockedError(directory: string): Error {
 	return new Error(
-		`${directory} is in use; quit Earthly Audio (tray, Quit) and try again.`,
+		`${directory} is in use; quit Harmony (tray, Quit) and try again.`,
 	);
 }
 
@@ -174,7 +174,7 @@ async function start(options: Set<string>) {
 		{ cwd: windowsOutputDirectory(), stdio: "ignore", timeout: 30_000 },
 	);
 	if (result.status !== 0) {
-		throw new Error(`Earthly Audio could not be started (${result.status}).`);
+		throw new Error(`Harmony could not be started (${result.status}).`);
 	}
 }
 
