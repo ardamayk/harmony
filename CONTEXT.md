@@ -144,6 +144,10 @@ _Avoid_: Server Profile, local server, offline library
 A Music Server deployment bound to the local machine's loopback interface. The initial product does not authenticate Playback Clients and cannot be reached from other devices.
 _Avoid_: LAN deployment, internet-ready deployment, trusted client identity
 
+**Guest Listener**:
+A second loopback address of a Music Server that exposes only what a Guest may use, and that an operator-chosen reverse proxy or tunnel carries to the internet over HTTPS.
+_Avoid_: Public music server, port forwarding, LAN deployment
+
 **Server Capability**:
 A named behavior advertised by a Music Server so a Playback Client can adapt when their release versions differ.
 _Avoid_: Client version, feature assumption
@@ -247,6 +251,36 @@ _Avoid_: Track position, Playback Session version
 **Output Device**:
 The audio endpoint on the Playback Client's device through which its Player produces sound.
 _Avoid_: Playback Client, Music Server, stream source
+
+### Listen Together
+
+**Listen Together**:
+Shared listening in which several Playback Clients follow one Room on the Owner's Music Server, each producing sound on its own device.
+_Avoid_: Party mode, federation, multi-room, Queue Synchronization
+
+**Owner**:
+The person whose library a Music Server holds and who alone can open a Room or change the library.
+_Avoid_: Admin, host, operator
+
+**Guest**:
+A person temporarily admitted to a Room through an Invite Link, who can browse the Owner's library and control the Room but cannot change anything else. A Guest has no account and needs no Music Server.
+_Avoid_: User, friend, member, account
+
+**Room**:
+A temporary shared listening space on one Music Server, opened and closed by the Owner.
+_Avoid_: Party, session, channel
+
+**Invite Link**:
+A revocable, expiring link that admits its holder to a Room as a Guest.
+_Avoid_: Share link, public link, Server Connection
+
+**Room State**:
+The Music Server's record of what a Room is playing, including the current Track, playhead, play or pause, and whether lyrics are open. Each Player follows it through its own Playback Session.
+_Avoid_: Playback Session, shared Player, Queue
+
+**Room Queue**:
+The ordered list of library Tracks belonging to a Room, separate from the Owner's Queue.
+_Avoid_: Queue, Playlist
 
 ### Radio
 

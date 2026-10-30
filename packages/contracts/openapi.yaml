@@ -21,6 +21,12 @@ tags:
       Advertised through the external-source.v1 capability; every route
       answers 404 external_source_disabled while EXTERNAL_SOURCE_SEARCH is
       not configured.
+  - name: listen-together
+    description: >-
+      Rooms on the Owner's Music Server (ADR 0037). Advertised through the
+      listen-together.v1 capability, only when GUEST_ADDR and PUBLIC_URL are
+      configured. Opening and closing a Room exist only on the Owner's
+      listener; the Guest Listener answers only the routes a Guest may use.
 paths:
   /api/v1/health:
     get:
@@ -1945,6 +1951,180 @@ paths:
           $ref: "#/components/responses/ExternalSourceFailed"
         "504":
           $ref: "#/components/responses/ExternalSourceTimeout"
+  /api/v1/listen-together/session:
+    get:
+      tags: [listen-together]
+      operationId: getListenTogetherSession
+      summary: Who this client is to Listen Together
+      description: >-
+        Owner on the Owner's listener. On the Guest Listener, guest with a live
+        Guest session and none without one.
+      responses:
+        "200":
+          description: The client's role
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListenTogetherSession"
+  /api/v1/listen-together/join:
+    post:
+      tags: [listen-together]
+      operationId: joinListenTogetherRoom
+      summary: Exchange an Invite Link token for a Guest session
+      description: >-
+        Only on the Guest Listener. Sets the Guest session cookie.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ListenTogetherJoinRequest"
+      responses:
+        "200":
+          description: Joined; the Guest session cookie is set
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListenTogetherRoom"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          description: The Invite Link is invalid, expired or revoked (invite_invalid)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: The Room already holds its Guest limit (room_full)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/listen-together/leave:
+    post:
+      tags: [listen-together]
+      operationId: leaveListenTogetherRoom
+      summary: End this Guest session and free its place
+      responses:
+        "204":
+          description: Left; the Guest session cookie is cleared
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /api/v1/listen-together/room:
+    get:
+      tags: [listen-together]
+      operationId: getListenTogetherRoom
+      summary: Current Room State
+      responses:
+        "200":
+          description: The open Room
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListenTogetherRoom"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [listen-together]
+      operationId: openListenTogetherRoom
+      summary: Open the Room
+      description: Owner only. A Personal Music Server has one Room at a time.
+      responses:
+        "201":
+          description: The new Room, with its Invite Link
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListenTogetherRoom"
+        "404":
+          description: Listen Together is not configured (listen_together_disabled)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [listen-together]
+      operationId: closeListenTogetherRoom
+      summary: Close the Room and revoke its Invite Link and Guest sessions
+      description: Owner only.
+      responses:
+        "204":
+          description: Closed
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/listen-together/room/commands:
+    post:
+      tags: [listen-together]
+      operationId: sendListenTogetherCommand
+      summary: Change the Room State
+      description: >-
+        The last command to reach the Music Server wins. A skip carrying a
+        fromTrackId that is no longer current changes nothing, so every client
+        may report the end of a Track.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ListenTogetherCommand"
+      responses:
+        "200":
+          description: The Room State after the command
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListenTogetherRoom"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          description: Too many commands from this client (rate_limited)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/listen-together/room/events:
+    get:
+      tags: [listen-together]
+      operationId: streamListenTogetherRoomEvents
+      summary: Stream Room State snapshots
+      description: >-
+        Emits a room-state event with the full Room State on connecting and
+        after every change, and room-closed once when the Room ends. A Guest
+        whose stream stays disconnected for 60 seconds loses their session and
+        their place.
+      responses:
+        "200":
+          description: Room event stream
+          content:
+            text/event-stream:
+              schema:
+                $ref: "#/components/schemas/ListenTogetherRoom"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/listen-together/room/clock:
+    get:
+      tags: [listen-together]
+      operationId: getListenTogetherClock
+      summary: Read the Music Server's clock
+      responses:
+        "200":
+          description: The server time, for estimating the clock offset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListenTogetherClock"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
 components:
   securitySchemes:
     bearerAuth:
@@ -2129,6 +2309,169 @@ components:
         maxLength: 2048
         pattern: "^[A-Za-z0-9_.-]+$"
   schemas:
+    ListenTogetherSession:
+      type: object
+      required: [role]
+      properties:
+        role:
+          type: string
+          enum: [owner, guest, none]
+    ListenTogetherJoinRequest:
+      type: object
+      required: [token]
+      properties:
+        token:
+          type: string
+          minLength: 1
+          maxLength: 128
+    ListenTogetherClock:
+      type: object
+      required: [serverTimeMs]
+      properties:
+        serverTimeMs:
+          type: integer
+          format: int64
+    ListenTogetherRoom:
+      type: object
+      description: >-
+        One full snapshot of the Room State. While playing, the expected
+        playhead is positionMs plus the time since positionAtMs.
+      required:
+        - revision
+        - trackIds
+        - currentIndex
+        - playing
+        - positionMs
+        - positionAtMs
+        - lyricsOpen
+        - guestCount
+        - maxGuests
+        - expiresAt
+      properties:
+        revision:
+          type: integer
+          format: int64
+          description: Rises with every change; clients ignore older snapshots.
+        trackIds:
+          type: array
+          description: The Room Queue.
+          items:
+            type: string
+            format: uuid
+        currentIndex:
+          type: integer
+          nullable: true
+          minimum: 0
+          description: The current Track in trackIds; null before the first play.
+        playing:
+          type: boolean
+        positionMs:
+          type: integer
+          format: int64
+          minimum: 0
+        positionAtMs:
+          type: integer
+          format: int64
+          description: Server time at which positionMs was true.
+        lyricsOpen:
+          type: boolean
+        guestCount:
+          type: integer
+          minimum: 0
+        maxGuests:
+          type: integer
+          minimum: 1
+          maximum: 8
+        expiresAt:
+          type: string
+          format: date-time
+        inviteUrl:
+          type: string
+          format: uri
+          description: The Invite Link, only in the Owner's responses.
+    ListenTogetherCommand:
+      oneOf:
+        - $ref: "#/components/schemas/ListenTogetherPlayTracksCommand"
+        - $ref: "#/components/schemas/ListenTogetherResumeCommand"
+        - $ref: "#/components/schemas/ListenTogetherPauseCommand"
+        - $ref: "#/components/schemas/ListenTogetherSeekCommand"
+        - $ref: "#/components/schemas/ListenTogetherSkipCommand"
+        - $ref: "#/components/schemas/ListenTogetherSetLyricsOpenCommand"
+      discriminator:
+        propertyName: type
+        mapping:
+          playTracks: "#/components/schemas/ListenTogetherPlayTracksCommand"
+          resume: "#/components/schemas/ListenTogetherResumeCommand"
+          pause: "#/components/schemas/ListenTogetherPauseCommand"
+          seek: "#/components/schemas/ListenTogetherSeekCommand"
+          skip: "#/components/schemas/ListenTogetherSkipCommand"
+          setLyricsOpen: "#/components/schemas/ListenTogetherSetLyricsOpenCommand"
+    ListenTogetherPlayTracksCommand:
+      type: object
+      description: Replaces the Room Queue and plays from index.
+      required: [type, trackIds, index]
+      properties:
+        type:
+          type: string
+          enum: [playTracks]
+        trackIds:
+          type: array
+          minItems: 1
+          maxItems: 500
+          items:
+            type: string
+            format: uuid
+        index:
+          type: integer
+          minimum: 0
+    ListenTogetherResumeCommand:
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [resume]
+    ListenTogetherPauseCommand:
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [pause]
+    ListenTogetherSeekCommand:
+      type: object
+      required: [type, positionMs]
+      properties:
+        type:
+          type: string
+          enum: [seek]
+        positionMs:
+          type: integer
+          format: int64
+          minimum: 0
+    ListenTogetherSkipCommand:
+      type: object
+      required: [type, direction]
+      properties:
+        type:
+          type: string
+          enum: [skip]
+        direction:
+          type: string
+          enum: [next, previous]
+        fromTrackId:
+          type: string
+          format: uuid
+          description: When set, the skip applies only if this is still the current Track.
+    ListenTogetherSetLyricsOpenCommand:
+      type: object
+      required: [type, open]
+      properties:
+        type:
+          type: string
+          enum: [setLyricsOpen]
+        open:
+          type: boolean
     HealthResponse:
       type: object
       required: [status, version, capabilities, dependencies]

@@ -2,6 +2,81 @@
 
 import * as z from 'zod';
 
+export const zListenTogetherSession = z.object({
+    role: z.enum([
+        'owner',
+        'guest',
+        'none'
+    ])
+});
+
+export const zListenTogetherJoinRequest = z.object({
+    token: z.string().min(1).max(128)
+});
+
+export const zListenTogetherClock = z.object({
+    serverTimeMs: z.coerce.bigint().min(BigInt('-9223372036854775808'), { error: 'Invalid value: Expected int64 to be >= -9223372036854775808' }).max(BigInt('9223372036854775807'), { error: 'Invalid value: Expected int64 to be <= 9223372036854775807' })
+});
+
+/**
+ * One full snapshot of the Room State. While playing, the expected playhead is positionMs plus the time since positionAtMs.
+ */
+export const zListenTogetherRoom = z.object({
+    revision: z.coerce.bigint().min(BigInt('-9223372036854775808'), { error: 'Invalid value: Expected int64 to be >= -9223372036854775808' }).max(BigInt('9223372036854775807'), { error: 'Invalid value: Expected int64 to be <= 9223372036854775807' }),
+    trackIds: z.array(z.guid()),
+    currentIndex: z.int().gte(0).nullable(),
+    playing: z.boolean(),
+    positionMs: z.coerce.bigint().gte(BigInt(0)).max(BigInt('9223372036854775807'), { error: 'Invalid value: Expected int64 to be <= 9223372036854775807' }),
+    positionAtMs: z.coerce.bigint().min(BigInt('-9223372036854775808'), { error: 'Invalid value: Expected int64 to be >= -9223372036854775808' }).max(BigInt('9223372036854775807'), { error: 'Invalid value: Expected int64 to be <= 9223372036854775807' }),
+    lyricsOpen: z.boolean(),
+    guestCount: z.int().gte(0),
+    maxGuests: z.int().gte(1).lte(8),
+    expiresAt: z.iso.datetime({ offset: true }),
+    inviteUrl: z.url().optional()
+});
+
+/**
+ * Replaces the Room Queue and plays from index.
+ */
+export const zListenTogetherPlayTracksCommand = z.object({
+    type: z.enum(['playTracks']),
+    trackIds: z.array(z.guid()).min(1).max(500),
+    index: z.int().gte(0)
+});
+
+export const zListenTogetherResumeCommand = z.object({
+    type: z.enum(['resume'])
+});
+
+export const zListenTogetherPauseCommand = z.object({
+    type: z.enum(['pause'])
+});
+
+export const zListenTogetherSeekCommand = z.object({
+    type: z.enum(['seek']),
+    positionMs: z.coerce.bigint().gte(BigInt(0)).max(BigInt('9223372036854775807'), { error: 'Invalid value: Expected int64 to be <= 9223372036854775807' })
+});
+
+export const zListenTogetherSkipCommand = z.object({
+    type: z.enum(['skip']),
+    direction: z.enum(['next', 'previous']),
+    fromTrackId: z.guid().optional()
+});
+
+export const zListenTogetherSetLyricsOpenCommand = z.object({
+    type: z.enum(['setLyricsOpen']),
+    open: z.boolean()
+});
+
+export const zListenTogetherCommand = z.discriminatedUnion('type', [
+    zListenTogetherPlayTracksCommand.extend({ type: z.literal('playTracks') }),
+    zListenTogetherResumeCommand.extend({ type: z.literal('resume') }),
+    zListenTogetherPauseCommand.extend({ type: z.literal('pause') }),
+    zListenTogetherSeekCommand.extend({ type: z.literal('seek') }),
+    zListenTogetherSkipCommand.extend({ type: z.literal('skip') }),
+    zListenTogetherSetLyricsOpenCommand.extend({ type: z.literal('setLyricsOpen') })
+]);
+
 /**
  * The External Source the operator configured (ADR 0032). Present only when external-source.v1 is advertised.
  */
@@ -1353,3 +1428,48 @@ export const zGetExternalTrackResourceResponse = z.string();
  * Cover image
  */
 export const zGetExternalTrackArtworkResponse = z.string();
+
+/**
+ * The client's role
+ */
+export const zGetListenTogetherSessionResponse = zListenTogetherSession;
+
+/**
+ * Joined; the Guest session cookie is set
+ */
+export const zJoinListenTogetherRoomResponse = zListenTogetherRoom;
+
+/**
+ * Left; the Guest session cookie is cleared
+ */
+export const zLeaveListenTogetherRoomResponse = z.void();
+
+/**
+ * Closed
+ */
+export const zCloseListenTogetherRoomResponse = z.void();
+
+/**
+ * The open Room
+ */
+export const zGetListenTogetherRoomResponse = zListenTogetherRoom;
+
+/**
+ * The new Room, with its Invite Link
+ */
+export const zOpenListenTogetherRoomResponse = zListenTogetherRoom;
+
+/**
+ * The Room State after the command
+ */
+export const zSendListenTogetherCommandResponse = zListenTogetherRoom;
+
+/**
+ * Room event stream
+ */
+export const zStreamListenTogetherRoomEventsResponse = zListenTogetherRoom;
+
+/**
+ * The server time, for estimating the clock offset
+ */
+export const zGetListenTogetherClockResponse = zListenTogetherClock;

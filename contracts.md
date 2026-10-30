@@ -76,7 +76,7 @@ Widget IDs must be registered in `packages/ui/src/widgets/registry.tsx`.
 
 ## Live updates
 
-Shared Queue invalidations use the OpenAPI-documented server-sent event stream. Party mode remains a future WebSocket feature.
+Shared Queue invalidations use the OpenAPI-documented server-sent event stream. Listen Together will use server-sent events as well (ADR 0037).
 
 ## Codegen
 
@@ -105,6 +105,7 @@ mise run generate
 | `managed-track-deletion.v1` | Permanent Track Deletion preview and confirmation |
 | `managed-album-deletion.v1` | Album deletion: one Permanent Track Deletion per Track, previewed and confirmed once at the Album level |
 | `managed-track-replacement.v1` | Explicit Track Replacement |
+| `listen-together.v1` | Rooms, Invite Links and the Guest Listener (ADR 0037); only with `GUEST_ADDR` and `PUBLIC_URL` |
 
 `@repo/api-client` exports one constant per capability plus `hasServerCapability` and `missingServerCapabilities`; the Web Client's `useServerCapabilityState` hook wraps them.
 

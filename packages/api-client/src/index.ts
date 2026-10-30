@@ -880,3 +880,9 @@ export function createApiClient(config: ApiClientConfig) {
 }
 
 export type ApiClient = ReturnType<typeof createApiClient>;
+
+export type ListenTogetherRoom = components["schemas"]["ListenTogetherRoom"];
+export type ListenTogetherSession =
+	components["schemas"]["ListenTogetherSession"];
+export type ListenTogetherCommand =
+	components["schemas"]["ListenTogetherCommand"];

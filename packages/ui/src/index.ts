@@ -110,3 +110,10 @@ export {
 	defaultPreferences,
 	defaultTheme,
 } from "./widgets/types";
+export {
+	type ListenTogetherContextValue,
+	type ListenTogetherEnding,
+	type ListenTogetherRole,
+	ListenTogetherContext,
+	useListenTogether,
+} from "./listen-together/ListenTogetherContext";
