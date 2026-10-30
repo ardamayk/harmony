@@ -114,13 +114,16 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends $LINUX_NATIVE_PACKAGES
+      # The build links the distribution's FFmpeg, so it only runs on that release.
       - id: mpv
-        run: echo "version=$(tr -d '\r\n' < desktop/core/mpv-version.txt)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "version=$(tr -d '\r\n' < desktop/core/mpv-version.txt)" >> "$GITHUB_OUTPUT"
+          echo "distro=$(. /etc/os-release && echo "$VERSION_ID")" >> "$GITHUB_OUTPUT"
       - id: mpv-cache
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ${{ runner.temp }}/earthly-audio-mpv
-          key: mpv-${{ runner.os }}-${{ steps.mpv.outputs.version }}-${{ hashFiles('scripts/build-pinned-mpv.sh') }}
+          key: mpv-${{ runner.os }}-${{ steps.mpv.outputs.distro }}-${{ steps.mpv.outputs.version }}-${{ hashFiles('scripts/build-pinned-mpv.sh') }}
       - if: steps.mpv-cache.outputs.cache-hit != 'true'
         run: bash scripts/build-pinned-mpv.sh
       - run: (cd "$RUNNER_TEMP/earthly-audio-mpv" && sha256sum --check mpv.sha256)
