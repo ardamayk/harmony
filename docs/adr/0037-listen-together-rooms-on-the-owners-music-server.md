@@ -24,8 +24,20 @@ This first version covers joining from the Web Client only. The Desktop Client d
 - **Playback Sources.** A Room plays library Tracks only. Radio is live and specific to a user, and External Tracks and Catalog Previews are outside this first version.
 - **Lyrics.** Whether they are open moves from local state in the Player Bar to the Room State during a Room. Clicking a synced line is a Room seek.
 - **Reaching the server.** The Owner's listener stays exactly as it is: loopback only, unauthenticated, and never exposed. When `GUEST_ADDR` and `PUBLIC_URL` are both set, the Music Server opens a second loopback listener for Guests, and the operator's reverse proxy or tunnel points there and carries outside traffic over HTTPS. `PUBLIC_URL` names the public address: the Guest listener accepts only that host and origin, and the Invite Link is built from it. The Guest listener serves the Web Client, joining, and the Guest allowlist, and it has no Owner routes at all. Without both settings there is no reachable address, so the Music Server does not advertise `listen-together.v1`, and the page explains why instead of producing a link nobody can open.
-- **Invite Links expire**, and closing the Room revokes the link and every Guest session at once.
+- **Invite Links expire**, and closing the Room revokes the link and every Guest session at once. A Room closes itself after 24 hours; `LISTEN_TOGETHER_ROOM_HOURS` sets that from 1 to 168, because a link that lasts longer than a week stops being a link for one occasion.
 - **Guest limit.** A Room admits at most 8 Guests, and `LISTEN_TOGETHER_MAX_GUESTS` may lower that. The limit keeps a Room within a circle of friends, which is also why Rooms are never listed or discoverable, and it bounds the Owner's upload bandwidth. A Guest who arrives at a full Room is refused, and a Guest who leaves frees their place.
+- **Rate limits.** The Guest Listener faces the internet, so anyone holding an Invite Link could otherwise run ffmpeg and outside lookups on the Owner's server without end. Each Guest has budgets that answer `429 rate_limited` when spent, as Room commands do, and the Owner's listener has none. Each budget is a burst and then a steady rate, sized so a person in a browser never meets it:
+
+  | Budget | Burst | Then, per second | Covers |
+  | --- | --- | --- | --- |
+  | Library | 1000 | 60 | Library lists and details, covers, search, `me`, preferences, and stream requests, so a seek costs one read |
+  | Artist photos | 120 | 10 | One grid asks for 100 photos at once, and each is looked up online at most once |
+  | Lookups | 40 | 2 | Waveforms, lyrics, biographies, popular Tracks, play counts and online genres: the reads that run ffmpeg or call an outside service |
+  | Room | 20 | 20 | Room State, the event stream and the clock, kept apart so that browsing cannot cost a Guest their sync |
+
+  Popular Tracks and play counts are Lookups although they read like library routes, because they call Deezer and Last.fm. Room commands keep their own limit of 20 a second, a read not named here counts as a library read, and photos have a budget of their own so that an Artist grid does not spend the waveform of the Track that is playing.
+- **Audio streams.** A Guest holds at most 4 open audio streams; a further Track is refused with `429 rate_limited`, and a stream gives its place back when it ends or its connection closes. A seek is a new range request while the player or the proxy may still hold the previous one, so refusing at the limit would stop the music. At the limit, a request for a Track that is already streaming therefore replaces that Track's oldest stream and is never refused. `HEAD` sends no audio and takes no place.
+- **Joining is limited for everyone together.** `POST join` takes a burst of 20 and then one attempt every 5 seconds, valid or not, whether or not a Room is open. Behind a proxy the Music Server cannot trust a client address, so the limit cannot be per client: a stranger hammering the route can keep friends out until they stop. The tokens are 256 random bits, so the limit is not what stops guessing. It is slow because a new session starts with full budgets, and leaving and joining again must not be a way to refill them.
 
 ## The Desktop Client
 
@@ -52,3 +64,4 @@ Joining from the Desktop Client later needs a temporary Server Connection that l
 - The Owner opens Rooms from the machine that runs the Music Server, or through their own SSH tunnel to it. Owner sign-in is not needed for this and is left to a later decision.
 - The operator must make the server reachable. A home connection behind CGNAT cannot use port forwarding and needs a tunnel, and Listen Together uses the Owner's upload bandwidth once per Guest, at the Source Audio Format's bitrate.
 - Anyone holding the Invite Link is a Guest until it expires or the Room closes, so it has to be shared like a password.
+- The rate limits bound what one Guest costs, not what eight do, and they live in memory like the Room. The budgets are constants, not settings: nobody should have to tune them for a circle of friends.

@@ -8,6 +8,10 @@ pub const DEFAULT_MANAGED_IMPORT_FILE_LIMIT_BYTES: i64 = 2 * 1024 * 1024 * 1024;
 pub const DEFAULT_MANAGED_IMPORT_BATCH_LIMIT_BYTES: i64 = 4 * 1024 * 1024 * 1024;
 /// A Room admits at most this many Guests (ADR 0037).
 pub const MAX_LISTEN_TOGETHER_GUESTS: usize = 8;
+/// A Room closes itself after this many hours, unless the operator says.
+pub const DEFAULT_LISTEN_TOGETHER_ROOM_HOURS: u64 = 24;
+/// A week: an Invite Link is a password, so it does not live for long.
+pub const MAX_LISTEN_TOGETHER_ROOM_HOURS: u64 = 168;
 
 #[derive(Clone, Debug)]
 pub struct Config {
@@ -37,6 +41,8 @@ pub struct Config {
     pub listen_together: Option<ListenTogetherConfig>,
     /// `LISTEN_TOGETHER_MAX_GUESTS`: at most this many Guests in a Room.
     pub listen_together_max_guests: usize,
+    /// `LISTEN_TOGETHER_ROOM_HOURS`: how long a Room lasts.
+    pub listen_together_room_hours: u64,
 }
 
 /// The Guest Listener and the public address that reaches it.
@@ -173,6 +179,8 @@ pub enum ConfigError {
     InvalidPublicUrl(&'static str),
     #[error("LISTEN_TOGETHER_MAX_GUESTS {0:?} must be a whole number from 1 to 8")]
     InvalidMaxGuests(String),
+    #[error("LISTEN_TOGETHER_ROOM_HOURS {0:?} must be a whole number from 1 to 168")]
+    InvalidRoomHours(String),
 }
 
 impl Config {
@@ -258,6 +266,7 @@ impl Config {
         let addr = get("SERVER_ADDR", "127.0.0.1:8090");
         let listen_together = listen_together_config(&lookup, &addr)?;
         let listen_together_max_guests = max_guests(&lookup)?;
+        let listen_together_room_hours = room_hours(&lookup)?;
         Ok(Self {
             addr,
             database_path: get("DATABASE_PATH", "./data/app.db"),
@@ -309,6 +318,7 @@ impl Config {
             sentry,
             listen_together,
             listen_together_max_guests,
+            listen_together_room_hours,
         })
     }
 }
@@ -389,6 +399,20 @@ fn max_guests(lookup: &impl Fn(&str) -> Option<String>) -> Result<usize, ConfigE
     match raw.parse::<usize>() {
         Ok(limit) if (1..=MAX_LISTEN_TOGETHER_GUESTS).contains(&limit) => Ok(limit),
         _ => Err(ConfigError::InvalidMaxGuests(raw)),
+    }
+}
+
+/// Checked even while Listen Together is off, like the Guest limit.
+fn room_hours(lookup: &impl Fn(&str) -> Option<String>) -> Result<u64, ConfigError> {
+    let Some(raw) = lookup("LISTEN_TOGETHER_ROOM_HOURS")
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty())
+    else {
+        return Ok(DEFAULT_LISTEN_TOGETHER_ROOM_HOURS);
+    };
+    match raw.parse::<u64>() {
+        Ok(hours) if (1..=MAX_LISTEN_TOGETHER_ROOM_HOURS).contains(&hours) => Ok(hours),
+        _ => Err(ConfigError::InvalidRoomHours(raw)),
     }
 }
 
@@ -1010,6 +1034,25 @@ mod tests {
             assert_eq!(
                 limit(invalid),
                 Err(ConfigError::InvalidMaxGuests(invalid.to_owned())),
+                "{invalid}"
+            );
+        }
+    }
+
+    #[test]
+    fn room_hours_are_one_to_a_week() {
+        let hours = |value: &str| {
+            config(&[("LISTEN_TOGETHER_ROOM_HOURS", value)])
+                .map(|config| config.listen_together_room_hours)
+        };
+        assert_eq!(hours("1"), Ok(1));
+        assert_eq!(hours(" 168 "), Ok(168));
+        assert_eq!(hours(""), Ok(24));
+        assert_eq!(config(&[]).unwrap().listen_together_room_hours, 24);
+        for invalid in ["0", "169", "-1", "day", "1.5"] {
+            assert_eq!(
+                hours(invalid),
+                Err(ConfigError::InvalidRoomHours(invalid.to_owned())),
                 "{invalid}"
             );
         }

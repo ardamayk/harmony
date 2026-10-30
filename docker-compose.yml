@@ -12,6 +12,7 @@ services:
       GUEST_ADDR: ${GUEST_ADDR:-}
       PUBLIC_URL: ${PUBLIC_URL:-}
       LISTEN_TOGETHER_MAX_GUESTS: ${LISTEN_TOGETHER_MAX_GUESTS:-}
+      LISTEN_TOGETHER_ROOM_HOURS: ${LISTEN_TOGETHER_ROOM_HOURS:-}
     volumes:
       - app-data:/data
       - ${MUSIC_PATH:-./music}:/music:ro

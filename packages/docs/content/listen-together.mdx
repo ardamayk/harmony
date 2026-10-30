@@ -3,7 +3,7 @@
 Same Track, same playhead, with friends. Anyone: pause, seek, next. Lyrics open for all. Sound stays on each device.
 
 - **Room**: on your Music Server. One at a time. Restart ends it.
-- **Invite Link**: joins a Room. Expires in 24 hours.
+- **Invite Link**: joins a Room. Expires with the Room, 24 hours by default.
 - **Guest**: browser only. No account. No Music Server.
 
 ## Setup
@@ -13,6 +13,7 @@ Same Track, same playhead, with friends. Anyone: pause, seek, next. Lyrics open 
 | `GUEST_ADDR` | `127.0.0.1:8091` | Guest Listener. Loopback only. Must differ from `SERVER_ADDR`. |
 | `PUBLIC_URL` | `https://music.example.com` | Public origin, no path. HTTPS unless loopback. Builds the Invite Link. Guest Listener accepts only this host and origin. |
 | `LISTEN_TOGETHER_MAX_GUESTS` | `4` | Optional, 1 to 8. Default 8. |
+| `LISTEN_TOGETHER_ROOM_HOURS` | `6` | Optional, 1 to 168. How long a Room lasts. Default 24. |
 
 Set `GUEST_ADDR` and `PUBLIC_URL` together. One alone stops the Music Server at startup. Neither: feature off, page explains why.
 
@@ -70,5 +71,8 @@ Desktop Client cannot join yet. Use a browser.
 ## Sharing
 
 - 8 Guests at most. Full Room refuses. Leaving frees a place.
+- A Room closes itself after 24 hours, or after `LISTEN_TOGETHER_ROOM_HOURS`.
 - The Invite Link works until it expires or the Room closes. Treat it like a password. Friends only.
+- Each Guest has request limits, so a leaked link cannot keep your server busy for long. Browsing, playing and seeking stay within them.
+- Joining has one limit shared by everyone. A flood of attempts can hold friends back until it stops.
 - Share only music you have the right to listen to. You are responsible for what you share.

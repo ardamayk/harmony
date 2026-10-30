@@ -2321,6 +2321,15 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
+        /** @description Only on the Guest Listener. Too many requests from this Guest, or too many join attempts from everyone (rate_limited) */
+        RateLimited: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
         /** @description Bad request */
         BadRequest: {
             headers: {
@@ -2489,6 +2498,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            429: components["responses"]["RateLimited"];
         };
     };
     getPreferences: {
@@ -2510,6 +2520,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            429: components["responses"]["RateLimited"];
         };
     };
     patchPreferences: {
@@ -2561,6 +2572,7 @@ export interface operations {
                     "application/json": components["schemas"]["ArtistList"];
                 };
             };
+            429: components["responses"]["RateLimited"];
         };
     };
     getArtist: {
@@ -2584,6 +2596,7 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
         };
     };
     getArtistPhoto: {
@@ -2607,6 +2620,7 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
         };
     };
     getArtistBiography: {
@@ -2630,6 +2644,7 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
         };
     };
     listArtistPopularTracks: {
@@ -2655,6 +2670,7 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
         };
     };
     listTrackPlayCounts: {
@@ -2679,6 +2695,7 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            429: components["responses"]["RateLimited"];
         };
     };
     listAlbums: {
@@ -2705,6 +2722,7 @@ export interface operations {
                     "application/json": components["schemas"]["AlbumList"];
                 };
             };
+            429: components["responses"]["RateLimited"];
         };
     };
     listAlbumOnlineGenres: {
@@ -2728,6 +2746,7 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
         };
     };
     getAlbum: {
@@ -2751,6 +2770,7 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
         };
     };
     deleteAlbum: {
@@ -2836,6 +2856,7 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
         };
     };
     listTracks: {
@@ -2863,6 +2884,7 @@ export interface operations {
                     "application/json": components["schemas"]["TrackList"];
                 };
             };
+            429: components["responses"]["RateLimited"];
         };
     };
     getTrack: {
@@ -2886,6 +2908,7 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
         };
     };
     deleteTrack: {
@@ -2945,6 +2968,7 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            429: components["responses"]["RateLimited"];
         };
     };
     getTrackLyrics: {
@@ -2968,6 +2992,7 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
         };
     };
     getTrackWaveform: {
@@ -3001,6 +3026,7 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
             /** @description ffmpeg is not installed on the Music Server. */
             503: {
                 headers: {
@@ -3717,6 +3743,7 @@ export interface operations {
             };
             404: components["responses"]["NotFound"];
             416: components["responses"]["RangeNotSatisfiable"];
+            429: components["responses"]["RateLimited"];
         };
     };
     headTrackStream: {
@@ -4563,6 +4590,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            429: components["responses"]["RateLimited"];
         };
     };
     leaveListenTogetherRoom: {
@@ -4605,6 +4633,7 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
         };
     };
     openListenTogetherRoom: {
@@ -4712,6 +4741,7 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
         };
     };
     getListenTogetherClock: {
@@ -4733,6 +4763,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            429: components["responses"]["RateLimited"];
         };
     };
 }
