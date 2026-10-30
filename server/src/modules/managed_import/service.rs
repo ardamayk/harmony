@@ -425,7 +425,14 @@ impl Service {
     /// wins before cleanup rechecks eligibility.
     pub async fn heartbeat_batch(&self, batch_id: &str) -> Result<()> {
         let _batch = self.batch_lock.lock().await;
-        self.repo.heartbeat_batch(batch_id).await
+        match self.repo.heartbeat_batch(batch_id).await {
+            // One sent during a commit waits for this lock, then finds the
+            // Batch completed: nothing to keep alive, and nothing wrong.
+            Err(error) if error.is(Sentinel::NotFound) => {
+                self.repo.get_batch(batch_id).await.map(|_| ())
+            }
+            other => other,
+        }
     }
 
     pub async fn cancel_batch(&self, batch_id: &str) -> Result<()> {

@@ -313,7 +313,7 @@ pub fn error_response(error: &Error, path: &str) -> Response {
             Sentinel::NotFound,
             StatusCode::NOT_FOUND,
             "import_not_found",
-            "Managed Import Job not found",
+            "This import no longer exists on the Music Server",
         ),
         (
             Sentinel::RevisionConflict,

@@ -275,6 +275,14 @@ async fn confirms_a_batch_with_album_previews() {
         .await
         .unwrap();
     assert_eq!(retried.status, BATCH_STATUS_COMPLETED);
+    // A heartbeat that waited out the commit finds nothing wrong.
+    h.service.heartbeat_batch(&batch.id).await.unwrap();
+    let missing = h
+        .service
+        .heartbeat_batch(&uuid::Uuid::new_v4().to_string())
+        .await
+        .unwrap_err();
+    assert!(missing.is(Sentinel::NotFound));
     let history = h.service.list_history().await.unwrap();
     assert_eq!(history.items[0].import_id, batch.id);
     assert_eq!(history.items[0].files[0].file_id, client_file_id);
