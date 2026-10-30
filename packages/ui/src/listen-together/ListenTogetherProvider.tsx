@@ -229,6 +229,26 @@ export function ListenTogetherProvider({
 		};
 	}, [adoptRoom]);
 
+	// The page tells the Owner to restart the Music Server and come back.
+	useEffect(() => {
+		if (role !== "owner" || isAvailable) return undefined;
+		let cancelled = false;
+		const recheck = async () => {
+			const health = await apiRef.current.getHealth().catch(() => null);
+			if (!hasServerCapability(health, LISTEN_TOGETHER_CAPABILITY)) return;
+			const openRoom = await fetchRoom(apiRef.current);
+			if (cancelled) return;
+			setIsAvailable(true);
+			if (openRoom) adoptRoom(openRoom);
+		};
+		const onFocus = () => void recheck();
+		window.addEventListener("focus", onFocus);
+		return () => {
+			cancelled = true;
+			window.removeEventListener("focus", onFocus);
+		};
+	}, [role, isAvailable, adoptRoom]);
+
 	const hasRoom = room !== null;
 
 	useEffect(() => {

@@ -214,6 +214,26 @@ describe("ListenTogetherProvider", () => {
 		expect(fixture.calls.getListenTogetherRoom).not.toHaveBeenCalled();
 	});
 
+	it("notices a Music Server restarted with Listen Together on focus", async () => {
+		const fixture = createApi({ capabilities: [] });
+		renderProvider(fixture);
+		await roleIs("owner");
+		expect(context.isAvailable).toBe(false);
+
+		fixture.calls.getHealth.mockResolvedValue({
+			status: "ok",
+			version: "1",
+			capabilities: ["listen-together.v1"],
+			dependencies: {},
+		});
+		act(() => {
+			window.dispatchEvent(new Event("focus"));
+		});
+
+		await waitFor(() => expect(context.isAvailable).toBe(true));
+		expect(context.room?.revision).toBe(baseRoom.revision);
+	});
+
 	it("keeps the Owner in when an older server answers with a page", async () => {
 		const fixture = createApi({ capabilities: [] });
 		fixture.calls.getListenTogetherSession.mockRejectedValue(
