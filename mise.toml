@@ -10,29 +10,59 @@ _.path = ["{{config_root}}/node_modules/.bin"]
 
 # --- Development -------------------------------------------------------------
 
+# "Desktop" is the Windows Desktop Client in WSL and the Linux one elsewhere,
+# CI included; EARTHLY_DESKTOP_TARGET=linux|windows overrides it
+# (scripts/desktop-target.ts, run through scripts/desktop.sh).
+
 [tasks.dev]
-description = "Run the Music Server and Web Client in development mode"
+description = "Run the development Music Server and Desktop Client together"
 # The Music Server serves Scalar's API reference bundle at /api/docs.
+run = [
+	"bash scripts/sync-static.sh api-reference",
+	"./scripts/run-with-music-server.sh development bash scripts/desktop.sh dev",
+]
+
+[tasks."dev:web"]
+description = "Run the development Music Server and Web Client (Vite :3000, in a browser)"
 run = [
 	"bash scripts/sync-static.sh api-reference",
 	"./scripts/run-with-music-server.sh development pnpm --dir web run dev",
 ]
 
-[tasks."desktop:dev"]
-description = "Run the Music Server and Desktop Client in development mode"
+[tasks."server:dev"]
+description = "Run the development Music Server alone (cargo run, :8090)"
+# The working directory server/ holds ./data and migrations/, as for server:start.
 run = [
 	"bash scripts/sync-static.sh api-reference",
-	"./scripts/run-with-music-server.sh development pnpm --dir desktop run dev",
+	"cd server && exec cargo run --quiet -p earthly-music-server",
 ]
 
+[tasks."desktop:dev"]
+description = "Run the development Desktop Client alone (debug core, Vite HMR) against a running Music Server"
+run = "bash scripts/desktop.sh dev"
+
 [tasks.start]
-description = "Run the built Music Server and release Desktop Client"
+description = "Run the built Music Server and Desktop Client together"
 run = """
 #!/usr/bin/env bash
 set -euo pipefail
 [[ -x bin/server ]] || { echo "Missing bin/server; run 'mise run build' first." >&2; exit 1; }
-./scripts/run-with-music-server.sh built pnpm --dir desktop run start
+./scripts/run-with-music-server.sh built bash scripts/desktop.sh start --wait
 """
+
+[tasks."server:start"]
+description = "Run the built Music Server alone (bin/server, :8090)"
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+[[ -x bin/server ]] || { echo "Missing bin/server; run 'mise run server:build' first." >&2; exit 1; }
+cd server
+exec ../bin/server
+"""
+
+[tasks."desktop:start"]
+description = "Run the built Desktop Client alone against a running Music Server"
+run = "bash scripts/desktop.sh start"
 
 # --- Code generation ---------------------------------------------------------
 
@@ -50,7 +80,7 @@ run = [
 # --- Build -------------------------------------------------------------------
 
 [tasks.build]
-description = "Build the Music Server (with embedded Web Client and docs) and the Electron Desktop Client"
+description = "Build the Music Server and the Desktop Client"
 depends = ["server:build", "desktop:build"]
 
 [tasks."web:build"]
@@ -86,32 +116,13 @@ run = [
 ]
 
 [tasks."desktop:build"]
-description = "Build the release Desktop Client: Rust core with pinned mpv, Electron shell bundle, Web Client"
+description = "Build the release Desktop Client (in WSL: Windows package into %LOCALAPPDATA%\\EarthlyAudio)"
 depends = ["web:build"]
-run = "pnpm --dir desktop run build"
+run = "bash scripts/desktop.sh build"
 
-[tasks."desktop:windows"]
-description = "Build the Windows Desktop Client from WSL into %LOCALAPPDATA%\\EarthlyAudio: mingw core, pinned mpv, electron-builder dir"
-run = "node scripts/desktop-windows/cli.ts build"
-
-[tasks."desktop:windows:start"]
-description = "Launch the built Windows Desktop Client from WSL"
-run = "node scripts/desktop-windows/cli.ts start"
-
-[tasks."desktop:windows:dev"]
-description = "Run the built Windows Desktop Client with a fresh shell, debug core, and the WSL Vite dev server (HMR)"
-run = "node scripts/desktop-windows/cli.ts dev"
-
-[tasks."desktop:windows:dev:server"]
-description = "Run the Music Server and desktop:windows:dev together"
-run = [
-	"bash scripts/sync-static.sh api-reference",
-	"./scripts/run-with-music-server.sh development node scripts/desktop-windows/cli.ts dev",
-]
-
-[tasks."desktop:windows:clean"]
-description = "Remove the Windows Desktop Client's staging folder and its Windows output folder"
-run = "node scripts/desktop-windows/cli.ts clean"
+[tasks."desktop:clean"]
+description = "Remove the Desktop Client's build output (in WSL: Windows staging and output folders)"
+run = "bash scripts/desktop.sh clean"
 
 # --- Static checks -----------------------------------------------------------
 
@@ -166,13 +177,14 @@ description = "Regenerate server/.sqlx after adding or changing a sqlx query (ne
 run = "bash scripts/sqlx-prepare.sh"
 
 [tasks."desktop:test"]
-description = "Run Desktop core (Rust), Electron shell and Windows build script unit tests"
+description = "Run Desktop core (Rust), Electron shell, desktop target and Windows build script unit tests"
 run = [
 	"pnpm --dir desktop run test:core",
 	"pnpm --dir desktop run test",
-	# node:test suites of the WSL-side Windows build (pinned download integrity),
-	# named *.node-test.ts so Vitest's default *.test.ts pattern skips them.
-	"node --test scripts/desktop-windows/*.node-test.ts",
+	# node:test suites of the desktop target selection and the WSL-side Windows
+	# build (pinned download integrity), named *.node-test.ts so Vitest's
+	# default *.test.ts pattern skips them.
+	"node --test scripts/*.node-test.ts scripts/desktop-windows/*.node-test.ts",
 ]
 
 [tasks."web:test:e2e"]

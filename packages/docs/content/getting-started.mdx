@@ -10,7 +10,7 @@
 ```bash
 mise install
 pnpm install
-mise run dev
+mise run dev:web
 ```
 
 - API: http://localhost:8090
@@ -43,7 +43,7 @@ All byte-count settings use base-10 integer strings. Set `MANAGED_STORAGE_RESERV
 
 ```bash
 mise run build
-./bin/server
+mise run server:start
 ```
 
 Mise is the canonical interface for development and CI tasks. Run `mise run ci` for static checks and unit tests and `mise run ci:integration` for integration tests. Target one artifact or domain with commands such as `mise run web:build`, `mise run server:test`, and `mise run desktop:check`.
