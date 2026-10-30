@@ -33,7 +33,7 @@ export function Sidebar() {
 		<aside
 			data-sidebar
 			data-shell-surface
-			className="flex w-50 shrink-0 flex-col justify-between border-sidebar-border border-r bg-sidebar px-3 pt-6 pb-(--player-dock-clearance,0.75rem) text-sidebar-foreground max-lg:w-17"
+			className="flex w-62.5 shrink-0 flex-col justify-between border-sidebar-border border-r bg-sidebar px-3 pt-6 pb-(--player-dock-clearance,0.75rem) text-sidebar-foreground max-lg:w-17"
 		>
 			<nav aria-label="Library" className="flex flex-col gap-1">
 				{libraryNav.map(({ to, label, icon: Icon }) => (

@@ -247,8 +247,8 @@ test("library search drops down over the top bar field and animates result heigh
 			.toBe(initialHeight);
 		await input.press("Escape");
 	}
-	// The narrowest supported width (design rules: Widths).
-	await page.setViewportSize({ width: 640, height: 812 });
+	// The narrowest supported width.
+	await page.setViewportSize({ width: 768, height: 812 });
 	await page.emulateMedia({ reducedMotion: "reduce" });
 	await opener.click();
 	await expect(card).toHaveCSS("animation-name", "none");

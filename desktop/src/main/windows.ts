@@ -6,7 +6,7 @@ import { rendererWebPreferences, validateExternalUrl } from "./security";
 const MAIN_WINDOW = {
 	width: 1280,
 	height: 800,
-	minWidth: 900,
+	minWidth: 768,
 	minHeight: 600,
 };
 const MINI_WINDOW = { width: 380, height: 104 };

@@ -81,7 +81,7 @@ function AppShellFrame({
 					} as CSSProperties
 				}
 				data-app-shell
-				className="relative flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden bg-background text-foreground"
+				className="relative flex h-full min-h-0 w-full min-w-3xl flex-1 flex-col overflow-hidden bg-background text-foreground"
 			>
 				<TopNav onSearch={onSearch} windowControls={windowControls} />
 				<div

@@ -325,7 +325,7 @@ html[data-window-maximized] body::after {
 	grid-template-columns: auto minmax(0, 1fr) auto;
 }
 @utility grid-cols-cards {
-	grid-template-columns: repeat(auto-fill, min(250px, 100%));
+	grid-template-columns: repeat(auto-fill, minmax(min(250px, 100%), 1fr));
 }
 @utility grid-cols-panels {
 	grid-template-columns: repeat(auto-fit, minmax(min(100%, 560px), 1fr));

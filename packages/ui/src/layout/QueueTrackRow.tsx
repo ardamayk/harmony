@@ -61,11 +61,11 @@ export function QueueTrackRow({
 				}
 			}}
 			className={cn(
-				"group relative flex cursor-pointer items-center gap-3 rounded-r-sm py-2 pr-3 pl-6 -outline-offset-2 focus-visible:outline-2 focus-visible:outline-player-control-primary",
+				"group relative flex cursor-pointer items-center gap-3 rounded-r-sm py-2 pr-3 pl-3 -outline-offset-2 focus-visible:outline-2 focus-visible:outline-player-control-primary",
 				// The current row sits on the active step, so hover never darkens it.
 				!isCurrent && "hover:bg-muted",
-				// Margin plus padding match other rows' `pl-6` / `pr-3`, so number and duration columns stay put.
-				isCurrent && "my-1 mr-1 ml-2 rounded-sm bg-neutral-active pr-2 pl-4",
+				// Margin plus padding match other rows' `pl-3` / `pr-3`, so number and duration columns stay put.
+				isCurrent && "my-1 mr-1 ml-1 rounded-sm bg-neutral-active pr-2 pl-2",
 			)}
 		>
 			{isCurrent ? (

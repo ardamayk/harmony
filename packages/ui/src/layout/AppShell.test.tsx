@@ -321,7 +321,7 @@ describe("AppShell", () => {
 		const shell = container.querySelector<HTMLElement>("[data-app-shell]");
 		const drawer = container.querySelector<HTMLElement>("[data-queue-drawer]");
 		const main = container.querySelector("main");
-		expect(shell?.style.getPropertyValue("--queue-drawer-width")).toBe("302px");
+		expect(shell?.style.getPropertyValue("--queue-drawer-width")).toBe("400px");
 		expect(drawer?.style.getPropertyValue("--queue-drawer-width")).toBe("");
 		expect(main?.style.getPropertyValue("--queue-drawer-width")).toBe("");
 		expect(drawer?.className).toContain("w-(--queue-drawer-width,18rem)");
@@ -334,13 +334,13 @@ describe("AppShell", () => {
 			throw new Error("The shell was not observed for resizing");
 		shellWidth = 1919;
 		act(resizeShell);
-		expect(shell?.style.getPropertyValue("--queue-drawer-width")).toBe("333px");
+		expect(shell?.style.getPropertyValue("--queue-drawer-width")).toBe("400px");
 		expect(drawer?.style.getPropertyValue("--queue-drawer-bottom")).toBe(
 			bottom,
 		);
 		shellWidth = 1000;
 		fireEvent(window, new Event("resize"));
-		expect(shell?.style.getPropertyValue("--queue-drawer-width")).toBe("386px");
+		expect(shell?.style.getPropertyValue("--queue-drawer-width")).toBe("350px");
 		expect(drawer?.style.getPropertyValue("--queue-drawer-bottom")).toBe(
 			bottom,
 		);

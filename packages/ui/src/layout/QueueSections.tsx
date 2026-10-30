@@ -139,7 +139,7 @@ function QueueGroupHeader({
 		const artistName = group.source.artistName;
 		return (
 			<div
-				className="flex items-center gap-2 border-(--queue-group-color) border-l-2 bg-player-pill py-2 pr-3 pl-6"
+				className="flex items-center gap-2 border-(--queue-group-color) border-l-2 bg-player-pill py-2 pr-3 pl-3"
 				title={details.meta}
 			>
 				<a
@@ -199,7 +199,7 @@ function QueueGroupHeader({
 	);
 	return (
 		<div
-			className="flex items-center gap-2 border-(--queue-group-color) border-l-2 bg-player-pill py-2 pr-3 pl-6"
+			className="flex items-center gap-2 border-(--queue-group-color) border-l-2 bg-player-pill py-2 pr-3 pl-3"
 			title={details.meta}
 		>
 			{details.href ? (

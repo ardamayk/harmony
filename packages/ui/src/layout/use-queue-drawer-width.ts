@@ -1,49 +1,27 @@
 import { type RefObject, useLayoutEffect, useState } from "react";
 
-// Match the fixed collection cards and gap used by the host's collection grid.
-const COLLECTION_CARD_WIDTH_PX = 250;
-const COLLECTION_GRID_GAP_REM = 0.75;
-const MAX_COLLECTION_COLUMNS = 6;
-const QUEUE_MIN_WIDTH_REM = 18;
-// Below Tailwind's `lg` (1024px) the drawer has a fixed width, narrower again
-// below `md` (768px), and the collection grid stretches two columns into the
-// rest. Mirrored by the `max-lg` grid class in the Web Client's
-// collection-grid-layout.
+// From Tailwind's `lg` (1024px) the drawer has one width and the collection
+// cards stretch to the rest (ADR 0036). Below `lg` it is narrower and the
+// collection grid stretches two columns into the rest, mirrored by the
+// `max-lg` grid class in the Web Client's collection-grid-layout. The shell is
+// never narrower than 768px.
 const LG_BREAKPOINT_PX = 1024;
-const MD_BREAKPOINT_PX = 768;
-const QUEUE_BELOW_LG_WIDTH_PX = 386;
-const QUEUE_BELOW_MD_WIDTH_PX = 275;
+const QUEUE_WIDTH_PX = 400;
+const QUEUE_BELOW_LG_WIDTH_PX = 350;
 
 /**
- * `shellWidth` decides the breakpoints (it is the window's width); the cards
- * and the drawer share what the Sidebar and the page's two insets leave.
+ * `shellWidth` decides the breakpoints (it is the window's width); the drawer
+ * never takes more than the Sidebar and the page's two insets leave.
  */
 export function calculateQueueDrawerWidth(
 	shellWidth: number,
 	inset: number,
-	rootFontSize: number,
 	sidebarWidth = 0,
 ): number {
-	const minimumWidth = QUEUE_MIN_WIDTH_REM * rootFontSize;
 	const availableWidth = Math.max(0, shellWidth - sidebarWidth - 2 * inset);
-	if (shellWidth < MD_BREAKPOINT_PX)
-		return Math.min(QUEUE_BELOW_MD_WIDTH_PX, availableWidth);
 	if (shellWidth < LG_BREAKPOINT_PX)
 		return Math.min(QUEUE_BELOW_LG_WIDTH_PX, availableWidth);
-	// From `lg` the docked drawer fills whatever the fixed cards leave over,
-	// so its left edge sits one page inset from the last card.
-	const collectionGap = COLLECTION_GRID_GAP_REM * rootFontSize;
-	const columns = Math.min(
-		MAX_COLLECTION_COLUMNS,
-		Math.floor(
-			(availableWidth - minimumWidth + collectionGap) /
-				(COLLECTION_CARD_WIDTH_PX + collectionGap),
-		),
-	);
-	if (columns < 1) return Math.min(minimumWidth, availableWidth);
-	const collectionWidth =
-		columns * COLLECTION_CARD_WIDTH_PX + (columns - 1) * collectionGap;
-	return availableWidth - collectionWidth;
+	return Math.min(QUEUE_WIDTH_PX, availableWidth);
 }
 
 /**
@@ -54,8 +32,10 @@ export function calculateQueueDrawerWidth(
 export function useQueueDrawerWidth(
 	shellRef: RefObject<HTMLDivElement | null>,
 ) {
-	const [metrics, setMetrics] = useState<{
-		queueWidth: number;
+	const [measured, setMeasured] = useState<{
+		shellWidth: number;
+		inset: number;
+		sidebarWidth: number;
 		searchWidth: number;
 		searchCenter: number;
 		searchTop: number;
@@ -74,20 +54,13 @@ export function useQueueDrawerWidth(
 					?.offsetWidth ?? 0;
 			const sidebarWidth =
 				shell.querySelector<HTMLElement>("[data-sidebar]")?.offsetWidth ?? 0;
-			const rootFontSize =
-				Number.parseFloat(
-					getComputedStyle(document.documentElement).fontSize,
-				) || 16;
 			const fieldElement = shell.querySelector("[data-library-search-field]");
 			const field = fieldElement?.getBoundingClientRect();
 			const header = fieldElement?.closest("header")?.getBoundingClientRect();
-			setMetrics({
-				queueWidth: calculateQueueDrawerWidth(
-					shellWidth,
-					inset,
-					rootFontSize,
-					sidebarWidth,
-				),
+			setMeasured({
+				shellWidth,
+				inset,
+				sidebarWidth,
 				searchWidth: field?.width ?? 0,
 				searchCenter: field ? field.left + field.width / 2 : 0,
 				searchTop: field?.top ?? 0,
@@ -115,5 +88,14 @@ export function useQueueDrawerWidth(
 			window.removeEventListener("resize", measure);
 		};
 	}, [shellRef]);
-	return metrics;
+	if (!measured) return undefined;
+	// Derived on render, so a hot update of the rule applies without a resize.
+	return {
+		...measured,
+		queueWidth: calculateQueueDrawerWidth(
+			measured.shellWidth,
+			measured.inset,
+			measured.sidebarWidth,
+		),
+	};
 }

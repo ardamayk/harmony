@@ -49,13 +49,13 @@ export function TopNav({
 			data-window-drag-region
 			// Side tracks with one minimum keep the middle on the window's centre
 			// at every width; it narrows only when the window cannot fit it.
-			className={`relative grid ${TOP_NAV_HEIGHT_CLASS} shrink-0 grid-cols-[minmax(11.5rem,1fr)_minmax(0,42rem)_minmax(11.5rem,1fr)] lg:grid-cols-[minmax(13rem,1fr)_minmax(0,42rem)_minmax(13rem,1fr)] items-center gap-4 bg-sidebar text-sidebar-foreground`}
+			className={`relative grid ${TOP_NAV_HEIGHT_CLASS} shrink-0 grid-cols-[minmax(11.5rem,1fr)_minmax(0,42rem)_minmax(11.5rem,1fr)] lg:grid-cols-[minmax(16.25rem,1fr)_minmax(0,42rem)_minmax(16.25rem,1fr)] items-center gap-4 bg-sidebar text-sidebar-foreground`}
 		>
 			{/* Continues the Sidebar's line to the top, so the two read as one
 			    column while the search stays on the window's centre. */}
 			<div
 				aria-hidden
-				className="pointer-events-none absolute inset-y-0 left-0 w-50 border-sidebar-border border-r max-lg:w-17"
+				className="pointer-events-none absolute inset-y-0 left-0 w-62.5 border-sidebar-border border-r max-lg:w-17"
 			/>
 			<div data-window-drag-region className="relative flex pl-6">
 				<Link
