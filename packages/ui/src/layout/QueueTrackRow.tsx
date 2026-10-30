@@ -64,12 +64,14 @@ export function QueueTrackRow({
 				"group relative flex cursor-pointer items-center gap-3 rounded-r-sm py-2 pr-3 pl-3 -outline-offset-2 focus-visible:outline-2 focus-visible:outline-player-control-primary",
 				// The current row sits on the active step, so hover never darkens it.
 				!isCurrent && "hover:bg-muted",
-				// Margin plus padding match other rows' `pl-3` / `pr-3`, so number and duration columns stay put.
-				isCurrent && "my-1 mr-1 ml-1 rounded-sm bg-neutral-active pr-2 pl-2",
+				// As wide as the group's header, so the two blocks share their edges.
+				isCurrent && "my-1 rounded-sm bg-neutral-active",
 			)}
 		>
 			{isCurrent ? (
-				<QueueEqualizer isPlaying={isPlaying} />
+				<span className="flex w-5 shrink-0 justify-end">
+					<QueueEqualizer isPlaying={isPlaying} />
+				</span>
 			) : (
 				<span className="w-5 shrink-0 text-right text-xs text-caption tabular-nums">
 					{number}
