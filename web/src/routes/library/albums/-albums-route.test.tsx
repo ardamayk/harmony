@@ -19,13 +19,11 @@ import { AlbumsPage } from "./-albums-page";
 
 const mocks = vi.hoisted(() => ({
 	listAlbums: vi.fn(),
-	listArtists: vi.fn(),
 }));
 
 vi.mock("#/lib/api", () => ({
 	apiClient: {
 		listAlbums: mocks.listAlbums,
-		listArtists: mocks.listArtists,
 	},
 }));
 
@@ -51,9 +49,6 @@ function renderWithQuery(ui: React.ReactElement) {
 describe("albums route", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
-		mocks.listArtists.mockResolvedValue({
-			items: [{ id: "artist-1", name: "Taylor Swift" }],
-		});
 		const albumItems = [
 			{
 				id: "album-1",
@@ -63,9 +58,7 @@ describe("albums route", () => {
 				trackCount: 2,
 			},
 		];
-		mocks.listAlbums.mockImplementation(({ q }: { q?: string }) =>
-			Promise.resolve({ items: q ? [] : albumItems }),
-		);
+		mocks.listAlbums.mockResolvedValue({ items: albumItems });
 	});
 
 	afterEach(() => {
@@ -97,30 +90,13 @@ describe("albums route", () => {
 			.getByTestId("albums-page-content")
 			.querySelector(".page-content-column");
 		expect(collectionContainer).toBeTruthy();
-		expect(screen.getByRole("button", { name: "Filters" })).toBeTruthy();
+		expect(screen.queryByRole("button", { name: "Filters" })).toBeNull();
 		expect(screen.queryByRole("button", { name: "Scan library" })).toBeNull();
-	});
-
-	it("opens album filters in a drawer from the Top Nav filter button", async () => {
-		renderWithQuery(<AlbumsPage />);
-
-		await screen.findByText("1989");
-		const filters = screen.getByRole("button", { name: "Filters" });
-		expect(filters.getAttribute("aria-pressed")).toBe("false");
-		fireEvent.click(filters);
-		const drawer = await screen.findByRole("dialog", {
-			name: "Album filters",
-		});
-
-		expect(within(drawer).getByText("Artist")).toBeTruthy();
-		expect(within(drawer).getByText("Genre")).toBeTruthy();
-		expect(within(drawer).getByText("1 album")).toBeTruthy();
 	});
 
 	it("keeps the header visible while showing ten square loading cards", () => {
 		const pendingRequest = new Promise(() => undefined);
 		mocks.listAlbums.mockReturnValue(pendingRequest);
-		mocks.listArtists.mockReturnValue(pendingRequest);
 
 		renderWithQuery(<AlbumsPage />);
 
@@ -129,9 +105,8 @@ describe("albums route", () => {
 		expect(screen.getAllByTestId("collection-card-skeleton")).toHaveLength(10);
 	});
 
-	it("retries all album page queries from the shared error panel", async () => {
+	it("retries the albums from the shared error panel", async () => {
 		mocks.listAlbums.mockRejectedValue(new Error("album request failed"));
-		mocks.listArtists.mockRejectedValue(new Error("artist request failed"));
 
 		renderWithQuery(<AlbumsPage />);
 
@@ -141,24 +116,8 @@ describe("albums route", () => {
 		fireEvent.click(within(alert).getByRole("button", { name: "Try again" }));
 
 		await waitFor(() => {
-			expect(mocks.listAlbums.mock.calls.length).toBeGreaterThanOrEqual(4);
-			expect(mocks.listArtists.mock.calls.length).toBeGreaterThanOrEqual(2);
+			expect(mocks.listAlbums.mock.calls.length).toBeGreaterThanOrEqual(2);
 		});
-	});
-
-	it("shows an album error while another page query is still pending", async () => {
-		mocks.listAlbums.mockRejectedValue(new Error("album request failed"));
-		mocks.listArtists.mockReturnValue(new Promise(() => undefined));
-
-		renderWithQuery(<AlbumsPage />);
-
-		const alert = await screen.findByRole("alert");
-		expect(alert.textContent).toContain("Unable to load albums");
-		const retryButton = within(alert).getByRole("button", {
-			name: "Try again",
-		});
-		expect((retryButton as HTMLButtonElement).disabled).toBe(false);
-		expect(screen.queryByRole("status")).toBeNull();
 	});
 
 	it("shows the empty-library copy when there are no albums", async () => {
