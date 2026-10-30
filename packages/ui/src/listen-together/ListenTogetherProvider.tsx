@@ -208,10 +208,12 @@ export function ListenTogetherProvider({
 				health,
 				LISTEN_TOGETHER_CAPABILITY,
 			);
-			// Every Guest Listener advertises the capability. Without it this is
-			// the Owner's, even on an older Music Server, which answers the unknown
-			// session route with the Web Client's page.
-			const nextRole = sessionRole ?? (hasCapability ? "none" : "owner");
+			// Every Guest Listener advertises the capability. A health answer
+			// without it means the Owner's, even on an older Music Server, which
+			// answers the unknown session route with the Web Client's page. No
+			// answer at all proves nothing, so it shows a visitor nothing.
+			const nextRole =
+				sessionRole ?? (health && !hasCapability ? "owner" : "none");
 			const openRoom =
 				nextRole === "guest" || (nextRole === "owner" && hasCapability)
 					? await fetchRoom(apiRef.current)

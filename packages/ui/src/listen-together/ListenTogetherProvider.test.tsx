@@ -236,6 +236,18 @@ describe("ListenTogetherProvider", () => {
 		expect(context.role).toBe("none");
 	});
 
+	it("shows nothing when neither the session nor the health answers", async () => {
+		const fixture = createApi({ capabilities: [] });
+		fixture.calls.getListenTogetherSession.mockRejectedValue(
+			new Error("network down"),
+		);
+		fixture.calls.getHealth.mockRejectedValue(new Error("network down"));
+		renderProvider(fixture);
+
+		await roleIs("none");
+		expect(context.role).toBe("none");
+	});
+
 	it("treats a server without the session endpoint as the Owner's", async () => {
 		const fixture = createApi();
 		fixture.calls.getListenTogetherSession.mockRejectedValue(notFound());
