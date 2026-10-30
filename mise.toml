@@ -102,6 +102,13 @@ run = "node scripts/desktop-windows/cli.ts start"
 description = "Run the built Windows Desktop Client with a fresh shell, debug core, and the WSL Vite dev server (HMR)"
 run = "node scripts/desktop-windows/cli.ts dev"
 
+[tasks."desktop:windows:dev:server"]
+description = "Run the Music Server and desktop:windows:dev together"
+run = [
+	"bash scripts/sync-static.sh api-reference",
+	"./scripts/run-with-music-server.sh development node scripts/desktop-windows/cli.ts dev",
+]
+
 [tasks."desktop:windows:clean"]
 description = "Remove the Windows Desktop Client's staging folder and its Windows output folder"
 run = "node scripts/desktop-windows/cli.ts clean"
