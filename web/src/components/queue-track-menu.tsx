@@ -6,6 +6,7 @@ import {
 	usePlayback,
 	usePlaylistLibrary,
 } from "@repo/ui";
+import { useHiddenFromGuest } from "@repo/ui/guest-access";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
@@ -67,6 +68,8 @@ function QueueMenuActions({ item }: { item: QueueRowMenuProps["item"] }) {
 	const { listPlaylists, addPlaylistTrack } = usePlaylistLibrary();
 	const queryClient = useQueryClient();
 	const navigate = useNavigate();
+	const hideQueueEditing = useHiddenFromGuest("queue-editing");
+	const hidePlaylists = useHiddenFromGuest("playlists");
 	const [isPlaylistOpen, setIsPlaylistOpen] = useState(false);
 	const playlists = useQuery({
 		queryKey: playlistQueryKeys.list,
@@ -103,48 +106,54 @@ function QueueMenuActions({ item }: { item: QueueRowMenuProps["item"] }) {
 		);
 	return (
 		<>
-			<DropdownMenuItem
-				onClick={() =>
-					runAction("Failed to play track next", () => playNext(item.track.id))
-				}
-			>
-				Play next
-			</DropdownMenuItem>
-			<DropdownMenuSub open={isPlaylistOpen} onOpenChange={setIsPlaylistOpen}>
-				<DropdownMenuSubTrigger>Add to playlist</DropdownMenuSubTrigger>
-				<DropdownMenuSubContent
-					onClick={(event) => event.stopPropagation()}
-					onKeyDown={(event) => event.stopPropagation()}
+			{hideQueueEditing ? null : (
+				<DropdownMenuItem
+					onClick={() =>
+						runAction("Failed to play track next", () =>
+							playNext(item.track.id),
+						)
+					}
 				>
-					{playlists.isPending ? (
-						<DropdownMenuItem disabled>Loading playlists…</DropdownMenuItem>
-					) : playlists.isError && !playlists.data ? (
-						<DropdownMenuItem
-							closeOnClick={false}
-							onClick={() => void playlists.refetch()}
-						>
-							Retry loading playlists
-						</DropdownMenuItem>
-					) : playlists.data?.items.length === 0 ? (
-						<DropdownMenuItem disabled>No playlists</DropdownMenuItem>
-					) : (
-						playlists.data?.items.map((playlist) => (
+					Play next
+				</DropdownMenuItem>
+			)}
+			{hidePlaylists ? null : (
+				<DropdownMenuSub open={isPlaylistOpen} onOpenChange={setIsPlaylistOpen}>
+					<DropdownMenuSubTrigger>Add to playlist</DropdownMenuSubTrigger>
+					<DropdownMenuSubContent
+						onClick={(event) => event.stopPropagation()}
+						onKeyDown={(event) => event.stopPropagation()}
+					>
+						{playlists.isPending ? (
+							<DropdownMenuItem disabled>Loading playlists…</DropdownMenuItem>
+						) : playlists.isError && !playlists.data ? (
 							<DropdownMenuItem
-								key={playlist.id}
-								onClick={() =>
-									runAction("Failed to add track to playlist", async () => {
-										await addPlaylistTrack(playlist.id, item.track.id);
-										await invalidatePlaylistCache(queryClient, playlist.id);
-										toast.success(`Added to ${playlist.name}`);
-									})
-								}
+								closeOnClick={false}
+								onClick={() => void playlists.refetch()}
 							>
-								{playlist.name}
+								Retry loading playlists
 							</DropdownMenuItem>
-						))
-					)}
-				</DropdownMenuSubContent>
-			</DropdownMenuSub>
+						) : playlists.data?.items.length === 0 ? (
+							<DropdownMenuItem disabled>No playlists</DropdownMenuItem>
+						) : (
+							playlists.data?.items.map((playlist) => (
+								<DropdownMenuItem
+									key={playlist.id}
+									onClick={() =>
+										runAction("Failed to add track to playlist", async () => {
+											await addPlaylistTrack(playlist.id, item.track.id);
+											await invalidatePlaylistCache(queryClient, playlist.id);
+											toast.success(`Added to ${playlist.name}`);
+										})
+									}
+								>
+									{playlist.name}
+								</DropdownMenuItem>
+							))
+						)}
+					</DropdownMenuSubContent>
+				</DropdownMenuSub>
+			)}
 			<DropdownMenuItem
 				onClick={() =>
 					runAction("Failed to open album", () =>
@@ -182,16 +191,18 @@ function QueueMenuActions({ item }: { item: QueueRowMenuProps["item"] }) {
 					Go to artist
 				</DropdownMenuItem>
 			)}
-			<DropdownMenuItem
-				variant="destructive"
-				onClick={() =>
-					runAction("Failed to remove track from queue", () =>
-						removeFromQueue(item.id),
-					)
-				}
-			>
-				Remove from queue
-			</DropdownMenuItem>
+			{hideQueueEditing ? null : (
+				<DropdownMenuItem
+					variant="destructive"
+					onClick={() =>
+						runAction("Failed to remove track from queue", () =>
+							removeFromQueue(item.id),
+						)
+					}
+				>
+					Remove from queue
+				</DropdownMenuItem>
+			)}
 		</>
 	);
 }

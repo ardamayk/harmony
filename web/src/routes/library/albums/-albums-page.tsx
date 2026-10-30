@@ -7,6 +7,7 @@ import {
 	CollectionGridState,
 	CollectionPageContainer,
 } from "#/components/collection-grid-layout";
+import { useHiddenFromGuest } from "@repo/ui/guest-access";
 import { PageHeader, PageShell } from "#/components/page-layout";
 import { apiClient } from "#/lib/api";
 
@@ -16,6 +17,7 @@ export function AlbumsPage() {
 		queryFn: () => apiClient.listAlbums({ limit: 500 }),
 	});
 	const visibleAlbums = albums.data?.items ?? [];
+	const hideImport = useHiddenFromGuest("managed-import");
 
 	return (
 		<PageShell
@@ -45,7 +47,11 @@ export function AlbumsPage() {
 						kind="empty"
 						icon={<Disc3 aria-hidden />}
 						title="No albums yet"
-						description="Import music to get started."
+						description={
+							hideImport
+								? "This library has no music yet."
+								: "Import music to get started."
+						}
 					/>
 				) : (
 					<AlbumGrid albums={visibleAlbums} />

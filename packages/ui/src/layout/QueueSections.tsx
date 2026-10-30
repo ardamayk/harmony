@@ -2,6 +2,7 @@ import type { QueueItem } from "@repo/api-client";
 import { ListMusic, Plus, Sparkles } from "lucide-react";
 import { type CSSProperties, type RefObject, useEffect, useRef } from "react";
 import { AlbumArt } from "./AlbumArt";
+import { useHiddenFromGuest } from "./guest-access";
 import { useQueueLinkClick } from "./QueueRowMenuProvider";
 import { QueueTrackRow } from "./QueueTrackRow";
 import {
@@ -116,6 +117,7 @@ function QueueGroupHeader({
 	isUpdating: boolean;
 	onDismiss: () => void;
 }) {
+	const hideQueueEditing = useHiddenFromGuest("queue-editing");
 	const details = getQueueGroupDetails(group, queue, sourceTitles);
 	const navigate = useQueueLinkClick();
 	const Icon =
@@ -222,7 +224,7 @@ function QueueGroupHeader({
 			<span className="text-xs text-caption tabular-nums">
 				{group.items.length}
 			</span>
-			{group.source.kind === "suggestion" && (
+			{group.source.kind === "suggestion" && !hideQueueEditing && (
 				<button
 					type="button"
 					disabled={isUpdating}

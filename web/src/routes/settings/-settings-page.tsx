@@ -1,5 +1,6 @@
 import type { ThemePreferences } from "@repo/api-client";
 import { useLayout } from "@repo/ui";
+import { useHiddenFromGuest } from "@repo/ui/guest-access";
 import { useQuery } from "@tanstack/react-query";
 import type { CSSProperties } from "react";
 import { Button } from "#/components/ui/button";
@@ -25,6 +26,8 @@ export function SettingsPage() {
 		queryFn: () => apiClient.getHealth(),
 	});
 
+	const hideServerSettings = useHiddenFromGuest("server-settings");
+	const hideImport = useHiddenFromGuest("managed-import");
 	const isDesktop = isDesktopClient();
 	const desktopMpv = useQuery({
 		queryKey: ["desktop-mpv-status"],
@@ -41,10 +44,16 @@ export function SettingsPage() {
 		<div className="p-6">
 			<header className="mb-6">
 				<h1 className="font-semibold text-2xl">Settings</h1>
-				<p className="text-foreground text-sm">
-					Appearance · Playback · Library · API {health.data?.status ?? "…"} v
-					{health.data?.version ?? "…"}
-				</p>
+				{hideServerSettings ? (
+					<p className="text-foreground text-sm">
+						Appearance · Playback · saved on this device
+					</p>
+				) : (
+					<p className="text-foreground text-sm">
+						Appearance · Playback · Library · API {health.data?.status ?? "…"} v
+						{health.data?.version ?? "…"}
+					</p>
+				)}
 			</header>
 
 			<section className="mb-8 flex flex-col gap-4">
@@ -104,22 +113,24 @@ export function SettingsPage() {
 
 			<PlaybackSettingsSection />
 
-			<ImportSettingsSection />
+			{hideImport ? null : <ImportSettingsSection />}
 
-			<ServerDependenciesSection
-				health={health.data}
-				desktopMpv={
-					desktopMpv.data ??
-					(desktopMpv.isError
-						? {
-								available: false,
-								pinned: false,
-								pinnedVersion: "",
-								detail: "status unavailable",
-							}
-						: null)
-				}
-			/>
+			{hideServerSettings ? null : (
+				<ServerDependenciesSection
+					health={health.data}
+					desktopMpv={
+						desktopMpv.data ??
+						(desktopMpv.isError
+							? {
+									available: false,
+									pinned: false,
+									pinnedVersion: "",
+									detail: "status unavailable",
+								}
+							: null)
+					}
+				/>
+			)}
 		</div>
 	);
 }

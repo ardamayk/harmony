@@ -9,7 +9,8 @@ use sqlx::SqlitePool;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-const GROUP_ORDER: [&str; 5] = ["track", "album", "artist", "genre", "playlist"];
+const PLAYLIST_KIND: &str = "playlist";
+const GROUP_ORDER: [&str; 5] = ["track", "album", "artist", "genre", PLAYLIST_KIND];
 
 struct Snapshot {
     index: Arc<Index>,
@@ -73,9 +74,11 @@ impl SearchService {
         user_id: &str,
         query: &Query,
         all: bool,
+        include_playlists: bool,
     ) -> Result<SearchResponse, IndexError> {
         let index = self.current_index(user_id).await?;
-        let ranked = rank::rank(&index, query, all);
+        let hidden_kind = (!include_playlists).then_some(PLAYLIST_KIND);
+        let ranked = rank::rank(&index, query, all, hidden_kind);
         let mut groups = ranked.groups;
         let mut group = |kind: &str| -> Vec<SearchResult> {
             groups

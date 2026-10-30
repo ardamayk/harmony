@@ -26,6 +26,25 @@ testdata/               audio fixtures shared with the Web E2E and Desktop impor
 
 `tests/search_text_parity.rs` recomputes every Library Search text a database holds (`EARTHLY_PARITY_DB=<copy> cargo test -p earthly-music-server --test search_text_parity -- --ignored`).
 
+## Listen Together
+
+Listen Together lets friends join a Room on your Music Server through an Invite Link and listen to your library with you ([ADR 0037](../docs/adr/0037-listen-together-rooms-on-the-owners-music-server.md)). It is off by default. Set `GUEST_ADDR` and `PUBLIC_URL` together, or leave both unset; setting only one stops the server at startup.
+
+| Variable | Meaning |
+| --- | --- |
+| `GUEST_ADDR` | The Guest Listener's address, for example `127.0.0.1:8091`. It must be a loopback address and differ from `SERVER_ADDR`. |
+| `PUBLIC_URL` | The public origin your reverse proxy or tunnel serves, for example `https://music.example.com`, with no path. It must be `https` unless its host is loopback. The Invite Link is built from it, and the Guest Listener answers only this host and origin. |
+| `LISTEN_TOGETHER_MAX_GUESTS` | How many Guests a Room admits, 1 to 8. Unset, 8. |
+| `LISTEN_TOGETHER_ROOM_HOURS` | How many hours a Room lasts, 1 to 168. Unset, 24. |
+
+**Point your tunnel or reverse proxy at `GUEST_ADDR`, never at `SERVER_ADDR`.** `SERVER_ADDR` has no authentication: it trusts every request because only your own machine can reach it. Exposing it hands your whole Music Server to the internet, including deleting your library. `GUEST_ADDR` serves only the Web Client, joining, and what a Guest may use, and it refuses everything else.
+
+The proxy must terminate HTTPS and pass the public host through in the `Host` header; the Guest Listener refuses any other host. With nginx that means `proxy_set_header Host $http_host;`, which keeps a non-default port (`$host` drops it, and nginx's default sends the upstream's name instead), and it needs `proxy_buffering off` for the Room's event stream. Caddy and `cloudflared` keep the host unless you configure them otherwise.
+
+A Room lives in memory for at most `LISTEN_TOGETHER_ROOM_HOURS`, and a restart ends it. Anyone holding the Invite Link can join until the Room closes, so share it like a password. Each Guest streams from your connection, at the Track's own bitrate.
+
+The Guest Listener answers `429 rate_limited` when a Guest passes a limit; the budgets are constants, listed in ADR 0037, and normal listening stays within them. Reads that run ffmpeg or call an outside service are the strictest, a Guest holds at most 4 audio streams, and a seek is never refused. `POST /api/v1/listen-together/join` has one limit shared by everyone, because the server cannot trust a client address behind a proxy: repeated attempts can delay your friends' joins until they stop.
+
 ## External Source (yt-dlp)
 
 The External Source is an optional search of one site through the operator's own [yt-dlp](https://github.com/yt-dlp/yt-dlp); its results play in full through the server and are never stored ([ADR 0032](../docs/adr/0032-external-source-through-an-operator-installed-yt-dlp.md)). It is off by default. The project does not ship yt-dlp: you install it and keep it current.

@@ -6,6 +6,12 @@ use std::net::{IpAddr, SocketAddr};
 pub const DEFAULT_MANAGED_STORAGE_RESERVE_BYTES: i64 = 2 * 1024 * 1024 * 1024;
 pub const DEFAULT_MANAGED_IMPORT_FILE_LIMIT_BYTES: i64 = 2 * 1024 * 1024 * 1024;
 pub const DEFAULT_MANAGED_IMPORT_BATCH_LIMIT_BYTES: i64 = 4 * 1024 * 1024 * 1024;
+/// A Room admits at most this many Guests (ADR 0037).
+pub const MAX_LISTEN_TOGETHER_GUESTS: usize = 8;
+/// A Room closes itself after this many hours, unless the operator says.
+pub const DEFAULT_LISTEN_TOGETHER_ROOM_HOURS: u64 = 24;
+/// A week: an Invite Link is a password, so it does not live for long.
+pub const MAX_LISTEN_TOGETHER_ROOM_HOURS: u64 = 168;
 
 #[derive(Clone, Debug)]
 pub struct Config {
@@ -30,6 +36,37 @@ pub struct Config {
     pub external_source: Option<ExternalSourceConfig>,
     /// The owner's own Sentry, off when `SENTRY_DSN` is unset (ADR 0033).
     pub sentry: Option<SentryConfig>,
+    /// Where Guests reach this server, off unless `GUEST_ADDR` and
+    /// `PUBLIC_URL` are both set (ADR 0037).
+    pub listen_together: Option<ListenTogetherConfig>,
+    /// `LISTEN_TOGETHER_MAX_GUESTS`: at most this many Guests in a Room.
+    pub listen_together_max_guests: usize,
+    /// `LISTEN_TOGETHER_ROOM_HOURS`: how long a Room lasts.
+    pub listen_together_room_hours: u64,
+}
+
+/// The Guest Listener and the public address that reaches it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ListenTogetherConfig {
+    /// The Guest Listener's loopback address.
+    pub guest_addr: String,
+    /// `PUBLIC_URL`'s origin, such as `https://music.example.com`.
+    pub public_origin: String,
+    /// Whether Guests arrive over HTTPS, which decides the cookie's name
+    /// and `Secure` attribute.
+    pub secure: bool,
+    /// The Host values that mean `PUBLIC_URL`: its authority as written and
+    /// with the scheme's default port spelled out.
+    hosts: [String; 2],
+}
+
+impl ListenTogetherConfig {
+    /// Whether a Host header names `PUBLIC_URL`.
+    pub fn accepts_host(&self, host: &str) -> bool {
+        self.hosts
+            .iter()
+            .any(|accepted| accepted.eq_ignore_ascii_case(host))
+    }
 }
 
 /// Where and how the Music Server reports to the owner's Sentry.
@@ -126,6 +163,24 @@ pub enum ConfigError {
     InvalidSentryEnvironment(String),
     #[error("SENTRY_TRACES_SAMPLE_RATE {0:?} must be a number from 0 to 1 such as 0.25")]
     InvalidSentryTracesSampleRate(String),
+    #[error("GUEST_ADDR and PUBLIC_URL must be set together: {0} is missing")]
+    IncompleteListenTogether(&'static str),
+    #[error("invalid GUEST_ADDR {0:?}: {1}")]
+    InvalidGuestAddress(String, String),
+    #[error(
+        "GUEST_ADDR {0:?} must bind to a loopback address; a reverse proxy or tunnel carries Guests to it"
+    )]
+    GuestAddressNotLoopback(String),
+    #[error("GUEST_ADDR {0:?} must differ from SERVER_ADDR")]
+    GuestAddressIsServerAddress(String),
+    // A URL with credentials would put them in the log, so the message does
+    // not repeat the value.
+    #[error("PUBLIC_URL must be an origin such as https://music.example.com: {0}")]
+    InvalidPublicUrl(&'static str),
+    #[error("LISTEN_TOGETHER_MAX_GUESTS {0:?} must be a whole number from 1 to 8")]
+    InvalidMaxGuests(String),
+    #[error("LISTEN_TOGETHER_ROOM_HOURS {0:?} must be a whole number from 1 to 168")]
+    InvalidRoomHours(String),
 }
 
 impl Config {
@@ -208,8 +263,12 @@ impl Config {
             ));
         };
         let sentry = sentry_config(&lookup)?;
+        let addr = get("SERVER_ADDR", "127.0.0.1:8090");
+        let listen_together = listen_together_config(&lookup, &addr)?;
+        let listen_together_max_guests = max_guests(&lookup)?;
+        let listen_together_room_hours = room_hours(&lookup)?;
         Ok(Self {
-            addr: get("SERVER_ADDR", "127.0.0.1:8090"),
+            addr,
             database_path: get("DATABASE_PATH", "./data/app.db"),
             // The Web Client's dev server (3000) and `vp preview` (4173)
             // proxy the API but forward the browser's Origin.
@@ -257,7 +316,103 @@ impl Config {
                 .filter(|key| !key.is_empty()),
             external_source,
             sentry,
+            listen_together,
+            listen_together_max_guests,
+            listen_together_room_hours,
         })
+    }
+}
+
+/// Listen Together needs both a Guest Listener and the public address that
+/// reaches it; one without the other would produce a link nobody can open.
+fn listen_together_config(
+    lookup: &impl Fn(&str) -> Option<String>,
+    server_addr: &str,
+) -> Result<Option<ListenTogetherConfig>, ConfigError> {
+    let value = |key: &str| {
+        lookup(key)
+            .map(|value| value.trim().to_owned())
+            .filter(|value| !value.is_empty())
+    };
+    let (guest_addr, public_url) = match (value("GUEST_ADDR"), value("PUBLIC_URL")) {
+        (None, None) => return Ok(None),
+        (Some(_), None) => return Err(ConfigError::IncompleteListenTogether("PUBLIC_URL")),
+        (None, Some(_)) => return Err(ConfigError::IncompleteListenTogether("GUEST_ADDR")),
+        (Some(guest_addr), Some(public_url)) => (guest_addr, public_url),
+    };
+    check_loopback(&guest_addr).map_err(|problem| match problem {
+        AddressProblem::Invalid(reason) => {
+            ConfigError::InvalidGuestAddress(guest_addr.clone(), reason)
+        }
+        AddressProblem::NotLoopback => ConfigError::GuestAddressNotLoopback(guest_addr.clone()),
+    })?;
+    if guest_addr.eq_ignore_ascii_case(server_addr)
+        || bind_address(&guest_addr).is_some_and(|guest| bind_address(server_addr) == Some(guest))
+    {
+        return Err(ConfigError::GuestAddressIsServerAddress(guest_addr));
+    }
+    let invalid = ConfigError::InvalidPublicUrl;
+    let url = url::Url::parse(&public_url).map_err(|_| invalid("it is not an absolute URL"))?;
+    let secure = match url.scheme() {
+        "https" => true,
+        "http" => false,
+        _ => return Err(invalid("the scheme must be https")),
+    };
+    if !url.username().is_empty() || url.password().is_some() {
+        return Err(invalid("it cannot hold a user name or password"));
+    }
+    if url.path() != "/" || url.query().is_some() || url.fragment().is_some() {
+        return Err(invalid("it cannot have a path, query or fragment"));
+    }
+    let is_loopback = match url.host() {
+        None => return Err(invalid("it needs a host")),
+        Some(url::Host::Domain(name)) => name.eq_ignore_ascii_case("localhost"),
+        Some(url::Host::Ipv4(ip)) => ip.is_loopback(),
+        Some(url::Host::Ipv6(ip)) => ip.is_loopback(),
+    };
+    if !secure && !is_loopback {
+        return Err(invalid(
+            "the scheme must be https unless the host is loopback",
+        ));
+    }
+    let host = url.host_str().unwrap_or_default();
+    let port = url.port_or_known_default().unwrap_or_default();
+    let authority = url
+        .port()
+        .map_or_else(|| host.to_owned(), |port| format!("{host}:{port}"));
+    Ok(Some(ListenTogetherConfig {
+        guest_addr,
+        public_origin: url.origin().ascii_serialization(),
+        secure,
+        hosts: [authority, format!("{host}:{port}")],
+    }))
+}
+
+/// Checked even while Listen Together is off, like the Sentry settings.
+fn max_guests(lookup: &impl Fn(&str) -> Option<String>) -> Result<usize, ConfigError> {
+    let Some(raw) = lookup("LISTEN_TOGETHER_MAX_GUESTS")
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty())
+    else {
+        return Ok(MAX_LISTEN_TOGETHER_GUESTS);
+    };
+    match raw.parse::<usize>() {
+        Ok(limit) if (1..=MAX_LISTEN_TOGETHER_GUESTS).contains(&limit) => Ok(limit),
+        _ => Err(ConfigError::InvalidMaxGuests(raw)),
+    }
+}
+
+/// Checked even while Listen Together is off, like the Guest limit.
+fn room_hours(lookup: &impl Fn(&str) -> Option<String>) -> Result<u64, ConfigError> {
+    let Some(raw) = lookup("LISTEN_TOGETHER_ROOM_HOURS")
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty())
+    else {
+        return Ok(DEFAULT_LISTEN_TOGETHER_ROOM_HOURS);
+    };
+    match raw.parse::<u64>() {
+        Ok(hours) if (1..=MAX_LISTEN_TOGETHER_ROOM_HOURS).contains(&hours) => Ok(hours),
+        _ => Err(ConfigError::InvalidRoomHours(raw)),
     }
 }
 
@@ -346,7 +501,19 @@ fn is_search_prefix(value: &str) -> bool {
 
 /// The server has no authentication yet, so it only binds to loopback.
 pub fn validate_server_address(address: &str) -> Result<(), ConfigError> {
-    let invalid = |reason: &str| ConfigError::InvalidAddress(address.to_owned(), reason.to_owned());
+    check_loopback(address).map_err(|problem| match problem {
+        AddressProblem::Invalid(reason) => ConfigError::InvalidAddress(address.to_owned(), reason),
+        AddressProblem::NotLoopback => ConfigError::NotLoopback(address.to_owned()),
+    })
+}
+
+enum AddressProblem {
+    Invalid(String),
+    NotLoopback,
+}
+
+fn check_loopback(address: &str) -> Result<(), AddressProblem> {
+    let invalid = |reason: &str| AddressProblem::Invalid(reason.to_owned());
     let (host, port) = address
         .rsplit_once(':')
         .ok_or_else(|| invalid("missing port in address"))?;
@@ -357,7 +524,7 @@ pub fn validate_server_address(address: &str) -> Result<(), ConfigError> {
     }
     match host.parse::<IpAddr>() {
         Ok(ip) if ip.is_loopback() => Ok(()),
-        _ => Err(ConfigError::NotLoopback(address.to_owned())),
+        _ => Err(AddressProblem::NotLoopback),
     }
 }
 
@@ -731,5 +898,163 @@ mod tests {
             bind_address("localhost:8090"),
             Some("127.0.0.1:8090".parse().expect("socket address"))
         );
+    }
+
+    fn guest_config(
+        guest_addr: &str,
+        public_url: &str,
+    ) -> Result<Option<ListenTogetherConfig>, ConfigError> {
+        config(&[("GUEST_ADDR", guest_addr), ("PUBLIC_URL", public_url)])
+            .map(|config| config.listen_together)
+    }
+
+    #[test]
+    fn listen_together_is_off_without_both_settings() {
+        let off = config(&[("GUEST_ADDR", " "), ("PUBLIC_URL", "")]).expect("config");
+        assert_eq!(off.listen_together, None);
+        assert_eq!(off.listen_together_max_guests, 8);
+        assert_eq!(
+            config(&[("GUEST_ADDR", "127.0.0.1:8091")]).err(),
+            Some(ConfigError::IncompleteListenTogether("PUBLIC_URL"))
+        );
+        assert_eq!(
+            config(&[("PUBLIC_URL", "https://music.example.com")]).err(),
+            Some(ConfigError::IncompleteListenTogether("GUEST_ADDR"))
+        );
+    }
+
+    #[test]
+    fn guest_address_must_be_loopback_and_not_the_server_address() {
+        let url = "https://music.example.com";
+        for address in ["127.0.0.1:8091", "localhost:8091", "[::1]:8090"] {
+            assert!(guest_config(address, url).expect("valid").is_some());
+        }
+        for address in ["0.0.0.0:8091", "192.168.1.2:8091", "example.com:80"] {
+            assert_eq!(
+                guest_config(address, url),
+                Err(ConfigError::GuestAddressNotLoopback(address.to_owned()))
+            );
+        }
+        for address in ["nope", "127.0.0.1:port"] {
+            assert!(matches!(
+                guest_config(address, url),
+                Err(ConfigError::InvalidGuestAddress(..))
+            ));
+        }
+        for address in ["127.0.0.1:8090", "localhost:8090"] {
+            assert_eq!(
+                guest_config(address, url),
+                Err(ConfigError::GuestAddressIsServerAddress(address.to_owned()))
+            );
+        }
+    }
+
+    #[test]
+    fn public_url_is_an_origin_over_https_unless_on_loopback() {
+        let origin = |url: &str| {
+            guest_config("127.0.0.1:8091", url)
+                .map(|config| config.expect("on").public_origin)
+                .map_err(|_| ())
+        };
+        for (url, expected) in [
+            ("https://music.example.com", "https://music.example.com"),
+            ("https://music.example.com/", "https://music.example.com"),
+            (
+                "HTTPS://Music.Example.com:8443",
+                "https://music.example.com:8443",
+            ),
+            ("http://localhost:8091", "http://localhost:8091"),
+            ("http://127.0.0.1:8091", "http://127.0.0.1:8091"),
+            ("http://[::1]:8091", "http://[::1]:8091"),
+        ] {
+            assert_eq!(origin(url), Ok(expected.to_owned()), "{url}");
+        }
+        for url in [
+            "music.example.com",
+            "/join",
+            "ftp://music.example.com",
+            "http://music.example.com",
+            "http://192.168.1.2:8091",
+            "https://music.example.com/music",
+            "https://music.example.com/?a=1",
+            "https://music.example.com/#a",
+            "https://user:secret@music.example.com",
+        ] {
+            assert_eq!(origin(url), Err(()), "{url}");
+        }
+    }
+
+    #[test]
+    fn a_public_url_error_never_repeats_credentials() {
+        let error = guest_config("127.0.0.1:8091", "https://user:secret@music.example.com")
+            .expect_err("refused");
+        assert!(!error.to_string().contains("secret"));
+    }
+
+    #[test]
+    fn accepts_only_the_public_host() {
+        let config = guest_config("127.0.0.1:8091", "https://music.example.com")
+            .expect("valid")
+            .expect("on");
+        assert!(config.secure);
+        for host in [
+            "music.example.com",
+            "MUSIC.example.com",
+            "music.example.com:443",
+        ] {
+            assert!(config.accepts_host(host), "{host}");
+        }
+        for host in [
+            "music.example.com:8443",
+            "evil.example",
+            "music.example.com.evil.example",
+            "127.0.0.1:8091",
+            "",
+        ] {
+            assert!(!config.accepts_host(host), "{host}");
+        }
+        let local = guest_config("127.0.0.1:8091", "http://localhost:8091")
+            .expect("valid")
+            .expect("on");
+        assert!(!local.secure);
+        assert!(local.accepts_host("localhost:8091"));
+        assert!(!local.accepts_host("localhost"));
+    }
+
+    #[test]
+    fn max_guests_is_one_to_eight() {
+        let limit = |value: &str| {
+            config(&[("LISTEN_TOGETHER_MAX_GUESTS", value)])
+                .map(|config| config.listen_together_max_guests)
+        };
+        assert_eq!(limit("1"), Ok(1));
+        assert_eq!(limit(" 8 "), Ok(8));
+        assert_eq!(limit(""), Ok(8));
+        for invalid in ["0", "9", "-1", "many", "2.5"] {
+            assert_eq!(
+                limit(invalid),
+                Err(ConfigError::InvalidMaxGuests(invalid.to_owned())),
+                "{invalid}"
+            );
+        }
+    }
+
+    #[test]
+    fn room_hours_are_one_to_a_week() {
+        let hours = |value: &str| {
+            config(&[("LISTEN_TOGETHER_ROOM_HOURS", value)])
+                .map(|config| config.listen_together_room_hours)
+        };
+        assert_eq!(hours("1"), Ok(1));
+        assert_eq!(hours(" 168 "), Ok(168));
+        assert_eq!(hours(""), Ok(24));
+        assert_eq!(config(&[]).unwrap().listen_together_room_hours, 24);
+        for invalid in ["0", "169", "-1", "day", "1.5"] {
+            assert_eq!(
+                hours(invalid),
+                Err(ConfigError::InvalidRoomHours(invalid.to_owned())),
+                "{invalid}"
+            );
+        }
     }
 }

@@ -3,6 +3,7 @@ import {
 	MANAGED_ALBUM_DELETION_CAPABILITY,
 } from "@repo/api-client";
 import { AlbumArt } from "@repo/ui";
+import { useHiddenFromGuest } from "@repo/ui/guest-access";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { Disc3, Play, SkipForward, Trash2 } from "lucide-react";
@@ -83,6 +84,9 @@ export function AlbumDetailHeader({
 	const canDeleteAlbums = useServerCapability(
 		MANAGED_ALBUM_DELETION_CAPABILITY,
 	);
+	const hideAlbumDeletion = useHiddenFromGuest("album-deletion");
+	const hideQueueEditing = useHiddenFromGuest("queue-editing");
+	const hideAlbumRadio = useHiddenFromGuest("album-radio");
 	const [setActionRow, actionsScrolledPast] = useScrolledPast();
 	return (
 		<>
@@ -112,19 +116,23 @@ export function AlbumDetailHeader({
 					filled
 					onClick={onPlayAlbum}
 				/>
-				<DetailStickyAction
-					icon={SkipForward}
-					label="Queue"
-					description="Queue album"
-					onClick={onQueueAlbum}
-				/>
-				<DetailStickyAction
-					icon={Disc3}
-					label="Radio"
-					description="Album radio"
-					hint={ALBUM_RADIO_HINT}
-					disabled
-				/>
+				{hideQueueEditing ? null : (
+					<DetailStickyAction
+						icon={SkipForward}
+						label="Queue"
+						description="Queue album"
+						onClick={onQueueAlbum}
+					/>
+				)}
+				{hideAlbumRadio ? null : (
+					<DetailStickyAction
+						icon={Disc3}
+						label="Radio"
+						description="Album radio"
+						hint={ALBUM_RADIO_HINT}
+						disabled
+					/>
+				)}
 			</DetailStickyBar>
 			{/* Same cache key and size as the Player Bar, so the cover is read once. */}
 			<CoverWash
@@ -175,25 +183,29 @@ export function AlbumDetailHeader({
 								<Play className="size-4" />
 								Play
 							</Button>
-							<Button
-								type="button"
-								size="lg"
-								variant="outline"
-								onClick={onQueueAlbum}
-							>
-								<SkipForward className="size-4" />
-								Queue album
-							</Button>
-							<Button
-								type="button"
-								size="lg"
-								variant="outline"
-								disabled
-								title={ALBUM_RADIO_HINT}
-							>
-								<Disc3 className="size-4" />
-								Album radio
-							</Button>
+							{hideQueueEditing ? null : (
+								<Button
+									type="button"
+									size="lg"
+									variant="outline"
+									onClick={onQueueAlbum}
+								>
+									<SkipForward className="size-4" />
+									Queue album
+								</Button>
+							)}
+							{hideAlbumRadio ? null : (
+								<Button
+									type="button"
+									size="lg"
+									variant="outline"
+									disabled
+									title={ALBUM_RADIO_HINT}
+								>
+									<Disc3 className="size-4" />
+									Album radio
+								</Button>
+							)}
 							<div className="ml-auto flex gap-2">
 								{externalLinks.map((link) => (
 									<ExternalLinkButton
@@ -209,7 +221,7 @@ export function AlbumDetailHeader({
 						</div>
 					</ContextMenuTrigger>
 					<ContextMenuContent>
-						{canDeleteAlbums ? (
+						{canDeleteAlbums && !hideAlbumDeletion ? (
 							<ContextMenuItem
 								variant="destructive"
 								onClick={() => albumDeletion.open(album)}

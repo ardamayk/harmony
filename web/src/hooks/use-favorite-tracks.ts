@@ -1,3 +1,4 @@
+import { useHiddenFromGuest } from "@repo/ui/guest-access";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 import { apiClient } from "#/lib/api";
@@ -8,9 +9,11 @@ import {
 
 export function useFavoriteTracks() {
 	const queryClient = useQueryClient();
+	const hideFavorites = useHiddenFromGuest("favorites");
 	const playlists = useQuery({
 		queryKey: playlistQueryKeys.list,
 		queryFn: () => apiClient.listPlaylists(),
+		enabled: !hideFavorites,
 	});
 
 	const favoritesPlaylist = playlists.data?.items.find(

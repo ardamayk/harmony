@@ -11,10 +11,12 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as HomeRouteImport } from './routes/home'
+import { Route as JoinRouteImport } from './routes/join'
 import { Route as MiniRouteImport } from './routes/mini'
 import { Route as FavoritesIndexRouteImport } from './routes/favorites/index'
 import { Route as LibraryIndexRouteImport } from './routes/library/index'
 import { Route as LibraryAlbumIdRouteImport } from './routes/library/$albumId'
+import { Route as ListenTogetherIndexRouteImport } from './routes/listen-together/index'
 import { Route as PlaylistsIndexRouteImport } from './routes/playlists/index'
 import { Route as PlaylistsPlaylistIdRouteImport } from './routes/playlists/$playlistId'
 import { Route as RadioIndexRouteImport } from './routes/radio/index'
@@ -38,6 +40,11 @@ const HomeRoute = HomeRouteImport.update({
   path: '/home',
   getParentRoute: () => rootRouteImport,
 } as any)
+const JoinRoute = JoinRouteImport.update({
+  id: '/join',
+  path: '/join',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const MiniRoute = MiniRouteImport.update({
   id: '/mini',
   path: '/mini',
@@ -56,6 +63,11 @@ const LibraryIndexRoute = LibraryIndexRouteImport.update({
 const LibraryAlbumIdRoute = LibraryAlbumIdRouteImport.update({
   id: '/library/$albumId',
   path: '/library/$albumId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ListenTogetherIndexRoute = ListenTogetherIndexRouteImport.update({
+  id: '/listen-together/',
+  path: '/listen-together/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PlaylistsIndexRoute = PlaylistsIndexRouteImport.update({
@@ -122,6 +134,7 @@ const LibraryTracksIndexRoute = LibraryTracksIndexRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/home': typeof HomeRoute
+  '/join': typeof JoinRoute
   '/mini': typeof MiniRoute
   '/library/$albumId': typeof LibraryAlbumIdRoute
   '/playlists/$playlistId': typeof PlaylistsPlaylistIdRoute
@@ -129,6 +142,7 @@ export interface FileRoutesByFullPath {
   '/radio/discover': typeof RadioDiscoverRoute
   '/favorites/': typeof FavoritesIndexRoute
   '/library/': typeof LibraryIndexRoute
+  '/listen-together/': typeof ListenTogetherIndexRoute
   '/playlists/': typeof PlaylistsIndexRoute
   '/radio/': typeof RadioIndexRoute
   '/settings/': typeof SettingsIndexRoute
@@ -142,6 +156,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/home': typeof HomeRoute
+  '/join': typeof JoinRoute
   '/mini': typeof MiniRoute
   '/library/$albumId': typeof LibraryAlbumIdRoute
   '/playlists/$playlistId': typeof PlaylistsPlaylistIdRoute
@@ -149,6 +164,7 @@ export interface FileRoutesByTo {
   '/radio/discover': typeof RadioDiscoverRoute
   '/favorites': typeof FavoritesIndexRoute
   '/library': typeof LibraryIndexRoute
+  '/listen-together': typeof ListenTogetherIndexRoute
   '/playlists': typeof PlaylistsIndexRoute
   '/radio': typeof RadioIndexRoute
   '/settings': typeof SettingsIndexRoute
@@ -163,6 +179,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/home': typeof HomeRoute
+  '/join': typeof JoinRoute
   '/mini': typeof MiniRoute
   '/library/$albumId': typeof LibraryAlbumIdRoute
   '/playlists/$playlistId': typeof PlaylistsPlaylistIdRoute
@@ -170,6 +187,7 @@ export interface FileRoutesById {
   '/radio/discover': typeof RadioDiscoverRoute
   '/favorites/': typeof FavoritesIndexRoute
   '/library/': typeof LibraryIndexRoute
+  '/listen-together/': typeof ListenTogetherIndexRoute
   '/playlists/': typeof PlaylistsIndexRoute
   '/radio/': typeof RadioIndexRoute
   '/settings/': typeof SettingsIndexRoute
@@ -185,6 +203,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/home'
+    | '/join'
     | '/mini'
     | '/library/$albumId'
     | '/playlists/$playlistId'
@@ -192,6 +211,7 @@ export interface FileRouteTypes {
     | '/radio/discover'
     | '/favorites/'
     | '/library/'
+    | '/listen-together/'
     | '/playlists/'
     | '/radio/'
     | '/settings/'
@@ -205,6 +225,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/home'
+    | '/join'
     | '/mini'
     | '/library/$albumId'
     | '/playlists/$playlistId'
@@ -212,6 +233,7 @@ export interface FileRouteTypes {
     | '/radio/discover'
     | '/favorites'
     | '/library'
+    | '/listen-together'
     | '/playlists'
     | '/radio'
     | '/settings'
@@ -225,6 +247,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/home'
+    | '/join'
     | '/mini'
     | '/library/$albumId'
     | '/playlists/$playlistId'
@@ -232,6 +255,7 @@ export interface FileRouteTypes {
     | '/radio/discover'
     | '/favorites/'
     | '/library/'
+    | '/listen-together/'
     | '/playlists/'
     | '/radio/'
     | '/settings/'
@@ -246,6 +270,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   HomeRoute: typeof HomeRoute
+  JoinRoute: typeof JoinRoute
   MiniRoute: typeof MiniRoute
   LibraryAlbumIdRoute: typeof LibraryAlbumIdRoute
   PlaylistsPlaylistIdRoute: typeof PlaylistsPlaylistIdRoute
@@ -253,6 +278,7 @@ export interface RootRouteChildren {
   RadioDiscoverRoute: typeof RadioDiscoverRoute
   FavoritesIndexRoute: typeof FavoritesIndexRoute
   LibraryIndexRoute: typeof LibraryIndexRoute
+  ListenTogetherIndexRoute: typeof ListenTogetherIndexRoute
   PlaylistsIndexRoute: typeof PlaylistsIndexRoute
   RadioIndexRoute: typeof RadioIndexRoute
   SettingsIndexRoute: typeof SettingsIndexRoute
@@ -278,6 +304,13 @@ declare module '@tanstack/react-router' {
       path: '/home'
       fullPath: '/home'
       preLoaderRoute: typeof HomeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/join': {
+      id: '/join'
+      path: '/join'
+      fullPath: '/join'
+      preLoaderRoute: typeof JoinRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/mini': {
@@ -306,6 +339,13 @@ declare module '@tanstack/react-router' {
       path: '/library/$albumId'
       fullPath: '/library/$albumId'
       preLoaderRoute: typeof LibraryAlbumIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/listen-together/': {
+      id: '/listen-together/'
+      path: '/listen-together'
+      fullPath: '/listen-together/'
+      preLoaderRoute: typeof ListenTogetherIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/playlists/': {
@@ -398,6 +438,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   HomeRoute: HomeRoute,
+  JoinRoute: JoinRoute,
   MiniRoute: MiniRoute,
   LibraryAlbumIdRoute: LibraryAlbumIdRoute,
   PlaylistsPlaylistIdRoute: PlaylistsPlaylistIdRoute,
@@ -405,6 +446,7 @@ const rootRouteChildren: RootRouteChildren = {
   RadioDiscoverRoute: RadioDiscoverRoute,
   FavoritesIndexRoute: FavoritesIndexRoute,
   LibraryIndexRoute: LibraryIndexRoute,
+  ListenTogetherIndexRoute: ListenTogetherIndexRoute,
   PlaylistsIndexRoute: PlaylistsIndexRoute,
   RadioIndexRoute: RadioIndexRoute,
   SettingsIndexRoute: SettingsIndexRoute,

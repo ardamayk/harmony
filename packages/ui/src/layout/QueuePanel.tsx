@@ -2,6 +2,7 @@ import { ChevronDown, ListMusic, Pin, PinOff } from "lucide-react";
 import { useRef, useState } from "react";
 import { usePlayback } from "../playback/PlaybackProvider";
 import { getQueuePanel } from "../widgets/layout-utils";
+import { useHiddenFromGuest } from "./guest-access";
 import { useLayout } from "./LayoutProvider";
 import { PanelCollapseButton } from "./PanelCollapseButton";
 import { useQueuePin } from "./QueuePinProvider";
@@ -26,6 +27,7 @@ export function QueuePanel({
 	const scrollContainerRef = useRef<HTMLDivElement>(null);
 	const [actionError, setActionError] = useState<string | null>(null);
 	const [isUpdating, setIsUpdating] = useState(false);
+	const hideQueueEditing = useHiddenFromGuest("queue-editing");
 	const panelSide = getQueuePanel(preferences.layout.sidebarPosition);
 	const isCollapsed = !embedded && preferences.layout.collapsed[panelSide];
 	const {
@@ -99,14 +101,18 @@ export function QueuePanel({
 					</p>
 				</div>
 				<div className="flex shrink-0 items-center gap-1">
-					<button
-						type="button"
-						className="h-8 rounded-sm border border-sidebar-border bg-player-pill px-3 text-foreground text-xs hover:bg-muted hover:text-heading focus-visible:bg-muted focus-visible:text-heading focus-visible:outline-none disabled:pointer-events-none disabled:opacity-40"
-						disabled={!hasClearableItems || isUpdating}
-						onClick={() => void runAction("Failed to clear queue", clearQueue)}
-					>
-						Clear
-					</button>
+					{hideQueueEditing ? null : (
+						<button
+							type="button"
+							className="h-8 rounded-sm border border-sidebar-border bg-player-pill px-3 text-foreground text-xs hover:bg-muted hover:text-heading focus-visible:bg-muted focus-visible:text-heading focus-visible:outline-none disabled:pointer-events-none disabled:opacity-40"
+							disabled={!hasClearableItems || isUpdating}
+							onClick={() =>
+								void runAction("Failed to clear queue", clearQueue)
+							}
+						>
+							Clear
+						</button>
+					)}
 					{queuePin ? (
 						<button
 							type="button"

@@ -6,6 +6,7 @@ import {
 	toast,
 	usePlayback,
 } from "@repo/ui";
+import { useHiddenFromGuest } from "@repo/ui/guest-access";
 import {
 	Clock,
 	Heart,
@@ -102,6 +103,11 @@ export function TrackList({
 	const hasReplacementCapability = useServerCapability(
 		MANAGED_TRACK_REPLACEMENT_CAPABILITY,
 	);
+	const hideDeletion = useHiddenFromGuest("track-deletion");
+	const hideReplacement = useHiddenFromGuest("track-replacement");
+	const hideQueueEditing = useHiddenFromGuest("queue-editing");
+	const hideFavorites = useHiddenFromGuest("favorites");
+	const canFavorite = showFavorite && !hideFavorites;
 	const [detailsTrack, setDetailsTrack] = useState<Track | null>(null);
 	// Context menu items unmount with the menu, so dialogs opened from them
 	// return focus to the originating row (or the table once a row is gone).
@@ -164,7 +170,7 @@ export function TrackList({
 							<span className="sr-only">Duration</span>
 							<Clock className="ml-auto size-3.5" />
 						</th>
-						{showFavorite ? (
+						{canFavorite ? (
 							<th
 								className={cn("w-10 text-center font-medium", favoritePadding)}
 							>
@@ -289,7 +295,7 @@ export function TrackList({
 									>
 										{formatDuration(track.durationMs)}
 									</td>
-									{showFavorite ? (
+									{canFavorite ? (
 										<td className={cn("text-center", favoritePadding)}>
 											<Button
 												type="button"
@@ -318,30 +324,34 @@ export function TrackList({
 									) : null}
 								</ContextMenuTrigger>
 								<ContextMenuContent>
-									<ContextMenuItem
-										onClick={() =>
-											void handleQueueAction(
-												track.id,
-												playNext,
-												"Failed to play track next",
-											)
-										}
-									>
-										<SkipForward className="size-4" />
-										Play next
-									</ContextMenuItem>
-									<ContextMenuItem
-										onClick={() =>
-											void handleQueueAction(
-												track.id,
-												addToQueue,
-												"Failed to add track to queue",
-											)
-										}
-									>
-										<ListPlus className="size-4" />
-										Add to queue
-									</ContextMenuItem>
+									{hideQueueEditing ? null : (
+										<>
+											<ContextMenuItem
+												onClick={() =>
+													void handleQueueAction(
+														track.id,
+														playNext,
+														"Failed to play track next",
+													)
+												}
+											>
+												<SkipForward className="size-4" />
+												Play next
+											</ContextMenuItem>
+											<ContextMenuItem
+												onClick={() =>
+													void handleQueueAction(
+														track.id,
+														addToQueue,
+														"Failed to add track to queue",
+													)
+												}
+											>
+												<ListPlus className="size-4" />
+												Add to queue
+											</ContextMenuItem>
+										</>
+									)}
 									<ContextMenuItem
 										onClick={() => {
 											captureRowFocus(track.id);
@@ -357,7 +367,9 @@ export function TrackList({
 											{removeLabel}
 										</ContextMenuItem>
 									) : null}
-									{showDelete && hasReplacementCapability ? (
+									{showDelete &&
+									hasReplacementCapability &&
+									!hideReplacement ? (
 										<ContextMenuItem
 											disabled={trackReplacement.isBusy}
 											onClick={() => {
@@ -369,7 +381,7 @@ export function TrackList({
 											Replace file
 										</ContextMenuItem>
 									) : null}
-									{showDelete && hasDeletionCapability ? (
+									{showDelete && hasDeletionCapability && !hideDeletion ? (
 										<ContextMenuItem
 											variant="destructive"
 											disabled={trackDeletion.isDeleting}

@@ -1073,15 +1073,256 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/listen-together/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Who this client is to Listen Together
+         * @description Owner on the Owner's listener. On the Guest Listener, guest with a live Guest session and none without one.
+         */
+        get: operations["getListenTogetherSession"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/listen-together/join": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Exchange an Invite Link token for a Guest session
+         * @description Only on the Guest Listener. Sets the Guest session cookie.
+         */
+        post: operations["joinListenTogetherRoom"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/listen-together/leave": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * End this Guest session and free its place
+         * @description Only on the Guest Listener.
+         */
+        post: operations["leaveListenTogetherRoom"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/listen-together/room": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Current Room State */
+        get: operations["getListenTogetherRoom"];
+        put?: never;
+        /**
+         * Open the Room
+         * @description Owner only. A Personal Music Server has one Room at a time.
+         */
+        post: operations["openListenTogetherRoom"];
+        /**
+         * Close the Room and revoke its Invite Link and Guest sessions
+         * @description Owner only.
+         */
+        delete: operations["closeListenTogetherRoom"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/listen-together/room/commands": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Change the Room State
+         * @description The last command to reach the Music Server wins. A skip carrying a fromTrackId or fromIndex that is no longer current changes nothing, so every client may report the end of a Track. A playTracks naming a Track outside the library answers 400 with field trackIds.
+         */
+        post: operations["sendListenTogetherCommand"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/listen-together/room/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stream Room State snapshots
+         * @description Emits a room-state event with the full Room State on connecting and after every change, and room-closed once, with an empty JSON object as its data, when the Room ends. A Guest whose stream stays disconnected for 60 seconds loses their session and their place.
+         */
+        get: operations["streamListenTogetherRoomEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/listen-together/room/clock": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read the Music Server's clock */
+        get: operations["getListenTogetherClock"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        ListenTogetherSession: {
+            /** @enum {string} */
+            role: "owner" | "guest" | "none";
+        };
+        ListenTogetherJoinRequest: {
+            token: string;
+        };
+        ListenTogetherClock: {
+            /** Format: int64 */
+            serverTimeMs: number;
+        };
+        /** @description One full snapshot of the Room State. While playing, the expected playhead is positionMs plus the time since positionAtMs. */
+        ListenTogetherRoom: {
+            /**
+             * Format: int64
+             * @description Rises with every change; clients ignore older snapshots.
+             */
+            revision: number;
+            /** @description The Room Queue. */
+            trackIds: string[];
+            /** @description The current Track in trackIds; null before the first play. */
+            currentIndex: number | null;
+            playing: boolean;
+            /** Format: int64 */
+            positionMs: number;
+            /**
+             * Format: int64
+             * @description Server time at which positionMs was true.
+             */
+            positionAtMs: number;
+            lyricsOpen: boolean;
+            guestCount: number;
+            maxGuests: number;
+            /** Format: date-time */
+            expiresAt: string;
+            /**
+             * Format: uri
+             * @description The Invite Link, only in the Owner's responses.
+             */
+            inviteUrl?: string;
+        };
+        ListenTogetherCommand: components["schemas"]["ListenTogetherPlayTracksCommand"] | components["schemas"]["ListenTogetherResumeCommand"] | components["schemas"]["ListenTogetherPauseCommand"] | components["schemas"]["ListenTogetherSeekCommand"] | components["schemas"]["ListenTogetherSkipCommand"] | components["schemas"]["ListenTogetherSetLyricsOpenCommand"];
+        /** @description Replaces the Room Queue and plays from index. */
+        ListenTogetherPlayTracksCommand: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "playTracks";
+            trackIds: string[];
+            index: number;
+        };
+        ListenTogetherResumeCommand: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "resume";
+        };
+        ListenTogetherPauseCommand: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "pause";
+        };
+        ListenTogetherSeekCommand: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "seek";
+            /** Format: int64 */
+            positionMs: number;
+        };
+        ListenTogetherSkipCommand: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "skip";
+            /** @enum {string} */
+            direction: "next" | "previous";
+            /**
+             * Format: uuid
+             * @description When set, the skip applies only if this is still the current Track.
+             */
+            fromTrackId?: string;
+            /** @description When set, the skip applies only if the Room is still at this position, since a Room Queue can hold one Track twice in a row. */
+            fromIndex?: number;
+        };
+        ListenTogetherSetLyricsOpenCommand: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "setLyricsOpen";
+            open: boolean;
+        };
         HealthResponse: {
             /** @enum {string} */
             status: "ok";
             version: string;
-            /** @description Named server behaviors supported by this release. The versioned /api/v1 surface itself is advertised as api.v1. Queue event streaming is advertised as playback.queue-events.v1 and the first strict FLAC Managed Import tracer bullet as managed-import.v1. Multi-file Managed Import Batches are advertised as managed-import-batches.v1, Permanent Track Deletion as managed-track-deletion.v1, explicit Track Replacement as managed-track-replacement.v1, Album deletion (one Permanent Track Deletion per Track, previewed once) as managed-album-deletion.v1, lazily generated waveform peaks as track-waveform.v1 (only when ffmpeg is installed), and External Source search and playback through yt-dlp as external-source.v1 (only when EXTERNAL_SOURCE_SEARCH is configured; a missing yt-dlp shows in dependencies and answers 503). Clients gate optional behavior on the exact capability name and must ignore unknown entries so newer servers stay compatible with older clients. */
+            /** @description Named server behaviors supported by this release. The versioned /api/v1 surface itself is advertised as api.v1. Queue event streaming is advertised as playback.queue-events.v1 and the first strict FLAC Managed Import tracer bullet as managed-import.v1. Multi-file Managed Import Batches are advertised as managed-import-batches.v1, Permanent Track Deletion as managed-track-deletion.v1, explicit Track Replacement as managed-track-replacement.v1, Album deletion (one Permanent Track Deletion per Track, previewed once) as managed-album-deletion.v1, lazily generated waveform peaks as track-waveform.v1 (only when ffmpeg is installed), and External Source search and playback through yt-dlp as external-source.v1 (only when EXTERNAL_SOURCE_SEARCH is configured; a missing yt-dlp shows in dependencies and answers 503), and Rooms as listen-together.v1 (only when GUEST_ADDR and PUBLIC_URL are configured). On the Guest Listener, health lists only api.v1, listen-together.v1 and track-waveform.v1, with empty dependencies and no externalSource. Clients gate optional behavior on the exact capability name and must ignore unknown entries so newer servers stay compatible with older clients. */
             capabilities: string[];
             /** @description Server Dependencies probed once at startup, in a stable order (ffmpeg, ffprobe, then the optional yt-dlp only when EXTERNAL_SOURCE_SEARCH is configured). They describe the deployment environment so an operator can see what the installation supports. */
             dependencies: components["schemas"]["ServerDependency"][];
@@ -1649,7 +1890,7 @@ export interface components {
             replayGain?: components["schemas"]["ReplayGainMetadata"];
             /** @description Normalized title the library sorts and matches by. */
             titleSort?: string;
-            /** @description Canonical Library Path of the authoritative audio file in Managed Storage. */
+            /** @description Canonical Library Path of the authoritative audio file in Managed Storage. Empty on the Guest Listener. */
             filePath?: string;
             /**
              * Format: int64
@@ -2080,6 +2321,15 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
+        /** @description Only on the Guest Listener. Too many requests from this Guest, or too many join attempts from everyone (rate_limited) */
+        RateLimited: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
         /** @description Bad request */
         BadRequest: {
             headers: {
@@ -2248,6 +2498,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            429: components["responses"]["RateLimited"];
         };
     };
     getPreferences: {
@@ -2269,6 +2520,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            429: components["responses"]["RateLimited"];
         };
     };
     patchPreferences: {
@@ -2320,6 +2572,7 @@ export interface operations {
                     "application/json": components["schemas"]["ArtistList"];
                 };
             };
+            429: components["responses"]["RateLimited"];
         };
     };
     getArtist: {
@@ -2343,6 +2596,7 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
         };
     };
     getArtistPhoto: {
@@ -2366,6 +2620,7 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
         };
     };
     getArtistBiography: {
@@ -2389,6 +2644,7 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
         };
     };
     listArtistPopularTracks: {
@@ -2414,6 +2670,7 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
         };
     };
     listTrackPlayCounts: {
@@ -2438,6 +2695,7 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            429: components["responses"]["RateLimited"];
         };
     };
     listAlbums: {
@@ -2464,6 +2722,7 @@ export interface operations {
                     "application/json": components["schemas"]["AlbumList"];
                 };
             };
+            429: components["responses"]["RateLimited"];
         };
     };
     listAlbumOnlineGenres: {
@@ -2487,6 +2746,7 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
         };
     };
     getAlbum: {
@@ -2510,6 +2770,7 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
         };
     };
     deleteAlbum: {
@@ -2595,6 +2856,7 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
         };
     };
     listTracks: {
@@ -2622,6 +2884,7 @@ export interface operations {
                     "application/json": components["schemas"]["TrackList"];
                 };
             };
+            429: components["responses"]["RateLimited"];
         };
     };
     getTrack: {
@@ -2645,6 +2908,7 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
         };
     };
     deleteTrack: {
@@ -2704,6 +2968,7 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            429: components["responses"]["RateLimited"];
         };
     };
     getTrackLyrics: {
@@ -2727,6 +2992,7 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
         };
     };
     getTrackWaveform: {
@@ -2760,6 +3026,7 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
             /** @description ffmpeg is not installed on the Music Server. */
             503: {
                 headers: {
@@ -3476,6 +3743,7 @@ export interface operations {
             };
             404: components["responses"]["NotFound"];
             416: components["responses"]["RangeNotSatisfiable"];
+            429: components["responses"]["RateLimited"];
         };
     };
     headTrackStream: {
@@ -4259,6 +4527,243 @@ export interface operations {
             404: components["responses"]["ExternalTrackArtworkNotFound"];
             502: components["responses"]["ExternalSourceFailed"];
             504: components["responses"]["ExternalSourceTimeout"];
+        };
+    };
+    getListenTogetherSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The client's role */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListenTogetherSession"];
+                };
+            };
+        };
+    };
+    joinListenTogetherRoom: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ListenTogetherJoinRequest"];
+            };
+        };
+        responses: {
+            /** @description Joined; the Guest session cookie is set */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListenTogetherRoom"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description The Invite Link is invalid, expired or revoked (invite_invalid) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The Room already holds its Guest limit (room_full) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    leaveListenTogetherRoom: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Left; the Guest session cookie is cleared */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getListenTogetherRoom: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The open Room */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListenTogetherRoom"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    openListenTogetherRoom: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The new Room, with its Invite Link */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListenTogetherRoom"];
+                };
+            };
+            /** @description Listen Together is not configured (listen_together_disabled) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            409: components["responses"]["Conflict"];
+        };
+    };
+    closeListenTogetherRoom: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Closed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    sendListenTogetherCommand: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ListenTogetherCommand"];
+            };
+        };
+        responses: {
+            /** @description The Room State after the command */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListenTogetherRoom"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            /** @description Too many commands from this client (rate_limited) */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    streamListenTogetherRoomEvents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Room event stream */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": components["schemas"]["ListenTogetherRoom"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    getListenTogetherClock: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The server time, for estimating the clock offset */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListenTogetherClock"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            429: components["responses"]["RateLimited"];
         };
     };
 }

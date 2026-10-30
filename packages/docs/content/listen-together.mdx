@@ -1,0 +1,78 @@
+# Listen Together
+
+Same Track, same playhead, with friends. Anyone: pause, seek, next. Lyrics open for all. Sound stays on each device.
+
+- **Room**: on your Music Server. One at a time. Restart ends it.
+- **Invite Link**: joins a Room. Expires with the Room, 24 hours by default.
+- **Guest**: browser only. No account. No Music Server.
+
+## Setup
+
+| Variable | Example | Purpose |
+| --- | --- | --- |
+| `GUEST_ADDR` | `127.0.0.1:8091` | Guest Listener. Loopback only. Must differ from `SERVER_ADDR`. |
+| `PUBLIC_URL` | `https://music.example.com` | Public origin, no path. HTTPS unless loopback. Builds the Invite Link. Guest Listener accepts only this host and origin. |
+| `LISTEN_TOGETHER_MAX_GUESTS` | `4` | Optional, 1 to 8. Default 8. |
+| `LISTEN_TOGETHER_ROOM_HOURS` | `6` | Optional, 1 to 168. How long a Room lasts. Default 24. |
+
+Set `GUEST_ADDR` and `PUBLIC_URL` together. One alone stops the Music Server at startup. Neither: feature off, page explains why.
+
+## Proxy or tunnel
+
+Send HTTPS traffic to `GUEST_ADDR`. Caddy:
+
+```text
+music.example.com {
+	reverse_proxy 127.0.0.1:8091
+}
+```
+
+**Never point a proxy or tunnel at `SERVER_ADDR`.** That listener has no authentication, because only your own machine can reach it. Exposing it hands your whole Music Server to the internet, including deleting your library. Only `GUEST_ADDR` is safe to expose: it has no Owner routes.
+
+- nginx: `proxy_set_header Host $http_host;` and `proxy_buffering off`.
+- CGNAT: port forwarding fails. Use a tunnel.
+- Bandwidth: each Guest uses your upload, at the Track's bitrate.
+
+## Try it on one machine
+
+No proxy needed. Use loopback. Build first: `server:dev` embeds no Web Client, and `dev:web` on `:3000` does not cover the Guest Listener.
+
+```bash
+mise run server:build
+```
+
+```bash
+GUEST_ADDR=127.0.0.1:8091 PUBLIC_URL=http://127.0.0.1:8091 mise run server:start
+```
+
+1. Open `http://localhost:8090/listen-together`. Open a Room.
+2. Open the Invite Link in a second browser window.
+3. Choose **Join**. Play a Track in either window.
+
+## Open a Room
+
+1. Left bar: **Listen Together**.
+2. **Listen with friends in my library**.
+3. Copy the Invite Link. Send it.
+
+Web or Desktop Client, on the Music Server's machine or through your SSH tunnel. The page shows Guests and expiry. **Close room** removes all Guests and revokes the link. Your Queue stays as it was.
+
+## Join
+
+Open the Invite Link in a browser. Choose **Join**. A bar names the library, with **Leave**.
+
+- Guests can: browse, play library Tracks, read lyrics.
+- Guests cannot: import, delete, replace, see Playlists, use Radio or External Source, change server settings.
+- Guest preferences stay on their device.
+- A Room has no shuffle, repeat or queue editing.
+
+Desktop Client cannot join yet. Use a browser.
+
+## Sharing
+
+- 8 Guests at most. Full Room refuses. Leaving frees a place.
+- A Room closes itself after 24 hours, or after `LISTEN_TOGETHER_ROOM_HOURS`.
+- The Invite Link works until it expires or the Room closes. Treat it like a password. Friends only.
+- Each Guest has request limits, so a leaked link cannot keep your server busy for long. Browsing, playing and seeking stay within them.
+- Joining has one limit shared by everyone. A flood of attempts can hold friends back until it stops.
+- Share only music you have the right to listen to. You are responsible for what you share.

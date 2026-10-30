@@ -28,7 +28,15 @@ pub const TRACK_WAVEFORM_CAPABILITY: &str = "track-waveform.v1";
 /// (ADR 0032). A missing yt-dlp shows as its Server Dependency instead.
 pub const EXTERNAL_SOURCE_CAPABILITY: &str = "external-source.v1";
 
-pub fn server_capabilities(report: &dependencies::Report, external_source: bool) -> Vec<String> {
+/// Advertised only when `GUEST_ADDR` and `PUBLIC_URL` give Guests an address
+/// (ADR 0037).
+pub const LISTEN_TOGETHER_CAPABILITY: &str = "listen-together.v1";
+
+pub fn server_capabilities(
+    report: &dependencies::Report,
+    external_source: bool,
+    listen_together: bool,
+) -> Vec<String> {
     let mut capabilities: Vec<String> = SERVER_CAPABILITIES
         .iter()
         .map(|&capability| capability.to_owned())
@@ -38,6 +46,19 @@ pub fn server_capabilities(report: &dependencies::Report, external_source: bool)
     }
     if external_source {
         capabilities.push(EXTERNAL_SOURCE_CAPABILITY.to_owned());
+    }
+    if listen_together {
+        capabilities.push(LISTEN_TOGETHER_CAPABILITY.to_owned());
+    }
+    capabilities
+}
+
+/// What a Guest's Web Client may rely on. Everything else in the full list
+/// is a behavior the Guest Listener refuses.
+fn guest_capabilities(report: &dependencies::Report) -> Vec<String> {
+    let mut capabilities = vec!["api.v1".to_owned(), LISTEN_TOGETHER_CAPABILITY.to_owned()];
+    if report.has(dependencies::FFMPEG) {
+        capabilities.push(TRACK_WAVEFORM_CAPABILITY.to_owned());
     }
     capabilities
 }
@@ -65,7 +86,11 @@ pub async fn get_health(State(state): State<AppState>) -> Json<HealthResponse> {
     Json(HealthResponse {
         status: "ok",
         version: state.config.version.clone(),
-        capabilities: server_capabilities(&state.dependencies, external_source_enabled),
+        capabilities: server_capabilities(
+            &state.dependencies,
+            external_source_enabled,
+            state.config.listen_together.is_some(),
+        ),
         dependencies: state.dependencies.0.clone(),
         external_source: state
             .config
@@ -75,6 +100,18 @@ pub async fn get_health(State(state): State<AppState>) -> Json<HealthResponse> {
             .map(|source| ExternalSourceInfo {
                 name: source.name.clone(),
             }),
+    })
+}
+
+/// Health on the Guest Listener: the deployment's dependencies and External
+/// Source stay with the Owner.
+pub async fn get_guest_health(State(state): State<AppState>) -> Json<HealthResponse> {
+    Json(HealthResponse {
+        status: "ok",
+        version: state.config.version.clone(),
+        capabilities: guest_capabilities(&state.dependencies),
+        dependencies: Vec::new(),
+        external_source: None,
     })
 }
 

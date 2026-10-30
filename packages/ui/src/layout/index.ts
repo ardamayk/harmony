@@ -6,6 +6,14 @@ export {
 	useLayout,
 	usePlaybackPreferences,
 } from "./LayoutProvider";
+export {
+	GUEST_BLOCKED_ROUTE_PREFIXES,
+	GUEST_HIDDEN_FEATURES,
+	type GuestHiddenFeature,
+	isGuestBlockedRoute,
+	isHiddenFromRole,
+	useHiddenFromGuest,
+} from "./guest-access";
 export { LyricsOverlay } from "./LyricsOverlay";
 export { MiniPlayerWindow } from "./MiniPlayerWindow";
 export { NowPlayingView } from "./NowPlayingView";

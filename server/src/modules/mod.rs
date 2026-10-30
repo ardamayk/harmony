@@ -2,6 +2,7 @@ pub mod artist_info;
 pub mod docs;
 pub mod external_source;
 pub mod library;
+pub mod listen_together;
 pub mod lyrics;
 pub mod managed_import;
 pub mod playback;

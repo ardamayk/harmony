@@ -4,11 +4,14 @@ import {
 	defaultPlayback,
 	defaultPreferences,
 	LayoutProvider,
+	ListenTogetherProvider,
 	PlaybackProvider,
 	PlayerBar,
 	QueueRowMenuProvider,
+	useListenTogether,
 	usePlayback,
 } from "@repo/ui";
+import { useHiddenFromGuest } from "@repo/ui/guest-access";
 import type { QueryClient } from "@tanstack/react-query";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -18,8 +21,10 @@ import {
 	useRouterState,
 } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
+import { GuestBar } from "#/components/guest-bar";
 import { ImportSessionProvider } from "#/components/import-session-provider";
 import { LibrarySearchDialog } from "#/components/library-search-dialog";
+import { ListenTogetherGate } from "#/components/listen-together-gate";
 import { QueueTrackMenu } from "#/components/queue-track-menu";
 import { RootErrorComponent } from "#/components/root-error";
 import { ThemeSync } from "#/components/theme-sync";
@@ -35,6 +40,10 @@ import {
 	useServerCapability,
 } from "#/hooks/use-server-capability";
 import { apiClient } from "#/lib/api";
+import {
+	readGuestPreferences,
+	writeGuestPreferences,
+} from "#/lib/guest-preferences";
 import { isMiniPlayerRoute } from "#/lib/mini-player-route";
 import { createPlaybackApi } from "#/lib/playback-api";
 import { invalidatePlaylistCache } from "#/lib/playlist-query-cache";
@@ -53,6 +62,8 @@ function PlayerBarWithSync() {
 	const { isFavorite, toggleFavorite } = useFavoriteTracks();
 	const { isStationFavorite, toggleStationFavorite } =
 		useFavoriteRadioStations();
+	const hideFavorites = useHiddenFromGuest("favorites");
+	const hideRadio = useHiddenFromGuest("radio");
 	const canShowWaveform = useServerCapability(TRACK_WAVEFORM_CAPABILITY);
 	const externalSourceName = useExternalSourceName();
 	return (
@@ -63,11 +74,11 @@ function PlayerBarWithSync() {
 			isCurrentTrackFavorite={
 				currentTrack ? isFavorite(currentTrack.id) : false
 			}
-			onToggleFavorite={toggleFavorite}
+			onToggleFavorite={hideFavorites ? undefined : toggleFavorite}
 			isCurrentStationFavorite={
 				currentRadioStation ? isStationFavorite(currentRadioStation.id) : false
 			}
-			onToggleStationFavorite={toggleStationFavorite}
+			onToggleStationFavorite={hideRadio ? undefined : toggleStationFavorite}
 			onToggleMiniPlayer={
 				isDesktopClient() ? () => void toggleMiniPlayer() : undefined
 			}
@@ -90,17 +101,36 @@ function RootLayout() {
 }
 
 function ConnectedRootLayout() {
+	const isMiniPlayer = useRouterState({
+		select: (state) => isMiniPlayerRoute(state.location.pathname),
+	});
+	return (
+		<ListenTogetherProvider
+			api={apiClient}
+			engine={getSharedPlaybackEngine()}
+			shouldDriveEngine={!isMiniPlayer}
+		>
+			<ListenTogetherGate>
+				<AppLayout isMiniPlayer={isMiniPlayer} />
+			</ListenTogetherGate>
+		</ListenTogetherProvider>
+	);
+}
+
+function AppLayout({ isMiniPlayer }: { isMiniPlayer: boolean }) {
 	const navigate = useNavigate();
 	const queryClient = useQueryClient();
 	const [searchOpen, setSearchOpen] = useState(false);
 	const api = useMemo(() => createPlaybackApi(queryClient), [queryClient]);
 	const playbackEngine = getSharedPlaybackEngine();
-	const isMiniPlayer = useRouterState({
-		select: (state) => isMiniPlayerRoute(state.location.pathname),
-	});
+	const { role } = useListenTogether();
+	// Only the Owner has Preferences on the Music Server. A Guest's, or those of
+	// a visitor about to join, stay on their device (ADR 0037).
+	const hasServerPreferences = role === "owner";
 	const preferences = useQuery({
 		queryKey: ["preferences"],
 		queryFn: () => apiClient.getPreferences(),
+		enabled: hasServerPreferences,
 	});
 
 	const patchPreferences = useMutation({
@@ -110,17 +140,20 @@ function ConnectedRootLayout() {
 		},
 	});
 
-	if (preferences.isLoading) {
+	if (role === "loading" || preferences.isLoading) {
 		return <div className="p-8">Loading…</div>;
 	}
 
-	const initial = preferences.data ?? defaultPreferences;
+	const initial = hasServerPreferences
+		? (preferences.data ?? defaultPreferences)
+		: readGuestPreferences();
 
 	return (
 		<LayoutProvider
 			initialPreferences={initial}
 			onPreferencesChange={(prefs) => {
-				patchPreferences.mutate(prefs);
+				if (hasServerPreferences) patchPreferences.mutate(prefs);
+				else writeGuestPreferences(prefs);
 			}}
 		>
 			<div className="flex h-full min-h-0 flex-1 flex-col overflow-x-auto overflow-y-hidden">
@@ -158,6 +191,7 @@ function ConnectedRootLayout() {
 										isDesktopClient() ? desktopWindowControls : undefined
 									}
 								>
+									<GuestBar />
 									<Outlet />
 									<LibrarySearchDialog
 										open={searchOpen}

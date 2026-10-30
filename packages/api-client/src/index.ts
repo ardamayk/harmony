@@ -9,6 +9,11 @@ import {
 	isDevelopmentBuild,
 	validateResponse,
 } from "./response-validation";
+import {
+	type RoomEvent,
+	type RoomEventsMode,
+	subscribeRoomEvents,
+} from "./room-events";
 
 /**
  * Longest-edge sizes the server scales covers to. Pick the one at or above
@@ -23,6 +28,8 @@ export {
 	type ApiOperation,
 	ApiResponseValidationError,
 } from "./response-validation";
+export type { RoomEvent, RoomEventsMode } from "./room-events";
+export { ROOM_POLL_INTERVAL_MS } from "./room-events";
 
 export type ApiClientConfig = {
 	baseUrl: string;
@@ -36,6 +43,11 @@ export type ApiClientConfig = {
 		onEvent: (event: QueueEvent) => void,
 		onError: (error: Error) => void,
 	) => (() => void) | Promise<() => void>;
+	/**
+	 * How Room events arrive. Defaults to "stream", or "poll" with `getToken`,
+	 * since EventSource cannot send an Authorization header.
+	 */
+	roomEventsMode?: RoomEventsMode;
 	/**
 	 * Checks every JSON response against the operation's schema from the
 	 * contract and throws ApiResponseValidationError on a mismatch. For
@@ -281,6 +293,7 @@ export function createApiClient(config: ApiClientConfig) {
 		transport = globalThis.fetch,
 		eventSourceFactory = (url) => new EventSource(url) as QueueEventSource,
 		queueEventSubscriber,
+		roomEventsMode = getToken ? "poll" : "stream",
 		validateResponses = isDevelopmentBuild(),
 	} = config;
 	const getMediaBaseUrl = () =>
@@ -407,6 +420,30 @@ export function createApiClient(config: ApiClientConfig) {
 			},
 			onEvent,
 			onError,
+		);
+	}
+
+	function subscribeListenTogetherRoomEvents(
+		onEvent: (event: RoomEvent) => void,
+		onError?: (error: Error) => void,
+	): () => void {
+		return subscribeRoomEvents(
+			{
+				mode: roomEventsMode,
+				getBaseUrl: () => baseUrl,
+				getRoom: getListenTogetherRoom,
+				isRoomGone: isListenTogetherRoomGone,
+				eventSourceFactory,
+			},
+			onEvent,
+			onError,
+		);
+	}
+
+	function getListenTogetherRoom() {
+		return request<ListenTogetherRoom>(
+			"getListenTogetherRoom",
+			"/api/v1/listen-together/room",
 		);
 	}
 
@@ -876,7 +913,63 @@ export function createApiClient(config: ApiClientConfig) {
 		/** Not found while the Artist has no photo; show their initial then. */
 		getArtistPhotoUrl: (artistId: string) =>
 			`${getMediaBaseUrl()}/api/v1/library/artists/${artistId}/photo`,
+
+		getListenTogetherSession: () =>
+			request<ListenTogetherSession>(
+				"getListenTogetherSession",
+				"/api/v1/listen-together/session",
+			),
+		/** Sets the Guest session cookie; rejects with invite_invalid or room_full. */
+		joinListenTogetherRoom: (token: string) =>
+			request<ListenTogetherRoom>(
+				"joinListenTogetherRoom",
+				"/api/v1/listen-together/join",
+				{ method: "POST", body: JSON.stringify({ token }) },
+			),
+		leaveListenTogetherRoom: () =>
+			request<void>(
+				"leaveListenTogetherRoom",
+				"/api/v1/listen-together/leave",
+				{ method: "POST" },
+			),
+		getListenTogetherRoom,
+		openListenTogetherRoom: () =>
+			request<ListenTogetherRoom>(
+				"openListenTogetherRoom",
+				"/api/v1/listen-together/room",
+				{ method: "POST" },
+			),
+		closeListenTogetherRoom: () =>
+			request<void>("closeListenTogetherRoom", "/api/v1/listen-together/room", {
+				method: "DELETE",
+			}),
+		sendListenTogetherCommand: (command: ListenTogetherCommand) =>
+			request<ListenTogetherRoom>(
+				"sendListenTogetherCommand",
+				"/api/v1/listen-together/room/commands",
+				{ method: "POST", body: JSON.stringify(command) },
+			),
+		getListenTogetherClock: () =>
+			request<ListenTogetherClock>(
+				"getListenTogetherClock",
+				"/api/v1/listen-together/room/clock",
+			),
+		subscribeListenTogetherRoomEvents,
 	};
 }
 
+/** A Room read or command refused because the Room or this session is over. */
+export function isListenTogetherRoomGone(error: unknown): boolean {
+	return (
+		error instanceof ApiError && (error.status === 401 || error.status === 404)
+	);
+}
+
 export type ApiClient = ReturnType<typeof createApiClient>;
+
+export type ListenTogetherRoom = components["schemas"]["ListenTogetherRoom"];
+export type ListenTogetherSession =
+	components["schemas"]["ListenTogetherSession"];
+export type ListenTogetherCommand =
+	components["schemas"]["ListenTogetherCommand"];
+export type ListenTogetherClock = components["schemas"]["ListenTogetherClock"];

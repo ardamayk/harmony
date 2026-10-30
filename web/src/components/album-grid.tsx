@@ -3,6 +3,7 @@ import {
 	MANAGED_ALBUM_DELETION_CAPABILITY,
 } from "@repo/api-client";
 import { AlbumArt } from "@repo/ui";
+import { useHiddenFromGuest } from "@repo/ui/guest-access";
 import { Link } from "@tanstack/react-router";
 import { Trash2 } from "lucide-react";
 import { AlbumDeletionDialog } from "#/components/album-deletion-dialog";
@@ -28,6 +29,7 @@ export function AlbumGrid({ albums }: { albums: Album[] }) {
 	const canDeleteAlbums = useServerCapability(
 		MANAGED_ALBUM_DELETION_CAPABILITY,
 	);
+	const hideAlbumDeletion = useHiddenFromGuest("album-deletion");
 	return (
 		<>
 			<CollectionGrid>
@@ -78,7 +80,7 @@ export function AlbumGrid({ albums }: { albums: Album[] }) {
 							>
 								Open album
 							</ContextMenuItem>
-							{canDeleteAlbums ? (
+							{canDeleteAlbums && !hideAlbumDeletion ? (
 								<>
 									<ContextMenuSeparator />
 									<ContextMenuItem

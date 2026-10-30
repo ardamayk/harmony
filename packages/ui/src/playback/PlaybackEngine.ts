@@ -117,6 +117,11 @@ export interface PlaybackEngine {
 		currentIndex: number | null,
 	): Promise<void>;
 	play(source?: PlaybackSource): Promise<void>;
+	/**
+	 * Call from a click: lets later playback start without one, for a player
+	 * whose platform requires it. Starting a Room's Track comes after a request.
+	 */
+	unlockAudio?(): void;
 	previous(): void;
 	next(): void;
 	pause(): void;

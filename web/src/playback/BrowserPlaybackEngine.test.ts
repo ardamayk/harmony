@@ -79,6 +79,35 @@ afterEach(() => {
 	vi.restoreAllMocks();
 });
 
+describe("unlockAudio", () => {
+	it("tries to play the empty element so a click counts for later", async () => {
+		const engine = new BrowserPlaybackEngine({
+			createMedia: () => media,
+			mediaSession: null,
+		});
+		media.play.mockRejectedValueOnce(new Error("no source"));
+
+		engine.unlockAudio();
+		await Promise.resolve();
+
+		expect(media.play).toHaveBeenCalledOnce();
+		expect(engine.getState().error).toBeNull();
+	});
+
+	it("leaves a loaded source alone", async () => {
+		const engine = new BrowserPlaybackEngine({
+			createMedia: () => media,
+			mediaSession: null,
+		});
+		await engine.play(trackSource);
+		media.play.mockClear();
+
+		engine.unlockAudio();
+
+		expect(media.play).not.toHaveBeenCalled();
+	});
+});
+
 playbackEngineContract("browser", () => {
 	const engine = new BrowserPlaybackEngine({ createMedia: () => media });
 	return {
