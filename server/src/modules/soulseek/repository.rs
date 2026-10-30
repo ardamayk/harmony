@@ -151,6 +151,13 @@ impl Repository {
     }
 
     pub async fn get(&self, user_id: &str, id: &str) -> Result<Option<Acquisition>> {
+        // One read transaction, so the acquisition and its files come from
+        // the same save.
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(context("begin Soulseek Acquisition read"))?;
         let row = sqlx::query!(
             r#"SELECT id AS "id!", query, scope, version_key, quality_json, sources_json,
                 source_index, state, batch_id, failure_reason, progress_at_ms,
@@ -159,13 +166,16 @@ impl Repository {
             id,
             user_id,
         )
-        .fetch_optional(&self.pool)
+        .fetch_optional(&mut *tx)
         .await
         .map_err(context("get Soulseek Acquisition"))?;
         let Some(row) = row else {
             return Ok(None);
         };
-        let files = self.files(&row.id).await?;
+        let files = Self::files(&mut tx, &row.id).await?;
+        tx.commit()
+            .await
+            .map_err(context("end Soulseek Acquisition read"))?;
         Ok(Some(Acquisition {
             scope: Scope::parse(&row.scope).unwrap_or(Scope::Album),
             quality: parse_quality(&row.quality_json)?,
@@ -233,14 +243,17 @@ impl Repository {
         Ok(rows.into_iter().map(|row| (row.user_id, row.id)).collect())
     }
 
-    async fn files(&self, acquisition_id: &str) -> Result<Vec<AcquisitionFile>> {
+    async fn files(
+        connection: &mut sqlx::SqliteConnection,
+        acquisition_id: &str,
+    ) -> Result<Vec<AcquisitionFile>> {
         let rows = sqlx::query!(
             r#"SELECT position, kind, name, source_index, remote_filename, size, transfer_id,
                 state, bytes_transferred, job_id, outcome
             FROM soulseek_acquisition_files WHERE acquisition_id = ? ORDER BY position"#,
             acquisition_id
         )
-        .fetch_all(&self.pool)
+        .fetch_all(connection)
         .await
         .map_err(context("list Soulseek Acquisition files"))?;
         Ok(rows
