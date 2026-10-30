@@ -2402,7 +2402,9 @@ components:
           description: >-
             Server Dependencies probed once at startup, in a stable order
             (ffmpeg, ffprobe, then the optional yt-dlp only when
-            EXTERNAL_SOURCE_SEARCH is configured). They describe the deployment environment
+            EXTERNAL_SOURCE_SEARCH is configured, then the optional slskd only
+            when SLSKD_URL, SLSKD_API_KEY and SLSKD_DOWNLOADS_PATH are all
+            configured). They describe the deployment environment
             so an operator can see what the installation supports.
         externalSource:
           $ref: "#/components/schemas/ExternalSourceInfo"
