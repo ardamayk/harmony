@@ -2133,3 +2133,88 @@ async fn cancelling_the_batch_through_its_own_route_cancels_the_acquisition() {
     assert_eq!(status, StatusCode::NO_CONTENT);
     assert_eq!(acquisition(&harness, &id).await["state"], "cancelled");
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_peer_path_out_of_the_download_directory_is_never_offered_or_deleted() {
+    let slskd = FakeSlskd::start().await;
+    let mut harness = harness(Some(&slskd.url)).await;
+    slskd.serve_downloads(&harness.downloads);
+    harness.start_worker(NO_STALL).await;
+    // `<downloads>/../<name>`: a file of the listener's next to slskd's
+    // download directory.
+    let name = format!("existing-{}.flac", uuid::Uuid::new_v4());
+    let outside = harness.downloads.parent().unwrap().join(&name);
+    std::fs::write(&outside, b"the listener's file").unwrap();
+    let search_id = start_search(&harness, &slskd, "Discovery", "album").await;
+    slskd.reply(
+        Method::GET,
+        &format!("/api/v0/searches/{search_id}"),
+        StatusCode::OK,
+        search(
+            &search_id,
+            "Discovery",
+            true,
+            vec![response(
+                "mallory",
+                true,
+                0,
+                1000,
+                vec![
+                    file(&format!(r"@@mallory\..\{name}"), 5, json!({})),
+                    file(r"@@mallory\Album\..\02 Two.flac", 5, json!({})),
+                    file(r"@@mallory\Album\01 One.flac", 5, json!({})),
+                ],
+            )],
+        ),
+    );
+    let (status, found) = send(
+        &harness.router,
+        Method::GET,
+        &format!("/api/v1/soulseek/searches/{search_id}"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{found}");
+    let versions = found["versions"].as_array().unwrap();
+    assert_eq!(versions.len(), 1, "{found:#}");
+    let sources = versions[0]["sources"].as_array().unwrap();
+    assert_eq!(sources.len(), 1, "{found:#}");
+    assert_eq!(sources[0]["folder"], r"@@mallory\Album");
+    assert_eq!(sources[0]["fileCount"], 1);
+
+    slskd.user_behaves("mallory", Behavior::Hold);
+    let (status, started) = start_acquisition(
+        &harness,
+        json!({"searchId": search_id, "versionKey": versions[0]["versionKey"]}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{started}");
+    let id = started["acquisitionId"].as_str().unwrap().to_owned();
+    assert_eq!(
+        file_states(&started),
+        [("01 One.flac".to_owned(), "queued".to_owned())]
+    );
+    wait_for(&harness, &id, "the download", |body| {
+        states(body) == ["downloading"]
+    })
+    .await;
+    let (status, _) = send(
+        &harness.router,
+        Method::DELETE,
+        &format!("/api/v1/soulseek/acquisitions/{id}"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let queued: Vec<String> = slskd
+        .requests_to(Method::POST, "/api/v0/transfers/downloads/mallory")
+        .iter()
+        .flat_map(|request| request.body.as_array().unwrap().clone())
+        .map(|file| file["filename"].as_str().unwrap().to_owned())
+        .collect();
+    assert_eq!(queued, [r"@@mallory\Album\01 One.flac"]);
+    assert_eq!(
+        std::fs::read(&outside).unwrap(),
+        b"the listener's file",
+        "a file outside slskd's download directory is never deleted"
+    );
+    std::fs::remove_file(&outside).unwrap();
+}

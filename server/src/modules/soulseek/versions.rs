@@ -4,7 +4,9 @@
 //! own "unknown" version, and the order is for display, never a ranking of
 //! one quality over another.
 
+use super::acquisitions::local_relative_path;
 use super::slskd::{SearchFile, SearchResponse};
+use crate::inspect::artwork::MAX_ARTWORK_SIZE_BYTES;
 use sha2::{Digest, Sha256};
 use std::cmp::Reverse;
 use std::collections::BTreeMap;
@@ -262,6 +264,11 @@ fn sources(scope: Scope, username: &str, user: &UserFiles<'_>) -> Vec<(Quality, 
     // (quality key, folder, file for Track scope) -> files
     let mut groups: BTreeMap<(String, &str, &str), Gathered> = BTreeMap::new();
     for (filename, file) in &user.files {
+        // A peer's path that could land outside slskd's download directory
+        // is never offered.
+        if local_relative_path(filename).is_none() {
+            continue;
+        }
         let (folder, name) = split_path(filename);
         let Some(extension) = extension(name) else {
             continue;

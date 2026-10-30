@@ -212,17 +212,57 @@ pub fn file_name(remote: &str) -> &str {
     remote.rsplit(['\\', '/']).next().unwrap_or(remote)
 }
 
-/// Where slskd puts a completed download by default: its downloads
-/// directory, then the remote file's own folder name
+/// Where slskd puts a completed download by default, below its downloads
+/// directory: the remote file's own folder name
 /// (`Transfers.Download.Destination.Subdirectory` = `${SOURCE_DIRECTORY}`),
-/// then the file name.
-pub fn local_path(downloads: &Path, remote: &str) -> PathBuf {
-    let mut parts = remote.rsplit(['\\', '/']);
-    let name = parts.next().unwrap_or(remote);
-    match parts.next().filter(|folder| !folder.is_empty()) {
-        Some(folder) => downloads.join(folder).join(name),
-        None => downloads.join(name),
+/// then the file name. `None` for a remote path a peer could aim outside
+/// the downloads directory with: a `.` or `..` component anywhere, a NUL,
+/// or a folder or file name that is empty or not one plain path component
+/// here (such as a drive, `C:`, on Windows).
+pub fn local_relative_path(remote: &str) -> Option<PathBuf> {
+    if remote.contains('\0')
+        || remote
+            .split(['\\', '/'])
+            .any(|component| component == "." || component == "..")
+    {
+        return None;
     }
+    let plain = |component: &str| {
+        let mut components = Path::new(component).components();
+        matches!(components.next(), Some(std::path::Component::Normal(_)))
+            && components.next().is_none()
+    };
+    let mut parts = remote.rsplit(['\\', '/']);
+    let name = parts.next().filter(|name| plain(name))?;
+    match parts.next().filter(|folder| !folder.is_empty()) {
+        Some(folder) if plain(folder) => Some(Path::new(folder).join(name)),
+        Some(_) => None,
+        None => Some(PathBuf::from(name)),
+    }
+}
+
+/// [`local_relative_path`] below `downloads`.
+pub fn local_path(downloads: &Path, remote: &str) -> Option<PathBuf> {
+    local_relative_path(remote).map(|relative| downloads.join(relative))
+}
+
+/// The download copy of a remote file when it is a regular file confined
+/// to `downloads`: its folder is a directory inside it, not a symbolic link
+/// out, and the file itself is no symbolic link.
+fn confined_copy(downloads: &Path, remote: &str) -> Option<PathBuf> {
+    let path = local_path(downloads, remote)?;
+    let folder = path.parent()?;
+    if folder != downloads && !std::fs::symlink_metadata(folder).ok()?.is_dir() {
+        return None;
+    }
+    let root = std::fs::canonicalize(downloads).ok()?;
+    if !std::fs::canonicalize(folder).ok()?.starts_with(&root) {
+        return None;
+    }
+    std::fs::symlink_metadata(&path)
+        .ok()?
+        .is_file()
+        .then_some(path)
 }
 
 fn now_ms() -> i64 {
@@ -467,12 +507,14 @@ impl Soulseek {
     }
 
     /// Deletes one download from slskd's directory, and its folder when that
-    /// leaves it empty.
+    /// leaves it empty. A copy outside the directory is never touched.
     fn remove_download_copy(&self, remote: &str) {
         let Some(downloads) = self.downloads_path() else {
             return;
         };
-        let path = local_path(downloads, remote);
+        let Some(path) = confined_copy(downloads, remote) else {
+            return;
+        };
         match std::fs::remove_file(&path) {
             Ok(()) => {}
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
@@ -921,8 +963,7 @@ impl Soulseek {
     /// The completed download of a remote file, when it is in slskd's
     /// download directory.
     fn downloaded_copy(&self, remote: &str) -> Option<PathBuf> {
-        let path = local_path(self.downloads_path()?, remote);
-        path.is_file().then_some(path)
+        confined_copy(self.downloads_path()?, remote)
     }
 }
 
@@ -1001,13 +1042,57 @@ mod tests {
             local_path(
                 downloads,
                 r"@@alice\Daft Punk\Discovery [24-48]\01 One.flac"
-            ),
+            )
+            .unwrap(),
             Path::new("/srv/downloads/Discovery [24-48]/01 One.flac")
         );
         assert_eq!(
-            local_path(downloads, "One.flac"),
+            local_path(downloads, "One.flac").unwrap(),
+            Path::new("/srv/downloads/One.flac")
+        );
+        assert_eq!(
+            local_path(downloads, r"\One.flac").unwrap(),
             Path::new("/srv/downloads/One.flac")
         );
         assert_eq!(file_name(r"A\B\01 One.flac"), "01 One.flac");
+    }
+
+    #[test]
+    fn remote_paths_that_could_leave_the_downloads_directory_map_nowhere() {
+        for remote in [
+            r"@@peer\..\existing.flac",
+            r"@@peer\Album\..",
+            r"@@peer\..\..\Album\01.flac",
+            r"@@peer\.\01.flac",
+            "@@peer/../01.flac",
+            r"@@peer\Album\",
+            "@@peer\\Album\\01\0.flac",
+            "",
+        ] {
+            assert_eq!(local_relative_path(remote), None, "{remote:?}");
+        }
+    }
+
+    #[test]
+    fn a_copy_is_read_or_deleted_only_inside_the_downloads_directory() {
+        let root = tempfile::tempdir().unwrap();
+        let downloads = root.path().join("downloads");
+        let outside = root.path().join("outside");
+        std::fs::create_dir_all(downloads.join("Album")).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        std::fs::write(downloads.join("Album").join("01.flac"), b"in").unwrap();
+        std::fs::write(outside.join("01.flac"), b"out").unwrap();
+        assert!(confined_copy(&downloads, r"@@peer\Album\01.flac").is_some());
+        assert_eq!(confined_copy(&downloads, r"@@peer\Album\02.flac"), None);
+        assert_eq!(confined_copy(&downloads, r"@@peer\..\01.flac"), None);
+        #[cfg(unix)]
+        {
+            // A folder or file that links out of the directory is refused.
+            std::os::unix::fs::symlink(&outside, downloads.join("Linked")).unwrap();
+            assert_eq!(confined_copy(&downloads, r"@@peer\Linked\01.flac"), None);
+            std::os::unix::fs::symlink(outside.join("01.flac"), downloads.join("Album/02.flac"))
+                .unwrap();
+            assert_eq!(confined_copy(&downloads, r"@@peer\Album\02.flac"), None);
+        }
     }
 }
