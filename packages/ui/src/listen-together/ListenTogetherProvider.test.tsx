@@ -226,11 +226,13 @@ describe("ListenTogetherProvider", () => {
 			capabilities: ["listen-together.v1"],
 			dependencies: {},
 		});
-		act(() => {
-			window.dispatchEvent(new Event("focus"));
+		// Repeated, since the listener arrives with the effect after the role.
+		await waitFor(() => {
+			act(() => {
+				window.dispatchEvent(new Event("focus"));
+			});
+			expect(context.isAvailable).toBe(true);
 		});
-
-		await waitFor(() => expect(context.isAvailable).toBe(true));
 		expect(context.room?.revision).toBe(baseRoom.revision);
 	});
 
