@@ -2347,3 +2347,39 @@ async fn a_downloaded_file_managed_import_cannot_read_yet_is_fed_again() {
     assert_eq!(ready["state"], "accepted", "{batch:#}");
     assert!(files_in(&harness.downloads).is_empty());
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn cancelling_answers_promptly_while_slskd_holds_its_removals() {
+    let slskd = FakeSlskd::start().await;
+    slskd.user_behaves("alice", Behavior::Hold);
+    let (harness, search_id) = acquiring(&slskd, NO_STALL).await;
+    let id = acquire_hi_res(&harness, &search_id).await;
+    wait_for(&harness, &id, "downloads in progress", |body| {
+        states(body) == ["downloading", "downloading"]
+    })
+    .await;
+    slskd.hold_removals();
+    let uri = format!("/api/v1/soulseek/acquisitions/{id}");
+    let started = tokio::time::Instant::now();
+    let (status, _) = send(&harness.router, Method::DELETE, &uri).await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    assert!(
+        started.elapsed() < Duration::from_secs(15),
+        "cancelling waited {:?} on slskd",
+        started.elapsed()
+    );
+    assert_eq!(acquisition(&harness, &id).await["state"], "cancelled");
+    assert!(!slskd.transfers().is_empty(), "slskd removed nothing yet");
+    // Once slskd answers again, the worker removes what is left.
+    slskd.release_removals();
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(15);
+    while !slskd.transfers().is_empty() {
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "{:?}",
+            slskd.transfers()
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    assert_eq!(acquisition(&harness, &id).await["state"], "cancelled");
+}

@@ -41,6 +41,10 @@ impl Default for WorkerTiming {
     }
 }
 
+/// The longest slskd may take to remove an acquisition's transfers when it
+/// is cancelled or finished; what is left then, the worker removes later.
+const REMOTE_CLEANUP_DEADLINE: Duration = Duration::from_secs(5);
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AcquisitionState {
     /// Some audio file is still to arrive from slskd.
@@ -448,11 +452,13 @@ impl Soulseek {
         }
     }
 
-    /// Cancels an active acquisition: stops slskd's transfers, deletes the
-    /// downloaded copies, cancels its Import Batch and marks it cancelled. A
-    /// finished one (failed, completed or cancelled) is dismissed instead:
-    /// its unconfirmed batch is cancelled, it is removed, and the listener
-    /// no longer sees it. Neither is possible while the batch commits.
+    /// Cancels an active acquisition: cancels its Import Batch and records
+    /// it cancelled first, then deletes the downloaded copies and stops
+    /// slskd's transfers for at most [`REMOTE_CLEANUP_DEADLINE`]; the worker
+    /// removes what slskd did not in time. A finished one (failed, completed
+    /// or cancelled) is dismissed instead: its unconfirmed batch is
+    /// cancelled, it is removed, and the listener no longer sees it. Neither
+    /// is possible while the batch commits.
     pub async fn cancel_acquisition(&self, id: &str) -> Result<(), SoulseekError> {
         self.ensure_enabled()?;
         let repo = self.repo();
@@ -469,43 +475,80 @@ impl Soulseek {
             ));
         }
         let mut acquisition = self.observe(acquisition).await;
-        self.discard_downloads(&mut acquisition).await;
         if progress == BatchProgress::Open {
             self.cancel_batch(&acquisition).await;
         }
         match acquisition.state {
             AcquisitionState::Failed
             | AcquisitionState::Completed
-            | AcquisitionState::Cancelled => repo
-                .delete(DEFAULT_USER_ID, &acquisition.id)
-                .await
-                .map_err(internal),
+            | AcquisitionState::Cancelled => {
+                self.discard_downloads(&mut acquisition).await;
+                repo.delete(DEFAULT_USER_ID, &acquisition.id)
+                    .await
+                    .map_err(internal)
+            }
             AcquisitionState::Downloading
             | AcquisitionState::Importing
             | AcquisitionState::Review => {
                 acquisition.state = AcquisitionState::Cancelled;
-                repo.save(&acquisition).await.map_err(internal)
+                repo.save(&acquisition).await.map_err(internal)?;
+                self.discard_downloads(&mut acquisition).await;
+                // Records the transfers slskd removed; the worker removes
+                // the rest.
+                if let Err(error) = repo.save(&acquisition).await {
+                    tracing::error!(%error, acquisition = %acquisition.id, "save Soulseek Acquisition failed");
+                }
+                Ok(())
             }
         }
     }
 
-    /// Removes every transfer of the acquisition from slskd and deletes the
-    /// copies in slskd's download directory. Failures are logged: a copy
-    /// that cannot be removed now is not worth failing the caller.
+    /// Deletes the copies in slskd's download directory, then removes every
+    /// transfer of the acquisition from slskd, all at once and for at most
+    /// [`REMOTE_CLEANUP_DEADLINE`]. A transfer slskd did not answer for in
+    /// time keeps its id, for the worker to remove later. Failures are
+    /// logged: a copy that cannot be removed now is not worth failing the
+    /// caller.
     async fn discard_downloads(&self, acquisition: &mut Acquisition) {
-        let slskd = self.slskd_client();
         for file in &mut acquisition.files {
-            if let (Some(slskd), Some(transfer_id)) = (slskd, file.transfer_id.take()) {
-                let username = &acquisition.sources[file.source_index].username;
-                if let Err(error) = slskd.remove_download(username, &transfer_id).await {
-                    tracing::warn!(%error, acquisition = %acquisition.id, "remove slskd download failed");
-                }
-            }
             if file.state != FileState::Staged {
                 self.remove_download_copy(&file.remote_filename);
             }
             if file.state.is_missing() {
                 file.bytes_transferred = 0;
+            }
+        }
+        let Some(slskd) = self.slskd_client() else {
+            return;
+        };
+        let mut removals: FuturesUnordered<_> = acquisition
+            .files
+            .iter()
+            .enumerate()
+            .filter_map(|(index, file)| {
+                let transfer_id = file.transfer_id.clone()?;
+                let username = acquisition.sources[file.source_index].username.clone();
+                Some(async move { (index, slskd.remove_download(&username, &transfer_id).await) })
+            })
+            .collect();
+        let deadline = tokio::time::Instant::now() + REMOTE_CLEANUP_DEADLINE;
+        loop {
+            match tokio::time::timeout_at(deadline, removals.next()).await {
+                Ok(Some((index, result))) => {
+                    if let Err(error) = result {
+                        tracing::warn!(%error, acquisition = %acquisition.id, "remove slskd download failed");
+                    }
+                    acquisition.files[index].transfer_id = None;
+                }
+                Ok(None) => break,
+                Err(_) => {
+                    tracing::warn!(
+                        acquisition = %acquisition.id,
+                        left = removals.len(),
+                        "slskd did not remove every download in time; the worker retries"
+                    );
+                    break;
+                }
             }
         }
     }
@@ -603,6 +646,36 @@ impl Soulseek {
             self.step(&mut next, timing).await;
             if next != acquisition
                 && let Err(error) = repo.save(&next).await
+            {
+                tracing::error!(%error, acquisition = %id, "save Soulseek Acquisition failed");
+            }
+        }
+        self.sweep_finished().await;
+    }
+
+    /// Removes the slskd transfers a finished acquisition still holds:
+    /// those slskd did not remove in time when it was cancelled or ended.
+    async fn sweep_finished(&self) {
+        let repo = self.repo();
+        let finished = match repo.list_finished_with_transfers().await {
+            Ok(finished) => finished,
+            Err(error) => {
+                tracing::error!(%error, "list finished Soulseek Acquisitions failed");
+                return;
+            }
+        };
+        for (user_id, id) in finished {
+            let _lock = self.acquisition_lock().await;
+            let Ok(Some(mut acquisition)) = repo.get(&user_id, &id).await else {
+                continue;
+            };
+            if acquisition.state.is_downloading() || acquisition.state == AcquisitionState::Review {
+                continue;
+            }
+            let before = acquisition.clone();
+            self.discard_downloads(&mut acquisition).await;
+            if acquisition != before
+                && let Err(error) = repo.save(&acquisition).await
             {
                 tracing::error!(%error, acquisition = %id, "save Soulseek Acquisition failed");
             }

@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT user_id, id AS \"id!\" FROM soulseek_acquisitions\n            WHERE state IN ('completed', 'failed', 'cancelled')\n                AND EXISTS (\n                    SELECT 1 FROM soulseek_acquisition_files\n                    WHERE acquisition_id = soulseek_acquisitions.id AND transfer_id IS NOT NULL\n                )\n            ORDER BY created_at, rowid",
+  "describe": {
+    "columns": [
+      {
+        "name": "user_id",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "soulseek_acquisitions",
+            "name": "user_id"
+          }
+        }
+      },
+      {
+        "name": "id!",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "soulseek_acquisitions",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "0a1238027eeab5755c318b4d29476d025a5f8f7ba781222e4b2f8e9bccb9ac92"
+}

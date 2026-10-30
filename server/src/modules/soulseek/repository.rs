@@ -203,6 +203,24 @@ impl Repository {
         Ok(acquisitions)
     }
 
+    /// Every user's finished acquisitions that still hold an slskd
+    /// transfer, as (user, id).
+    pub async fn list_finished_with_transfers(&self) -> Result<Vec<(String, String)>> {
+        let rows = sqlx::query!(
+            r#"SELECT user_id, id AS "id!" FROM soulseek_acquisitions
+            WHERE state IN ('completed', 'failed', 'cancelled')
+                AND EXISTS (
+                    SELECT 1 FROM soulseek_acquisition_files
+                    WHERE acquisition_id = soulseek_acquisitions.id AND transfer_id IS NOT NULL
+                )
+            ORDER BY created_at, rowid"#
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(context("list finished Soulseek Acquisitions"))?;
+        Ok(rows.into_iter().map(|row| (row.user_id, row.id)).collect())
+    }
+
     /// Every user's acquisitions the worker still drives, as (user, id).
     pub async fn list_active(&self) -> Result<Vec<(String, String)>> {
         let rows = sqlx::query!(
