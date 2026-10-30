@@ -123,6 +123,7 @@ html[data-theme-preset] {
 	--color-queue: var(--queue);
 	--color-queue-foreground: var(--queue-foreground);
 	--color-player: var(--player);
+	--color-player-bar: var(--player-bar);
 	--color-player-foreground: var(--player-foreground);
 	--color-shell-brand: var(--shell-brand);
 	--color-shell-active: var(--shell-active);
@@ -299,7 +300,6 @@ html[data-window-maximized] body::after {
 }
 
 /* Named utilities for the few layout patterns Tailwind has no class for. */
-@utility scrollbar-hidden {
 /* The logo's gradient, black to white. Black would vanish on a dark Top Nav,
    so there it starts at grey; light themes run from black to dark grey, except
    where the Top Nav stays dark. */
@@ -322,6 +322,7 @@ html[data-window-maximized] body::after {
 	background-image: linear-gradient(135deg, var(--brand-from), var(--brand-to));
 	mask: url("/logo.svg") center / contain no-repeat;
 }
+@utility scrollbar-hidden {
 	scrollbar-width: none;
 	-ms-overflow-style: none;
 	&::-webkit-scrollbar {
@@ -524,7 +525,7 @@ html[data-window-maximized] body::after {
 		border: 0;
 		border-radius: 9999px;
 		background: var(--player-live-progress);
-		box-shadow: 0 0 0 3px color-mix(in srgb, var(--player) 85%, transparent);
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--player-bar) 85%, transparent);
 		opacity: 0;
 		transform: scale(0.6);
 		transition:
@@ -537,7 +538,7 @@ html[data-window-maximized] body::after {
 		border: 0;
 		border-radius: 9999px;
 		background: var(--player-live-progress);
-		box-shadow: 0 0 0 3px color-mix(in srgb, var(--player) 85%, transparent);
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--player-bar) 85%, transparent);
 		opacity: 0;
 		transform: scale(0.6);
 		transition:

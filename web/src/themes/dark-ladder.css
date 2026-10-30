@@ -78,6 +78,9 @@
 	   from --player-border. */
 	--player: color-mix(in oklab, var(--background) 60%, var(--card));
 	--queue: var(--player);
+	/* The Player Bar sits on the cards' step, so it reads apart from the page
+	   and the Queue Drawer above it. */
+	--player-bar: var(--card);
 	--player-pill: oklch(
 		30% calc(0.03 * var(--neutral-chroma)) var(--neutral-hue)
 	);

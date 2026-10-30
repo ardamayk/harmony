@@ -387,7 +387,13 @@ describe("text tiers", () => {
 					const surfaces =
 						preset.id === "vintage-harbor" && !dark
 							? ["--background", "--card"]
-							: ["--background", "--card", "--player", "--player-pill"];
+							: [
+									"--background",
+									"--card",
+									"--player",
+									"--player-bar",
+									"--player-pill",
+								];
 					for (const surface of surfaces) {
 						expect(
 							contrastRatio(token("--caption"), token(surface)),
@@ -427,9 +433,9 @@ describe("text tiers", () => {
 						expect(
 							contrastRatio(
 								token("--player-control-primary"),
-								token("--player"),
+								token("--player-bar"),
 							),
-							"primary control on --player",
+							"primary control on --player-bar",
 						).toBeGreaterThanOrEqual(3);
 						expect(
 							contrastRatio(

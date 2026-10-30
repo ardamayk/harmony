@@ -72,6 +72,7 @@
 	--player-control-primary-foreground: var(--primary-foreground);
 	--player-control-shadow: color-mix(in srgb, var(--primary) 20%, transparent);
 	--player-live-progress: var(--primary);
+	--player-bar: var(--player);
 	--player-pill: color-mix(in srgb, var(--player) 72%, var(--theme-3) 28%);
 
 	--chart-1: var(--theme-4);
@@ -152,6 +153,7 @@
 	--player-control-primary-foreground: var(--primary-foreground);
 	--player-control-shadow: color-mix(in srgb, var(--primary) 20%, transparent);
 	--player-live-progress: var(--primary);
+	--player-bar: var(--player);
 	--player-pill: color-mix(in srgb, var(--player) 72%, var(--theme-4) 28%);
 
 	--chart-1: var(--theme-3);
