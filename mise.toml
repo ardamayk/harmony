@@ -83,6 +83,10 @@ run = [
 description = "Build the Music Server and the Desktop Client"
 depends = ["server:build", "desktop:build"]
 
+[tasks."brand:icons"]
+description = "Regenerate the Harmony icon files"
+run = "node scripts/generate-brand-icons.ts"
+
 [tasks."web:build"]
 description = "Build the Web Client"
 run = "pnpm --dir web run build"

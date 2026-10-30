@@ -63,10 +63,10 @@ export function TopNav({
 				<Link
 					to="/library/albums"
 					aria-label="Harmony"
-					className="font-display shrink-0 font-semibold text-shell-brand text-xl tracking-tight"
+					className="font-display flex shrink-0 items-center gap-2 font-semibold text-shell-brand text-xl tracking-tight"
 				>
-					<span className="max-lg:hidden">Harmony</span>
-					<span className="inline-block w-5 text-center lg:hidden">H</span>
+					<span aria-hidden className="brand-mark size-5 shrink-0 lg:size-6" />
+					<span className="text-brand-gradient max-lg:hidden">Harmony</span>
 				</Link>
 			</div>
 			<div className="relative flex min-w-0 items-center gap-2">

@@ -55,12 +55,12 @@ The Windows client is built entirely inside WSL; there is no Windows clone or Wi
 
 - The core is cross-built for `x86_64-pc-windows-gnu` with WSL's mingw-w64 and needs no extra DLLs at run time.
 - Pinned mpv is the official `mpv-v0.41.0-x86_64-w64-mingw32.zip` release build. It is downloaded once into `~/.cache/earthly-audio-windows` and checked against its SHA-256. It reports `0.41.0-dev-g41f6a6450`, pinned in `core/mpv-windows-version.txt`, and `mpv.exe` ships with the DLLs beside it.
-- electron-builder packages the shell with its `dir` target (`electron-builder.yml`). It neither signs nor edits the executable, so no Wine is needed.
+- electron-builder packages the shell with its `dir` target (`electron-builder.yml`). It neither signs nor edits the executable, so no Wine is needed; `scripts/desktop-windows/icon.ts` then sets the icon with resedit.
 - The result is copied to `%LOCALAPPDATA%\EarthlyAudio` (`EARTHLY_AUDIO_WINDOWS_OUT` overrides it) and started from there through WSL interop.
 
 ```text
 Harmony.exe
-resources/app/       package.json, dist/ (shell bundle), resources/icon.png
+resources/app/       package.json, dist/ (shell bundle), resources/ (icons)
 resources/web/dist/  the Web Client
 resources/core/      earthly-audio-core.exe, mpv.exe and its DLLs
 ```

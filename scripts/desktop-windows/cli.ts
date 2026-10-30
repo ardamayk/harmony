@@ -37,6 +37,7 @@ import {
 } from "./config.ts";
 import { buildCore } from "./core.ts";
 import { buildShell, buildWeb } from "./frontend.ts";
+import { setExecutableIcon } from "./icon.ts";
 import { stageMpv } from "./mpv.ts";
 
 const executableName = "Harmony.exe";
@@ -127,6 +128,10 @@ async function build(options: Set<string>) {
 			"electron-builder packed node_modules; the shell must have no runtime dependencies.",
 		);
 	}
+	setExecutableIcon(
+		join(packaged, executableName),
+		join(repoRoot, "desktop/resources/icon.ico"),
+	);
 
 	const output = windowsOutputDirectory();
 	removeWindowsDirectory(output);

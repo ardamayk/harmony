@@ -15,6 +15,7 @@ export type ShellPaths = {
 	rendererRoot: string;
 	preload: string;
 	icon: string;
+	trayIcon: string;
 };
 
 /**
@@ -35,6 +36,7 @@ export function shellPaths(
 		),
 		preload: join(desktopDirectory, "dist/preload.cjs"),
 		icon: join(desktopDirectory, "resources/icon.png"),
+		trayIcon: join(desktopDirectory, "resources/tray.png"),
 	};
 }
 

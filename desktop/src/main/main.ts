@@ -102,7 +102,7 @@ async function start() {
 	core.on("event", (name, payload) => {
 		switch (name) {
 			case "shell:ready":
-				tray = new PlaybackTray(paths.icon, sendShellAction);
+				tray = new PlaybackTray(paths.trayIcon, sendShellAction);
 				if (pendingTrayUpdate) tray.update(pendingTrayUpdate);
 				windows.createMainWindow();
 				return;
