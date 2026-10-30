@@ -34,10 +34,14 @@ music.example.com {
 
 ## Try it on one machine
 
-No proxy needed. Use loopback:
+No proxy needed. Use loopback. Build first: `server:dev` embeds no Web Client, and `dev:web` on `:3000` does not cover the Guest Listener.
 
 ```bash
-GUEST_ADDR=127.0.0.1:8091 PUBLIC_URL=http://127.0.0.1:8091 mise run server:dev
+mise run server:build
+```
+
+```bash
+GUEST_ADDR=127.0.0.1:8091 PUBLIC_URL=http://127.0.0.1:8091 mise run server:start
 ```
 
 1. Open `http://localhost:8090/listen-together`. Open a Room.
