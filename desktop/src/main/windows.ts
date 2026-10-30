@@ -26,6 +26,28 @@ export type WindowManagerOptions = {
  * web UI; the mini player is its `/mini` route. They share playback truth
  * through the forwarded `desktop-playback-state` event.
  */
+const WM_SYSCOMMAND = 0x0112;
+// SC_MAXIMIZE and SC_RESTORE with HTCAPTION: what a double click on the title
+// bar sends.
+const MAXIMIZE_FROM_CAPTION = 0xf032;
+const RESTORE_FROM_CAPTION = 0xf122;
+
+/**
+ * Windows asks a window to maximize on a double click on its title bar, which
+ * here is a drag region, but a transparent window ignores the request. Electron
+ * maximizes such a window itself, so Windows may ask to maximize one that
+ * already is: the request toggles.
+ */
+function followCaptionDoubleClick(window: BrowserWindow) {
+	window.hookWindowMessage(WM_SYSCOMMAND, (wParam) => {
+		const command = wParam.readUInt32LE(0);
+		if (command !== MAXIMIZE_FROM_CAPTION && command !== RESTORE_FROM_CAPTION)
+			return;
+		if (window.isMaximized()) window.unmaximize();
+		else window.maximize();
+	});
+}
+
 export class WindowManager {
 	private main: BrowserWindow | null = null;
 	private mini: BrowserWindow | null = null;
@@ -74,6 +96,7 @@ export class WindowManager {
 			window.webContents.send(IPC.windowMaximized, maximized);
 		window.on("maximize", () => sendMaximized(true));
 		window.on("unmaximize", () => sendMaximized(false));
+		if (process.platform === "win32") followCaptionDoubleClick(window);
 		window.on("closed", () => {
 			this.main = null;
 		});
