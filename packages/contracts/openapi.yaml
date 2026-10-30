@@ -2264,6 +2264,7 @@ components:
             - coastal-mist
             - sage-hearth
             - charcoal-coral
+            - noir-red
     PlaybackPreferences:
       type: object
       description: Player Bar behaviour shared by the Web and Desktop Clients.

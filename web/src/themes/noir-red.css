@@ -1,0 +1,14 @@
+[data-theme-preset="noir-red"] {
+	--theme-1: #000000;
+	--theme-2: #1a1a1a;
+	--theme-3: #d9434a;
+	--theme-4: #8a8a8a;
+	--theme-5: #e8e8e8;
+	--theme-6: #fafafa;
+	/* Dark mode's colours (dark-ladder.css): a pure grey neutral, so its hue
+	   has no effect, and the light red. */
+	--neutral-hue: 25;
+	--accent-hue: 25;
+	--brand-hue: 25;
+	--neutral-chroma: 0;
+}

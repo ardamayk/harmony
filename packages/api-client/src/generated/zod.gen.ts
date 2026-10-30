@@ -61,7 +61,8 @@ export const zThemePreferences = z.object({
         'dusty-earth',
         'coastal-mist',
         'sage-hearth',
-        'charcoal-coral'
+        'charcoal-coral',
+        'noir-red'
     ])
 });
 

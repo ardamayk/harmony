@@ -98,6 +98,13 @@ export const THEME_PRESET_REGISTRY: ThemePresetDefinition[] = [
 		colors: ["#111113", "#2d2d31", "#bc4a3c", "#8b8b93", "#e7e7ea", "#f8f8fa"],
 		hues: { neutral: 286, accent: 30, neutralChroma: 0.25, accentChroma: 1.45 },
 	},
+	{
+		id: "noir-red",
+		label: "Noir Red",
+		colors: ["#000000", "#1a1a1a", "#d9434a", "#8a8a8a", "#e8e8e8", "#fafafa"],
+		hues: { neutral: 25, accent: 25, neutralChroma: 0 },
+		semanticOverride: true,
+	},
 ];
 
 export const THEME_PRESET_IDS = THEME_PRESET_REGISTRY.map(

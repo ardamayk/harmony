@@ -266,6 +266,7 @@ function resolvedTokens(
 		"layers.css",
 		"dark-ladder.css",
 		"semantic/vintage-harbor.css",
+		"semantic/noir-red.css",
 		"contrast.css",
 	];
 	const mode = dark ? ".dark" : ":not(.dark)";

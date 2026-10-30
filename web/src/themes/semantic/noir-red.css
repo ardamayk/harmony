@@ -1,0 +1,18 @@
+/* Noir Red: dark mode's page and shell panels are black, so panels separate by
+   their lines. The steps above black are lower than the shared ladder's, which
+   keeps the light red at 4.5:1 on the active step. */
+[data-theme-preset="noir-red"].dark {
+	--background: #000000;
+	--player: #000000;
+	--player-bar: #1c1c1c;
+	--card: #141414;
+	--player-pill: #242424;
+	--muted: #2c2c2c;
+	--sidebar-accent: #333333;
+
+	--primary: #ff6b6b;
+	--primary-foreground: #2a0507;
+	--player-control-shadow: rgba(255, 107, 107, 0.2);
+	--shell-active-foreground: #ff6b6b;
+	--shell-brand: #ff6b6b;
+}

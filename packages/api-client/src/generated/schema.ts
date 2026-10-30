@@ -1126,7 +1126,7 @@ export interface components {
             /** @enum {string} */
             mode: "light" | "dark" | "system";
             /** @enum {string} */
-            preset: "earthly" | "tokyo-night" | "vintage-harbor" | "night-ember" | "dusty-earth" | "coastal-mist" | "sage-hearth" | "charcoal-coral";
+            preset: "earthly" | "tokyo-night" | "vintage-harbor" | "night-ember" | "dusty-earth" | "coastal-mist" | "sage-hearth" | "charcoal-coral" | "noir-red";
         };
         /** @description Player Bar behaviour shared by the Web and Desktop Clients. */
         PlaybackPreferences: {

@@ -56,6 +56,10 @@
 	--player-control-primary: color-mix(in srgb, var(--primary) 80%, black);
 }
 
+[data-theme-preset="noir-red"]:not(.dark) {
+	--player-control-primary: color-mix(in srgb, var(--primary) 60%, black);
+}
+
 [data-theme-preset="vintage-harbor"]:not(.dark) {
 	/* The light page's accent: the palette's brown (#8b5e3c) at the accent hue. */
 	--primary: oklch(52.2% calc(0.076 * var(--accent-chroma)) var(--accent-hue));
@@ -90,16 +94,16 @@
 	--muted: color-mix(in srgb, var(--player-title) 8%, transparent);
 }
 
-[data-theme-preset="vintage-harbor"]:not(.dark)
-	[data-shell-surface]
-	:is(.bg-popover) {
-	--heading: var(--theme-1);
 /* The bar's text is light here, so a page's cover wash stays on the dark bar
    instead of the light page. */
 [data-theme-preset="vintage-harbor"]:not(.dark) [data-top-nav-backdrop] {
 	--background: var(--sidebar);
 }
 
+[data-theme-preset="vintage-harbor"]:not(.dark)
+	[data-shell-surface]
+	:is(.bg-popover) {
+	--heading: var(--theme-1);
 	--text: var(--theme-2);
 	--foreground: var(--theme-2);
 	--caption: color-mix(in oklab, var(--theme-2) 85%, var(--theme-6));
