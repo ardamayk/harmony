@@ -1169,7 +1169,7 @@ export interface paths {
         put?: never;
         /**
          * Change the Room State
-         * @description The last command to reach the Music Server wins. A skip carrying a fromTrackId that is no longer current changes nothing, so every client may report the end of a Track. A playTracks naming a Track outside the library answers 400 with field trackIds.
+         * @description The last command to reach the Music Server wins. A skip carrying a fromTrackId or fromIndex that is no longer current changes nothing, so every client may report the end of a Track. A playTracks naming a Track outside the library answers 400 with field trackIds.
          */
         post: operations["sendListenTogetherCommand"];
         delete?: never;
@@ -1307,6 +1307,8 @@ export interface components {
              * @description When set, the skip applies only if this is still the current Track.
              */
             fromTrackId?: string;
+            /** @description When set, the skip applies only if the Room is still at this position, since a Room Queue can hold one Track twice in a row. */
+            fromIndex?: number;
         };
         ListenTogetherSetLyricsOpenCommand: {
             /**

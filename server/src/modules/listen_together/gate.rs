@@ -19,7 +19,6 @@ const PUBLIC_ROUTES: &[(&str, &str)] = &[
     ("POST", "/api/v1/listen-together/join"),
 ];
 
-const LIBRARY_SEARCH: &str = "/api/v1/library/search";
 const TRACK_STREAM: &str = "/api/v1/tracks/{track_id}/stream";
 
 /// Open to a live Guest session, as (method, route).
@@ -40,7 +39,7 @@ const SESSION_ROUTES: &[(&str, &str)] = &[
     ("GET", "/api/v1/library/tracks/{track_id}"),
     ("GET", "/api/v1/library/tracks/{track_id}/lyrics"),
     ("GET", "/api/v1/library/tracks/{track_id}/waveform"),
-    ("GET", LIBRARY_SEARCH),
+    ("GET", "/api/v1/library/search"),
     ("GET", TRACK_STREAM),
     ("HEAD", TRACK_STREAM),
     ("GET", "/api/v1/listen-together/room"),
@@ -155,7 +154,7 @@ pub async fn guest_gate(
             match route.as_deref() {
                 Some(TRACK_STREAM) => end_with_session(response, session),
                 Some(route) if route.starts_with("/api/v1/library/") => {
-                    guest_library_response(response, route == LIBRARY_SEARCH).await
+                    without_file_paths(response).await
                 }
                 _ => response,
             }
@@ -174,8 +173,7 @@ fn end_with_session(response: Response, session: GuestSession) -> Response {
 
 /// A Track's `filePath` says where the Owner's files live, and no client
 /// reads it. The field stays, empty, so the JSON keeps the contract's shape.
-/// Library Search also finds Playlists, which stay private to the Owner.
-async fn guest_library_response(response: Response, is_search: bool) -> Response {
+async fn without_file_paths(response: Response) -> Response {
     let is_json = response
         .headers()
         .get(header::CONTENT_TYPE)
@@ -191,28 +189,9 @@ async fn guest_library_response(response: Response, is_search: bool) -> Response
         return Response::from_parts(parts, Body::from(bytes));
     };
     blank_file_paths(&mut value);
-    if is_search {
-        remove_playlists(&mut value);
-    }
     parts.headers.remove(header::CONTENT_LENGTH);
     let body = serde_json::to_vec(&value).expect("JSON value encodes");
     Response::from_parts(parts, Body::from(body))
-}
-
-fn remove_playlists(results: &mut Value) {
-    let found = results
-        .get_mut("playlists")
-        .and_then(Value::as_array_mut)
-        .map_or(0, |playlists| std::mem::take(playlists).len());
-    if let Some(total) = results.get("total").and_then(Value::as_u64) {
-        results["total"] = Value::from(total.saturating_sub(found as u64));
-    }
-    let best_is_playlist = results
-        .pointer("/bestMatch/type")
-        .is_some_and(|kind| kind == "playlist");
-    if best_is_playlist && let Some(fields) = results.as_object_mut() {
-        fields.remove("bestMatch");
-    }
 }
 
 fn blank_file_paths(value: &mut Value) {
@@ -280,33 +259,6 @@ mod tests {
             assert_eq!(classify("GET", path), Access::Denied, "{path}");
         }
         assert_eq!(classify("POST", "/join"), Access::Denied);
-    }
-
-    #[test]
-    fn hides_playlists_from_library_search() {
-        let mut value = serde_json::json!({
-            "bestMatch": {"id": "p1", "type": "playlist"},
-            "playlists": [{"id": "p1"}, {"id": "p2"}],
-            "total": 3,
-            "tracks": [{"id": "t1"}],
-        });
-        remove_playlists(&mut value);
-        assert_eq!(
-            value,
-            serde_json::json!({
-                "playlists": [],
-                "total": 1,
-                "tracks": [{"id": "t1"}],
-            })
-        );
-
-        let mut value = serde_json::json!({
-            "bestMatch": {"id": "t1", "type": "track"},
-            "playlists": [],
-            "total": 1,
-        });
-        remove_playlists(&mut value);
-        assert_eq!(value["bestMatch"]["id"], "t1");
     }
 
     #[test]

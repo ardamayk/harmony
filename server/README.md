@@ -38,7 +38,7 @@ Listen Together lets friends join a Room on your Music Server through an Invite 
 
 **Point your tunnel or reverse proxy at `GUEST_ADDR`, never at `SERVER_ADDR`.** `SERVER_ADDR` has no authentication: it trusts every request because only your own machine can reach it. Exposing it hands your whole Music Server to the internet, including deleting your library. `GUEST_ADDR` serves only the Web Client, joining, and what a Guest may use, and it refuses everything else.
 
-The proxy must terminate HTTPS and pass the public host through in the `Host` header; the Guest Listener refuses any other host. With nginx that means `proxy_set_header Host $host;` (its default sends the upstream's name instead), and it needs `proxy_buffering off` for the Room's event stream. Caddy and `cloudflared` keep the host unless you configure them otherwise.
+The proxy must terminate HTTPS and pass the public host through in the `Host` header; the Guest Listener refuses any other host. With nginx that means `proxy_set_header Host $http_host;`, which keeps a non-default port (`$host` drops it, and nginx's default sends the upstream's name instead), and it needs `proxy_buffering off` for the Room's event stream. Caddy and `cloudflared` keep the host unless you configure them otherwise.
 
 A Room lives in memory for at most 24 hours, and a restart ends it. Anyone holding the Invite Link can join until the Room closes, so share it like a password. Each Guest streams from your connection, at the Track's own bitrate.
 

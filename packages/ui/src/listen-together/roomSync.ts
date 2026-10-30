@@ -293,7 +293,12 @@ function planOtherSource(
 			return [
 				{
 					type: "command",
-					command: { type: "skip", direction, fromTrackId: target.trackId },
+					command: {
+						type: "skip",
+						direction,
+						fromTrackId: target.trackId,
+						fromIndex: target.index,
+					},
 				},
 			];
 		}
@@ -356,6 +361,7 @@ function planEnded(
 					type: "skip",
 					direction: "next",
 					fromTrackId: target.trackId,
+					fromIndex: target.index,
 				},
 			},
 		];

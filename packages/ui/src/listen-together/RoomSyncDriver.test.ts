@@ -227,7 +227,7 @@ describe("RoomSyncDriver", () => {
 		await vi.advanceTimersByTimeAsync(SYNC_TICK_MS);
 
 		expect(commands).toEqual([
-			{ type: "skip", direction: "next", fromTrackId: "track-1" },
+			{ type: "skip", direction: "next", fromTrackId: "track-1", fromIndex: 0 },
 		]);
 		const source = engine.getState().source;
 		expect(source?.type === "track" && source.track.id).toBe("track-1");
@@ -347,7 +347,12 @@ describe("RoomSyncDriver", () => {
 			await vi.advanceTimersByTimeAsync(SYNC_TICK_MS);
 
 			expect(commands).toEqual([
-				{ type: "skip", direction: "next", fromTrackId: "track-1" },
+				{
+					type: "skip",
+					direction: "next",
+					fromTrackId: "track-1",
+					fromIndex: 0,
+				},
 			]);
 		});
 

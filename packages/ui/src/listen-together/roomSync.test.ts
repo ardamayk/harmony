@@ -369,7 +369,12 @@ describe("local changes become Room commands", () => {
 		expect(actions).toEqual([
 			{
 				type: "command",
-				command: { type: "skip", direction: "next", fromTrackId: "track-b" },
+				command: {
+					type: "skip",
+					direction: "next",
+					fromTrackId: "track-b",
+					fromIndex: 1,
+				},
 			},
 		]);
 	});
@@ -536,7 +541,12 @@ describe("the end of a Track", () => {
 		expect(sim.step(room, ended, 100_000)).toEqual([
 			{
 				type: "command",
-				command: { type: "skip", direction: "next", fromTrackId: "track-b" },
+				command: {
+					type: "skip",
+					direction: "next",
+					fromTrackId: "track-b",
+					fromIndex: 1,
+				},
 			},
 		]);
 		sim.update(settleCommand);

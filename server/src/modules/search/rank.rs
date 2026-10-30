@@ -446,21 +446,32 @@ pub struct Ranked {
 }
 
 /// Strong direct matches first; typo correction only when no type has one.
-pub fn rank(index: &Index, query: &Query, all: bool) -> Ranked {
-    let strong = evaluate_all(index, query, false);
+/// A `hidden_kind` is left out before ranking, so it never counts anywhere.
+pub fn rank(index: &Index, query: &Query, all: bool, hidden_kind: Option<&str>) -> Ranked {
+    let strong = evaluate_all(index, query, false, hidden_kind);
     if !strong.is_empty() {
         let best = strong[0].entity.clone();
         let mut ranked = assemble(strong, Match::Direct, all);
         ranked.best_match = Some(best);
         return ranked;
     }
-    assemble(evaluate_all(index, query, true), Match::Corrected, all)
+    assemble(
+        evaluate_all(index, query, true, hidden_kind),
+        Match::Corrected,
+        all,
+    )
 }
 
-fn evaluate_all(index: &Index, query: &Query, fuzzy: bool) -> Vec<Candidate> {
+fn evaluate_all(
+    index: &Index,
+    query: &Query,
+    fuzzy: bool,
+    hidden_kind: Option<&str>,
+) -> Vec<Candidate> {
     let mut candidates: Vec<Candidate> = index
         .entities
         .iter()
+        .filter(|item| hidden_kind != Some(item.kind.as_str()))
         .filter_map(|item| evaluate(item, query, fuzzy))
         .collect();
     // Stable, like sort.SliceStable.

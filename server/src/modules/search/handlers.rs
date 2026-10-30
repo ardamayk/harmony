@@ -4,12 +4,13 @@ use super::rank::Query;
 use super::service::SearchResponse;
 use crate::app::AppState;
 use crate::auth;
+use crate::modules::listen_together::GuestSession;
 use crate::query::GoQuery;
 use crate::respond::{ApiError, ApiResult};
 use crate::searchdata;
 use axum::extract::State;
 use axum::routing::get;
-use axum::{Json, Router};
+use axum::{Extension, Json, Router};
 
 const MAX_QUERY_CHARACTERS: usize = 200;
 
@@ -17,7 +18,11 @@ pub fn routes() -> Router<AppState> {
     Router::new().route("/api/v1/library/search", get(search))
 }
 
-async fn search(State(state): State<AppState>, query: GoQuery) -> ApiResult<Json<SearchResponse>> {
+async fn search(
+    State(state): State<AppState>,
+    guest: Option<Extension<GuestSession>>,
+    query: GoQuery,
+) -> ApiResult<Json<SearchResponse>> {
     let raw = query.get("q");
     if raw.trim().is_empty() {
         return Err(ApiError::bad_request("query parameter q is required"));
@@ -45,7 +50,8 @@ async fn search(State(state): State<AppState>, query: GoQuery) -> ApiResult<Json
     };
     let response = state
         .search
-        .search(auth::current_user().id, &prepared, all)
+        // Playlists stay private to the Owner (ADR 0037).
+        .search(auth::current_user().id, &prepared, all, guest.is_none())
         .await
         .map_err(|error| {
             tracing::error!(%error, "Library Search failed");

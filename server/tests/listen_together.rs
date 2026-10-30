@@ -434,6 +434,38 @@ async fn session_operations_need_a_live_session() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn library_search_hides_every_playlist_from_a_guest() {
+    let harness = harness().await;
+    // More than one result group holds, so a capped group cannot hide the rest.
+    for number in 0..7 {
+        sqlx::query("INSERT INTO playlists (id, user_id, name) VALUES (?, ?, ?)")
+            .bind(format!("playlist-{number}"))
+            .bind(earthly_music_server::auth::DEFAULT_USER_ID)
+            .bind(format!("Hero Mix {number}"))
+            .execute(&harness.state.db)
+            .await
+            .unwrap();
+    }
+    let room = open_room(&harness).await;
+    let (cookie, _) = join(&harness, &token(&room)).await;
+    let path = "/api/v1/library/search?q=hero";
+
+    let (_, _, owner) = send(&harness.owner, on_owner(Method::GET, path, None)).await;
+    let (status, _, guest) = send(
+        &harness.guest,
+        on_guest(Method::GET, path, Some(&cookie), None),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(owner["total"], 8);
+    assert_eq!(guest["total"], 1);
+    assert_eq!(guest["playlists"], json!([]));
+    assert_eq!(guest["bestMatch"]["type"], "track");
+    assert!(!guest.to_string().contains("Hero Mix"), "{guest}");
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn a_guest_never_learns_where_the_owners_files_are() {
     let harness = harness().await;
     let room = open_room(&harness).await;

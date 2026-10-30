@@ -560,10 +560,12 @@ export function PlaybackProvider({
 	const skipFailedTrack = useCallback(() => {
 		setCountdownSeconds(null);
 		if (roomRef.current) {
+			const fromIndex = roomRef.current.currentIndex;
 			void sendRoomCommandRef.current?.({
 				type: "skip",
 				direction: "next",
 				...(failedTrackId ? { fromTrackId: failedTrackId } : {}),
+				...(fromIndex === null ? {} : { fromIndex }),
 			});
 			return;
 		}

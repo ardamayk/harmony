@@ -53,6 +53,7 @@ pub enum Command {
         direction: SkipDirection,
         #[serde(default)]
         from_track_id: Option<String>,
+        from_index: Option<usize>,
     },
     SetLyricsOpen {
         open: bool,
@@ -144,7 +145,8 @@ impl RoomState {
             Command::Skip {
                 direction,
                 from_track_id,
-            } => self.skip(direction, from_track_id.as_deref(), now_ms),
+                from_index,
+            } => self.skip(direction, from_track_id.as_deref(), from_index, now_ms),
             Command::SetLyricsOpen { open } if self.lyrics_open != open => {
                 self.lyrics_open = open;
                 true
@@ -157,12 +159,21 @@ impl RoomState {
         changed
     }
 
-    fn skip(&mut self, direction: SkipDirection, from_track_id: Option<&str>, now_ms: i64) -> bool {
+    fn skip(
+        &mut self,
+        direction: SkipDirection,
+        from_track_id: Option<&str>,
+        from_index: Option<usize>,
+        now_ms: i64,
+    ) -> bool {
         let Some(index) = self.current_index else {
             return false;
         };
         // Every client reports the end of a Track; only the first one counts.
-        if from_track_id.is_some_and(|id| self.track_ids[index] != id) {
+        // The position settles it when one Track is queued twice in a row.
+        if from_track_id.is_some_and(|id| self.track_ids[index] != id)
+            || from_index.is_some_and(|from| from != index)
+        {
             return false;
         }
         match direction {
@@ -214,6 +225,7 @@ mod tests {
         Command::Skip {
             direction,
             from_track_id: from.map(str::to_owned),
+            from_index: None,
         }
     }
 
@@ -331,6 +343,20 @@ mod tests {
         assert!(!room.apply(skip(SkipDirection::Next, Some("a")), 2_001));
         assert_eq!(room.current_index, Some(1));
         assert_eq!(room.revision, revision);
+    }
+
+    #[test]
+    fn a_second_report_for_a_track_queued_twice_changes_nothing() {
+        let mut room = playing(&["a", "a", "b"], 0);
+        let report = || Command::Skip {
+            direction: SkipDirection::Next,
+            from_track_id: Some("a".to_owned()),
+            from_index: Some(0),
+        };
+        assert!(room.apply(report(), 2_000));
+        assert_eq!(room.current_index, Some(1));
+        assert!(!room.apply(report(), 2_001));
+        assert_eq!(room.current_index, Some(1));
     }
 
     #[test]

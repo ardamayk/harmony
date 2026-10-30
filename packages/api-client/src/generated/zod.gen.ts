@@ -60,7 +60,8 @@ export const zListenTogetherSeekCommand = z.object({
 export const zListenTogetherSkipCommand = z.object({
     type: z.enum(['skip']),
     direction: z.enum(['next', 'previous']),
-    fromTrackId: z.guid().optional()
+    fromTrackId: z.guid().optional(),
+    fromIndex: z.int().gte(0).optional()
 });
 
 export const zListenTogetherSetLyricsOpenCommand = z.object({

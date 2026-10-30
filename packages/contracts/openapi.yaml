@@ -2067,7 +2067,7 @@ paths:
       summary: Change the Room State
       description: >-
         The last command to reach the Music Server wins. A skip carrying a
-        fromTrackId that is no longer current changes nothing, so every client
+        fromTrackId or fromIndex that is no longer current changes nothing, so every client
         may report the end of a Track. A playTracks naming a Track outside
         the library answers 400 with field trackIds.
       requestBody:
@@ -2468,6 +2468,12 @@ components:
           type: string
           format: uuid
           description: When set, the skip applies only if this is still the current Track.
+        fromIndex:
+          type: integer
+          minimum: 0
+          description: >-
+            When set, the skip applies only if the Room is still at this
+            position, since a Room Queue can hold one Track twice in a row.
     ListenTogetherSetLyricsOpenCommand:
       type: object
       required: [type, open]
