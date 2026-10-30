@@ -311,24 +311,29 @@ test("installs an External Track from Soulseek and reviews it in Import Music", 
 	await expect(install).toBeVisible();
 	await expect(install.getByLabel("Soulseek query")).toHaveValue(QUERY);
 	await expect(install.getByRole("radio", { name: "Album" })).toBeChecked();
-	await install.getByRole("button", { name: "Search Soulseek" }).click();
 
-	const flac = install.getByRole("listitem", { name: "FLAC 24-bit / 48 kHz" });
-	await expect(flac).toContainText(
+	// A quality from the fixed list comes first; the search waits for it.
+	const searchButton = install.getByRole("button", { name: "Search Soulseek" });
+	await expect(searchButton).toBeDisabled();
+	await install.getByRole("button", { name: "Quality" }).click();
+	await page.getByRole("menuitemradio", { name: "FLAC 24/48" }).click();
+	await expect(
+		install.getByRole("button", { name: "Quality, FLAC 24/48" }),
+	).toBeVisible();
+	await searchButton.click();
+
+	// Only the sources of the chosen quality are listed.
+	await expect(install).toContainText("2 sources for FLAC 24/48");
+	await expect(install).toContainText(
 		"2 files · 80.0 MiB · 2 sources (1 complete)",
 	);
-	await expect(
-		install.getByRole("listitem", { name: "MP3 320 kbps" }),
-	).toBeVisible();
-	await flac
-		.getByRole("button", { name: "Sources for FLAC 24-bit / 48 kHz" })
-		.click();
-	await expect(flac.getByText("1/2 files")).toBeVisible();
+	const sources = install.getByRole("list", { name: "Sources for FLAC 24/48" });
+	await expect(sources.getByRole("listitem")).toHaveCount(2);
+	await expect(sources.getByText("1/2 files")).toBeVisible();
+	await expect(install.getByText("carol")).toHaveCount(0);
 	await expect(install).not.toContainText(/best/i);
 
-	await flac
-		.getByRole("button", { name: "Install FLAC 24-bit / 48 kHz" })
-		.click();
+	await install.getByRole("button", { name: "Install FLAC 24/48" }).click();
 	await expect
 		.poll(() => stub.acquisitionStarts)
 		.toEqual([{ searchId: SEARCH_ID, versionKey: "flac-24-48000" }]);
