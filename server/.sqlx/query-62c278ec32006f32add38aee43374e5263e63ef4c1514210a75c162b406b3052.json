@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id AS \"id!\" FROM soulseek_acquisitions WHERE user_id = ?\n            ORDER BY created_at DESC, rowid DESC",
+  "query": "SELECT id AS \"id!\" FROM soulseek_acquisitions WHERE user_id = ? AND dismissed = 0\n            ORDER BY created_at DESC, rowid DESC",
   "describe": {
     "columns": [
       {
@@ -22,5 +22,5 @@
       true
     ]
   },
-  "hash": "d3d1ed149c1e1008e9854e557c873e8e53366c9fee08227be4ad63006cdaf39c"
+  "hash": "62c278ec32006f32add38aee43374e5263e63ef4c1514210a75c162b406b3052"
 }

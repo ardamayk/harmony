@@ -42,7 +42,8 @@ impl Default for WorkerTiming {
 }
 
 /// The longest slskd may take to remove an acquisition's transfers when it
-/// is cancelled or finished; what is left then, the worker removes later.
+/// is cancelled, finished or dismissed; what is left then, the worker
+/// removes later, keeping a dismissed acquisition until it has.
 const REMOTE_CLEANUP_DEADLINE: Duration = Duration::from_secs(5);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -183,6 +184,10 @@ pub struct Acquisition {
     pub created_at: String,
     pub updated_at: String,
     pub files: Vec<AcquisitionFile>,
+    /// Dismissed by the listener while slskd still held some of its
+    /// transfers: invisible to the listener, kept for the worker to remove
+    /// them, then deleted.
+    pub dismissed: bool,
 }
 
 impl Acquisition {
@@ -361,6 +366,7 @@ impl Soulseek {
             created_at: String::new(),
             updated_at: String::new(),
             files,
+            dismissed: false,
         };
         if let Err(error) = repo.insert(DEFAULT_USER_ID, &acquisition).await {
             self.cancel_batch(&acquisition).await;
@@ -387,15 +393,21 @@ impl Soulseek {
         Ok(observed)
     }
 
+    /// The acquisition as the listener sees it; a dismissed one is not found.
     pub async fn get_acquisition(&self, id: &str) -> Result<Acquisition, SoulseekError> {
         self.ensure_enabled()?;
-        let acquisition = self
-            .repo()
+        let acquisition = self.visible(id).await?;
+        Ok(self.observe(acquisition).await)
+    }
+
+    /// The stored acquisition unless it is missing or dismissed.
+    async fn visible(&self, id: &str) -> Result<Acquisition, SoulseekError> {
+        self.repo()
             .get(DEFAULT_USER_ID, id)
             .await
             .map_err(internal)?
-            .ok_or(SoulseekError::AcquisitionNotFound)?;
-        Ok(self.observe(acquisition).await)
+            .filter(|acquisition| !acquisition.dismissed)
+            .ok_or(SoulseekError::AcquisitionNotFound)
     }
 
     /// The acquisition as the listener sees it now: completed as soon as its
@@ -457,17 +469,16 @@ impl Soulseek {
     /// slskd's transfers for at most [`REMOTE_CLEANUP_DEADLINE`]; the worker
     /// removes what slskd did not in time. A finished one (failed, completed
     /// or cancelled) is dismissed instead: its unconfirmed batch is
-    /// cancelled, it is removed, and the listener no longer sees it. Neither
-    /// is possible while the batch commits.
+    /// cancelled, its copies are deleted and its transfers stopped the same
+    /// way, and the listener no longer sees it. It is deleted at once when
+    /// slskd removed every transfer in time; otherwise it is kept, marked
+    /// dismissed, until the worker removes the rest. Neither is possible
+    /// while the batch commits; a dismissed acquisition is not found.
     pub async fn cancel_acquisition(&self, id: &str) -> Result<(), SoulseekError> {
         self.ensure_enabled()?;
         let repo = self.repo();
         let _lock = self.acquisition_lock().await;
-        let acquisition = repo
-            .get(DEFAULT_USER_ID, id)
-            .await
-            .map_err(internal)?
-            .ok_or(SoulseekError::AcquisitionNotFound)?;
+        let acquisition = self.visible(id).await?;
         let progress = self.batch_progress(&acquisition).await?;
         if progress == BatchProgress::Confirming {
             return Err(SoulseekError::Conflict(
@@ -483,9 +494,15 @@ impl Soulseek {
             | AcquisitionState::Completed
             | AcquisitionState::Cancelled => {
                 self.discard_downloads(&mut acquisition).await;
-                repo.delete(DEFAULT_USER_ID, &acquisition.id)
-                    .await
-                    .map_err(internal)
+                if holds_transfers(&acquisition) {
+                    // Kept for the worker to remove the transfers left.
+                    acquisition.dismissed = true;
+                    repo.save(&acquisition).await.map_err(internal)
+                } else {
+                    repo.delete(DEFAULT_USER_ID, &acquisition.id)
+                        .await
+                        .map_err(internal)
+                }
             }
             AcquisitionState::Downloading
             | AcquisitionState::Importing
@@ -506,7 +523,9 @@ impl Soulseek {
     /// Deletes the copies in slskd's download directory, then removes every
     /// transfer of the acquisition from slskd, all at once and for at most
     /// [`REMOTE_CLEANUP_DEADLINE`]. A transfer slskd did not answer for in
-    /// time keeps its id, for the worker to remove later. Failures are
+    /// time keeps its id, for the worker to remove later; a caller that
+    /// would delete the acquisition keeps it while such an id is left, or
+    /// the transfer would never be removed. Failures are
     /// logged: a copy that cannot be removed now is not worth failing the
     /// caller.
     async fn discard_downloads(&self, acquisition: &mut Acquisition) {
@@ -654,7 +673,8 @@ impl Soulseek {
     }
 
     /// Removes the slskd transfers a finished acquisition still holds:
-    /// those slskd did not remove in time when it was cancelled or ended.
+    /// those slskd did not remove in time when it was cancelled, ended or
+    /// dismissed. A dismissed acquisition is deleted once none is left.
     async fn sweep_finished(&self) {
         let repo = self.repo();
         let finished = match repo.list_finished_with_transfers().await {
@@ -674,7 +694,11 @@ impl Soulseek {
             }
             let before = acquisition.clone();
             self.discard_downloads(&mut acquisition).await;
-            if acquisition != before
+            if acquisition.dismissed && !holds_transfers(&acquisition) {
+                if let Err(error) = repo.delete(&user_id, &id).await {
+                    tracing::error!(%error, acquisition = %id, "delete dismissed Soulseek Acquisition failed");
+                }
+            } else if acquisition != before
                 && let Err(error) = repo.save(&acquisition).await
             {
                 tracing::error!(%error, acquisition = %id, "save Soulseek Acquisition failed");
@@ -1133,6 +1157,14 @@ fn assign(acquisition: &mut Acquisition, index: usize) -> bool {
         assigned = true;
     }
     assigned
+}
+
+/// Whether some file still holds an slskd transfer.
+fn holds_transfers(acquisition: &Acquisition) -> bool {
+    acquisition
+        .files
+        .iter()
+        .any(|file| file.transfer_id.is_some())
 }
 
 fn internal(error: impl std::fmt::Display) -> SoulseekError {

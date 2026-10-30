@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id AS \"id!\", query, scope, version_key, quality_json, sources_json,\n                source_index, state, batch_id, failure_reason, progress_at_ms,\n                created_at AS \"created_at: String\", updated_at AS \"updated_at: String\"\n            FROM soulseek_acquisitions WHERE id = ? AND user_id = ?",
+  "query": "SELECT id AS \"id!\", query, scope, version_key, quality_json, sources_json,\n                source_index, state, batch_id, failure_reason, progress_at_ms,\n                dismissed AS \"dismissed: bool\",\n                created_at AS \"created_at: String\", updated_at AS \"updated_at: String\"\n            FROM soulseek_acquisitions WHERE id = ? AND user_id = ?",
   "describe": {
     "columns": [
       {
@@ -125,8 +125,19 @@
         }
       },
       {
-        "name": "created_at: String",
+        "name": "dismissed: bool",
         "ordinal": 11,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "soulseek_acquisitions",
+            "name": "dismissed"
+          }
+        }
+      },
+      {
+        "name": "created_at: String",
+        "ordinal": 12,
         "type_info": "Datetime",
         "origin": {
           "Table": {
@@ -137,7 +148,7 @@
       },
       {
         "name": "updated_at: String",
-        "ordinal": 12,
+        "ordinal": 13,
         "type_info": "Datetime",
         "origin": {
           "Table": {
@@ -163,8 +174,9 @@
       true,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "2caf86429bf58030fef702f0c1b95c43b58d903a758119fe0e6fc7b96eaa2343"
+  "hash": "d692190b9ff4a723923ef550e4913edbfb3119f67db96e092576c9eede9c6b57"
 }

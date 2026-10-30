@@ -2157,6 +2157,69 @@ async fn cancelling_the_batch_through_its_own_route_cancels_the_acquisition() {
     assert_eq!(acquisition(&harness, &id).await["state"], "cancelled");
 }
 
+async fn stored_acquisitions(harness: &Harness) -> i64 {
+    sqlx::query_scalar("SELECT COUNT(*) FROM soulseek_acquisitions")
+        .fetch_one(&harness.state.db)
+        .await
+        .unwrap()
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_dismissed_acquisition_is_kept_until_slskd_removes_its_transfers() {
+    let slskd = FakeSlskd::start().await;
+    slskd.user_behaves("alice", Behavior::Hold);
+    let (harness, search_id) = acquiring(&slskd, NO_STALL).await;
+    let id = acquire_hi_res(&harness, &search_id).await;
+    wait_for(&harness, &id, "downloads in progress", |body| {
+        states(body) == ["downloading", "downloading"]
+    })
+    .await;
+    slskd.hold_removals();
+    let uri = format!("/api/v1/soulseek/acquisitions/{id}");
+    // Cancelling leaves the transfers slskd holds with the cancelled
+    // acquisition; dismissing it then cannot remove them either.
+    let (status, _) = send(&harness.router, Method::DELETE, &uri).await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    assert_eq!(acquisition(&harness, &id).await["state"], "cancelled");
+    let started = tokio::time::Instant::now();
+    let (status, _) = send(&harness.router, Method::DELETE, &uri).await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    assert!(
+        started.elapsed() < Duration::from_secs(15),
+        "dismissing waited {:?} on slskd",
+        started.elapsed()
+    );
+    assert!(!slskd.transfers().is_empty(), "slskd removed nothing yet");
+    // The listener no longer sees it.
+    let (status, body) = send(&harness.router, Method::GET, &uri).await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
+    assert_eq!(body["code"], "acquisition_not_found", "{body}");
+    let (_, list) = send(
+        &harness.router,
+        Method::GET,
+        "/api/v1/soulseek/acquisitions",
+    )
+    .await;
+    assert_eq!(list["items"], json!([]));
+    let (status, _) = send(&harness.router, Method::DELETE, &uri).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    // The worker still removes its transfers once slskd answers again, and
+    // then the acquisition itself.
+    assert_eq!(stored_acquisitions(&harness).await, 1);
+    slskd.release_removals();
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(15);
+    while !slskd.transfers().is_empty() || stored_acquisitions(&harness).await != 0 {
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "{:?}",
+            slskd.transfers()
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    let (status, _) = send(&harness.router, Method::DELETE, &uri).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn a_peer_path_out_of_the_download_directory_is_never_offered_or_deleted() {
     let slskd = FakeSlskd::start().await;

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE soulseek_acquisitions\n            SET source_index = ?, state = ?, batch_id = ?, failure_reason = ?, progress_at_ms = ?,\n                dismissed = ?, updated_at = CURRENT_TIMESTAMP\n            WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 7
+    },
+    "nullable": []
+  },
+  "hash": "e2fc89300451a202976de807fce168a73f5c783ef1441f3ebdae98164df2354b"
+}

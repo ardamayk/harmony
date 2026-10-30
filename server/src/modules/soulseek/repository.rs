@@ -84,13 +84,14 @@ impl Repository {
         sqlx::query!(
             "UPDATE soulseek_acquisitions
             SET source_index = ?, state = ?, batch_id = ?, failure_reason = ?, progress_at_ms = ?,
-                updated_at = CURRENT_TIMESTAMP
+                dismissed = ?, updated_at = CURRENT_TIMESTAMP
             WHERE id = ?",
             source_index,
             state,
             acquisition.batch_id,
             acquisition.failure_reason,
             acquisition.progress_at_ms,
+            acquisition.dismissed,
             acquisition.id,
         )
         .execute(&mut *tx)
@@ -161,6 +162,7 @@ impl Repository {
         let row = sqlx::query!(
             r#"SELECT id AS "id!", query, scope, version_key, quality_json, sources_json,
                 source_index, state, batch_id, failure_reason, progress_at_ms,
+                dismissed AS "dismissed: bool",
                 created_at AS "created_at: String", updated_at AS "updated_at: String"
             FROM soulseek_acquisitions WHERE id = ? AND user_id = ?"#,
             id,
@@ -191,13 +193,15 @@ impl Repository {
             created_at: row.created_at,
             updated_at: row.updated_at,
             files,
+            dismissed: row.dismissed,
         }))
     }
 
-    /// The user's acquisitions, newest first.
+    /// The user's acquisitions the listener sees (none dismissed), newest
+    /// first.
     pub async fn list(&self, user_id: &str) -> Result<Vec<Acquisition>> {
         let ids = sqlx::query_scalar!(
-            r#"SELECT id AS "id!" FROM soulseek_acquisitions WHERE user_id = ?
+            r#"SELECT id AS "id!" FROM soulseek_acquisitions WHERE user_id = ? AND dismissed = 0
             ORDER BY created_at DESC, rowid DESC"#,
             user_id
         )
@@ -214,7 +218,7 @@ impl Repository {
     }
 
     /// Every user's finished acquisitions that still hold an slskd
-    /// transfer, as (user, id).
+    /// transfer, dismissed ones included, as (user, id).
     pub async fn list_finished_with_transfers(&self) -> Result<Vec<(String, String)>> {
         let rows = sqlx::query!(
             r#"SELECT user_id, id AS "id!" FROM soulseek_acquisitions
