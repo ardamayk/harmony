@@ -666,9 +666,16 @@ impl Soulseek {
             let Some(path) = self.downloaded_copy(&file.remote_filename) else {
                 tracing::warn!(acquisition = %acquisition.id, file = %file.name, "downloaded copy disappeared");
                 acquisition.files[index].state = FileState::Failed;
+                // A job an earlier attempt left without its file.
+                if let Some(job_id) = acquisition.files[index].job_id.take()
+                    && let Err(error) = import.cancel_job(&job_id).await
+                {
+                    tracing::warn!(%error, acquisition = %acquisition.id, "cancel unfinished Managed Import job failed");
+                }
                 continue;
             };
-            // A job from before a restart that never got its file.
+            // A job that never got its file: from before a restart, or from
+            // an attempt that failed for a reason other than the file.
             if let Some(job_id) = acquisition.files[index].job_id.take()
                 && let Err(error) = import.cancel_job(&job_id).await
             {
@@ -697,7 +704,15 @@ impl Soulseek {
             {
                 Ok(_) => "previewed",
                 // The Import Preview shows why.
-                Err(_) => "rejected",
+                Err(error) if error.rejects_file() => "rejected",
+                Err(error) => {
+                    // Not the file's fault (reading it, staging, the
+                    // database, a cancellation): it stays downloaded with
+                    // its copy, and the next poll cancels this job and
+                    // feeds it again.
+                    tracing::warn!(%error, acquisition = %acquisition.id, file = %name, "feed downloaded file to Managed Import failed; retrying");
+                    continue;
+                }
             };
             let file = &mut acquisition.files[index];
             file.outcome = Some(outcome.to_owned());

@@ -53,6 +53,8 @@ struct FakeState {
     downloads: Option<PathBuf>,
     /// While set, removing a download waits until it is closed.
     removal_gate: Option<Arc<tokio::sync::Semaphore>>,
+    /// File names a download writes without read permission.
+    unreadable: std::collections::HashSet<String>,
 }
 
 /// What the fake does with a queued download.
@@ -118,6 +120,12 @@ impl FakeState {
             .cloned()
             .unwrap_or_else(|| name.as_bytes().to_vec());
         std::fs::write(folder.join(name), content).unwrap();
+        #[cfg(unix)]
+        if self.unreadable.contains(name) {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(folder.join(name), std::fs::Permissions::from_mode(0o000))
+                .unwrap();
+        }
     }
 }
 
@@ -191,6 +199,15 @@ impl FakeSlskd {
             .unwrap()
             .contents
             .insert(name.to_owned(), data.to_vec());
+    }
+
+    /// A download of `name` lands without read permission.
+    fn lands_unreadable(&self, name: &str) {
+        self.state
+            .lock()
+            .unwrap()
+            .unreadable
+            .insert(name.to_owned());
     }
 
     fn transfers(&self) -> Vec<FakeTransfer> {
@@ -2251,5 +2268,82 @@ async fn a_cover_over_the_artwork_limit_is_skipped_unread() {
             .all(|artwork| !artwork["id"].as_str().unwrap().starts_with("upload-")),
         "{batch:#}"
     );
+    assert!(files_in(&harness.downloads).is_empty());
+}
+
+/// Whether a file without read permission cannot be read here; root reads
+/// it anyway.
+#[cfg(unix)]
+fn permissions_bind() -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("probe");
+    std::fs::write(&path, b"x").unwrap();
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o000)).unwrap();
+    std::fs::read(&path).is_err()
+}
+
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread")]
+async fn a_downloaded_file_managed_import_cannot_read_yet_is_fed_again() {
+    use std::os::unix::fs::PermissionsExt;
+    if !permissions_bind() {
+        return;
+    }
+    let slskd = FakeSlskd::start().await;
+    slskd.lands_unreadable("03 Inspection Fixture.flac");
+    let (harness, id) = strict_album_acquisition(&slskd).await;
+    let fixture = |body: &Value| {
+        body["files"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|file| file["filename"] == "03 Inspection Fixture.flac")
+            .cloned()
+            .unwrap()
+    };
+    // Opening it fails, which is not the file's fault: it stays downloaded
+    // with its copy, is not rejected, and the next polls feed it again
+    // under a new job. The rejected file after it is fed meanwhile.
+    let failed = wait_for(&harness, &id, "a failed first feed", |body| {
+        states(body) == ["downloaded", "staged"] && fixture(body)["jobId"].as_str().is_some()
+    })
+    .await;
+    let first_job = fixture(&failed)["jobId"].as_str().unwrap().to_owned();
+    let copy = harness
+        .downloads
+        .join("Strict Import Tests")
+        .join("03 Inspection Fixture.flac");
+    assert!(copy.exists());
+    let retried = wait_for(&harness, &id, "another feed", |body| {
+        fixture(body)["jobId"]
+            .as_str()
+            .is_some_and(|job| job != first_job)
+    })
+    .await;
+    assert_eq!(retried["state"], "importing", "{retried:#}");
+    assert_eq!(fixture(&retried)["state"], "downloaded", "{retried:#}");
+    assert!(copy.exists());
+
+    std::fs::set_permissions(&copy, std::fs::Permissions::from_mode(0o644)).unwrap();
+    let review = wait_for(&harness, &id, "review", |body| body["state"] == "review").await;
+    assert_eq!(states(&review), ["staged", "staged"], "{review}");
+    let batch_id = review["batchId"].as_str().expect("batchId");
+    let (status, batch) = send(
+        &harness.router,
+        Method::GET,
+        &format!("/api/v1/import-batches/{batch_id}"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{batch}");
+    // The job of the failed attempt was cancelled, not left in the batch.
+    let files = batch["files"].as_array().unwrap();
+    assert_eq!(files.len(), 2, "{batch:#}");
+    assert!(files.iter().all(|file| file["jobId"] != first_job.as_str()));
+    let ready = files
+        .iter()
+        .find(|file| file["originalFilename"] == "03 Inspection Fixture.flac")
+        .expect("the fixture");
+    assert_eq!(ready["state"], "accepted", "{batch:#}");
     assert!(files_in(&harness.downloads).is_empty());
 }

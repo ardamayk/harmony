@@ -210,6 +210,16 @@ impl Error {
         self.validation.as_deref()
     }
 
+    /// Whether the failure is the file's own: it fails validation, or is
+    /// too large or invalid as an upload, so feeding the same bytes again
+    /// fails the same way. Anything else (reading the file, staging, the
+    /// database, a cancellation) may pass on another attempt.
+    pub fn rejects_file(&self) -> bool {
+        self.as_validation().is_some()
+            || self.is(Sentinel::UploadTooLarge)
+            || self.is(Sentinel::InvalidUpload)
+    }
+
     pub fn message(&self) -> &str {
         &self.message
     }
