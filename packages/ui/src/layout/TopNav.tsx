@@ -4,7 +4,7 @@ import { TOP_NAV_HEIGHT_CLASS } from "./shell-metrics";
 import { TopNavActionsSlot } from "./TopNavActions";
 
 const LINK_BASE_CLASS =
-	"flex items-center gap-2 whitespace-nowrap rounded-md px-3 py-2 text-sidebar-foreground text-sm transition hover:bg-muted hover:text-heading focus-visible:bg-muted focus-visible:text-heading focus-visible:outline-none";
+	"flex h-10 items-center gap-2 whitespace-nowrap rounded-md px-3 text-sidebar-foreground text-sm transition hover:bg-muted hover:text-heading focus-visible:bg-muted focus-visible:text-heading focus-visible:outline-none";
 const WINDOW_CONTROL_CLASS =
 	"inline-flex size-8 items-center justify-center rounded-md text-sidebar-foreground transition hover:bg-muted hover:text-heading focus-visible:bg-muted focus-visible:outline-none";
 
@@ -28,10 +28,11 @@ const ROUND_CONTROL_CLASS =
 	"border border-border bg-card text-sidebar-foreground transition hover:bg-muted hover:text-heading focus-visible:bg-muted focus-visible:text-heading focus-visible:outline-none";
 
 /**
- * Top bar: the brand over the Sidebar, Home and the library search field on
- * the page's content line, page actions on the right. The field opens the host's search,
- * whose card drops down over it (`data-library-search-field` is what the
- * card lines up with). The Desktop Client draws no system title bar, so the
+ * Top bar: the brand on the left, Home and the library search field in the
+ * window's centre at one width, page actions on the right. The field opens the
+ * host's search, whose card drops down over it (`data-library-search-field` is
+ * what the card lines up with), over the Queue Drawer when that is open. The
+ * Desktop Client draws no system title bar, so the
  * bar's empty space carries `data-window-drag-region` to move (and
  * double-click to maximize) the window; browsers ignore the attribute.
  */
@@ -46,30 +47,27 @@ export function TopNav({
 		<header
 			data-shell-surface
 			data-window-drag-region
-			className={`flex ${TOP_NAV_HEIGHT_CLASS} shrink-0 items-center border-sidebar-border border-b bg-sidebar text-sidebar-foreground ${
-				windowControls ? "" : "pr-6"
-			}`}
+			// Side tracks with one minimum keep the middle on the window's centre
+			// at every width; it narrows only when the window cannot fit it.
+			className={`relative grid ${TOP_NAV_HEIGHT_CLASS} shrink-0 grid-cols-[minmax(11.5rem,1fr)_minmax(0,42rem)_minmax(11.5rem,1fr)] lg:grid-cols-[minmax(13rem,1fr)_minmax(0,42rem)_minmax(13rem,1fr)] items-center gap-4 bg-sidebar text-sidebar-foreground`}
 		>
-			{/* As wide as the Sidebar, so the search centres on the page rather
-			    than on the window. */}
+			{/* Continues the Sidebar's line to the top, so the two read as one
+			    column while the search stays on the window's centre. */}
 			<div
-				data-window-drag-region
-				className="flex w-60 shrink-0 pl-6 max-lg:w-16 max-lg:pl-3"
-			>
+				aria-hidden
+				className="pointer-events-none absolute inset-y-0 left-0 w-50 border-sidebar-border border-r max-lg:w-17"
+			/>
+			<div data-window-drag-region className="relative flex pl-6">
 				<Link
 					to="/library/albums"
-					className="font-display shrink-0 font-semibold text-shell-brand text-xl tracking-tight max-lg:sr-only"
+					aria-label="Harmony"
+					className="font-display shrink-0 font-semibold text-shell-brand text-xl tracking-tight"
 				>
-					Earthly Audio
+					<span className="max-lg:hidden">Harmony</span>
+					<span className="inline-block w-5 text-center lg:hidden">H</span>
 				</Link>
 			</div>
-			{/* On wide windows the search grows rightward only: the extra width
-			    goes in as margin on its left, half of it moving the centre. */}
-			<div
-				data-window-drag-region
-				className="min-w-0 flex-1 basis-0 xl:mr-24"
-			/>
-			<div className="flex w-full max-w-xl min-w-0 items-center gap-2 xl:max-w-2xl">
+			<div className="flex min-w-0 items-center gap-2">
 				<Link
 					to="/"
 					title="Home"
@@ -96,14 +94,13 @@ export function TopNav({
 			</div>
 			<div
 				data-window-drag-region
-				// The Queue Drawer's width on this side keeps the search centred on
-				// the page between Sidebar and drawer, whether or not it is open.
-				// Narrower windows centre it on the bar, clear of the actions.
-				className="flex min-w-0 flex-1 basis-0 items-center justify-end gap-1 xl:ml-(--queue-drawer-clearance)"
+				className={`flex items-center justify-end gap-1 ${
+					windowControls ? "" : "pr-3.5"
+				}`}
 			>
 				<TopNavActionsSlot />
 				{windowControls ? (
-					<WindowControlButtons controls={windowControls} className="pr-2" />
+					<WindowControlButtons controls={windowControls} className="pr-4" />
 				) : null}
 			</div>
 		</header>

@@ -10,6 +10,10 @@ import {
 } from "lucide-react";
 import { NAV_LINK_CLASS } from "./TopNav";
 
+/** Below `lg` a link is only its icon, which stays where it was. */
+const RAIL_LINK_CLASS = "max-lg:w-11";
+const NAV_ICON_CLASS = "size-5 shrink-0";
+
 const libraryNav = [
 	{ to: "/library/albums", label: "Albums", icon: Disc3 },
 	{ to: "/library/artists", label: "Artists", icon: Users },
@@ -29,7 +33,7 @@ export function Sidebar() {
 		<aside
 			data-sidebar
 			data-shell-surface
-			className="flex w-60 shrink-0 flex-col justify-between border-sidebar-border border-r bg-sidebar p-3 pb-(--player-dock-clearance,0.75rem) text-sidebar-foreground max-lg:w-16 max-lg:px-2"
+			className="flex w-50 shrink-0 flex-col justify-between border-sidebar-border border-r bg-sidebar px-3 pt-6 pb-(--player-dock-clearance,0.75rem) text-sidebar-foreground max-lg:w-17"
 		>
 			<nav aria-label="Library" className="flex flex-col gap-1">
 				{libraryNav.map(({ to, label, icon: Icon }) => (
@@ -37,9 +41,9 @@ export function Sidebar() {
 						key={to}
 						to={to}
 						title={label}
-						className={`${NAV_LINK_CLASS} max-lg:justify-center`}
+						className={`${NAV_LINK_CLASS} ${RAIL_LINK_CLASS}`}
 					>
-						<Icon className="size-4 shrink-0" />
+						<Icon className={NAV_ICON_CLASS} />
 						<span className="max-lg:sr-only">{label}</span>
 					</Link>
 				))}
@@ -47,9 +51,9 @@ export function Sidebar() {
 			<Link
 				to="/settings"
 				title="Settings"
-				className={`${NAV_LINK_CLASS} mt-3 max-lg:justify-center`}
+				className={`${NAV_LINK_CLASS} ${RAIL_LINK_CLASS} my-3`}
 			>
-				<Settings className="size-4 shrink-0" />
+				<Settings className={NAV_ICON_CLASS} />
 				<span className="max-lg:sr-only">Settings</span>
 			</Link>
 		</aside>

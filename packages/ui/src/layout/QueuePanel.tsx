@@ -88,7 +88,7 @@ export function QueuePanel({
 
 	return (
 		<div className="flex h-full min-h-0 flex-col">
-			<div className="flex items-center justify-between gap-2 border-sidebar-border border-b pt-3 pr-3 pb-3 pl-4">
+			<div className="flex items-center justify-between gap-2 border-sidebar-border border-b pt-6 pr-4 pb-3 pl-4">
 				<div className="min-w-0">
 					<h2 className="font-semibold text-heading text-base leading-5.5">
 						Queue
@@ -142,7 +142,7 @@ export function QueuePanel({
 			</div>
 			<div
 				ref={scrollContainerRef}
-				className="min-h-0 flex-1 overflow-y-auto pt-2 pr-2 pb-3 pl-4 scrollbar-hidden"
+				className="min-h-0 flex-1 overflow-y-auto pt-2 pr-3 pb-3 pl-4 scrollbar-hidden"
 			>
 				{(queueConflict || actionError) && (
 					<p
