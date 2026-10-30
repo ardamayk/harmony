@@ -14,6 +14,7 @@ import {
 	PlaybackProvider,
 	TopNav,
 	TopNavActions,
+	TopNavBackdrop,
 } from "../index";
 import { InMemoryPlaybackEngine } from "../playback/testing/InMemoryPlaybackEngine";
 import { Sidebar } from "./Sidebar";
@@ -493,6 +494,35 @@ describe("AppShell", () => {
 		const filters = screen.getByRole("button", { name: "Filters" });
 		expect(filters.closest("header")).toBeTruthy();
 		expect(filters.closest("main")).toBeNull();
+	});
+
+	it("paints a page's backdrop behind the bar, right of the Sidebar column", () => {
+		const { container } = renderShell(
+			<AppShell>
+				<TopNavBackdrop>
+					<div data-testid="wash" />
+				</TopNavBackdrop>
+			</AppShell>,
+		);
+		const backdrop = screen.getByTestId("wash").parentElement as HTMLElement;
+		expect(backdrop.closest("header")).toBe(container.querySelector("header"));
+		expect(backdrop.className).toContain("left-62.5");
+		expect(backdrop.className).toContain("pointer-events-none");
+	});
+
+	it("keeps the bar's backdrop empty when no page supplies one", () => {
+		const { container } = renderShell(<AppShell />);
+		const backdrop = container.querySelector("[data-top-nav-backdrop]");
+		expect(backdrop?.childElementCount).toBe(0);
+	});
+
+	it("drops a page's backdrop outside an App Shell", () => {
+		render(
+			<TopNavBackdrop>
+				<div data-testid="wash" />
+			</TopNavBackdrop>,
+		);
+		expect(screen.queryByTestId("wash")).toBeNull();
 	});
 
 	it("shows window controls only when the host supplies them", () => {

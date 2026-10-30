@@ -1,5 +1,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+	act,
+	cleanup,
+	fireEvent,
+	render,
+	screen,
+	within,
+} from "@testing-library/react";
 import {
 	afterEach,
 	beforeEach,
@@ -8,12 +15,14 @@ import {
 	it,
 	vi,
 } from "vite-plus/test";
+import { stubIntersectionObserver } from "#/test-intersection-observer";
 import { AlbumDetailContent } from "./-album-page";
 
 const mocks = vi.hoisted(() => ({
 	getAlbum: vi.fn(),
 	playTrack: vi.fn(),
 	queueTracks: vi.fn(),
+	coverAccent: vi.fn(),
 }));
 
 vi.mock("@tanstack/react-router", async (importOriginal) => ({
@@ -72,7 +81,10 @@ vi.mock("@repo/ui", () => ({
 		coverUrl?: string | null;
 		className?: string;
 	}) => (coverUrl ? <img alt="" src={coverUrl} className={className} /> : null),
-	useCoverAccent: () => ({}),
+	TopNavBackdrop: ({ children }: { children: React.ReactNode }) => (
+		<div data-testid="top-nav-backdrop">{children}</div>
+	),
+	useCoverAccent: mocks.coverAccent,
 	useLayout: () => ({ preferences: { theme: { mode: "dark" } } }),
 	useResolvedThemeMode: () => "dark",
 	usePlayback: () => ({
@@ -92,6 +104,7 @@ function renderWithQuery(ui: React.ReactElement) {
 
 describe("album detail route", () => {
 	beforeEach(() => {
+		mocks.coverAccent.mockReturnValue({});
 		mocks.getAlbum.mockResolvedValue({
 			id: "album-1",
 			title: "1989",
@@ -167,5 +180,80 @@ describe("album detail route", () => {
 		expect(content.className).toContain("page-content-column");
 		expect(content.parentElement?.className).toContain("pl-(--shell-inset)");
 		expect(content.parentElement?.className).toContain("page-edge-right");
+	});
+
+	it("runs the cover colour behind the Top Nav and scrolls it with the page", async () => {
+		mocks.coverAccent.mockReturnValue({ "--cover-tint": "hsl(10 50% 55%)" });
+		renderWithQuery(<AlbumDetailContent albumId="album-1" />);
+		await screen.findByRole("heading", { name: "1989" });
+
+		const wash = within(screen.getByTestId("top-nav-backdrop")).getByTestId(
+			"top-nav-wash",
+		);
+		expect(wash.style.getPropertyValue("--cover-tint")).toBe("hsl(10 50% 55%)");
+
+		const scroller = screen.getByTestId("album-detail-content")
+			.parentElement as HTMLElement;
+		scroller.scrollTop = 120;
+		fireEvent.scroll(scroller);
+		expect(wash.style.getPropertyValue("--cover-wash-scroll")).toBe("120px");
+		// A child would inherit the Desktop Client's drag region past the bar.
+		expect(wash.childElementCount).toBe(0);
+	});
+
+	it("leaves the Top Nav flat while the cover has no colour", async () => {
+		renderWithQuery(<AlbumDetailContent albumId="album-1" />);
+		await screen.findByRole("heading", { name: "1989" });
+		expect(screen.queryByTestId("top-nav-wash")).toBeNull();
+	});
+
+	describe("sticky bar", () => {
+		afterEach(() => {
+			vi.unstubAllGlobals();
+		});
+
+		it("shows while the hero's actions are scrolled away, with the same actions", async () => {
+			const observer = stubIntersectionObserver();
+			renderWithQuery(<AlbumDetailContent albumId="album-1" />);
+			await screen.findByRole("heading", { name: "1989" });
+			expect(screen.queryByTestId("detail-sticky-bar")).toBeNull();
+			expect(observer.options[0]?.root).toBe(
+				screen.getByTestId("album-detail-content").parentElement,
+			);
+
+			act(() => observer.scroll("scrolled past"));
+			const bar = within(screen.getByTestId("detail-sticky-bar"));
+			expect(bar.getByText("1989")).toBeTruthy();
+			expect(bar.getByText("Taylor Swift, Guest Artist")).toBeTruthy();
+			// The artist alone: external links stay in the hero.
+			expect(bar.getAllByRole("link")).toHaveLength(1);
+
+			const source = {
+				kind: "album",
+				albumId: "album-1",
+				albumTitle: "1989",
+				artistName: "Taylor Swift, Guest Artist",
+			};
+			fireEvent.click(bar.getByRole("button", { name: "Play" }));
+			expect(mocks.playTrack).toHaveBeenLastCalledWith(
+				"track-1",
+				["track-1"],
+				source,
+			);
+			fireEvent.click(bar.getByRole("button", { name: "Queue album" }));
+			expect(mocks.queueTracks).toHaveBeenLastCalledWith(["track-1"], source);
+
+			act(() => observer.scroll("in view"));
+			expect(screen.queryByTestId("detail-sticky-bar")).toBeNull();
+		});
+
+		it("stays away while the actions are still below the fold", async () => {
+			const observer = stubIntersectionObserver();
+			renderWithQuery(<AlbumDetailContent albumId="album-1" />);
+			await screen.findByRole("heading", { name: "1989" });
+
+			act(() => observer.scroll("below the fold"));
+			expect(screen.queryByTestId("detail-sticky-bar")).toBeNull();
+		});
 	});
 });

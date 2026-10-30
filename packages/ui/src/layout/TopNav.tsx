@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { House, Minus, Search, Square, X } from "lucide-react";
 import { TOP_NAV_HEIGHT_CLASS } from "./shell-metrics";
-import { TopNavActionsSlot } from "./TopNavActions";
+import { TopNavActionsSlot, TopNavBackdropSlot } from "./TopNavActions";
 
 const LINK_BASE_CLASS =
 	"flex h-10 items-center gap-2 whitespace-nowrap rounded-md px-3 text-sidebar-foreground text-sm transition hover:bg-muted hover:text-heading focus-visible:bg-muted focus-visible:text-heading focus-visible:outline-none";
@@ -51,6 +51,8 @@ export function TopNav({
 			// at every width; it narrows only when the window cannot fit it.
 			className={`relative grid ${TOP_NAV_HEIGHT_CLASS} shrink-0 grid-cols-[minmax(11.5rem,1fr)_minmax(0,42rem)_minmax(11.5rem,1fr)] lg:grid-cols-[minmax(16.25rem,1fr)_minmax(0,42rem)_minmax(16.25rem,1fr)] items-center gap-4 bg-sidebar text-sidebar-foreground`}
 		>
+			{/* First, so the columns below (all `relative`) paint over it. */}
+			<TopNavBackdropSlot />
 			{/* Continues the Sidebar's line to the top, so the two read as one
 			    column while the search stays on the window's centre. */}
 			<div
@@ -67,7 +69,7 @@ export function TopNav({
 					<span className="inline-block w-5 text-center lg:hidden">H</span>
 				</Link>
 			</div>
-			<div className="flex min-w-0 items-center gap-2">
+			<div className="relative flex min-w-0 items-center gap-2">
 				<Link
 					to="/"
 					title="Home"
@@ -94,7 +96,7 @@ export function TopNav({
 			</div>
 			<div
 				data-window-drag-region
-				className={`flex items-center justify-end gap-1 ${
+				className={`relative flex items-center justify-end gap-1 ${
 					windowControls ? "" : "pr-3.5"
 				}`}
 			>

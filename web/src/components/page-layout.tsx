@@ -5,6 +5,9 @@ import {
 } from "#/lib/page-layout-classes";
 import { cn } from "#/lib/utils";
 
+/** The scroller of a {@link DetailPageShell}, for what follows its scrolling. */
+export const DETAIL_SCROLLER_SELECTOR = "[data-detail-scroller]";
+
 export function PageShell({
 	testId,
 	header,
@@ -99,7 +102,10 @@ export function DetailPageShell({
 	return (
 		// `page-edge-right` (styles.css) lets the scroller reach the window edge
 		// behind the Queue Drawer, so a header backdrop can run full width.
-		<div className="page-edge-right min-h-0 flex-1 overflow-y-auto scrollbar-hidden pl-(--shell-inset) py-6">
+		<div
+			data-detail-scroller
+			className="page-edge-right min-h-0 flex-1 overflow-y-auto scrollbar-hidden pl-(--shell-inset) py-6"
+		>
 			<div
 				data-testid={testId}
 				className={cn(PAGE_CONTENT_WIDTH_CLASS, className)}

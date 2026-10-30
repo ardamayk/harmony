@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
+	act,
 	cleanup,
 	fireEvent,
 	render,
@@ -15,6 +16,7 @@ import {
 	it,
 	vi,
 } from "vite-plus/test";
+import { stubIntersectionObserver } from "#/test-intersection-observer";
 import { PlaylistDetailContent } from "./-playlist-page";
 import { PlaylistsPage } from "./-playlists-page";
 
@@ -306,6 +308,38 @@ describe("playlist routes", () => {
 			screen.getByText("Create a playlist to organize your library."),
 		).toBeTruthy();
 		expect(screen.queryByRole("button")).toBeNull();
+	});
+
+	it("keeps the Top Nav flat, the wash being the cover pages'", async () => {
+		renderWithQuery(<PlaylistDetailContent playlistId="p1" />);
+		await screen.findByRole("heading", { name: "Favorites" });
+		expect(screen.queryByTestId("top-nav-wash")).toBeNull();
+	});
+
+	it("shows the compact bar with the header's actions while they are scrolled away", async () => {
+		const observer = stubIntersectionObserver();
+		try {
+			renderWithQuery(<PlaylistDetailContent playlistId="p1" />);
+			await screen.findByRole("heading", { name: "Favorites" });
+			expect(screen.queryByTestId("detail-sticky-bar")).toBeNull();
+
+			act(() => observer.scroll("scrolled past"));
+			const bar = within(screen.getByTestId("detail-sticky-bar"));
+			expect(bar.getByText("Favorites")).toBeTruthy();
+			fireEvent.click(bar.getByRole("button", { name: "Play" }));
+			await waitFor(() =>
+				expect(mocks.playTrack).toHaveBeenLastCalledWith(
+					"t1",
+					["t1", "t2", "t3", "t4"],
+					expect.objectContaining({ kind: "playlist", playlistId: "p1" }),
+				),
+			);
+
+			act(() => observer.scroll("in view"));
+			expect(screen.queryByTestId("detail-sticky-bar")).toBeNull();
+		} finally {
+			vi.unstubAllGlobals();
+		}
 	});
 
 	it("plays queues and removes tracks from playlist detail", async () => {

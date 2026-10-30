@@ -94,6 +94,12 @@
 	[data-shell-surface]
 	:is(.bg-popover) {
 	--heading: var(--theme-1);
+/* The bar's text is light here, so a page's cover wash stays on the dark bar
+   instead of the light page. */
+[data-theme-preset="vintage-harbor"]:not(.dark) [data-top-nav-backdrop] {
+	--background: var(--sidebar);
+}
+
 	--text: var(--theme-2);
 	--foreground: var(--theme-2);
 	--caption: color-mix(in oklab, var(--theme-2) 85%, var(--theme-6));

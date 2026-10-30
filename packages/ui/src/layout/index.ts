@@ -27,6 +27,6 @@ export {
 	TopNav,
 	type WindowControls,
 } from "./TopNav";
-export { TopNavActions } from "./TopNavActions";
+export { TopNavActions, TopNavBackdrop } from "./TopNavActions";
 export { UpNextPeek } from "./UpNextPeek";
 export { WidgetDndProvider, WidgetDock } from "./WidgetDock";

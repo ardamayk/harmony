@@ -8,6 +8,11 @@ import { Link } from "@tanstack/react-router";
 import { Disc3, Play, SkipForward, Trash2 } from "lucide-react";
 import { AlbumDeletionDialog } from "#/components/album-deletion-dialog";
 import { CoverWash } from "#/components/cover-wash";
+import {
+	DetailStickyAction,
+	DetailStickyBar,
+	useScrolledPast,
+} from "#/components/detail-sticky-bar";
 import { ExternalLinkButton } from "#/components/external-link-button";
 import { Button } from "#/components/ui/button";
 import {
@@ -24,6 +29,8 @@ import { getAlbumArtistName, getAlbumGenreNames } from "#/lib/library-display";
 
 /** The header names a few genres; the rest are in its tooltip. */
 const MAX_GENRES = 3;
+const ALBUM_RADIO_HINT =
+	"Album radio will build a station from similar album, artist, and genre tracks when recommendations exist.";
 
 function formatTotalDuration(ms: number): string {
 	if (!ms || ms < 0) return "0m";
@@ -76,107 +83,153 @@ export function AlbumDetailHeader({
 	const canDeleteAlbums = useServerCapability(
 		MANAGED_ALBUM_DELETION_CAPABILITY,
 	);
+	const [setActionRow, actionsScrolledPast] = useScrolledPast();
 	return (
-		// Same cache key and size as the Player Bar, so the cover is read once.
-		<CoverWash
-			cacheKey={album.id}
-			imageUrl={apiClient.getAlbumCoverUrl(album.id, 128)}
-		>
-			<ContextMenu>
-				<ContextMenuTrigger render={<div className="@container" />}>
-					<div className="grid gap-8 @xl:grid-cols-media @xl:items-end">
-						<AlbumArt
-							coverUrl={apiClient.getAlbumCoverUrl(album.id, 1024)}
-							title={album.title}
-							className="aspect-square w-full shrink-0 rounded-md shadow-lg text-3xl @xl:size-60"
-						/>
+		<>
+			<DetailStickyBar
+				visible={actionsScrolledPast}
+				cover={
+					<AlbumArt
+						coverUrl={apiClient.getAlbumCoverUrl(album.id, 128)}
+						title={album.title}
+						className="size-16 shrink-0 rounded-sm text-xs"
+					/>
+				}
+				title={album.title}
+				subtitle={
+					<Link
+						to="/library/artists/$artistId"
+						params={{ artistId: album.artistId }}
+						className="hover:text-heading"
+					>
+						{artistName}
+					</Link>
+				}
+			>
+				<DetailStickyAction
+					icon={Play}
+					label="Play"
+					filled
+					onClick={onPlayAlbum}
+				/>
+				<DetailStickyAction
+					icon={SkipForward}
+					label="Queue"
+					description="Queue album"
+					onClick={onQueueAlbum}
+				/>
+				<DetailStickyAction
+					icon={Disc3}
+					label="Radio"
+					description="Album radio"
+					hint={ALBUM_RADIO_HINT}
+					disabled
+				/>
+			</DetailStickyBar>
+			{/* Same cache key and size as the Player Bar, so the cover is read once. */}
+			<CoverWash
+				cacheKey={album.id}
+				imageUrl={apiClient.getAlbumCoverUrl(album.id, 128)}
+			>
+				<ContextMenu>
+					<ContextMenuTrigger render={<div className="@container" />}>
+						<div className="grid gap-8 @xl:grid-cols-media @xl:items-end">
+							<AlbumArt
+								coverUrl={apiClient.getAlbumCoverUrl(album.id, 1024)}
+								title={album.title}
+								className="aspect-square w-full shrink-0 rounded-md shadow-lg text-3xl @xl:size-60"
+							/>
 
-						<div className="flex min-w-0 flex-col">
-							<h1 className="font-semibold text-page-title tracking-tight">
-								{album.title}
-							</h1>
-							<Link
-								to="/library/artists/$artistId"
-								params={{ artistId: album.artistId }}
-								className="mt-3 self-start font-medium text-base text-foreground hover:text-heading"
-							>
-								{artistName}
-							</Link>
+							<div className="flex min-w-0 flex-col">
+								<h1 className="font-semibold text-page-title tracking-tight">
+									{album.title}
+								</h1>
+								<Link
+									to="/library/artists/$artistId"
+									params={{ artistId: album.artistId }}
+									className="mt-3 self-start font-medium text-base text-foreground hover:text-heading"
+								>
+									{artistName}
+								</Link>
 
-							{/* Release date under the artist, genres, track count and
-							    length last; all on the caption step. */}
-							<div className="mt-6 flex flex-col gap-2 text-caption text-sm">
-								{released ? <p>{released}</p> : null}
-								{genres.length > 0 ? (
-									<p title={genres.join(", ")}>
-										{genres.slice(0, MAX_GENRES).join(", ")}
-									</p>
-								) : null}
-								{size ? <p>{size}</p> : null}
+								{/* Release date under the artist, genres, track count and
+								    length last; all on the caption step. */}
+								<div className="mt-6 flex flex-col gap-2 text-caption text-sm">
+									{released ? <p>{released}</p> : null}
+									{genres.length > 0 ? (
+										<p title={genres.join(", ")}>
+											{genres.slice(0, MAX_GENRES).join(", ")}
+										</p>
+									) : null}
+									{size ? <p>{size}</p> : null}
+								</div>
 							</div>
 						</div>
-					</div>
 
-					{/* Actions under the cover, external links at the far right. */}
-					<div className="mt-6 flex flex-wrap items-center gap-2">
-						<Button type="button" size="lg" onClick={onPlayAlbum}>
-							<Play className="size-4" />
-							Play
-						</Button>
-						<Button
-							type="button"
-							size="lg"
-							variant="outline"
-							onClick={onQueueAlbum}
+						{/* Actions under the cover, external links at the far right. */}
+						<div
+							ref={setActionRow}
+							className="mt-6 flex flex-wrap items-center gap-2"
 						>
-							<SkipForward className="size-4" />
-							Queue album
-						</Button>
-						<Button
-							type="button"
-							size="lg"
-							variant="outline"
-							disabled
-							title="Album radio will build a station from similar album, artist, and genre tracks when recommendations exist."
-						>
-							<Disc3 className="size-4" />
-							Album radio
-						</Button>
-						<div className="ml-auto flex gap-2">
-							{externalLinks.map((link) => (
-								<ExternalLinkButton
-									key={link.id}
-									href={link.href}
-									name={link.name}
-									short={link.short}
-									iconSrc={link.iconSrc}
-									iconClassName={link.iconClassName}
-								/>
-							))}
+							<Button type="button" size="lg" onClick={onPlayAlbum}>
+								<Play className="size-4" />
+								Play
+							</Button>
+							<Button
+								type="button"
+								size="lg"
+								variant="outline"
+								onClick={onQueueAlbum}
+							>
+								<SkipForward className="size-4" />
+								Queue album
+							</Button>
+							<Button
+								type="button"
+								size="lg"
+								variant="outline"
+								disabled
+								title={ALBUM_RADIO_HINT}
+							>
+								<Disc3 className="size-4" />
+								Album radio
+							</Button>
+							<div className="ml-auto flex gap-2">
+								{externalLinks.map((link) => (
+									<ExternalLinkButton
+										key={link.id}
+										href={link.href}
+										name={link.name}
+										short={link.short}
+										iconSrc={link.iconSrc}
+										iconClassName={link.iconClassName}
+									/>
+								))}
+							</div>
 						</div>
-					</div>
-				</ContextMenuTrigger>
-				<ContextMenuContent>
-					{canDeleteAlbums ? (
-						<ContextMenuItem
-							variant="destructive"
-							onClick={() => albumDeletion.open(album)}
-						>
-							<Trash2 className="size-4" />
-							Delete album
-						</ContextMenuItem>
-					) : null}
-				</ContextMenuContent>
-				<AlbumDeletionDialog
-					album={albumDeletion.album}
-					preview={albumDeletion.preview}
-					error={albumDeletion.error}
-					isLoading={albumDeletion.isLoading}
-					isDeleting={albumDeletion.isDeleting}
-					onCancel={albumDeletion.cancel}
-					onConfirm={albumDeletion.confirm}
-				/>
-			</ContextMenu>
-		</CoverWash>
+					</ContextMenuTrigger>
+					<ContextMenuContent>
+						{canDeleteAlbums ? (
+							<ContextMenuItem
+								variant="destructive"
+								onClick={() => albumDeletion.open(album)}
+							>
+								<Trash2 className="size-4" />
+								Delete album
+							</ContextMenuItem>
+						) : null}
+					</ContextMenuContent>
+					<AlbumDeletionDialog
+						album={albumDeletion.album}
+						preview={albumDeletion.preview}
+						error={albumDeletion.error}
+						isLoading={albumDeletion.isLoading}
+						isDeleting={albumDeletion.isDeleting}
+						onCancel={albumDeletion.cancel}
+						onConfirm={albumDeletion.confirm}
+					/>
+				</ContextMenu>
+			</CoverWash>
+		</>
 	);
 }
