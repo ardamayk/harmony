@@ -1,0 +1,45 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT album_id AS \"album_id!\", outcome,\n                CAST((julianday('now') - julianday(checked_at)) * 86400 AS INTEGER) AS \"age_seconds!: i64\"\n            FROM album_explicit_checks",
+  "describe": {
+    "columns": [
+      {
+        "name": "album_id!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "album_explicit_checks",
+            "name": "album_id"
+          }
+        }
+      },
+      {
+        "name": "outcome",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "album_explicit_checks",
+            "name": "outcome"
+          }
+        }
+      },
+      {
+        "name": "age_seconds!: i64",
+        "ordinal": 2,
+        "type_info": "Integer",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "c0a2d95fe3613a705a31f27e68833752a70c756e066cf15c0578c98ba90e88d6"
+}

@@ -56,6 +56,35 @@ pub struct Repository {
     pool: SqlitePool,
 }
 
+impl Repository {
+    /// Replaces which of the Album's Tracks are explicit.
+    pub async fn set_explicit_tracks(
+        &self,
+        album_id: &str,
+        track_ids: &[String],
+    ) -> Result<(), LibraryError> {
+        let what = || format!("store explicit Tracks of Album {album_id}");
+        let mut tx = crate::db::begin_write(&self.pool).await.context(what)?;
+        sqlx::query!(
+            "DELETE FROM explicit_tracks WHERE track_id IN (SELECT id FROM tracks WHERE album_id = ?1)",
+            album_id
+        )
+        .execute(&mut *tx)
+        .await
+        .context(what)?;
+        for track_id in track_ids {
+            sqlx::query!(
+                "INSERT OR IGNORE INTO explicit_tracks (track_id) VALUES (?1)",
+                track_id
+            )
+            .execute(&mut *tx)
+            .await
+            .context(what)?;
+        }
+        tx.commit().await.context(what)
+    }
+}
+
 struct TrackRow {
     id: String,
     title: String,
@@ -89,6 +118,7 @@ struct TrackRow {
     revision: i64,
     created_at: String,
     updated_at: String,
+    explicit: bool,
 }
 
 /// `SELECT <track columns> FROM library_track_reads t <tail>` into
@@ -110,7 +140,8 @@ macro_rules! select_tracks {
            t.replaygain_album_gain_db, t.replaygain_album_peak,
            t.title_sort AS "title_sort!", t.file_mtime AS "file_mtime!: i64",
            t.content_sha256, t.identity_key, t.revision AS "revision!: i64",
-           t.created_at AS "created_at!: String", t.updated_at AS "updated_at!: String""# + " FROM library_track_reads t " + $tail
+           t.created_at AS "created_at!: String", t.updated_at AS "updated_at!: String",
+           EXISTS (SELECT 1 FROM explicit_tracks e WHERE e.track_id = t.id) AS "explicit!: bool""# + " FROM library_track_reads t " + $tail
             $(, $argument)*
         )
     };
@@ -823,6 +854,7 @@ fn to_track(row: TrackRow) -> Track {
         revision: row.revision,
         created_at: crate::gojson::time(&row.created_at),
         updated_at: crate::gojson::time(&row.updated_at),
+        explicit: row.explicit,
     };
     if track.bitrate_bps > 0 {
         track.bitrate_kbps = track.bitrate_bps / 1000;

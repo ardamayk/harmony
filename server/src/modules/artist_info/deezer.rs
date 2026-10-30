@@ -11,6 +11,8 @@ use serde_json::Value;
 const ALBUM_ATTEMPTS: usize = 3;
 /// Deezer's empty-picture URLs have no image id between the slashes.
 const PLACEHOLDER_PATH: &str = "/images/artist//";
+/// How many of an Album's Tracks are asked for.
+const ALBUM_TRACKS: &str = "200";
 /// How many top Tracks are asked for; Deezer answers at most 50.
 const TOP_TRACKS: &str = "50";
 
@@ -28,7 +30,17 @@ struct AlbumHit {
     id: i64,
     #[serde(default)]
     title: String,
+    #[serde(default)]
+    explicit_lyrics: bool,
     artist: Artist,
+}
+
+#[derive(Deserialize)]
+struct AlbumTrack {
+    #[serde(default)]
+    title: String,
+    #[serde(default)]
+    explicit_lyrics: bool,
 }
 
 #[derive(Deserialize)]
@@ -140,6 +152,41 @@ pub async fn find_album_genres(
         .map(|genre| genre.name.trim().to_owned())
         .filter(|name| !name.is_empty())
         .collect())
+}
+
+/// The base titles of the Tracks Deezer marks explicit on this Album, `None`
+/// when Deezer has no such Album. The explicit edition is preferred when it also
+/// sells a clean one, which is rarely what a library holds.
+pub async fn find_explicit_titles(
+    client: &reqwest::Client,
+    base_url: &str,
+    artist_name: &str,
+    title: &str,
+) -> Result<Option<Vec<String>>, String> {
+    let query = format!("{artist_name} {title}");
+    let hits: Hits<AlbumHit> = search(client, base_url, "album", &query).await?;
+    let mut matches: Vec<AlbumHit> = hits
+        .into_iter()
+        .filter(|hit| {
+            hit.id > 0 && same_name(&hit.artist.name, artist_name) && same_title(&hit.title, title)
+        })
+        .collect();
+    matches.sort_by_key(|hit| !hit.explicit_lyrics);
+    let Some(album) = matches.first() else {
+        return Ok(None);
+    };
+    let url = format!("{base_url}/album/{}/tracks", album.id);
+    let tracks: Hits<AlbumTrack> = fetch::json(client, &url, &[("limit", ALBUM_TRACKS)]).await?;
+    if let Some(error) = tracks.error {
+        return Err(format!("GET {url}: {error}"));
+    }
+    Ok(Some(
+        tracks
+            .into_iter()
+            .filter(|track| track.explicit_lyrics)
+            .map(|track| base_title(&track.title))
+            .collect(),
+    ))
 }
 
 /// The Deezer Artist on one of the user's Albums that `accept`s, else the

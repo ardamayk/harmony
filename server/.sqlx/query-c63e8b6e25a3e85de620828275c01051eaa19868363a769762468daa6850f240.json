@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT OR IGNORE INTO explicit_tracks (track_id) VALUES (?1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "c63e8b6e25a3e85de620828275c01051eaa19868363a769762468daa6850f240"
+}

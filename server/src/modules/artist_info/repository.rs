@@ -260,6 +260,51 @@ impl Repository {
         Ok(())
     }
 
+    /// Each Album's last explicit Track lookup.
+    pub async fn album_explicit_checks(
+        &self,
+    ) -> Result<HashMap<String, Stored<()>>, RepositoryError> {
+        let rows = sqlx::query!(
+            r#"SELECT album_id AS "album_id!", outcome,
+                CAST((julianday('now') - julianday(checked_at)) * 86400 AS INTEGER) AS "age_seconds!: i64"
+            FROM album_explicit_checks"#
+        )
+        .fetch_all(&self.pool)
+        .await
+        .context(|| "list Album explicit checks".to_owned())?;
+        Ok(rows
+            .into_iter()
+            .map(|row| {
+                let stored = Stored {
+                    outcome: Outcome::parse(&row.outcome),
+                    value: None,
+                    age_seconds: row.age_seconds,
+                };
+                (row.album_id, stored)
+            })
+            .collect())
+    }
+
+    pub async fn put_album_explicit_check(
+        &self,
+        album_id: &str,
+        outcome: Outcome,
+    ) -> Result<(), RepositoryError> {
+        let outcome = outcome.as_str();
+        sqlx::query!(
+            "INSERT INTO album_explicit_checks (album_id, outcome, checked_at)
+            VALUES (?1, ?2, CURRENT_TIMESTAMP)
+            ON CONFLICT (album_id) DO UPDATE SET outcome = excluded.outcome,
+                checked_at = excluded.checked_at",
+            album_id,
+            outcome
+        )
+        .execute(&self.pool)
+        .await
+        .context(|| format!("store Album explicit check {album_id}"))?;
+        Ok(())
+    }
+
     pub async fn album_genres(
         &self,
         album_id: &str,

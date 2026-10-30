@@ -139,6 +139,7 @@ pub struct Track {
     pub revision: i64,
     pub created_at: String,
     pub updated_at: String,
+    pub explicit: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]

@@ -1,6 +1,7 @@
 import type { QueueItemSource, Track } from "@repo/api-client";
 import {
 	buildTrackDetailRows,
+	ExplicitBadge,
 	QueueEqualizer,
 	toast,
 	usePlayback,
@@ -241,16 +242,19 @@ export function TrackList({
 												/>
 											) : null}
 											<div className="min-w-0">
-												<span
-													className={cn(
-														"block truncate font-medium text-base leading-snug",
-														// The playing title takes the accent, as in the Queue.
-														isPlaying
-															? "text-neutral-active-foreground"
-															: "text-foreground",
-													)}
-												>
-													{track.title}
+												<span className="flex min-w-0 items-center gap-2">
+													<span
+														className={cn(
+															"min-w-0 truncate font-medium text-base leading-snug",
+															// The playing title takes the accent, as in the Queue.
+															isPlaying
+																? "text-neutral-active-foreground"
+																: "text-foreground",
+														)}
+													>
+														{track.title}
+													</span>
+													{track.explicit ? <ExplicitBadge /> : null}
 												</span>
 												{shouldShowArtistLine ? (
 													<span

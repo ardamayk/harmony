@@ -1,4 +1,5 @@
 export { AlbumArt } from "./AlbumArt";
+export { ExplicitBadge } from "./ExplicitBadge";
 export { AppShell, PLAYER_BAR_HEIGHT_PX } from "./AppShell";
 export {
 	LayoutProvider,

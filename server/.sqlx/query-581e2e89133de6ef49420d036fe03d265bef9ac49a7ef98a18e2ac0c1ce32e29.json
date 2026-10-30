@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT t.id AS \"id!\", t.title AS \"title!\", t.artist_name AS \"artist_name!\",\n           t.album_id AS \"album_id!\", t.album_title AS \"album_title!\", t.track_no,\n           t.disc_no AS \"disc_no!: i64\", t.track_total, t.disc_total,\n           t.duration_ms AS \"duration_ms!: i64\", t.format AS \"format!\",\n           t.size_bytes AS \"size_bytes!: i64\", t.genre AS \"genre!\",\n           t.sample_rate_hz AS \"sample_rate_hz!: i64\", t.bit_depth AS \"bit_depth!: i64\",\n           t.channel_count AS \"channel_count!: i64\", t.bitrate_bps AS \"bitrate_bps!: i64\",\n           t.codec, t.container, t.sample_format, t.file_path AS \"file_path!\",\n           t.replaygain_track_gain_db, t.replaygain_track_peak,\n           t.replaygain_album_gain_db, t.replaygain_album_peak,\n           t.title_sort AS \"title_sort!\", t.file_mtime AS \"file_mtime!: i64\",\n           t.content_sha256, t.identity_key, t.revision AS \"revision!: i64\",\n           t.created_at AS \"created_at!: String\", t.updated_at AS \"updated_at!: String\" FROM library_track_reads t WHERE (CAST(?1 AS TEXT) = '' OR EXISTS (\n                    SELECT 1 FROM track_artists credit WHERE credit.track_id = t.id AND credit.artist_id = CAST(?1 AS TEXT)\n                ) OR EXISTS (\n                    SELECT 1 FROM album_artists credit WHERE credit.album_id = t.album_id AND credit.artist_id = CAST(?1 AS TEXT)))\n              AND (CAST(?2 AS TEXT) = '' OR t.title LIKE '%' || CAST(?2 AS TEXT) || '%' OR t.album_title LIKE '%' || CAST(?2 AS TEXT) || '%' OR EXISTS (\n                    SELECT 1 FROM track_artists credit\n                    INNER JOIN artists credited ON credited.id = credit.artist_id\n                    WHERE credit.track_id = t.id AND credited.name LIKE '%' || CAST(?2 AS TEXT) || '%'\n                ) OR EXISTS (\n                    SELECT 1 FROM track_genres relation\n                    INNER JOIN genres genre ON genre.id = relation.genre_id\n                    WHERE relation.track_id = t.id AND genre.name LIKE '%' || CAST(?2 AS TEXT) || '%'))\n            ORDER BY t.title_sort\n            LIMIT ?3 OFFSET ?4",
+  "query": "SELECT t.id AS \"id!\", t.title AS \"title!\", t.artist_name AS \"artist_name!\",\n           t.album_id AS \"album_id!\", t.album_title AS \"album_title!\", t.track_no,\n           t.disc_no AS \"disc_no!: i64\", t.track_total, t.disc_total,\n           t.duration_ms AS \"duration_ms!: i64\", t.format AS \"format!\",\n           t.size_bytes AS \"size_bytes!: i64\", t.genre AS \"genre!\",\n           t.sample_rate_hz AS \"sample_rate_hz!: i64\", t.bit_depth AS \"bit_depth!: i64\",\n           t.channel_count AS \"channel_count!: i64\", t.bitrate_bps AS \"bitrate_bps!: i64\",\n           t.codec, t.container, t.sample_format, t.file_path AS \"file_path!\",\n           t.replaygain_track_gain_db, t.replaygain_track_peak,\n           t.replaygain_album_gain_db, t.replaygain_album_peak,\n           t.title_sort AS \"title_sort!\", t.file_mtime AS \"file_mtime!: i64\",\n           t.content_sha256, t.identity_key, t.revision AS \"revision!: i64\",\n           t.created_at AS \"created_at!: String\", t.updated_at AS \"updated_at!: String\",\n           EXISTS (SELECT 1 FROM explicit_tracks e WHERE e.track_id = t.id) AS \"explicit!: bool\" FROM library_track_reads t WHERE t.id = ?",
   "describe": {
     "columns": [
       {
@@ -309,10 +309,16 @@
             "name": "updated_at"
           }
         }
+      },
+      {
+        "name": "explicit!: bool",
+        "ordinal": 32,
+        "type_info": "Integer",
+        "origin": "Expression"
       }
     ],
     "parameters": {
-      "Right": 4
+      "Right": 1
     },
     "nullable": [
       true,
@@ -346,8 +352,9 @@
       true,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "c85629617669583e867b26937b6a53daac1054cb35b38aded828aa8814999462"
+  "hash": "581e2e89133de6ef49420d036fe03d265bef9ac49a7ef98a18e2ac0c1ce32e29"
 }

@@ -43,6 +43,14 @@ impl Service {
         self.repo.get_album(album_id).await
     }
 
+    pub async fn set_explicit_tracks(
+        &self,
+        album_id: &str,
+        track_ids: &[String],
+    ) -> Result<(), LibraryError> {
+        self.repo.set_explicit_tracks(album_id, track_ids).await
+    }
+
     pub async fn album_cover(&self, album_id: &str, size: i64) -> Result<AlbumCover, LibraryError> {
         covers::album_cover(&self.repo, album_id, size).await
     }

@@ -6,6 +6,7 @@ import {
 	getTrackArtistName,
 } from "../playback/track-details";
 import { AlbumArt } from "./AlbumArt";
+import { ExplicitBadge } from "./ExplicitBadge";
 import {
 	queueArtistHref,
 	useQueueLinkClick,
@@ -89,21 +90,24 @@ export function QueueTrackRow({
 				/>
 			)}
 			<span className="min-w-0 flex-1">
-				<span
-					// Played rows step the title down a text tier instead of fading the
-					// row, so their text keeps 4.5:1.
-					className={cn(
-						"block truncate text-sm leading-5",
-						// The playing title takes the accent: the one row it marks.
-						isCurrent
-							? "font-semibold text-shell-active-foreground"
-							: state === "played"
-								? "text-caption group-hover:text-heading group-focus-within:text-heading"
-								: "text-foreground group-hover:text-heading group-focus-within:text-heading",
-					)}
-					title={item.track.title}
-				>
-					{item.track.title}
+				<span className="flex min-w-0 items-center gap-2">
+					<span
+						// Played rows step the title down a text tier instead of fading the
+						// row, so their text keeps 4.5:1.
+						className={cn(
+							"min-w-0 truncate text-sm leading-5",
+							// The playing title takes the accent: the one row it marks.
+							isCurrent
+								? "font-semibold text-shell-active-foreground"
+								: state === "played"
+									? "text-caption group-hover:text-heading group-focus-within:text-heading"
+									: "text-foreground group-hover:text-heading group-focus-within:text-heading",
+						)}
+						title={item.track.title}
+					>
+						{item.track.title}
+					</span>
+					{item.track.explicit ? <ExplicitBadge /> : null}
 				</span>
 				{(!isAlbum || isCurrent) && (
 					<span

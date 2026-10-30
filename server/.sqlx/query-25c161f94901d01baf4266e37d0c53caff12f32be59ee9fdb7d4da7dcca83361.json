@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM explicit_tracks WHERE track_id IN (SELECT id FROM tracks WHERE album_id = ?1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "25c161f94901d01baf4266e37d0c53caff12f32be59ee9fdb7d4da7dcca83361"
+}

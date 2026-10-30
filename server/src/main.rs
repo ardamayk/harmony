@@ -75,6 +75,7 @@ async fn run(config: Config) -> Result<(), String> {
     if let Err(error) = state.managed_import.start().await {
         tracing::error!(%error, "Managed Import startup cleanup failed");
     }
+    state.artist_info.clone().spawn_explicit_sweep();
     let router = app::router(state.clone());
     // Go's net.Listen asks for net.core.somaxconn; tokio's bind asks for 1024 and
     // overflowed at 512 concurrent clients. The kernel caps this at somaxconn.

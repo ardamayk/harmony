@@ -1618,6 +1618,8 @@ export interface components {
             artists?: components["schemas"]["ArtistCredit"][];
             /** @description Ordered Album Artist credits, independent from Track Artists. */
             albumArtists?: components["schemas"]["ArtistCredit"][];
+            /** @description Whether Deezer marks the Track as explicit; absent or false when it is not known to be. */
+            explicit?: boolean;
             /** Format: uuid */
             albumId: string;
             albumTitle?: string;

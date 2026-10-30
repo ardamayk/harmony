@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT t.id AS \"id!\", t.title AS \"title!\", t.artist_name AS \"artist_name!\",\n           t.album_id AS \"album_id!\", t.album_title AS \"album_title!\", t.track_no,\n           t.disc_no AS \"disc_no!: i64\", t.track_total, t.disc_total,\n           t.duration_ms AS \"duration_ms!: i64\", t.format AS \"format!\",\n           t.size_bytes AS \"size_bytes!: i64\", t.genre AS \"genre!\",\n           t.sample_rate_hz AS \"sample_rate_hz!: i64\", t.bit_depth AS \"bit_depth!: i64\",\n           t.channel_count AS \"channel_count!: i64\", t.bitrate_bps AS \"bitrate_bps!: i64\",\n           t.codec, t.container, t.sample_format, t.file_path AS \"file_path!\",\n           t.replaygain_track_gain_db, t.replaygain_track_peak,\n           t.replaygain_album_gain_db, t.replaygain_album_peak,\n           t.title_sort AS \"title_sort!\", t.file_mtime AS \"file_mtime!: i64\",\n           t.content_sha256, t.identity_key, t.revision AS \"revision!: i64\",\n           t.created_at AS \"created_at!: String\", t.updated_at AS \"updated_at!: String\" FROM library_track_reads t WHERE t.id = ?",
+  "query": "SELECT t.id AS \"id!\", t.title AS \"title!\", t.artist_name AS \"artist_name!\",\n           t.album_id AS \"album_id!\", t.album_title AS \"album_title!\", t.track_no,\n           t.disc_no AS \"disc_no!: i64\", t.track_total, t.disc_total,\n           t.duration_ms AS \"duration_ms!: i64\", t.format AS \"format!\",\n           t.size_bytes AS \"size_bytes!: i64\", t.genre AS \"genre!\",\n           t.sample_rate_hz AS \"sample_rate_hz!: i64\", t.bit_depth AS \"bit_depth!: i64\",\n           t.channel_count AS \"channel_count!: i64\", t.bitrate_bps AS \"bitrate_bps!: i64\",\n           t.codec, t.container, t.sample_format, t.file_path AS \"file_path!\",\n           t.replaygain_track_gain_db, t.replaygain_track_peak,\n           t.replaygain_album_gain_db, t.replaygain_album_peak,\n           t.title_sort AS \"title_sort!\", t.file_mtime AS \"file_mtime!: i64\",\n           t.content_sha256, t.identity_key, t.revision AS \"revision!: i64\",\n           t.created_at AS \"created_at!: String\", t.updated_at AS \"updated_at!: String\",\n           EXISTS (SELECT 1 FROM explicit_tracks e WHERE e.track_id = t.id) AS \"explicit!: bool\" FROM library_track_reads t WHERE t.album_id = ?\n            ORDER BY t.disc_no, COALESCE(t.track_no, 9999), t.title_sort, t.id",
   "describe": {
     "columns": [
       {
@@ -309,6 +309,12 @@
             "name": "updated_at"
           }
         }
+      },
+      {
+        "name": "explicit!: bool",
+        "ordinal": 32,
+        "type_info": "Integer",
+        "origin": "Expression"
       }
     ],
     "parameters": {
@@ -346,8 +352,9 @@
       true,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "c342ba9f6b74d7e27c930c9938d2d9dab8fc319b98b60d63cddef7393a4a5d22"
+  "hash": "f53d3ac76edd558317cdb0faf4a7390e57d2fbdce2bee834d3d9f7a99fe61167"
 }

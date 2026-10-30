@@ -3229,6 +3229,9 @@ components:
           description: Ordered Album Artist credits, independent from Track Artists.
           items:
             $ref: "#/components/schemas/ArtistCredit"
+        explicit:
+          type: boolean
+          description: Whether Deezer marks the Track as explicit; absent or false when it is not known to be.
         albumId:
           type: string
           format: uuid

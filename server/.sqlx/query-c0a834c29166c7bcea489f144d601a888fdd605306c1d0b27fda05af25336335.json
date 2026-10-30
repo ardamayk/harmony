@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO album_explicit_checks (album_id, outcome, checked_at)\n            VALUES (?1, ?2, CURRENT_TIMESTAMP)\n            ON CONFLICT (album_id) DO UPDATE SET outcome = excluded.outcome,\n                checked_at = excluded.checked_at",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "c0a834c29166c7bcea489f144d601a888fdd605306c1d0b27fda05af25336335"
+}

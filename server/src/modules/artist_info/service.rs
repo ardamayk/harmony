@@ -5,7 +5,8 @@
 use super::repository::{Biography, Outcome, Photo, Repository, RepositoryError, Stored};
 use super::{deezer, lastfm, popular, wikipedia};
 use crate::modules::library::{LibraryError, LibraryService, Track};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Semaphore;
 
@@ -27,6 +28,11 @@ const TRACKS_FOR_MATCHING: i64 = 2000;
 const DEEZER_LOOKUPS_AT_ONCE: usize = 3;
 /// The Artist's Albums the lookups may use to tell homonyms apart.
 const ALBUMS_FOR_MATCHING: i64 = 3;
+/// How often Albums without an explicit lookup are looked for, new ones included.
+const EXPLICIT_SWEEP_EVERY: Duration = Duration::from_secs(10 * 60);
+/// A lookup is two requests, so this stays well inside Deezer's rate limit.
+const EXPLICIT_LOOKUP_PAUSE: Duration = Duration::from_millis(500);
+const EXPLICIT_SWEEP_PAGE: i64 = 200;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ArtistInfoError {
@@ -344,6 +350,75 @@ impl ArtistInfo {
         Ok(genres.unwrap_or_default())
     }
 
+    /// Keeps looking up Albums in the background for as long as the server runs.
+    pub fn spawn_explicit_sweep(self: Arc<Self>) {
+        tokio::spawn(async move {
+            let mut sweep = tokio::time::interval(EXPLICIT_SWEEP_EVERY);
+            loop {
+                sweep.tick().await;
+                if let Err(error) = self.mark_explicit_tracks().await {
+                    tracing::warn!(%error, "explicit Track sweep failed");
+                }
+            }
+        });
+    }
+
+    /// Looks up the Albums that are due, so every Track list can show which
+    /// Tracks are explicit without waiting on Deezer.
+    pub async fn mark_explicit_tracks(&self) -> Result<(), ArtistInfoError> {
+        if !self.enabled {
+            return Ok(());
+        }
+        let checks = self.repo.album_explicit_checks().await?;
+        let mut offset = 0;
+        loop {
+            let page = self
+                .library
+                .list_albums(EXPLICIT_SWEEP_PAGE, offset, "", "")
+                .await?;
+            let count = page.items.len() as i64;
+            for album in page.items {
+                if self.should_look_up(checks.get(&album.id), None) {
+                    self.mark_album_explicit_tracks(&album.id).await?;
+                    tokio::time::sleep(EXPLICIT_LOOKUP_PAUSE).await;
+                }
+            }
+            if count < EXPLICIT_SWEEP_PAGE {
+                return Ok(());
+            }
+            offset += count;
+        }
+    }
+
+    async fn mark_album_explicit_tracks(&self, album_id: &str) -> Result<(), ArtistInfoError> {
+        let detail = self.library.get_album(album_id).await?;
+        let _slot = self.deezer_slots.acquire().await.expect("semaphore open");
+        let found = deezer::find_explicit_titles(
+            &self.client,
+            &self.sources.deezer,
+            &detail.album.artist_name,
+            &detail.album.title,
+        )
+        .await;
+        let (outcome, titles) = settle(album_id, found);
+        if let Some(titles) = titles {
+            let titles: HashSet<String> = titles.into_iter().collect();
+            let track_ids: Vec<String> = detail
+                .tracks
+                .into_iter()
+                .filter(|track| titles.contains(&popular::base_title(&track.title)))
+                .map(|track| track.id)
+                .collect();
+            self.library
+                .set_explicit_tracks(album_id, &track_ids)
+                .await?;
+        }
+        self.repo
+            .put_album_explicit_check(album_id, outcome)
+            .await?;
+        Ok(())
+    }
+
     fn should_look_up<T>(&self, stored: Option<&Stored<T>>, found_refresh: Option<i64>) -> bool {
         self.enabled
             && stored.is_none_or(|stored| is_due(stored.outcome, stored.age_seconds, found_refresh))
@@ -424,6 +499,10 @@ mod tests {
                         {"id": 9, "title": "Awake (Deluxe)", "artist": {"id": 7, "name": "Skillet"}}
                     ]}),
                     "/album/9" => json!({"id": 9, "genres": {"data": [{"id": 152, "name": "Rock"}]}}),
+                    "/album/9/tracks" => json!({"data": [
+                        {"title": "HERO (Remastered)", "explicit_lyrics": true},
+                        {"title": "Monster", "explicit_lyrics": false}
+                    ]}),
                     "/search/artist" | "/search/album" => json!({"data": []}),
                     "/2.0/" if query.contains("artist=Skillet") && query.contains("api_key=test-key") => {
                         json!({"toptracks": {"track": [
@@ -625,6 +704,33 @@ mod tests {
             info.album_genres("unknown").await,
             Err(ArtistInfoError::NotFound)
         ));
+    }
+
+    #[tokio::test]
+    async fn marks_the_tracks_deezer_calls_explicit_once() {
+        let (sources, requests) = fake_sources().await;
+        let (dir, info) = service(sources, true).await;
+        let migrations = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations");
+        let pool =
+            crate::db::open_and_migrate(dir.path().join("app.db").to_str().unwrap(), &migrations)
+                .await
+                .unwrap();
+        seed_tracks(&pool, &["Hero", "Monster"]).await;
+        info.mark_explicit_tracks().await.unwrap();
+        let tracks = info.library.get_album("al").await.unwrap().tracks;
+        let explicit: Vec<&str> = tracks
+            .iter()
+            .filter(|track| track.explicit)
+            .map(|track| track.title.as_str())
+            .collect();
+        assert_eq!(explicit, ["Hero"]);
+        let made = requests.load(Ordering::SeqCst);
+        info.mark_explicit_tracks().await.unwrap();
+        assert_eq!(
+            requests.load(Ordering::SeqCst),
+            made,
+            "a found Album is not looked up again"
+        );
     }
 
     #[tokio::test]

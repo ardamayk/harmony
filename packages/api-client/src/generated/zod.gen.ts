@@ -472,6 +472,7 @@ export const zTrack = z.object({
     artistName: z.string(),
     artists: z.array(zArtistCredit).optional(),
     albumArtists: z.array(zArtistCredit).optional(),
+    explicit: z.boolean().optional(),
     albumId: z.guid(),
     albumTitle: z.string().optional(),
     trackNo: z.int().optional(),
