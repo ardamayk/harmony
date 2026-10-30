@@ -40,7 +40,7 @@ mise run generate   # OpenAPI client and sqlx query data
 mise run dev:web    # Music Server :8090 + Vite :3000
 ```
 
-Open http://localhost:3000/library/tracks and use **Import Music** to upload files or a local folder. The Music Server validates every file, shows an Import Preview, and stores accepted files in Managed Storage only after you confirm.
+Open http://localhost:3000/settings and use **Import Music** to upload files or a local folder. The Music Server validates every file, shows an Import Preview, and stores accepted files in Managed Storage only after you confirm.
 
 ## Server dependencies
 

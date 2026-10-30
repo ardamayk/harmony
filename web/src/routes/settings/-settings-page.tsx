@@ -7,6 +7,7 @@ import { getDesktopMpvStatus, isDesktopClient } from "#/desktop/bridge";
 import { apiClient } from "#/lib/api";
 import { cn } from "#/lib/utils";
 import { themePresetOptions } from "#/themes/presets";
+import { ImportSettingsSection } from "./-import-settings";
 import { PlaybackSettingsSection } from "./-playback-settings";
 import { ServerDependenciesSection } from "./-server-dependencies";
 
@@ -41,7 +42,7 @@ export function SettingsPage() {
 			<header className="mb-6">
 				<h1 className="font-semibold text-2xl">Settings</h1>
 				<p className="text-foreground text-sm">
-					Appearance · Playback · API {health.data?.status ?? "…"} v
+					Appearance · Playback · Library · API {health.data?.status ?? "…"} v
 					{health.data?.version ?? "…"}
 				</p>
 			</header>
@@ -102,6 +103,8 @@ export function SettingsPage() {
 			</section>
 
 			<PlaybackSettingsSection />
+
+			<ImportSettingsSection />
 
 			<ServerDependenciesSection
 				health={health.data}

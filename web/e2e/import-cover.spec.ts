@@ -22,7 +22,7 @@ test("import preview explains the destination and displays a selectable embedded
 		track: "1",
 		genres: [],
 	});
-	await page.goto("/library/tracks");
+	await page.goto("/settings");
 	await page.getByRole("button", { name: "Import Music", exact: true }).click();
 	const dialog = page.getByRole("dialog", { name: "Import Music" });
 	await dialog.getByLabel("Audio files", { exact: true }).setInputFiles({

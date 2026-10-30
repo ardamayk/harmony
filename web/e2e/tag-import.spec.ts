@@ -25,7 +25,7 @@ test("new Album cover and file alternatives lead to an explicit batch Track Repl
 		{ ...tags, artists: ["Selected Artist"] },
 		{ omitArtwork: true },
 	);
-	await page.goto("/library/tracks");
+	await page.goto("/settings");
 	await page.getByRole("button", { name: "Import Music" }).click();
 	const dialog = page.getByRole("dialog", { name: "Import Music" });
 	await dialog.getByLabel("Audio files").setInputFiles([

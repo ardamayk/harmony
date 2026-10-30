@@ -24,8 +24,8 @@ export function ImportSessionProvider({ children }: { children: ReactNode }) {
 function useImportSession() {
 	const [isOpen, setIsOpen] = useState(false);
 	const queryClient = useQueryClient();
-	// The dialog opens from the plus action without a DialogTrigger, so remember
-	// the opener to restore focus on close.
+	// The dialog opens from the Import Music action without a DialogTrigger, so
+	// remember the opener to restore focus on close.
 	const returnFocus = useReturnFocus();
 	async function refresh() {
 		clearTrackWaveformCache();

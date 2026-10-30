@@ -1,18 +1,11 @@
-import { MANAGED_IMPORT_CAPABILITY } from "@repo/api-client";
 import { useQuery } from "@tanstack/react-query";
-import { Plus } from "lucide-react";
 import {
 	COLLECTION_PAGE_CONTAINER_CLASS,
 	CollectionPageContainer,
 } from "#/components/collection-grid-layout";
-import { useManagedImport } from "#/components/import-session-context";
 import { PageHeader, PageShell } from "#/components/page-layout";
 import { TrackList } from "#/components/track-list";
 import { Button } from "#/components/ui/button";
-import {
-	type ServerCapabilityState,
-	useServerCapabilityState,
-} from "#/hooks/use-server-capability";
 import { apiClient } from "#/lib/api";
 import { libraryQueryKeys } from "#/lib/library-query-keys";
 
@@ -26,17 +19,15 @@ export function TracksPage({
 	onClearFilters?: () => void;
 } = {}) {
 	const tracks = useTrackLibrary(search, artistId);
-	const managedImport = useManagedImport();
-	const importCapability = useServerCapabilityState(MANAGED_IMPORT_CAPABILITY);
 
 	return (
 		<PageShell
 			testId="tracks-page-shell"
 			contentTestId="tracks-page-content"
 			header={
-				<TracksHeader
-					onImport={managedImport.open}
-					importCapability={importCapability}
+				<PageHeader
+					title="Tracks"
+					innerClassName={COLLECTION_PAGE_CONTAINER_CLASS}
 				/>
 			}
 		>
@@ -70,40 +61,6 @@ function useTrackLibrary(search: string, artistId: string) {
 			}),
 	});
 	return { tracks, items: tracks.data?.items ?? [] };
-}
-
-const IMPORT_UNSUPPORTED_TITLE =
-	"This Music Server does not support Managed Import. Update the Music Server to import music.";
-
-function TracksHeader({
-	onImport,
-	importCapability,
-}: {
-	onImport: () => void;
-	importCapability: ServerCapabilityState;
-}) {
-	// Gate on the advertised Server Capability (ADR 0006). The control stays
-	// usable while the health response is unknown so a slow answer never hides
-	// the Import Music action from a compatible Music Server.
-	const importUnsupported = importCapability === "missing";
-	return (
-		<PageHeader
-			title="Tracks"
-			innerClassName={COLLECTION_PAGE_CONTAINER_CLASS}
-			actions={
-				<Button
-					type="button"
-					aria-label="Import Music"
-					size="icon-lg"
-					onClick={onImport}
-					disabled={importUnsupported}
-					title={importUnsupported ? IMPORT_UNSUPPORTED_TITLE : undefined}
-				>
-					<Plus className="size-5" />
-				</Button>
-			}
-		/>
-	);
 }
 
 function TrackResults({

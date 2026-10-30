@@ -7,7 +7,7 @@ job; no extra CI wiring is needed.
 
 ## What it covers
 
-1. The Tracks page plus action opens the Import Music modal and uploads a
+1. The Settings page Import Music action opens the modal and uploads a
    mixed batch: two accepted files, one without a title, one without an
    embedded front cover. The Import Preview, live region, progress bars, the
    `role="alert"` confirmation error, and the final outcomes are asserted.

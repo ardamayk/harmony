@@ -24,6 +24,7 @@ import {
 	vi,
 } from "vite-plus/test";
 import { ImportSessionProvider } from "#/components/import-session-provider";
+import { ImportSettingsSection } from "#/routes/settings/-import-settings";
 import { TracksPage } from "./-tracks-page";
 import { Route } from "./index";
 
@@ -150,8 +151,20 @@ function renderWithQuery(ui: React.ReactElement) {
 	);
 }
 
+// Import Music lives on the Settings page. Mounting that section beside the
+// Tracks page drives the real control while the tests still see the library
+// refresh after an import.
+function TracksWithImportMusic() {
+	return (
+		<>
+			<TracksPage />
+			<ImportSettingsSection />
+		</>
+	);
+}
+
 async function openImportMusicDialog() {
-	renderWithQuery(<TracksPage />);
+	renderWithQuery(<TracksWithImportMusic />);
 	await screen.findByText("Anti-Hero");
 	fireEvent.click(screen.getByRole("button", { name: "Import Music" }));
 }
@@ -361,7 +374,7 @@ describe("tracks route", () => {
 					<button type="button" onClick={() => setIsTracksPage(!isTracksPage)}>
 						Navigate
 					</button>
-					{isTracksPage ? <TracksPage /> : <p>Another page</p>}
+					{isTracksPage ? <TracksWithImportMusic /> : <p>Another page</p>}
 				</>
 			);
 		}
@@ -605,7 +618,7 @@ describe("tracks route", () => {
 	});
 
 	it("restores focus to the Import Music action when the dialog closes", async () => {
-		renderWithQuery(<TracksPage />);
+		renderWithQuery(<TracksWithImportMusic />);
 		await screen.findByText("Anti-Hero");
 		const importButton = screen.getByRole("button", { name: "Import Music" });
 		importButton.focus();
@@ -621,45 +634,6 @@ describe("tracks route", () => {
 			expect(screen.queryByRole("dialog", { name: "Import Music" })).toBeNull(),
 		);
 		await waitFor(() => expect(document.activeElement).toBe(importButton));
-	});
-
-	it("disables Import Music when the Music Server lacks the Managed Import capability", async () => {
-		mocks.getHealth.mockResolvedValue({
-			status: "ok",
-			version: "legacy",
-			capabilities: ["api.v1", "future.unknown-feature.v2"],
-		});
-		renderWithQuery(<TracksPage />);
-		await screen.findByText("Anti-Hero");
-
-		const importButton = screen.getByRole("button", { name: "Import Music" });
-		await waitFor(() =>
-			expect(importButton.hasAttribute("disabled")).toBe(true),
-		);
-		expect(importButton.getAttribute("title")).toContain("Managed Import");
-		fireEvent.click(importButton);
-		expect(screen.queryByRole("heading", { name: "Import Music" })).toBeNull();
-		expect(mocks.createManagedImportBatch).not.toHaveBeenCalled();
-	});
-
-	it("keeps Import Music available when the Music Server advertises extra unknown capabilities", async () => {
-		mocks.getHealth.mockResolvedValue({
-			status: "ok",
-			version: "newer",
-			capabilities: [
-				"api.v1",
-				"managed-import.v1",
-				"future.unknown-feature.v2",
-			],
-		});
-		renderWithQuery(<TracksPage />);
-		await screen.findByText("Anti-Hero");
-		await waitFor(() => expect(mocks.getHealth).toHaveBeenCalled());
-
-		const importButton = screen.getByRole("button", { name: "Import Music" });
-		expect(importButton.hasAttribute("disabled")).toBe(false);
-		fireEvent.click(importButton);
-		expect(screen.getByRole("heading", { name: "Import Music" })).toBeTruthy();
 	});
 
 	it("loads exact Artist tracks within the 200-track cap and reports loaded/total counts", async () => {
@@ -770,7 +744,7 @@ describe("tracks route", () => {
 		expect(mocks.listTracks).not.toHaveBeenCalled();
 	});
 
-	it("renders the shared compact header and the track list", async () => {
+	it("renders the track list under a screen-reader title", async () => {
 		renderWithQuery(<TracksPage />);
 
 		await screen.findByText("Anti-Hero");
@@ -784,10 +758,7 @@ describe("tracks route", () => {
 			.getByRole("heading", { name: "Tracks" })
 			.closest("header");
 		expect(header).toBeTruthy();
-		expect(header?.className).toContain("sticky");
-		expect(header?.className).toContain("top-0");
-		expect(header?.className).toContain("py-3");
-		expect(header?.querySelector(".page-content-column")).toBeTruthy();
+		expect(header?.className).toContain("sr-only");
 		expect(screen.queryByPlaceholderText(/Search/)).toBeNull();
 		expect(screen.getByTestId("tracks-page-shell").className).toContain(
 			"overflow-hidden",
@@ -798,6 +769,12 @@ describe("tracks route", () => {
 		expect(screen.getByTestId("tracks-page-content").className).toContain(
 			"py-6",
 		);
+	});
+
+	it("leaves Import Music to the Settings page", async () => {
+		renderWithQuery(<TracksPage />);
+		await screen.findByText("Anti-Hero");
+		expect(screen.queryByRole("button", { name: "Import Music" })).toBeNull();
 	});
 
 	it("imports supported folder audio without sending client paths", async () => {
@@ -1317,7 +1294,7 @@ describe("tracks route", () => {
 					},
 				],
 			});
-		renderWithQuery(<TracksPage />);
+		renderWithQuery(<TracksWithImportMusic />);
 		await screen.findByText("Anti-Hero");
 
 		fireEvent.click(screen.getByRole("button", { name: "Import Music" }));
@@ -1645,7 +1622,7 @@ describe("tracks route", () => {
 				},
 			],
 		});
-		renderWithQuery(<TracksPage />);
+		renderWithQuery(<TracksWithImportMusic />);
 		await screen.findByText("Anti-Hero");
 		fireEvent.click(screen.getByRole("button", { name: "Import Music" }));
 		const fileInput = screen.getByLabelText("Audio files");
@@ -1709,7 +1686,7 @@ describe("tracks route", () => {
 		mocks.getManagedImportBatch.mockRejectedValueOnce(
 			new Error("Refresh unavailable"),
 		);
-		renderWithQuery(<TracksPage />);
+		renderWithQuery(<TracksWithImportMusic />);
 		await screen.findByText("Anti-Hero");
 		fireEvent.click(screen.getByRole("button", { name: "Import Music" }));
 		fireEvent.change(screen.getByLabelText("Audio files"), {
@@ -1817,7 +1794,7 @@ describe("tracks route", () => {
 				},
 			],
 		});
-		renderWithQuery(<TracksPage />);
+		renderWithQuery(<TracksWithImportMusic />);
 		await screen.findByText("Anti-Hero");
 		fireEvent.click(screen.getByRole("button", { name: "Import Music" }));
 		fireEvent.click(screen.getByRole("button", { name: "Select audio files" }));
@@ -1863,10 +1840,10 @@ describe("tracks route", () => {
 			new ApiError(404, {
 				error: "not_found",
 				code: "import_not_found",
-				message: "Managed Import Job not found",
+				message: "This import no longer exists on the Music Server",
 			}),
 		);
-		renderWithQuery(<TracksPage />);
+		renderWithQuery(<TracksWithImportMusic />);
 		await screen.findByText("Anti-Hero");
 		fireEvent.click(screen.getByRole("button", { name: "Import Music" }));
 		fireEvent.change(screen.getByLabelText("Audio files"), {
@@ -1879,7 +1856,9 @@ describe("tracks route", () => {
 		fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
 		await vi.waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-		expect(screen.queryByText("Managed Import Job not found")).toBeNull();
+		expect(
+			screen.queryByText("This import no longer exists on the Music Server"),
+		).toBeNull();
 		expect(mocks.cancelManagedImportBatch).toHaveBeenCalledWith("batch-1");
 		expect(confirmClose).not.toHaveBeenCalled();
 		confirmClose.mockRestore();
@@ -1887,7 +1866,7 @@ describe("tracks route", () => {
 
 	it("confirms modal close and cancels uncommitted server staging", async () => {
 		const confirmClose = vi.spyOn(window, "confirm").mockReturnValue(true);
-		renderWithQuery(<TracksPage />);
+		renderWithQuery(<TracksWithImportMusic />);
 		await screen.findByText("Anti-Hero");
 		fireEvent.click(screen.getByRole("button", { name: "Import Music" }));
 		fireEvent.change(screen.getByLabelText("Audio files"), {
@@ -1924,7 +1903,7 @@ describe("tracks route", () => {
 				});
 			},
 		);
-		renderWithQuery(<TracksPage />);
+		renderWithQuery(<TracksWithImportMusic />);
 		await screen.findByText("Anti-Hero");
 		fireEvent.click(screen.getByRole("button", { name: "Import Music" }));
 		fireEvent.change(screen.getByLabelText("Audio files"), {
@@ -1957,7 +1936,7 @@ describe("tracks route", () => {
 
 	it("keeps uncommitted import open when modal close is not confirmed", async () => {
 		const confirmClose = vi.spyOn(window, "confirm").mockReturnValue(false);
-		renderWithQuery(<TracksPage />);
+		renderWithQuery(<TracksWithImportMusic />);
 		await screen.findByText("Anti-Hero");
 		fireEvent.click(screen.getByRole("button", { name: "Import Music" }));
 		fireEvent.change(screen.getByLabelText("Audio files"), {
@@ -2000,7 +1979,7 @@ describe("tracks route", () => {
 					},
 				],
 			});
-		renderWithQuery(<TracksPage />);
+		renderWithQuery(<TracksWithImportMusic />);
 		await screen.findByText("Anti-Hero");
 		fireEvent.click(screen.getByRole("button", { name: "Import Music" }));
 		fireEvent.change(screen.getByLabelText("Audio files"), {
@@ -2074,7 +2053,7 @@ describe("tracks route", () => {
 					},
 				],
 			});
-		renderWithQuery(<TracksPage />);
+		renderWithQuery(<TracksWithImportMusic />);
 		await screen.findByText("Anti-Hero");
 		fireEvent.click(screen.getByRole("button", { name: "Import Music" }));
 		const file = new File(["flac bytes"], "strict-import.flac", {
@@ -2129,7 +2108,7 @@ describe("tracks route", () => {
 				revision: 3,
 				files: [],
 			});
-		renderWithQuery(<TracksPage />);
+		renderWithQuery(<TracksWithImportMusic />);
 		await screen.findByText("Anti-Hero");
 		fireEvent.click(screen.getByRole("button", { name: "Import Music" }));
 		const firstFile = new File(["first"], "first.flac", {
@@ -2162,7 +2141,7 @@ describe("tracks route", () => {
 	});
 
 	it("preserves an explicit deselection across confirmation refresh", async () => {
-		renderWithQuery(<TracksPage />);
+		renderWithQuery(<TracksWithImportMusic />);
 		await screen.findByText("Anti-Hero");
 		fireEvent.click(screen.getByRole("button", { name: "Import Music" }));
 		fireEvent.change(screen.getByLabelText("Audio files"), {
@@ -2200,7 +2179,7 @@ describe("tracks route", () => {
 						});
 				}),
 		);
-		renderWithQuery(<TracksPage />);
+		renderWithQuery(<TracksWithImportMusic />);
 		await screen.findByText("Anti-Hero");
 		fireEvent.click(screen.getByRole("button", { name: "Import Music" }));
 		fireEvent.change(screen.getByLabelText("Audio files"), {
@@ -2257,7 +2236,7 @@ describe("tracks route", () => {
 		mocks.confirmManagedImportBatch.mockRejectedValueOnce(
 			new Error("confirmation response lost"),
 		);
-		renderWithQuery(<TracksPage />);
+		renderWithQuery(<TracksWithImportMusic />);
 		await screen.findByText("Anti-Hero");
 		fireEvent.click(screen.getByRole("button", { name: "Import Music" }));
 		fireEvent.change(screen.getByLabelText("Audio files"), {
@@ -2323,7 +2302,7 @@ describe("tracks route", () => {
 				});
 			},
 		);
-		renderWithQuery(<TracksPage />);
+		renderWithQuery(<TracksWithImportMusic />);
 		await screen.findByText("Anti-Hero");
 		fireEvent.click(screen.getByRole("button", { name: "Import Music" }));
 		fireEvent.click(screen.getByRole("button", { name: "Select audio files" }));

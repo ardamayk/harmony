@@ -39,7 +39,7 @@ test("cached absence becomes imported Track; Enter decodes audio; Album navigati
 			},
 		});
 	});
-	await page.goto("/library/tracks");
+	await page.goto("/settings");
 	const absent = await search(page, title);
 	expect(absent.bestMatch).toBeUndefined();
 	expect(absent.tracks).toEqual([]);

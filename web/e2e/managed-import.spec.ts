@@ -147,6 +147,13 @@ async function gotoTracks(page: Page): Promise<void> {
 	});
 }
 
+async function gotoSettings(page: Page): Promise<void> {
+	await page.goto("/settings");
+	await expect(
+		page.getByRole("heading", { name: "Settings", exact: true }),
+	).toBeVisible({ timeout: 15_000 });
+}
+
 function trackRow(page: Page, title: string): Locator {
 	return page
 		.getByRole("row")
@@ -154,6 +161,7 @@ function trackRow(page: Page, title: string): Locator {
 }
 
 async function openImportDialog(page: Page): Promise<Locator> {
+	await gotoSettings(page);
 	await page.getByRole("button", { name: "Import Music" }).click();
 	const dialog = page.getByRole("dialog", { name: "Import Music" });
 	await expect(dialog).toBeVisible();
@@ -198,7 +206,7 @@ function newStagingFiles(before: Set<string>): string[] {
 	return stagingFiles().filter((name) => !before.has(name));
 }
 
-test("Tracks plus action imports a mixed valid and invalid batch through preview and confirmation", async ({
+test("Settings Import Music action imports a mixed valid and invalid batch through preview and confirmation", async ({
 	page,
 	request,
 }) => {
@@ -300,6 +308,7 @@ test("Tracks plus action imports a mixed valid and invalid batch through preview
 	await dialog.getByRole("button", { name: "Done" }).click();
 	await expect(dialog).toBeHidden();
 
+	await gotoTracks(page);
 	await expect(trackRow(page, ALPHA)).toBeVisible();
 	await expect(trackRow(page, BETA)).toBeVisible();
 	await expect(page.getByRole("row").filter({ hasText: RUN_ID })).toHaveCount(
@@ -315,7 +324,6 @@ test("Import Preview skips identical bytes and separates a conflicting Album edi
 	page,
 	request,
 }) => {
-	await gotoTracks(page);
 	const dialog = await openImportDialog(page);
 	await dialog
 		.getByLabel("Audio files")
@@ -356,6 +364,7 @@ test("Import Preview skips identical bytes and separates a conflicting Album edi
 	await expect(copyRow.getByText("Rejected")).toBeVisible();
 	await dialog.getByRole("button", { name: "Done" }).click();
 
+	await gotoTracks(page);
 	await expect(trackRow(page, BETA_REMASTER)).toBeVisible();
 	const tracks = await listRunTracks(request);
 	expect(tracks.map((track) => track.title).sort()).toEqual([
@@ -508,7 +517,7 @@ test("Import Music dialog is keyboard accessible and cancelling cleans staging",
 }) => {
 	const before = await listRunTracks(request);
 	const stagingBefore = new Set(stagingFiles());
-	await gotoTracks(page);
+	await gotoSettings(page);
 
 	// Keyboard open, focus trap, Escape close with focus restoration.
 	const importButton = page.getByRole("button", { name: "Import Music" });
@@ -559,6 +568,7 @@ test("Import Music dialog is keyboard accessible and cancelling cleans staging",
 	expect(prompts).toEqual([CANCEL_PROMPT, CANCEL_PROMPT]);
 	await expect.poll(() => newStagingFiles(stagingBefore)).toEqual([]);
 
+	await gotoTracks(page);
 	await expect(trackRow(page, `${RUN_ID} Abandoned`)).toHaveCount(0);
 	const after = await listRunTracks(request);
 	expect(after.map((track) => track.title).sort()).toEqual(
