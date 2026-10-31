@@ -74,7 +74,7 @@ export function Sidebar({ playlists }: { playlists?: ReactNode }) {
 					);
 				})}
 			</nav>
-			<div className="mt-6 flex min-h-0 flex-1 flex-col gap-1">
+			<div className="mt-1 flex min-h-0 flex-1 flex-col gap-1">
 				{isHiddenFromRole(role, "playlists") ? null : (
 					<>
 						<Link

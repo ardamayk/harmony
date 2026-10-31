@@ -3,9 +3,18 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { SidebarPlaylists } from "./sidebar-playlists";
 
-const listPlaylists = vi.hoisted(() => vi.fn());
+const { getPlaylist, listPlaylists } = vi.hoisted(() => ({
+	getPlaylist: vi.fn(),
+	listPlaylists: vi.fn(),
+}));
 
-vi.mock("#/lib/api", () => ({ apiClient: { listPlaylists } }));
+vi.mock("#/lib/api", () => ({
+	apiClient: {
+		getAlbumCoverUrl: (albumId: string) => `/cover/${albumId}`,
+		getPlaylist,
+		listPlaylists,
+	},
+}));
 
 vi.mock("@tanstack/react-router", () => ({
 	Link: ({
@@ -37,11 +46,14 @@ describe("SidebarPlaylists", () => {
 	it("links each Playlist in the server's order", async () => {
 		listPlaylists.mockResolvedValue({
 			items: [
-				{ id: "p1", name: "Road trip" },
-				{ id: "p2", name: "Late night" },
+				{ id: "p1", name: "Road trip", trackCount: 2 },
+				{ id: "p2", name: "Late night", trackCount: 0 },
 			],
 		});
-		renderList();
+		getPlaylist.mockResolvedValue({
+			tracks: [{ albumId: "a1" }, { albumId: "a2" }],
+		});
+		const { container } = renderList();
 
 		const links = await screen.findAllByRole("link");
 		expect(links.map((link) => link.getAttribute("href"))).toEqual([
@@ -49,6 +61,14 @@ describe("SidebarPlaylists", () => {
 			"/playlists/p2",
 		]);
 		expect(links[0].getAttribute("title")).toBe("Road trip");
+		await vi.waitFor(() =>
+			expect(
+				Array.from(container.querySelectorAll("img")).map((img) =>
+					img.getAttribute("src"),
+				),
+			).toEqual(["/cover/a1"]),
+		);
+		expect(getPlaylist).toHaveBeenCalledTimes(1);
 	});
 
 	it("shows nothing without Playlists", async () => {
