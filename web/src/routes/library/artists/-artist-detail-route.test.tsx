@@ -147,9 +147,11 @@ describe("artist detail route", () => {
 		expect(screen.getByTitle("Last.fm").getAttribute("href")).toBe(
 			"https://www.last.fm/music/Skillet",
 		);
-		// The whole square photo, at the banner's full height.
-		const photo = document.querySelector('img[src="/photo/artist-1"]');
-		expect(photo?.className).toContain("aspect-square");
+		// The backdrop draws the photo; this one only reports a failed load.
+		const photo = document.querySelector<HTMLImageElement>(
+			'img[src="/photo/artist-1"]',
+		);
+		expect(photo?.hidden).toBe(true);
 		expect(photo?.parentElement?.className).toContain("min-h-artist-banner");
 	});
 

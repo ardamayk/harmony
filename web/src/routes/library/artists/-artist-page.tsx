@@ -136,25 +136,27 @@ export function ArtistDetailContent({ artistId }: { artistId: string }) {
 
 	return (
 		<DetailPageShell testId="artist-detail-content">
-			{/* Deezer's photos are square, so the banner holds the whole photo at
-			    its full height on the right, over its own larger copy as the
-			    band's backdrop (Tidal); name and About sit on its left. With no
-			    photo the band stays, holding the name. */}
+			{/* Deezer's photos are square, so the banner's backdrop is the whole
+			    photo at its full height on the right, melting into the page
+			    (Tidal); name and About sit on its left. With no photo the band
+			    stays, holding the name. */}
 			<CoverWash
 				cacheKey={`artist:${artistId}`}
 				imageUrl={photoUrl}
 				backdropUrl={photoShown ? photoUrl : undefined}
+				backdropPlacement="end"
 				className={cn(
 					"relative flex flex-col justify-end overflow-hidden",
 					photoShown && "min-h-artist-banner",
 				)}
 			>
 				{photoShown ? (
+					// Not drawn: it only says whether the backdrop has a photo.
 					<img
 						src={photoUrl}
 						alt=""
+						hidden
 						onError={() => setFailedPhotoUrl(photoUrl)}
-						className="absolute inset-y-0 right-(--page-edge-right) aspect-square h-full object-cover"
 					/>
 				) : null}
 				<div className="relative flex min-w-0 flex-col">

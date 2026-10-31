@@ -30,20 +30,27 @@ const SHARP_WIDTH = "var(--cover-wash-image-width, 100%)";
 
 const TEXT_SIDE = `linear-gradient(to right, ${TEXT_VEIL} ${CONTENT_LEFT}, transparent calc(${CONTENT_LEFT} + ${CONTENT_WIDTH} * 0.5))`;
 
+/**
+ * `content` spans what the band holds. `end` is one square image at the band's
+ * full height, on the content's right edge, melting into the page on its left.
+ */
+type BackdropPlacement = "content" | "end";
+
 /** One image, centred on the band and faded towards its sides. */
 function imageLayerStyle(
 	url: string,
 	left: string,
 	width: string,
 	bandTop: string,
-	fade: number,
+	fadeLeft: number,
+	fadeRight: number,
 ): CSSProperties {
 	return {
 		backgroundImage: `url(${JSON.stringify(url)})`,
 		backgroundSize: `${width} auto`,
 		backgroundPosition: `${left} calc(${bandTop} + (${BAND_HEIGHT} - ${width}) / 2)`,
 		backgroundRepeat: "no-repeat",
-		maskImage: `linear-gradient(to right, transparent ${left}, var(--background) calc(${left} + ${width} * ${fade}), var(--background) calc(${left} + ${width} * ${1 - fade}), transparent calc(${left} + ${width}))`,
+		maskImage: `linear-gradient(to right, transparent ${left}, var(--background) calc(${left} + ${width} * ${fadeLeft}), var(--background) calc(${left} + ${width} * ${1 - fadeRight}), transparent calc(${left} + ${width}))`,
 	};
 }
 
@@ -51,11 +58,28 @@ function CoverImages({
 	softUrl,
 	sharpUrl,
 	bandTop,
+	placement,
 }: {
 	softUrl: string;
 	sharpUrl: string;
 	bandTop: string;
+	placement: BackdropPlacement;
 }) {
+	if (placement === "end") {
+		return (
+			<div
+				className="absolute inset-0"
+				style={imageLayerStyle(
+					sharpUrl,
+					SHARP_LEFT,
+					SHARP_WIDTH,
+					bandTop,
+					0.6,
+					0,
+				)}
+			/>
+		);
+	}
 	return (
 		<>
 			<div
@@ -66,6 +90,7 @@ function CoverImages({
 					CONTENT_WIDTH,
 					bandTop,
 					0.05,
+					0.05,
 				)}
 			/>
 			<div
@@ -75,6 +100,7 @@ function CoverImages({
 					SHARP_LEFT,
 					SHARP_WIDTH,
 					bandTop,
+					0.22,
 					0.22,
 				)}
 			/>
@@ -110,7 +136,11 @@ const TOP_NAV_TINT_STYLE: CSSProperties = {
  * Keeps the Top Nav's copy of the band on the band: at the band's height and
  * scrolled with it, so the bar is a window onto the same surface.
  */
-function keepWashOnBand(topNavWash: HTMLElement, band: HTMLElement | null) {
+function keepWashOnBand(
+	topNavWash: HTMLElement,
+	band: HTMLElement | null,
+	placement: BackdropPlacement,
+) {
 	const scroller = band?.closest<HTMLElement>(DETAIL_SCROLLER_SELECTOR);
 	if (!band || !scroller) return;
 	const follow = () => {
@@ -128,12 +158,16 @@ function keepWashOnBand(topNavWash: HTMLElement, band: HTMLElement | null) {
 		// Last, after the images when the band has them.
 		const contentBox = (band.lastElementChild ?? band).getBoundingClientRect();
 		const left = contentBox.left - bandBox.left;
-		const sharpWidth = contentBox.width * SHARP_SHARE_OF_CONTENT;
+		const atEnd = placement === "end";
+		const sharpWidth = atEnd
+			? bandBox.height
+			: contentBox.width * SHARP_SHARE_OF_CONTENT;
 		const measures = {
 			"--cover-wash-height": bandBox.height,
 			"--cover-wash-content-left": left,
 			"--cover-wash-content-width": contentBox.width,
-			"--cover-wash-image-left": left + (contentBox.width - sharpWidth) / 2,
+			"--cover-wash-image-left":
+				left + (contentBox.width - sharpWidth) / (atEnd ? 1 : 2),
 			"--cover-wash-image-width": sharpWidth,
 		};
 		for (const surface of [topNavWash, band]) {
@@ -166,6 +200,7 @@ export function CoverWash({
 	cacheKey,
 	imageUrl,
 	backdropUrl,
+	backdropPlacement = "content",
 	className,
 	children,
 }: {
@@ -174,6 +209,7 @@ export function CoverWash({
 	imageUrl: string;
 	/** A larger copy; `imageUrl` is its soft copy as well as its colour. */
 	backdropUrl?: string;
+	backdropPlacement?: BackdropPlacement;
 	/** Layout for what the band holds, such as an Artist photo laid on it. */
 	className?: string;
 	children: ReactNode;
@@ -190,8 +226,9 @@ export function CoverWash({
 	const bandImage = tint ? backdropUrl : undefined;
 	const bandRef = useRef<HTMLDivElement>(null);
 	const followBand = useCallback(
-		(topNavWash: HTMLDivElement) => keepWashOnBand(topNavWash, bandRef.current),
-		[],
+		(topNavWash: HTMLDivElement) =>
+			keepWashOnBand(topNavWash, bandRef.current, backdropPlacement),
+		[backdropPlacement],
 	);
 	return (
 		<>
@@ -212,6 +249,7 @@ export function CoverWash({
 						<CoverImages
 							softUrl={imageUrl}
 							sharpUrl={bandImage}
+							placement={backdropPlacement}
 							bandTop="0px"
 						/>
 						<div className="absolute inset-0" style={BAND_VEIL_STYLE} />
@@ -235,6 +273,7 @@ export function CoverWash({
 								<CoverImages
 									softUrl={imageUrl}
 									sharpUrl={bandImage}
+									placement={backdropPlacement}
 									bandTop={BAND_TOP}
 								/>
 								<div className="absolute inset-0" style={TOP_NAV_VEIL_STYLE} />
