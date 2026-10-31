@@ -43,6 +43,17 @@ pub(crate) async fn load_saved_playback(
     }
 }
 
+/// A Playback Session names one Music Server's Tracks, so a connection to
+/// another server keeps only the volume, shuffle and repeat.
+pub(crate) fn forget_saved_source(
+    store: &PlaybackSnapshotStore,
+) -> Result<(), PlaybackLifecycleError> {
+    if let Some(snapshot) = store.load()? {
+        store.save(&cleared_snapshot(&snapshot)?)?;
+    }
+    Ok(())
+}
+
 fn cleared_snapshot(
     snapshot: &PlaybackSessionSnapshot,
 ) -> Result<PlaybackSessionSnapshot, PlaybackLifecycleError> {
@@ -107,6 +118,21 @@ mod tests {
     use super::*;
     use axum::{Router, http::StatusCode, routing::get};
     use serde_json::json;
+
+    #[test]
+    fn forgetting_the_source_keeps_the_listeners_settings() {
+        let (directory, store, snapshot) = saved_track();
+        store.save(&snapshot).unwrap();
+
+        forget_saved_source(&store).unwrap();
+
+        let forgotten = store.load().unwrap().expect("snapshot");
+        assert!(forgotten.source().is_none());
+        assert_eq!(forgotten.playhead_seconds(), 0.0);
+        assert_eq!(forgotten.volume(), snapshot.volume());
+        assert_eq!(forgotten.repeat_mode(), snapshot.repeat_mode());
+        std::fs::remove_dir_all(directory).unwrap();
+    }
 
     fn saved_track() -> (
         std::path::PathBuf,

@@ -163,7 +163,7 @@ async fn test_server_connection(
 
 /// Without `headers`, a server keeps the ones it already has.
 async fn save_server_connection(
-    state: &AppState,
+    state: &Arc<AppState>,
     origin: String,
     headers: Option<BTreeMap<String, String>>,
 ) -> Result<ConnectionCheck, ConnectionError> {
@@ -183,26 +183,57 @@ async fn save_server_connection(
         Some(headers) => state.bridge.save_headers(&origin, headers),
         None => state.bridge.keep_headers_of(&origin),
     }
-    *state.origin.write().map_err(|_| state_error())? = Some(origin);
+    let previous = state
+        .origin
+        .write()
+        .map_err(|_| state_error())?
+        .replace(origin.clone());
+    if previous.as_ref() != Some(&origin) {
+        if let Err(error) = playback_restore::forget_saved_source(&state.playback_snapshot_store) {
+            eprintln!("Saved playback could not be cleared for the new server: {error}");
+        }
+        stop_saved_playback(state).await;
+    }
     state.queue_events.reconnect();
     state.output.emit(CONNECTION_CHANGED_EVENT, &check);
     Ok(check)
 }
 
+/// Leaves the player empty, so a Track from elsewhere never tries to play.
+async fn stop_saved_playback(state: &Arc<AppState>) {
+    let state = state.clone();
+    let stopped = runtime::spawn_blocking(move || state.playback.stop().map(|_| ())).await;
+    if !matches!(stopped, Ok(Ok(()))) {
+        eprintln!("Saved playback could not be stopped.");
+    }
+}
+
 /// The shell hands over what it keeps encrypted, once, at startup. Headers
-/// saved for another origin than the current one are ignored.
-fn set_server_headers(
-    state: &AppState,
+/// saved for another origin than the current one are ignored. A server that
+/// needs them could not answer when the core checked the saved Track on start,
+/// so it is checked again here.
+async fn set_server_headers(
+    state: &Arc<AppState>,
     origin: String,
     headers: BTreeMap<String, String>,
 ) -> Result<(), ConnectionError> {
     let origin = ServerOrigin::parse(&origin)?;
     let current = state.origin.read().map_err(|_| state_error())?.clone();
-    if current.as_ref() == Some(&origin) {
-        state
-            .bridge
-            .save_headers(&origin, ServerHeaders::parse(&headers)?);
-        state.queue_events.reconnect();
+    if current.as_ref() != Some(&origin) {
+        return Ok(());
+    }
+    state
+        .bridge
+        .save_headers(&origin, ServerHeaders::parse(&headers)?);
+    state.queue_events.reconnect();
+    let restored = playback_restore::load_saved_playback(
+        &state.playback_snapshot_store,
+        &state.bridge,
+        Some(&origin),
+    )
+    .await;
+    if matches!(restored, Ok(Some(snapshot)) if snapshot.source().is_none()) {
+        stop_saved_playback(state).await;
     }
     Ok(())
 }
@@ -1011,7 +1042,7 @@ async fn dispatch(state: Arc<AppState>, method: &str, params: Value) -> Reply {
         "set_server_headers" => {
             let origin = param(&params, "origin")?;
             let headers = param(&params, "headers")?;
-            reply(set_server_headers(&state, origin, headers))
+            reply(set_server_headers(&state, origin, headers).await)
         }
         "desktop_http_request" => {
             let request = param(&params, "request")?;
