@@ -227,6 +227,7 @@ fn browser_headers(mut response: Response, csp: &'static str) -> Response {
         ),
         ("x-content-type-options", "nosniff"),
         ("x-frame-options", "DENY"),
+        ("x-robots-tag", "noindex, nofollow"),
     ] {
         headers.insert(name, HeaderValue::from_static(value));
     }

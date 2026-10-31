@@ -366,6 +366,7 @@ async fn every_guest_answer_carries_the_browser_protections() {
     assert_eq!(status, StatusCode::FORBIDDEN);
     for headers in [page, refused] {
         assert_eq!(headers["x-frame-options"], "DENY");
+        assert_eq!(headers["x-robots-tag"], "noindex, nofollow");
         assert_eq!(headers["x-content-type-options"], "nosniff");
         assert_eq!(headers["referrer-policy"], "no-referrer");
         assert_eq!(
