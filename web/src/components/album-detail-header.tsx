@@ -138,7 +138,7 @@ export function AlbumDetailHeader({
 			<CoverWash
 				cacheKey={album.id}
 				imageUrl={apiClient.getAlbumCoverUrl(album.id, 128)}
-				showImage
+				backdropUrl={apiClient.getAlbumCoverUrl(album.id, 1024)}
 			>
 				<ContextMenu>
 					<ContextMenuTrigger render={<div className="@container" />}>
