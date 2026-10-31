@@ -2,7 +2,7 @@
 //! top Track titles and play counts, and Album genres and covers, with the outcome of
 //! their last lookup.
 
-use sqlx::SqlitePool;
+use crate::db::Db;
 use std::collections::HashMap;
 
 #[derive(Debug, thiserror::Error)]
@@ -67,11 +67,11 @@ pub struct Biography {
 
 #[derive(Clone)]
 pub struct Repository {
-    pool: SqlitePool,
+    pool: Db,
 }
 
 impl Repository {
-    pub fn new(pool: SqlitePool) -> Self {
+    pub fn new(pool: Db) -> Self {
         Self { pool }
     }
 

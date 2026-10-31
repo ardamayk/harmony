@@ -108,12 +108,17 @@ The Music Server reads its settings from environment variables only; it does not
 
 Where to set them:
 
-- **Development** (`mise run dev`, `dev:web`, `server:dev`, `desktop:dev`): put them in `mise.local.toml`, which is git-ignored and which mise applies to every task. Keep keys such as `LASTFM_API_KEY` there, never in a tracked file:
+- **Development** (`mise run dev`, `dev:web`, `server:dev`, `desktop:dev`): put them in `mise.local.toml`, which is git-ignored and which mise applies to every task. Keep keys such as `LASTFM_API_KEY` in a file outside the repository, readable only by you, and name it there, so reading or searching the tree never shows them:
 
   ```toml
   [env]
-  LASTFM_API_KEY = "your-key"
+  _.file = { path = "~/.config/harmony-dev/secrets.env", redact = true }
   ARTIST_INFO_LANGUAGE = "tr"
+  ```
+
+  ```sh
+  # ~/.config/harmony-dev/secrets.env
+  LASTFM_API_KEY=your-key
   ```
 
 - **Docker:** under `environment:` in `docker-compose.yml` (see below).

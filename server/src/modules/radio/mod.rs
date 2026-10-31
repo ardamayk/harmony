@@ -59,7 +59,7 @@ impl NowPlayingSink for Recorder {
 }
 
 impl Radio {
-    pub fn new(pool: sqlx::SqlitePool, radio_browser_base_url: &str) -> Self {
+    pub fn new(pool: crate::db::Db, radio_browser_base_url: &str) -> Self {
         let repo = Repository::new(pool);
         let cache = Arc::new(NowPlayingCache::default());
         let recorder = Arc::new(Recorder {

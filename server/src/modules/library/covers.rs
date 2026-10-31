@@ -36,6 +36,7 @@ pub async fn album_cover(
         .ok()
         .flatten();
     crate::observability::distribution_ms("cover.scale.duration", started.elapsed(), &[]);
+    crate::observability::record_span(started, "cover.scale", started.elapsed(), &[], &[]);
     let Some(scaled) = scaled else {
         return Ok(original);
     };

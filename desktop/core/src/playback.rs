@@ -246,6 +246,8 @@ pub(crate) enum MpvEvent {
     BufferedEnd(f64),
     Paused(bool),
     Decoder(ObservedMpvProperties),
+    /// mpv's `start-file`: the previous file is closed and this one opens.
+    FileStarted,
     /// mpv's `file-loaded`: the file opened and its audio was found.
     FileLoaded,
     /// mpv's `playback-restart`: audio plays after a load or seek.
@@ -437,6 +439,13 @@ impl RealMpvProcess {
         command: Value,
         event_boundary: Option<u64>,
     ) -> Result<Value, String> {
+        // Only the name: mpv's "error running command" says nothing else, and
+        // the arguments can hold Track URLs.
+        let name = command
+            .get(0)
+            .and_then(Value::as_str)
+            .unwrap_or("unknown")
+            .to_owned();
         let (response_sender, response_receiver) = mpsc::channel();
         self.requests
             .send(MpvWorkerRequest::Command {
@@ -448,6 +457,7 @@ impl RealMpvProcess {
         response_receiver
             .recv_timeout(MPV_COMMAND_TIMEOUT)
             .map_err(|_| "Native mpv command timed out.".to_owned())?
+            .map_err(|error| format!("{error} ({name})"))
     }
 
     fn stop_worker(&self) {
@@ -1162,6 +1172,7 @@ fn drain_mpv_event(reader: &mut MpvIpcReader, events: &Sender<MpvEvent>) -> bool
 fn emit_mpv_event(events: &Sender<MpvEvent>, message: &Value) {
     let event = match message.get("event").and_then(Value::as_str) {
         Some("property-change") => property_event(message),
+        Some("start-file") => Some(MpvEvent::FileStarted),
         Some("file-loaded") => Some(MpvEvent::FileLoaded),
         Some("playback-restart") => Some(MpvEvent::PlaybackRestart),
         Some("end-file") if message.get("reason").and_then(Value::as_str) == Some("eof") => {
@@ -2558,6 +2569,7 @@ fn dispatch_regular_playback_event(
 fn report_load_timing(load_timer: &LoadTimer, event: &MpvEvent) {
     let mark = match event {
         MpvEvent::LoadBoundary(load_revision) => LoadMark::Accepted(*load_revision),
+        MpvEvent::FileStarted => LoadMark::FileStarted,
         MpvEvent::FileLoaded => LoadMark::FileLoaded,
         MpvEvent::PlaybackRestart => LoadMark::Playing,
         MpvEvent::Error(_) => LoadMark::Failed,
@@ -3505,6 +3517,7 @@ fn reduce_mpv_event(
         MpvEvent::Ended => handle_ended_event(process, state, queue, adaptive_system_rate),
         MpvEvent::Error(message) => handle_mpv_error(process, state, adaptive_system_rate, message),
         MpvEvent::LoadBoundary(_)
+        | MpvEvent::FileStarted
         | MpvEvent::FileLoaded
         | MpvEvent::PlaybackRestart
         | MpvEvent::ExitedUnexpectedly(_)

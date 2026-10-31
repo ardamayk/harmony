@@ -15,6 +15,7 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post, put};
 use axum::{Json, Router};
 use futures_util::StreamExt;
+use sentry::SentryFutureExt;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use std::sync::Arc;
@@ -550,7 +551,8 @@ where
 {
     let token = CancellationToken::new();
     let _cancel_on_drop = token.clone().drop_guard();
-    let task = tokio::spawn(work(token));
+    // The request's own hub, so its spans survive the move to a new task.
+    let task = tokio::spawn(work(token).bind_hub(sentry::Hub::current()));
     task.await.expect("Managed Import task panicked")
 }
 
@@ -580,11 +582,14 @@ async fn confirm_batch(
     let service = service(&state);
     // Unlike `detached`, this outlives the connection: once the Owner confirms,
     // losing the answer must not leave the Batch half imported.
-    let result = tokio::spawn(async move {
-        service
-            .confirm_batch(&CancellationToken::new(), &batch_id, &confirmation)
-            .await
-    })
+    let result = tokio::spawn(
+        async move {
+            service
+                .confirm_batch(&CancellationToken::new(), &batch_id, &confirmation)
+                .await
+        }
+        .bind_hub(sentry::Hub::current()),
+    )
     .await
     .expect("Managed Import task panicked");
     respond(result, StatusCode::OK, "/api/v1/import-batches")

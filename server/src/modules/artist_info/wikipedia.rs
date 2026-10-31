@@ -4,6 +4,7 @@
 
 use super::fetch;
 use super::repository::Biography;
+use crate::observability;
 use serde_json::Value;
 use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
@@ -18,12 +19,14 @@ pub struct Pacer(Mutex<Option<Instant>>);
 
 impl Pacer {
     async fn wait(&self) {
+        let started = Instant::now();
         let mut last = self.0.lock().await;
         if let Some(previous) = *last {
             let next = previous + Duration::from_secs(1);
             tokio::time::sleep_until(next.into()).await;
         }
         *last = Some(Instant::now());
+        observability::record_span(started, "artist_info.wait", started.elapsed(), &[], &[]);
     }
 }
 

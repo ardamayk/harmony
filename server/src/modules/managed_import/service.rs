@@ -969,6 +969,7 @@ impl Service {
             started.elapsed(),
             &[("outcome", if inspection.is_ok() { "ok" } else { "failed" })],
         );
+        crate::observability::record_span(started, "import.inspect", started.elapsed(), &[], &[]);
         inspection
     }
 

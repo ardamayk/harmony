@@ -58,7 +58,7 @@ fn is_due(outcome: Outcome, age_seconds: i64, plain: bool) -> bool {
 }
 
 impl Lyrics {
-    pub fn new(pool: sqlx::SqlitePool, base_url: &str, enabled: bool, version: &str) -> Self {
+    pub fn new(pool: crate::db::Db, base_url: &str, enabled: bool, version: &str) -> Self {
         // LRCLIB requires clients to name themselves and a project page.
         let user_agent = format!("EarthlyAudio/{version} (https://github.com/ardamayk/harmony)");
         let client = reqwest::Client::builder()
@@ -161,7 +161,10 @@ mod tests {
         let last_query = Arc::new(std::sync::Mutex::new(String::new()));
         let (counter, seen) = (requests.clone(), last_query.clone());
         let app = Router::new().fallback(move |uri: Uri| {
-            counter.fetch_add(1, Ordering::SeqCst);
+            // LRCLIB answers below `/api`; local tools probe open ports at `/`.
+            if uri.path() != "/" {
+                counter.fetch_add(1, Ordering::SeqCst);
+            }
             let query = uri.query().unwrap_or("").to_owned();
             if uri.path() == "/api/get" {
                 *seen.lock().unwrap() = query.clone();

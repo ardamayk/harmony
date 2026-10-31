@@ -4,11 +4,12 @@
 use super::service::{apply_playback_patch, normalize_layout};
 use super::types::*;
 use crate::db;
-use sqlx::{SqliteConnection, SqlitePool};
+use crate::db::Db;
+use sqlx::SqliteConnection;
 
 #[derive(Clone)]
 pub struct Repository {
-    pool: SqlitePool,
+    pool: Db,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -24,7 +25,7 @@ pub enum RepositoryError {
 }
 
 impl Repository {
-    pub fn new(pool: SqlitePool) -> Self {
+    pub fn new(pool: Db) -> Self {
         Self { pool }
     }
 

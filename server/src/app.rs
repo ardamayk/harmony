@@ -3,6 +3,7 @@
 //! Listener's far smaller one (ADR 0037).
 
 use crate::config::{Config, ListenTogetherConfig};
+use crate::db::Db;
 use crate::dependencies::Report;
 use crate::owner_access::OwnerAccess;
 use crate::respond::ApiError;
@@ -15,7 +16,6 @@ use axum::http::{
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
-use sqlx::SqlitePool;
 use std::sync::Arc;
 use std::time::Duration;
 use tower_http::catch_panic::CatchPanicLayer;
@@ -53,7 +53,7 @@ const OWNER_DOCS_CSP: &str = "object-src 'none'; base-uri 'none'; frame-ancestor
 pub struct AppState {
     pub config: Arc<Config>,
     pub dependencies: Arc<Report>,
-    pub db: SqlitePool,
+    pub db: Db,
     pub waveforms: Arc<modules::library::WaveformService>,
     pub search: Arc<modules::search::SearchService>,
     pub radio: Arc<modules::radio::Radio>,
@@ -68,7 +68,7 @@ pub struct AppState {
 }
 
 impl AppState {
-    pub fn new(config: Config, dependencies: Report, db: SqlitePool) -> Self {
+    pub fn new(config: Config, dependencies: Report, db: Db) -> Self {
         let radio = modules::radio::Radio::new(db.clone(), &config.radio_browser_base_url);
         let waveforms = modules::library::WaveformService::new(
             db.clone(),

@@ -2,11 +2,12 @@
 
 use super::types::{CatalogOption, List, SearchResult};
 use crate::gojson;
+use crate::observability;
 use crate::query::GoQuery;
 use serde::Deserialize;
 use serde_json::Value;
 use std::collections::BTreeMap;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 const USER_AGENT: &str = "navidrome-replacement/0.1";
@@ -381,9 +382,16 @@ impl RadioBrowserClient {
         path: &str,
     ) -> Result<T, BrowserError> {
         let url = format!("{}{path}", self.base_url);
+        let started = Instant::now();
+        let result = self.get_json(&url).await;
+        observability::outbound_request(&url, started, result.is_ok());
+        result
+    }
+
+    async fn get_json<T: serde::de::DeserializeOwned>(&self, url: &str) -> Result<T, BrowserError> {
         let response = self
             .client
-            .get(&url)
+            .get(url)
             .send()
             .await
             .map_err(|error| BrowserError::Failed(format!("Get \"{url}\": {error}")))?;

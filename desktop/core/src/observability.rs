@@ -3,18 +3,22 @@
 //! the environment the Electron shell starts it with; without `SENTRY_DSN`
 //! nothing starts and every call below is a no-op.
 //!
-//! What is sent: panics, the core failing, the mpv process failing, and
-//! each Playback Source load as a transaction and metrics named by its
-//! source type and what started it. What is never sent: media URLs (the
+//! What is sent: panics, the core failing, the mpv process failing, each
+//! Playback Source load as a transaction and metrics named by its source
+//! type and what started it, and each audio stream through the media proxy
+//! as a transaction in that load's trace, which its `sentry-trace` header
+//! carries to the Music Server. What is never sent: media URLs (the
 //! media proxy's carry a token), file paths, Track titles or the host's
 //! name; [`scrub_text`] replaces URLs and paths in free text. The scrubbing
 //! follows the Music Server's (server/src/observability.rs).
 
+use crate::media_stream_timing::{StreamOutcome, StreamReport};
 use crate::playback_load_timing::{LoadOutcome, LoadReport};
-use sentry::protocol::{Context, Event, SpanId, SpanStatus, Unit, Value};
+use sentry::protocol::{Context, Event, SpanId, SpanStatus, TraceId, Unit, Value};
 use sentry::{Hub, Level, TransactionContext};
 use std::borrow::Cow;
 use std::path::Path;
+use std::sync::Mutex;
 use std::time::{Duration, SystemTime};
 
 /// The name every event carries instead of the computer's name.
@@ -156,9 +160,43 @@ pub(crate) fn playback_process_failed(detail: &str) {
     );
 }
 
-/// One Playback Source load: a transaction from `loadfile` to its outcome
-/// with `file-loaded` as a child span, duration metrics, and an error event
-/// when it failed. It names the source type and trigger, never the source.
+/// A load's place in a trace, which the streams opened for it share.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct LoadTrace {
+    pub(crate) trace_id: TraceId,
+    pub(crate) span_id: SpanId,
+}
+
+/// The latest load, which a new stream belongs to: mpv opens streams on its
+/// own, so no request says which load asked for one.
+static LOAD_TRACE: Mutex<Option<LoadTrace>> = Mutex::new(None);
+
+pub(crate) fn start_load_trace() -> LoadTrace {
+    let trace = LoadTrace::default();
+    if let Ok(mut current) = LOAD_TRACE.lock() {
+        *current = Some(trace);
+    }
+    trace
+}
+
+pub(crate) fn load_trace() -> LoadTrace {
+    LOAD_TRACE
+        .lock()
+        .ok()
+        .and_then(|current| *current)
+        .unwrap_or_default()
+}
+
+/// The stream's `sentry-trace` value. It leaves out a sampling decision, so
+/// the Music Server keeps its own sample rate.
+pub(crate) fn stream_trace_header(report: &StreamReport) -> Option<String> {
+    enabled().then(|| format!("{}-{}", report.load.trace_id, report.span_id))
+}
+
+/// One Playback Source load: a transaction from `loadfile` to its outcome,
+/// with mpv closing the previous file and opening this one as child spans,
+/// duration metrics, and an error event when it failed. It names the source
+/// type and trigger, never the source.
 pub(crate) fn playback_load(report: &LoadReport) {
     if !enabled() {
         return;
@@ -170,22 +208,50 @@ pub(crate) fn playback_load(report: &LoadReport) {
         .checked_sub(report.elapsed)
         .unwrap_or_else(SystemTime::now);
     let transaction = sentry::start_transaction_with_timestamp(
-        TransactionContext::new(&format!("playback.load {source_type}"), "playback.load"),
+        TransactionContext::new_with_details(
+            &format!("playback.load {source_type}"),
+            "playback.load",
+            report.trace.trace_id,
+            Some(report.trace.span_id),
+            None,
+        ),
         start,
     );
     transaction.set_tag("source_type", source_type);
     transaction.set_tag("start", trigger);
     transaction.set_tag("outcome", outcome);
     transaction.set_data("load_ms", milliseconds(report.elapsed).into());
-    if let Some(file_loaded) = report.file_loaded {
+    if let Some(accepted) = report.accepted {
+        transaction.set_data("accepted_ms", milliseconds(accepted).into());
+    }
+    let stage = |op: &str, description: &str, from: Duration, to: Duration| {
         transaction
-            .start_child_with_details(
-                "playback.file_loaded",
-                "loadfile to file-loaded",
-                SpanId::default(),
-                start,
-            )
-            .finish_with_timestamp(start + file_loaded);
+            .start_child_with_details(op, description, SpanId::default(), start + from)
+            .finish_with_timestamp(start + to);
+    };
+    if let Some(file_started) = report.file_started {
+        stage(
+            "playback.close_previous",
+            "loadfile to start-file",
+            Duration::ZERO,
+            file_started,
+        );
+    }
+    if let Some(file_loaded) = report.file_loaded {
+        stage(
+            "playback.file_loaded",
+            "loadfile to file-loaded",
+            Duration::ZERO,
+            file_loaded,
+        );
+        if let Some(file_started) = report.file_started {
+            stage(
+                "playback.open_file",
+                "start-file to file-loaded",
+                file_started,
+                file_loaded,
+            );
+        }
     }
     transaction.set_status(match report.outcome {
         LoadOutcome::Started => SpanStatus::Ok,
@@ -203,6 +269,9 @@ pub(crate) fn playback_load(report: &LoadReport) {
     if let Some(file_loaded) = report.file_loaded {
         distribution_ms("playback.load.file_loaded", file_loaded, &attributes);
     }
+    if let Some(file_started) = report.file_started {
+        distribution_ms("playback.load.file_started", file_started, &attributes);
+    }
     if report.outcome == LoadOutcome::Failed {
         sentry::with_scope(
             |scope| {
@@ -212,6 +281,85 @@ pub(crate) fn playback_load(report: &LoadReport) {
             || sentry::capture_message("Playback Source failed to start", Level::Error),
         );
     }
+}
+
+/// One audio stream through the media proxy: a transaction in the trace of
+/// the load it opened for, with the wait for the Music Server's answer as
+/// child spans and what it waited on as data, and metrics. It names the
+/// source type and the byte range, never the source.
+pub(crate) fn media_stream(report: &StreamReport) {
+    if !enabled() {
+        return;
+    }
+    let source_type = report.source_type;
+    let outcome = report.outcome.name();
+    let start = SystemTime::now()
+        .checked_sub(report.elapsed)
+        .unwrap_or_else(SystemTime::now);
+    let transaction = sentry::start_transaction_with_timestamp(
+        TransactionContext::new_with_details(
+            &format!("media.stream {source_type}"),
+            "media.stream",
+            report.load.trace_id,
+            Some(report.span_id),
+            Some(report.load.span_id),
+        ),
+        start,
+    );
+    transaction.set_tag("source_type", source_type);
+    transaction.set_tag("outcome", outcome);
+    transaction.set_data("range", report.range.clone().into());
+    transaction.set_data("bytes", report.bytes.into());
+    if let Some(status) = report.status {
+        transaction.set_data("http.response.status_code", status.into());
+    }
+    for (key, wait) in [
+        ("server_wait_ms", report.server.total),
+        ("server_wait_longest_ms", report.server.longest),
+        ("player_wait_ms", report.player.total),
+        ("player_wait_longest_ms", report.player.longest),
+    ] {
+        transaction.set_data(key, milliseconds(wait).into());
+    }
+    if let Some(headers) = report.headers {
+        transaction
+            .start_child_with_details(
+                "media.stream.headers",
+                "request to Music Server headers",
+                SpanId::default(),
+                start,
+            )
+            .finish_with_timestamp(start + headers);
+        if let Some(first_byte) = report.first_byte {
+            transaction
+                .start_child_with_details(
+                    "media.stream.first_byte",
+                    "headers to first byte",
+                    SpanId::default(),
+                    start + headers,
+                )
+                .finish_with_timestamp(start + first_byte);
+        }
+    }
+    transaction.set_status(match report.outcome {
+        StreamOutcome::Finished => SpanStatus::Ok,
+        StreamOutcome::PlayerClosed => SpanStatus::Cancelled,
+        StreamOutcome::Failed => SpanStatus::InternalError,
+    });
+    transaction.finish_with_timestamp(start + report.elapsed);
+
+    let attributes = [("source_type", source_type), ("outcome", outcome)];
+    distribution_ms("media.stream.duration", report.elapsed, &attributes);
+    distribution_ms(
+        "media.stream.server_wait_longest",
+        report.server.longest,
+        &attributes,
+    );
+    distribution_ms(
+        "media.stream.player_wait_longest",
+        report.player.longest,
+        &attributes,
+    );
 }
 
 fn milliseconds(duration: Duration) -> f64 {
@@ -407,6 +555,7 @@ impl<'a> Word<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::media_stream_timing::Wait;
     use crate::playback_load_timing::LoadTrigger;
     use sentry::protocol::EnvelopeItem;
     use std::collections::HashMap;
@@ -554,6 +703,74 @@ mod tests {
     }
 
     #[test]
+    fn a_stream_joins_its_load_and_says_what_it_waited_on() {
+        let load = LoadTrace::default();
+        let report = StreamReport {
+            source_type: "track",
+            range: "0-".to_owned(),
+            status: Some(206),
+            outcome: StreamOutcome::PlayerClosed,
+            headers: Some(Duration::from_millis(4)),
+            first_byte: Some(Duration::from_millis(6)),
+            elapsed: Duration::from_secs(124),
+            bytes: 2048,
+            length: Some(4096),
+            server: Wait {
+                total: Duration::from_millis(30),
+                longest: Duration::from_millis(9),
+            },
+            player: Wait {
+                total: Duration::from_secs(123),
+                longest: Duration::from_secs(120),
+            },
+            load,
+            span_id: SpanId::default(),
+        };
+        assert_eq!(stream_trace_header(&report), None);
+        let mut header = None;
+        let envelopes = sentry::test::with_captured_envelopes_options(
+            || {
+                header = stream_trace_header(&report);
+                media_stream(&report);
+            },
+            options(),
+        );
+        assert_eq!(
+            header,
+            Some(format!("{}-{}", load.trace_id, report.span_id))
+        );
+        let transaction = envelopes
+            .iter()
+            .flat_map(|envelope| envelope.items())
+            .find_map(|item| match item {
+                EnvelopeItem::Transaction(transaction) => Some(transaction),
+                _ => None,
+            })
+            .expect("transaction");
+        assert_eq!(transaction.name.as_deref(), Some("media.stream track"));
+        assert_eq!(
+            transaction.tags.get("outcome").map(String::as_str),
+            Some("player_closed")
+        );
+        let Some(Context::Trace(trace)) = transaction.contexts.get("trace") else {
+            panic!("trace context");
+        };
+        assert_eq!(trace.trace_id, load.trace_id);
+        assert_eq!(trace.span_id, report.span_id);
+        assert_eq!(trace.parent_span_id, Some(load.span_id));
+        assert_eq!(
+            trace.data.get("player_wait_longest_ms"),
+            Some(&Value::from(120_000.0))
+        );
+        let ops: Vec<_> = transaction
+            .spans
+            .iter()
+            .map(|span| span.op.as_deref().unwrap_or_default())
+            .collect();
+        assert_eq!(ops, ["media.stream.headers", "media.stream.first_byte"]);
+    }
+
+    #[test]
     fn a_failed_load_sends_a_transaction_and_an_event_without_its_source() {
         let envelopes = sentry::test::with_captured_envelopes_options(
             || {
@@ -561,8 +778,11 @@ mod tests {
                     outcome: LoadOutcome::Failed,
                     source_type: "external-track",
                     trigger: LoadTrigger::Play,
+                    accepted: Some(Duration::from_millis(1)),
+                    file_started: Some(Duration::from_millis(10)),
                     file_loaded: Some(Duration::from_millis(40)),
                     elapsed: Duration::from_millis(120),
+                    trace: LoadTrace::default(),
                 });
                 playback_process_failed(
                     "mpv exited reading http://127.0.0.1:41234/media/secret-token from /home/me/Music/a.flac",
@@ -603,10 +823,18 @@ mod tests {
             transaction.tags.get("start").map(String::as_str),
             Some("play")
         );
-        assert_eq!(transaction.spans.len(), 1);
+        let ops: Vec<_> = transaction
+            .spans
+            .iter()
+            .map(|span| span.op.as_deref().unwrap_or_default())
+            .collect();
         assert_eq!(
-            transaction.spans[0].op.as_deref(),
-            Some("playback.file_loaded")
+            ops,
+            [
+                "playback.close_previous",
+                "playback.file_loaded",
+                "playback.open_file"
+            ]
         );
 
         let events: Vec<_> = items

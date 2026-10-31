@@ -7,8 +7,8 @@ use super::{deezer, lastfm, popular, wikipedia};
 use crate::modules::library::{LibraryError, LibraryService, Track};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use std::time::Duration;
-use tokio::sync::Semaphore;
+use std::time::{Duration, Instant};
+use tokio::sync::{Semaphore, SemaphorePermit};
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 /// A cover at least this wide fills the Album page well enough to keep.
@@ -97,6 +97,14 @@ pub struct ArtistInfo {
     lastfm_slot: Semaphore,
 }
 
+/// A slot of a rate limit, whose queue can outlast the lookup it holds up.
+async fn take_slot(slots: &Semaphore) -> SemaphorePermit<'_> {
+    let started = Instant::now();
+    let slot = slots.acquire().await.expect("semaphore open");
+    crate::observability::record_span(started, "artist_info.wait", started.elapsed(), &[], &[]);
+    slot
+}
+
 /// A library Track's Last.fm play count.
 #[derive(Clone, Debug, PartialEq)]
 pub struct PlayCount {
@@ -116,7 +124,7 @@ fn is_due(outcome: Outcome, age_seconds: i64, found_refresh: Option<i64>) -> boo
 
 impl ArtistInfo {
     pub fn new(
-        pool: sqlx::SqlitePool,
+        pool: crate::db::Db,
         sources: Sources,
         enabled: bool,
         language: &str,
@@ -216,7 +224,7 @@ impl ArtistInfo {
         if !due {
             return Ok(stored.and_then(|stored| stored.value).unwrap_or_default());
         }
-        let _slot = self.lastfm_slot.acquire().await.expect("semaphore open");
+        let _slot = take_slot(&self.lastfm_slot).await;
         let found = lastfm::play_counts(&self.client, &self.sources.lastfm, key, name)
             .await
             .map(|counts| (!counts.is_empty()).then_some(counts));
@@ -239,7 +247,7 @@ impl ArtistInfo {
             return Ok(stored.and_then(|stored| stored.value));
         }
         let (name, albums) = self.artist(artist_id).await?;
-        let _slot = self.deezer_slots.acquire().await.expect("semaphore open");
+        let _slot = take_slot(&self.deezer_slots).await;
         let found =
             match deezer::find_picture(&self.client, &self.sources.deezer, &name, &albums).await {
                 Ok(Some(url)) => super::fetch::bytes(&self.client, &url)
@@ -310,7 +318,7 @@ impl ArtistInfo {
             return Ok(stored.and_then(|stored| stored.value).unwrap_or_default());
         }
         let (name, albums) = self.artist(artist_id).await?;
-        let _slot = self.deezer_slots.acquire().await.expect("semaphore open");
+        let _slot = take_slot(&self.deezer_slots).await;
         let found = deezer::find_top_titles(&self.client, &self.sources.deezer, &name, &albums)
             .await
             .map(|titles| (!titles.is_empty()).then_some(titles));
@@ -337,7 +345,7 @@ impl ArtistInfo {
         if !self.should_look_up(stored.as_ref(), None) {
             return Ok(stored.and_then(|stored| stored.value).unwrap_or_default());
         }
-        let _slot = self.deezer_slots.acquire().await.expect("semaphore open");
+        let _slot = take_slot(&self.deezer_slots).await;
         let found = deezer::find_album_genres(
             &self.client,
             &self.sources.deezer,
@@ -391,7 +399,7 @@ impl ArtistInfo {
             .await
             .map_err(|error| error.to_string())?
             .album;
-        let _slot = self.deezer_slots.acquire().await.expect("semaphore open");
+        let _slot = take_slot(&self.deezer_slots).await;
         let Some(url) = deezer::find_album_cover(
             &self.client,
             &self.sources.deezer,
@@ -448,7 +456,7 @@ impl ArtistInfo {
 
     async fn mark_album_explicit_tracks(&self, album_id: &str) -> Result<(), ArtistInfoError> {
         let detail = self.library.get_album(album_id).await?;
-        let _slot = self.deezer_slots.acquire().await.expect("semaphore open");
+        let _slot = take_slot(&self.deezer_slots).await;
         let found = deezer::find_explicit_titles(
             &self.client,
             &self.sources.deezer,
@@ -555,7 +563,10 @@ mod tests {
         let photo_url = format!("{origin}/img/skillet.jpg");
         let cover_url = format!("{origin}/img/cover.png");
         let app = Router::new().fallback(move |uri: Uri| {
-            counter.fetch_add(1, Ordering::SeqCst);
+            // No source lives at `/`; local tools probe open ports there.
+            if uri.path() != "/" {
+                counter.fetch_add(1, Ordering::SeqCst);
+            }
             let photo_url = photo_url.clone();
             let cover_url = cover_url.clone();
             let musicbrainz_busy = musicbrainz_busy.clone();
@@ -668,7 +679,7 @@ mod tests {
     }
 
     /// One Album by Skillet holding Tracks with these titles.
-    async fn seed_tracks(pool: &sqlx::SqlitePool, titles: &[&str]) {
+    async fn seed_tracks(pool: &crate::db::Db, titles: &[&str]) {
         sqlx::query("INSERT INTO albums (id, artist_id, title, title_sort) VALUES ('al', 'ar', 'Awake', 'awake')")
             .execute(pool)
             .await
@@ -768,7 +779,7 @@ mod tests {
         data
     }
 
-    async fn set_cover(pool: &sqlx::SqlitePool, cover: Vec<u8>) {
+    async fn set_cover(pool: &crate::db::Db, cover: Vec<u8>) {
         sqlx::query("UPDATE albums SET cover_mime = 'image/png', cover_data = ? WHERE id = 'al'")
             .bind(cover)
             .execute(pool)
@@ -776,7 +787,7 @@ mod tests {
             .unwrap();
     }
 
-    async fn album_pool(dir: &tempfile::TempDir) -> sqlx::SqlitePool {
+    async fn album_pool(dir: &tempfile::TempDir) -> crate::db::Db {
         let migrations = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations");
         let pool =
             crate::db::open_and_migrate(dir.path().join("app.db").to_str().unwrap(), &migrations)

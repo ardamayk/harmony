@@ -1,7 +1,7 @@
 //! Saved radio stations (radio/repository.go, queries.sql).
 
 use super::types::{NowPlaying, Station, StationCreate};
-use sqlx::SqlitePool;
+use crate::db::Db;
 
 #[derive(Debug, thiserror::Error)]
 pub enum RadioError {
@@ -15,7 +15,7 @@ pub enum RadioError {
 
 #[derive(Clone)]
 pub struct Repository {
-    pool: SqlitePool,
+    pool: Db,
 }
 
 struct Row {
@@ -95,7 +95,7 @@ fn encode_tags(tags: &[String]) -> String {
 }
 
 impl Repository {
-    pub fn new(pool: SqlitePool) -> Self {
+    pub fn new(pool: Db) -> Self {
         Self { pool }
     }
 

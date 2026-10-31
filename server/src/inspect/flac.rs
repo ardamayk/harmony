@@ -317,7 +317,9 @@ fn decode(
         .ok_or_else(|| audio_error("FLAC stream has no audio track"))?;
     let mut options = AudioDecoderOptions::default();
     options.gapless = false;
-    options.verify = true;
+    // Encoders may leave STREAMINFO's MD5 empty; asking to verify such a stream
+    // only makes the decoder warn once per file.
+    options.verify = params.verification_check.is_some();
     let mut decoder = FlacDecoder::try_new(&params, &options).map_err(audio_error)?;
     let info = &stream.info;
     let mut decoded_samples = 0u64;

@@ -4,8 +4,8 @@
 use super::index::{self, Entity, Index};
 use super::rank::{self, Match, Query};
 use super::repository::{IndexError, Repository};
+use crate::db::Db;
 use serde::Serialize;
-use sqlx::SqlitePool;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -26,7 +26,7 @@ pub struct SearchService {
 }
 
 impl SearchService {
-    pub fn new(pool: SqlitePool) -> Self {
+    pub fn new(pool: Db) -> Self {
         Self {
             repo: Repository::new(pool),
             snapshot: Mutex::new(None),

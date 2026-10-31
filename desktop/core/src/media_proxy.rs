@@ -1,6 +1,7 @@
 use crate::connection::{
     ConnectionError, ConnectionErrorCode, HttpBridge, HttpRequest, ServerOrigin,
 };
+use crate::media_stream_timing::StreamTimer;
 use axum::Router;
 use axum::body::Body;
 use axum::extract::State;
@@ -120,7 +121,11 @@ async fn forward_media_request(
 ) -> Result<Response<Body>, ConnectionError> {
     ensure_read_method(request.method())?;
     let relative_url = proxy_relative_url(request.uri(), &state.token)?;
-    let headers = request
+    let mut timer = audio_stream_type(request.uri()).map(|source_type| {
+        let range = request.headers().get("range");
+        StreamTimer::start(source_type, range.and_then(|value| value.to_str().ok()))
+    });
+    let mut headers = request
         .headers()
         .iter()
         .filter(|(name, _)| MEDIA_REQUEST_HEADERS.contains(&name.as_str()))
@@ -131,6 +136,9 @@ async fn forward_media_request(
                 .map(|value| (name.as_str().to_owned(), value.to_owned()))
         })
         .collect::<BTreeMap<_, _>>();
+    if let Some(trace) = timer.as_ref().and_then(StreamTimer::trace_header) {
+        headers.insert("sentry-trace".to_owned(), trace);
+    }
     let media_request = HttpRequest {
         method: request.method().as_str().to_owned(),
         url: relative_url,
@@ -148,13 +156,30 @@ async fn forward_media_request(
                 "Configure a Music Server before requesting desktop media.",
             )
         })?;
-    let upstream = state.bridge.send_media(&origin, media_request).await?;
+    let upstream = state
+        .bridge
+        .send_media(&origin, media_request)
+        .await
+        .inspect_err(|_| {
+            if let Some(timer) = &mut timer {
+                timer.failed();
+            }
+        })?;
+    let status = upstream.status();
+    if let Some(timer) = &mut timer {
+        timer.answered(status.as_u16(), upstream.content_length());
+    }
     if is_hls_response(&upstream) {
+        if let Some(timer) = &mut timer {
+            timer.finished();
+        }
         return hls_response(upstream, &state.token).await;
     }
-    let status = upstream.status();
     let headers = upstream.headers().clone();
-    let body = Body::from_stream(upstream.bytes_stream());
+    let body = match timer {
+        Some(timer) => Body::from_stream(timer.watch(upstream.bytes_stream())),
+        None => Body::from_stream(upstream.bytes_stream()),
+    };
     let mut response = Response::builder().status(status);
     for (name, value) in headers {
         if let Some(name) = name
@@ -214,6 +239,23 @@ async fn hls_response(
             ConnectionErrorCode::InvalidResponse,
             "Desktop media proxy could not build the rewritten HLS response.",
         )
+    })
+}
+
+/// The Playback Source a request streams, for the requests that last: not an
+/// image, and not one of the HLS resources a playlist asks for every few
+/// seconds, whose Station is reported by the playlist's own stream.
+fn audio_stream_type(uri: &axum::http::Uri) -> Option<&'static str> {
+    let path = uri.path();
+    if !path.ends_with("/stream") || uri.query().is_some_and(|query| query.contains("resource=")) {
+        return None;
+    }
+    Some(if path.contains("/api/v1/tracks/") {
+        "track"
+    } else if path.contains("/api/v1/external/") {
+        "external-track"
+    } else {
+        "radio-station"
     })
 }
 
@@ -447,7 +489,9 @@ fn proxy_state_error() -> ConnectionError {
 
 #[cfg(test)]
 mod tests {
-    use super::{MediaProxy, ensure_read_method, proxy_relative_url, rewrite_hls_manifest};
+    use super::{
+        MediaProxy, audio_stream_type, ensure_read_method, proxy_relative_url, rewrite_hls_manifest,
+    };
     use crate::connection::{HttpBridge, ServerOrigin};
     use axum::Router;
     use axum::body::Body;
@@ -585,6 +629,27 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn only_audio_that_lasts_is_timed() {
+        for (uri, source_type) in [
+            ("/token/api/v1/tracks/t1/stream", Some("track")),
+            (
+                "/token/api/v1/radio/stations/s1/stream",
+                Some("radio-station"),
+            ),
+            (
+                "/token/api/v1/external/tracks/t.s/stream",
+                Some("external-track"),
+            ),
+            ("/token/api/v1/radio/stations/s1/stream?resource=a", None),
+            ("/token/api/v1/external/tracks/t.s/resources/a", None),
+            ("/token/api/v1/library/albums/a1/cover", None),
+        ] {
+            let uri = uri.parse().expect("URI");
+            assert_eq!(audio_stream_type(&uri), source_type, "{uri}");
+        }
     }
 
     #[test]

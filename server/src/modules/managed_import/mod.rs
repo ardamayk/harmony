@@ -30,7 +30,7 @@ pub struct ManagedImport {
 
 impl ManagedImport {
     pub fn new(
-        pool: sqlx::SqlitePool,
+        pool: crate::db::Db,
         config: &Config,
         queue_events: Arc<crate::modules::playback::QueueEventBroker>,
     ) -> Self {

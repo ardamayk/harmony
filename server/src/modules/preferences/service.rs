@@ -3,7 +3,7 @@
 
 use super::repository::{Repository, RepositoryError};
 use super::types::*;
-use sqlx::SqlitePool;
+use crate::db::Db;
 
 /// Preferences rules over the repository.
 pub struct Service {
@@ -19,7 +19,7 @@ pub enum ServiceError {
 }
 
 impl Service {
-    pub fn new(pool: SqlitePool) -> Self {
+    pub fn new(pool: Db) -> Self {
         Self {
             repo: Repository::new(pool),
         }

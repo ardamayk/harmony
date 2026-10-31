@@ -205,7 +205,7 @@ mod tests {
     use super::{QueueEventDecoder, QueueEventService};
     use crate::connection::{HttpBridge, ServerOrigin};
     use std::io::{Read, Write};
-    use std::net::TcpListener;
+    use std::net::{TcpListener, TcpStream};
     use std::sync::{Arc, RwLock, mpsc};
     use std::thread;
     use std::time::Duration;
@@ -305,13 +305,32 @@ mod tests {
         drop(service);
     }
 
+    /// The next API request. Whatever probes local ports on a developer's
+    /// machine reaches these servers too, and must not take a request's place.
+    fn accept_api(listener: &TcpListener) -> TcpStream {
+        loop {
+            let (stream, _) = listener.accept().expect("accept request");
+            stream
+                .set_read_timeout(Some(Duration::from_millis(200)))
+                .expect("set read timeout");
+            let mut start = [0_u8; 9];
+            if stream
+                .peek(&mut start)
+                .is_ok_and(|_| start == *b"GET /api/")
+            {
+                stream.set_read_timeout(None).expect("clear read timeout");
+                return stream;
+            }
+        }
+    }
+
     fn serve_reconnecting_queue_events() -> (String, mpsc::Receiver<String>) {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind Queue SSE server");
         let address = listener.local_addr().expect("Queue SSE address");
         let (requests_tx, requests_rx) = mpsc::channel();
         thread::spawn(move || {
             for (sequence, revision) in [("1", "opaque-1"), ("3", "opaque-3")] {
-                let (mut health_stream, _) = listener.accept().expect("accept health request");
+                let mut health_stream = accept_api(&listener);
                 let mut health_request = [0_u8; 4096];
                 let _ = health_stream
                     .read(&mut health_request)
@@ -335,7 +354,7 @@ mod tests {
                 )
                 .expect("write health response");
 
-                let (mut stream, _) = listener.accept().expect("accept Queue SSE request");
+                let mut stream = accept_api(&listener);
                 let mut request = [0_u8; 4096];
                 let size = stream.read(&mut request).expect("read Queue SSE request");
                 requests_tx
@@ -366,7 +385,7 @@ mod tests {
         .to_string();
         let (requests_tx, requests_rx) = mpsc::channel();
         thread::spawn(move || {
-            let (mut stream, _) = listener.accept().expect("accept capability request");
+            let mut stream = accept_api(&listener);
             let mut request = [0_u8; 4096];
             let size = stream.read(&mut request).expect("read capability request");
             requests_tx

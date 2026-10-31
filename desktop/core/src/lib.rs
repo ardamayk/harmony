@@ -4,6 +4,7 @@ pub mod desktop_import;
 mod device_volume;
 mod exclusive_output;
 pub mod media_proxy;
+mod media_stream_timing;
 #[cfg(target_os = "linux")]
 mod mpris;
 #[cfg(not(target_os = "linux"))]
