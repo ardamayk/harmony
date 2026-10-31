@@ -323,6 +323,11 @@ enum MpvWorkerRequest {
     Shutdown,
 }
 
+/// Frees the real device by moving mpv's audio output to its null driver. Never
+/// use `aid` for this: dropping the track drops the demuxer cache, so playback
+/// stops and the Track is fetched from the Music Server again.
+const PARKED_AUDIO_DEVICE: &str = "null/parked";
+
 /// The running mpv's request channel. Windows restarts every stream on an
 /// endpoint when Adaptive changes its format, so Adaptive closes mpv's audio
 /// before the change and reopens it after (`set_mpv_audio_enabled`). It goes
@@ -343,10 +348,11 @@ pub(crate) fn set_mpv_audio_enabled(enabled: bool) -> Result<(), String> {
         return Ok(());
     };
     let (response, result) = mpsc::channel();
-    let track = if enabled { "auto" } else { "no" };
+    // Adaptive only runs on the default device, so reopening means `auto`.
+    let device = if enabled { "auto" } else { PARKED_AUDIO_DEVICE };
     if requests
         .send(MpvWorkerRequest::Command {
-            command: json!(["set_property", "aid", track]),
+            command: json!(["set_property", "audio-device", device]),
             event_boundary: None,
             response,
         })
@@ -466,17 +472,20 @@ impl RealMpvProcess {
     }
 
     fn restore_system_output(&self) -> Result<(), String> {
-        let disable_result = self.command(json!(["set_property", "aid", "no"]));
-        let device_result = self.command(json!(["set_property", "audio-device", "auto"]));
+        let park_result = self.park_audio_output();
         let shared_result = self.leave_exclusive_mode();
         let release_result = self.exclusive_output.release();
-        let enable_result = self.command(json!(["set_property", "aid", "auto"]));
-        disable_result?;
-        device_result?;
+        let device_result = self.command(json!(["set_property", "audio-device", "auto"]));
+        park_result?;
         shared_result?;
         release_result?;
-        enable_result?;
+        device_result?;
         Ok(())
+    }
+
+    fn park_audio_output(&self) -> Result<(), String> {
+        self.command(json!(["set_property", "audio-device", PARKED_AUDIO_DEVICE]))
+            .map(|_| ())
     }
 
     /// Raw ALSA hardware is exclusive by itself; WASAPI opens an endpoint
@@ -695,7 +704,7 @@ impl MpvProcessAdapter for RealMpvProcess {
                 Ok(None)
             }
             MpvOutputConfiguration::DirectAlsa { device_id } => {
-                self.command(json!(["set_property", "aid", "no"]))?;
+                self.park_audio_output()?;
                 if let Err(error) = self.exclusive_output.acquire(device_id) {
                     return match self.restore_system_output() {
                         Ok(()) => Err(error),
@@ -704,16 +713,13 @@ impl MpvProcessAdapter for RealMpvProcess {
                         )),
                     };
                 }
-                let result = self
-                    .enter_exclusive_mode()
-                    .and_then(|_| {
-                        self.command(json!([
-                            "set_property",
-                            "audio-device",
-                            exclusive_audio_device(device_id)
-                        ]))
-                    })
-                    .and_then(|_| self.command(json!(["set_property", "aid", "auto"])));
+                let result = self.enter_exclusive_mode().and_then(|_| {
+                    self.command(json!([
+                        "set_property",
+                        "audio-device",
+                        exclusive_audio_device(device_id)
+                    ]))
+                });
                 if let Err(error) = result {
                     if let Err(restore_error) = self.restore_system_output() {
                         return Err(format!(
@@ -4174,7 +4180,7 @@ mod tests {
     }
 
     struct ReconnectMpvProcess {
-        load_calls: Arc<AtomicUsize>,
+        load_calls: Arc<std::sync::atomic::AtomicUsize>,
     }
 
     struct RecordedExclusiveOutput {
@@ -4342,7 +4348,7 @@ mod tests {
     struct ReobservedOutputMpv {
         configured_format: Option<AudioFormatObservation>,
         observed_format: Arc<Mutex<Option<AudioFormatObservation>>>,
-        observation_calls: Arc<AtomicUsize>,
+        observation_calls: Arc<std::sync::atomic::AtomicUsize>,
     }
 
     struct FailingAdvanceMpv {
@@ -5489,14 +5495,12 @@ mod tests {
                 MpvOutputConfiguration::System,
             ]),
             [
-                "mpv:[\"set_property\",\"aid\",\"no\"]",
+                "mpv:[\"set_property\",\"audio-device\",\"null/parked\"]",
                 "reserve:hw:2,0",
                 "mpv:[\"set_property\",\"audio-device\",\"alsa/hw:2,0\"]",
-                "mpv:[\"set_property\",\"aid\",\"auto\"]",
-                "mpv:[\"set_property\",\"aid\",\"no\"]",
-                "mpv:[\"set_property\",\"audio-device\",\"auto\"]",
+                "mpv:[\"set_property\",\"audio-device\",\"null/parked\"]",
                 "release",
-                "mpv:[\"set_property\",\"aid\",\"auto\"]",
+                "mpv:[\"set_property\",\"audio-device\",\"auto\"]",
             ]
         );
         assert_eq!(
@@ -5504,10 +5508,9 @@ mod tests {
                 device_id: "hw:2,0".to_owned(),
             }]),
             [
-                "mpv:[\"set_property\",\"aid\",\"no\"]",
+                "mpv:[\"set_property\",\"audio-device\",\"null/parked\"]",
                 "reserve:hw:2,0",
                 "mpv:[\"set_property\",\"audio-device\",\"alsa/hw:2,0\"]",
-                "mpv:[\"set_property\",\"aid\",\"auto\"]",
                 "release",
             ]
         );
@@ -5522,7 +5525,7 @@ mod tests {
             bit_depth: Some(24),
             channels: Some(2),
         })));
-        let observation_calls = Arc::new(AtomicUsize::new(0));
+        let observation_calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let controller = PlaybackController::start_with_output_devices(
             Box::new(ReobservedOutputMpv {
                 configured_format: Some(AudioFormatObservation {
@@ -6491,7 +6494,7 @@ mod tests {
     #[test]
     fn live_radio_reloads_after_the_first_reconnect_delay() {
         let (event_sender, event_receiver) = std::sync::mpsc::channel();
-        let load_calls = Arc::new(AtomicUsize::new(0));
+        let load_calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let controller = PlaybackController::start(
             Box::new(ReconnectMpvProcess {
                 load_calls: load_calls.clone(),
@@ -6575,7 +6578,7 @@ mod tests {
     #[test]
     fn stale_live_reconnect_rechecks_revision_after_the_process_lock() {
         let (event_sender, event_receiver) = std::sync::mpsc::channel();
-        let load_calls = Arc::new(AtomicUsize::new(0));
+        let load_calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let controller = PlaybackController::start(
             Box::new(ReconnectMpvProcess {
                 load_calls: load_calls.clone(),
@@ -6624,7 +6627,7 @@ mod tests {
         let (event_sender, event_receiver) = std::sync::mpsc::channel();
         let controller = PlaybackController::start(
             Box::new(ReconnectMpvProcess {
-                load_calls: Arc::new(AtomicUsize::new(0)),
+                load_calls: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
             }),
             event_receiver,
             |_| {},
@@ -6665,7 +6668,7 @@ mod tests {
         let (event_sender, event_receiver) = std::sync::mpsc::channel();
         let controller = PlaybackController::start(
             Box::new(ReconnectMpvProcess {
-                load_calls: Arc::new(AtomicUsize::new(0)),
+                load_calls: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
             }),
             event_receiver,
             |_| {},
@@ -6695,7 +6698,7 @@ mod tests {
     #[test]
     fn delayed_stable_event_does_not_arm_a_replaced_live_source() {
         let (event_sender, event_receiver) = std::sync::mpsc::channel();
-        let load_calls = Arc::new(AtomicUsize::new(0));
+        let load_calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let controller = PlaybackController::start(
             Box::new(ReconnectMpvProcess {
                 load_calls: load_calls.clone(),
@@ -6743,7 +6746,7 @@ mod tests {
     #[test]
     fn delayed_stable_event_does_not_complete_a_new_reconnect_load() {
         let (event_sender, event_receiver) = std::sync::mpsc::channel();
-        let load_calls = Arc::new(AtomicUsize::new(0));
+        let load_calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let controller = PlaybackController::start(
             Box::new(ReconnectMpvProcess {
                 load_calls: load_calls.clone(),
@@ -6792,7 +6795,7 @@ mod tests {
     #[test]
     fn pausing_cancels_a_pending_live_reconnect() {
         let (event_sender, event_receiver) = std::sync::mpsc::channel();
-        let load_calls = Arc::new(AtomicUsize::new(0));
+        let load_calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let controller = PlaybackController::start(
             Box::new(ReconnectMpvProcess {
                 load_calls: load_calls.clone(),
@@ -7653,6 +7656,108 @@ mod tests {
         drop(controller);
         server.shutdown();
         fs::remove_dir_all(fixture_directory).expect("remove stream fixture directory");
+    }
+
+    /// Serves a long silent WAV slowly enough that mpv is still buffering, and
+    /// counts the requests that resume it from an offset.
+    fn serve_slow_wav() -> (String, Arc<std::sync::atomic::AtomicUsize>) {
+        const SAMPLE_RATE: u32 = 8_000;
+        const DATA_SIZE: u32 = SAMPLE_RATE * 2 * 600;
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind WAV server");
+        let url = format!(
+            "http://{}/track.wav",
+            listener.local_addr().expect("WAV server address")
+        );
+        use std::io::{BufRead, Write};
+        let resumes = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let counted_resumes = resumes.clone();
+        thread::spawn(move || {
+            for stream in listener.incoming().flatten() {
+                let counted_resumes = counted_resumes.clone();
+                thread::spawn(move || {
+                    let mut reader = std::io::BufReader::new(&stream);
+                    let mut start = 0_u32;
+                    let mut line = String::new();
+                    while reader.read_line(&mut line).is_ok_and(|read| read > 2) {
+                        if let Some(range) = line.to_lowercase().strip_prefix("range: bytes=") {
+                            start = range
+                                .split('-')
+                                .next()
+                                .and_then(|offset| offset.parse().ok())
+                                .unwrap_or(0);
+                        }
+                        line.clear();
+                    }
+                    if start > 0 {
+                        counted_resumes.fetch_add(1, Ordering::SeqCst);
+                    }
+                    let mut wav = Vec::with_capacity(44);
+                    wav.extend_from_slice(b"RIFF");
+                    wav.extend_from_slice(&(36 + DATA_SIZE).to_le_bytes());
+                    wav.extend_from_slice(b"WAVEfmt \x10\0\0\0\x01\0\x01\0");
+                    wav.extend_from_slice(&SAMPLE_RATE.to_le_bytes());
+                    wav.extend_from_slice(&(SAMPLE_RATE * 2).to_le_bytes());
+                    wav.extend_from_slice(&2_u16.to_le_bytes());
+                    wav.extend_from_slice(&16_u16.to_le_bytes());
+                    wav.extend_from_slice(b"data");
+                    wav.extend_from_slice(&DATA_SIZE.to_le_bytes());
+                    let length = 44 + DATA_SIZE;
+                    let status = if start > 0 {
+                        format!(
+                            "206 Partial Content\r\nContent-Range: bytes {start}-{}/{length}",
+                            length - 1
+                        )
+                    } else {
+                        "200 OK".to_owned()
+                    };
+                    let mut writer = &stream;
+                    let header = format!(
+                        "HTTP/1.1 {status}\r\nAccept-Ranges: bytes\r\nContent-Type: audio/wav\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                        length - start
+                    );
+                    if writer.write_all(header.as_bytes()).is_err() {
+                        return;
+                    }
+                    if start == 0 && writer.write_all(&wav).is_err() {
+                        return;
+                    }
+                    let silence = [0_u8; 32_000];
+                    while writer.write_all(&silence).is_ok() {
+                        thread::sleep(Duration::from_millis(50));
+                    }
+                });
+            }
+        });
+        (url, resumes)
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[ignore = "requires the pinned Linux mpv executable"]
+    fn real_pinned_mpv_changes_output_without_refetching_the_buffered_track() {
+        let (url, resumes) = serve_slow_wav();
+        let (process, events, _) =
+            RealMpvProcess::start(super::resolve_mpv_binary(), vec!["--ao=null".to_owned()])
+                .expect("start pinned mpv");
+        let controller = PlaybackController::start(process, events, |_| {});
+        controller
+            .play(Some(json!({
+                "type": "track",
+                "track": { "id": "fixture", "title": "Fixture", "durationMs": 600_000 },
+                "playbackUrl": url
+            })))
+            .expect("play buffered fixture");
+        let playing = wait_for_state(&controller, |state| state.current_time > 0.2);
+
+        controller
+            .fallback_to_system_output()
+            .expect("reopen audio output");
+        let resumed = wait_for_state(&controller, |state| {
+            state.current_time > playing.current_time + 0.5
+        });
+
+        assert_eq!(resumed.status, PlaybackStatus::Playing);
+        assert_eq!(resumes.load(Ordering::SeqCst), 0);
     }
 
     fn play_controlled_stream(
