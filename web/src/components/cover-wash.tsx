@@ -13,7 +13,7 @@ const TINT_STEP = "color-mix(in oklab, var(--cover-tint) 40%, transparent)";
 const TINT_END = "color-mix(in oklab, var(--cover-tint) 0%, transparent)";
 
 /** Keeps header text at contrast on a bright cover, in either theme mode. */
-const IMAGE_VEIL = "color-mix(in oklab, var(--background) 64%, transparent)";
+const IMAGE_VEIL = "color-mix(in oklab, var(--background) 76%, transparent)";
 const SCROLL = "var(--cover-wash-scroll, 0px)";
 const BAND_HEIGHT = "var(--cover-wash-height, 0px)";
 const BAND_TOP = `calc(var(--cover-wash-top, 0px) - ${SCROLL})`;
@@ -32,9 +32,9 @@ const IMAGE_EDGE = `linear-gradient(to right, var(--background) ${IMAGE_LEFT}, t
 
 function bandImageStyle(imageUrl: string): CSSProperties {
 	return {
-		backgroundImage: `linear-gradient(${TINT_STEP}, ${TINT_END}), linear-gradient(${IMAGE_VEIL}, var(--background)), ${IMAGE_EDGE}, ${imageLayer(imageUrl)}`,
-		backgroundSize: `auto, auto, auto, ${IMAGE_WIDTH} auto`,
-		backgroundPosition: `0 0, 0 0, 0 0, ${IMAGE_LEFT} 50%`,
+		backgroundImage: `linear-gradient(${IMAGE_VEIL}, var(--background)), ${IMAGE_EDGE}, ${imageLayer(imageUrl)}`,
+		backgroundSize: `auto, auto, ${IMAGE_WIDTH} auto`,
+		backgroundPosition: `0 0, 0 0, ${IMAGE_LEFT} 50%`,
 		backgroundRepeat: "no-repeat",
 	};
 }
@@ -43,25 +43,20 @@ function bandImageStyle(imageUrl: string): CSSProperties {
 // child: the Top Nav is the Desktop Client's drag region, a child inherits it
 // past the clip, and every click over the page below would move the window.
 function topNavWashStyle(imageUrl?: string): CSSProperties {
-	const tint = {
-		image: `linear-gradient(${TINT_STEP}, ${TINT_STEP}), linear-gradient(${TINT_STEP}, ${TINT_END})`,
-		size: `100% 100%, 100% ${BAND_HEIGHT}`,
-		position: `0 calc(0px - ${SCROLL}), 0 ${BAND_TOP}`,
-	};
 	if (!imageUrl) {
 		return {
-			backgroundImage: tint.image,
-			backgroundSize: tint.size,
-			backgroundPosition: tint.position,
+			backgroundImage: `linear-gradient(${TINT_STEP}, ${TINT_STEP}), linear-gradient(${TINT_STEP}, ${TINT_END})`,
+			backgroundSize: `100% 100%, 100% ${BAND_HEIGHT}`,
+			backgroundPosition: `0 calc(0px - ${SCROLL}), 0 ${BAND_TOP}`,
 			backgroundRepeat: "no-repeat",
 		};
 	}
 	// The veil runs on past the band as the plain page, so the rest of the
 	// image, taller than the band, never shows below it.
 	return {
-		backgroundImage: `${tint.image}, linear-gradient(${IMAGE_VEIL}, ${IMAGE_VEIL}), linear-gradient(${IMAGE_VEIL}, var(--background) ${BAND_HEIGHT}), ${IMAGE_EDGE}, ${imageLayer(imageUrl)}`,
-		backgroundSize: `${tint.size}, 100% 100%, 100% calc(${BAND_HEIGHT} + ${IMAGE_WIDTH}), 100% 100%, ${IMAGE_WIDTH} auto`,
-		backgroundPosition: `${tint.position}, 0 calc(0px - ${SCROLL}), 0 ${BAND_TOP}, 0 0, ${IMAGE_LEFT} calc(${BAND_TOP} + (${BAND_HEIGHT} - ${IMAGE_WIDTH}) / 2)`,
+		backgroundImage: `linear-gradient(${IMAGE_VEIL}, ${IMAGE_VEIL}), linear-gradient(${IMAGE_VEIL}, var(--background) ${BAND_HEIGHT}), ${IMAGE_EDGE}, ${imageLayer(imageUrl)}`,
+		backgroundSize: `100% 100%, 100% calc(${BAND_HEIGHT} + ${IMAGE_WIDTH}), 100% 100%, ${IMAGE_WIDTH} auto`,
+		backgroundPosition: `0 calc(0px - ${SCROLL}), 0 ${BAND_TOP}, 0 0, ${IMAGE_LEFT} calc(${BAND_TOP} + (${BAND_HEIGHT} - ${IMAGE_WIDTH}) / 2)`,
 		backgroundRepeat: "no-repeat",
 	};
 }
@@ -124,7 +119,7 @@ function keepWashOnBand(topNavWash: HTMLElement, band: HTMLElement | null) {
  * list begins; no colour yet leaves the plain page background. The colour
  * runs up behind the Top Nav at the band's top step, then scrolls away with
  * the band. With `backdropUrl`, that image lies under the colour at the
- * band's right, veiled and fading into the page.
+ * band's right instead of the colour, veiled and fading into the page.
  */
 export function CoverWash({
 	cacheKey,
