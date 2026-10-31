@@ -605,6 +605,7 @@ describe("createApiClient", () => {
 		const uploadHeaders = new Headers(transport.mock.calls[1]?.[1]?.headers);
 		expect(uploadHeaders.get("Content-Type")).toBe("audio/flac");
 		expect(uploadHeaders.get("X-Import-Filename")).toBe("fixture.flac");
+		expect(uploadHeaders.get("X-Import-Filename-Encoding")).toBe("url");
 		expect(JSON.parse(String(transport.mock.calls[2]?.[1]?.body))).toEqual({
 			revision: 2,
 		});
@@ -627,13 +628,15 @@ describe("createApiClient", () => {
 
 		await client.uploadManagedImportFile(
 			"00000000-0000-4000-8000-000000000003",
-			"recording.wav",
+			"01. Taylor Swift – Lavender Haze.wav",
 			new Blob(["wav bytes"], { type: "audio/wav" }),
 		);
 
 		const uploadHeaders = new Headers(transport.mock.calls[0]?.[1]?.headers);
 		expect(uploadHeaders.get("Content-Type")).toBe("audio/wav");
-		expect(uploadHeaders.get("X-Import-Filename")).toBe("recording.wav");
+		expect(uploadHeaders.get("X-Import-Filename")).toBe(
+			"01.%20Taylor%20Swift%20%E2%80%93%20Lavender%20Haze.wav",
+		);
 	});
 
 	it("preserves structured Managed Import validation fields", async () => {

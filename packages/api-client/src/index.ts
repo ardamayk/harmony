@@ -312,6 +312,11 @@ export function createApiClient(config: ApiClientConfig) {
 		onProgress?: ManagedImportUploadProgress,
 		signal?: AbortSignal,
 	): Promise<ManagedImportPreview> {
+		// A header carries Latin-1 only, and browsers throw on anything else.
+		const filenameHeaders = {
+			"X-Import-Filename": encodeURIComponent(originalFilename),
+			"X-Import-Filename-Encoding": "url",
+		};
 		if (config.transport || typeof XMLHttpRequest === "undefined") {
 			onProgress?.(0);
 			return request<ManagedImportPreview>(
@@ -321,7 +326,7 @@ export function createApiClient(config: ApiClientConfig) {
 					method: "PUT",
 					headers: {
 						"Content-Type": file.type || "application/octet-stream",
-						"X-Import-Filename": originalFilename,
+						...filenameHeaders,
 					},
 					body: file,
 					signal,
@@ -343,7 +348,9 @@ export function createApiClient(config: ApiClientConfig) {
 				"Content-Type",
 				file.type || "application/octet-stream",
 			);
-			upload.setRequestHeader("X-Import-Filename", originalFilename);
+			for (const [name, value] of Object.entries(filenameHeaders)) {
+				upload.setRequestHeader(name, value);
+			}
 			const token = getToken?.();
 			if (token) upload.setRequestHeader("Authorization", `Bearer ${token}`);
 			upload.upload.addEventListener("progress", (event) => {
