@@ -570,7 +570,8 @@ mod tests {
                         {"title": "Not In Library", "title_short": ""},
                         {"title": "Hero", "title_short": "Hero"}
                     ]}),
-                    "/search/album" if query.contains("Awake") => json!({"data": [
+                    "/search/album" if query.to_lowercase().contains("awake") && !query.contains("Edition") => json!({"data": [
+                        {"id": 9, "title": "Awake", "cover_xl": null, "artist": {"id": 7, "name": "Skillet"}},
                         {"id": 9, "title": "Awake (Deluxe)", "cover_xl": cover_url, "artist": {"id": 7, "name": "Skillet"}}
                     ]}),
                     "/album/9" => json!({"id": 9, "genres": {"data": [{"id": 152, "name": "Rock"}]}}),
@@ -802,6 +803,20 @@ mod tests {
         set_cover(&pool, png(600, 600)).await;
         assert!(info.sharper_cover("al").await.unwrap().is_some());
         assert!(requests.load(Ordering::SeqCst) > made, "a new own cover");
+    }
+
+    #[tokio::test]
+    async fn searches_for_a_cover_without_the_edition_in_the_title() {
+        let (sources, _) = fake_sources().await;
+        let (dir, info) = service(sources, true).await;
+        let pool = album_pool(&dir).await;
+        set_cover(&pool, png(500, 500)).await;
+        sqlx::query("UPDATE albums SET title = 'Awake (Deluxe Edition)' WHERE id = 'al'")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        assert!(info.sharper_cover("al").await.unwrap().is_some());
     }
 
     #[tokio::test]

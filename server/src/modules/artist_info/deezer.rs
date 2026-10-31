@@ -34,8 +34,9 @@ struct AlbumHit {
     title: String,
     #[serde(default)]
     explicit_lyrics: bool,
+    // Null for some Albums, which `default` alone does not accept.
     #[serde(default)]
-    cover_xl: String,
+    cover_xl: Option<String>,
     artist: Artist,
 }
 
@@ -166,17 +167,14 @@ pub async fn find_album_cover(
     artist_name: &str,
     title: &str,
 ) -> Result<Option<String>, String> {
-    let query = format!("{artist_name} {title}");
+    // Without an edition such as "(deluxe edition)", which can hide the Album.
+    let query = format!("{artist_name} {}", base_title(title));
     let hits: Hits<AlbumHit> = search(client, base_url, "album", &query).await?;
     Ok(hits
         .into_iter()
-        .find(|hit| {
-            same_name(&hit.artist.name, artist_name)
-                && same_title(&hit.title, title)
-                && !hit.cover_xl.is_empty()
-                && !hit.cover_xl.contains(COVER_PLACEHOLDER_PATH)
-        })
-        .map(|hit| hit.cover_xl))
+        .filter(|hit| same_name(&hit.artist.name, artist_name) && same_title(&hit.title, title))
+        .filter_map(|hit| hit.cover_xl)
+        .find(|cover| !cover.is_empty() && !cover.contains(COVER_PLACEHOLDER_PATH)))
 }
 
 /// The base titles of the Tracks Deezer marks explicit on this Album, `None`
