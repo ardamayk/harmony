@@ -12,8 +12,9 @@ const WASH_CLASS = "bg-linear-to-b from-(--cover-tint)/40 to-(--cover-tint)/0";
 const TINT_STEP = "color-mix(in oklab, var(--cover-tint) 40%, transparent)";
 const TINT_END = "color-mix(in oklab, var(--cover-tint) 0%, transparent)";
 
-/** Keeps header text at contrast on a bright cover, in either theme mode. */
-const IMAGE_VEIL = "color-mix(in oklab, var(--background) 76%, transparent)";
+/** Dims the image; `IMAGE_EDGE` darkens it further where header text sits. */
+const IMAGE_VEIL = "color-mix(in oklab, var(--background) 56%, transparent)";
+const TEXT_VEIL = "color-mix(in oklab, var(--background) 55%, transparent)";
 const SCROLL = "var(--cover-wash-scroll, 0px)";
 const BAND_HEIGHT = "var(--cover-wash-height, 0px)";
 const BAND_TOP = `calc(var(--cover-wash-top, 0px) - ${SCROLL})`;
@@ -27,8 +28,9 @@ function imageLayer(imageUrl: string) {
 const IMAGE_MAX_WIDTH_REM = 48;
 const IMAGE_WIDTH = "var(--cover-wash-image-width, 100%)";
 const IMAGE_LEFT = "var(--cover-wash-image-left, 0px)";
-/** Melts the image's left edge into the page, where the header's text sits. */
-const IMAGE_EDGE = `linear-gradient(to right, var(--background) ${IMAGE_LEFT}, transparent calc(${IMAGE_LEFT} + 14rem))`;
+const IMAGE_RIGHT = `calc(${IMAGE_LEFT} + ${IMAGE_WIDTH})`;
+/** Melts the image's sides into the page, slowly on the side with the text. */
+const IMAGE_EDGE = `linear-gradient(to right, var(--background) ${IMAGE_LEFT}, ${TEXT_VEIL} calc(${IMAGE_LEFT} + 16rem), transparent calc(${IMAGE_LEFT} + 32rem), transparent calc(${IMAGE_RIGHT} - 4rem), var(--background) ${IMAGE_RIGHT})`;
 
 function bandImageStyle(imageUrl: string): CSSProperties {
 	return {
@@ -83,21 +85,19 @@ function keepWashOnBand(topNavWash: HTMLElement, band: HTMLElement | null) {
 			"--cover-wash-height",
 			`${band.getBoundingClientRect().height}px`,
 		);
-		// The part of the band the Queue Drawer leaves in view.
-		const { paddingLeft, paddingRight, fontSize } = getComputedStyle(band);
-		const inView =
-			band.getBoundingClientRect().width -
-			Number.parseFloat(paddingRight) +
-			Number.parseFloat(paddingLeft);
+		// The image ends on the content's right edge.
+		const { paddingRight, fontSize } = getComputedStyle(band);
+		const contentRight =
+			band.getBoundingClientRect().width - Number.parseFloat(paddingRight);
 		const width = Math.min(
-			inView,
+			contentRight,
 			IMAGE_MAX_WIDTH_REM * Number.parseFloat(fontSize),
 		);
 		for (const surface of [topNavWash, band]) {
 			surface.style.setProperty("--cover-wash-image-width", `${width}px`);
 			surface.style.setProperty(
 				"--cover-wash-image-left",
-				`${inView - width}px`,
+				`${contentRight - width}px`,
 			);
 		}
 	};
