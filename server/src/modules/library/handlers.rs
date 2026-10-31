@@ -33,15 +33,41 @@ pub fn routes() -> Router<AppState> {
         )
 }
 
-/// `limit` 1..=500 (default 50) and `offset` >= 0; invalid values fall back
-/// to the defaults rather than failing, like the Go server.
-fn pagination(query: &GoQuery) -> (i64, i64) {
-    let number = |key: &str| query.get(key).parse::<i64>().ok();
-    let limit = number("limit")
-        .filter(|limit| (1..=500).contains(limit))
-        .unwrap_or(50);
-    let offset = number("offset").filter(|offset| *offset >= 0).unwrap_or(0);
-    (limit, offset)
+/// `limit` 1..=500 (default 50) and `offset` >= 0, as the contract bounds
+/// them; anything else is refused. An empty value counts as unset.
+fn pagination(query: &GoQuery) -> ApiResult<(i64, i64)> {
+    let limit = match query.get("limit") {
+        "" => 50,
+        raw => raw
+            .parse()
+            .ok()
+            .filter(|limit| (1..=500).contains(limit))
+            .ok_or_else(|| {
+                ApiError::bad_request("limit must be a whole number from 1 to 500")
+                    .with_field("limit")
+            })?,
+    };
+    let offset = match query.get("offset") {
+        "" => 0,
+        raw => raw
+            .parse()
+            .ok()
+            .filter(|offset| *offset >= 0)
+            .ok_or_else(|| {
+                ApiError::bad_request("offset must be a whole number from 0").with_field("offset")
+            })?,
+    };
+    Ok((limit, offset))
+}
+
+/// The `artistId` filter, or "" without one. `parse_str` also takes the
+/// UUID's other spellings, which no stored id uses.
+fn artist_filter(query: &GoQuery) -> ApiResult<&str> {
+    let artist_id = query.get("artistId");
+    if artist_id.is_empty() || (artist_id.len() == 36 && uuid::Uuid::parse_str(artist_id).is_ok()) {
+        return Ok(artist_id);
+    }
+    Err(ApiError::bad_request("artistId must be a UUID").with_field("artistId"))
 }
 
 fn not_found(message: &str) -> impl FnOnce(LibraryError) -> ApiError + '_ {
@@ -55,7 +81,7 @@ async fn list_artists(
     State(state): State<AppState>,
     query: GoQuery,
 ) -> ApiResult<Json<types::Page<types::Artist>>> {
-    let (limit, offset) = pagination(&query);
+    let (limit, offset) = pagination(&query)?;
     let page = Service::new(state.db)
         .list_artists(limit, offset, query.get("q"))
         .await
@@ -78,9 +104,10 @@ async fn list_albums(
     State(state): State<AppState>,
     query: GoQuery,
 ) -> ApiResult<Json<types::Page<types::Album>>> {
-    let (limit, offset) = pagination(&query);
+    let (limit, offset) = pagination(&query)?;
+    let artist_id = artist_filter(&query)?;
     let page = Service::new(state.db)
-        .list_albums(limit, offset, query.get("artistId"), query.get("q"))
+        .list_albums(limit, offset, artist_id, query.get("q"))
         .await
         .map_err(ApiError::internal)?;
     Ok(Json(page))
@@ -141,9 +168,10 @@ async fn list_tracks(
     State(state): State<AppState>,
     query: GoQuery,
 ) -> ApiResult<Json<types::Page<Track>>> {
-    let (limit, offset) = pagination(&query);
+    let (limit, offset) = pagination(&query)?;
+    let artist_id = artist_filter(&query)?;
     let page = Service::new(state.db)
-        .list_tracks(limit, offset, query.get("artistId"), query.get("q"))
+        .list_tracks(limit, offset, artist_id, query.get("q"))
         .await
         .map_err(ApiError::internal)?;
     Ok(Json(page))
@@ -199,12 +227,51 @@ mod tests {
     use super::*;
 
     #[test]
-    fn pagination_falls_back_to_defaults() {
+    fn pagination_defaults_and_keeps_valid_values() {
         let query = GoQuery::parse;
-        assert_eq!(pagination(&query("")), (50, 0));
-        assert_eq!(pagination(&query("limit=100&offset=20")), (100, 20));
-        assert_eq!(pagination(&query("limit=0&offset=-1")), (50, 0));
-        assert_eq!(pagination(&query("limit=501&offset=x")), (50, 0));
-        assert_eq!(pagination(&query("limit=10&limit=20")), (10, 0));
+        assert_eq!(pagination(&query("")), Ok((50, 0)));
+        assert_eq!(pagination(&query("limit=&offset=")), Ok((50, 0)));
+        assert_eq!(pagination(&query("limit=100&offset=20")), Ok((100, 20)));
+        assert_eq!(pagination(&query("limit=1&offset=0")), Ok((1, 0)));
+        assert_eq!(pagination(&query("limit=500")), Ok((500, 0)));
+        assert_eq!(pagination(&query("limit=10&limit=20")), Ok((10, 0)));
+    }
+
+    #[test]
+    fn pagination_refuses_what_the_contract_does_not_allow() {
+        for (raw, field) in [
+            ("limit=abc", "limit"),
+            ("limit=-1", "limit"),
+            ("limit=0", "limit"),
+            ("limit=501", "limit"),
+            ("limit=1.5", "limit"),
+            ("limit=9223372036854775808", "limit"),
+            ("offset=abc", "offset"),
+            ("offset=-1", "offset"),
+            ("offset=1.5", "offset"),
+            ("offset=9223372036854775808", "offset"),
+        ] {
+            let error = pagination(&GoQuery::parse(raw)).expect_err(raw);
+            assert_eq!(error.status, StatusCode::BAD_REQUEST, "{raw}");
+            assert_eq!(error.body.field, field, "{raw}");
+        }
+    }
+
+    #[test]
+    fn artist_filter_takes_only_a_hyphenated_uuid() {
+        let id = "67e55044-10b1-426f-9247-bb680e5fe0c8";
+        let valid = format!("artistId={id}");
+        assert_eq!(artist_filter(&GoQuery::parse(&valid)), Ok(id));
+        assert_eq!(artist_filter(&GoQuery::parse("")), Ok(""));
+        for raw in [
+            "artistId=abc",
+            "artistId=67e5504410b1426f9247bb680e5fe0c8",
+            "artistId=%7B67e55044-10b1-426f-9247-bb680e5fe0c8%7D",
+            "artistId=67e55044-10b1-426f-9247-bb680e5fe0cg",
+        ] {
+            let error = artist_filter(&GoQuery::parse(raw)).expect_err(raw);
+            assert_eq!(error.status, StatusCode::BAD_REQUEST, "{raw}");
+            assert_eq!(error.body.field, "artistId", "{raw}");
+        }
     }
 }

@@ -350,6 +350,74 @@ async fn writes_from_other_origins_are_refused() {
     }
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn the_web_client_fallback_serves_only_reads_of_its_own_paths() {
+    let directory = tempfile::tempdir().unwrap();
+    let router = router(directory.path()).await;
+    for (method, path) in [
+        (Method::GET, "/api/nonexistent"),
+        (Method::GET, "/api"),
+        (Method::PUT, "/api/v1/nothing"),
+    ] {
+        let request = Request::builder()
+            .method(&method)
+            .uri(path)
+            .header(header::HOST, "127.0.0.1:8090")
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::empty())
+            .unwrap();
+        let (status, _, body) = send(&router, request).await;
+        assert_eq!(status, StatusCode::NOT_FOUND, "{method} {path}");
+        let body: Value = serde_json::from_slice(&body).expect("JSON error");
+        assert_eq!(body["code"], "not_found", "{method} {path}");
+    }
+    for method in [Method::PUT, Method::DELETE, Method::POST] {
+        let request = Request::builder()
+            .method(&method)
+            .uri("/")
+            .header(header::HOST, "127.0.0.1:8090")
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::empty())
+            .unwrap();
+        let (status, headers, _) = send(&router, request).await;
+        assert_eq!(status, StatusCode::METHOD_NOT_ALLOWED, "{method}");
+        assert_eq!(headers[header::ALLOW], "GET, HEAD", "{method}");
+    }
+    // Without a built Web Client the handler answers an empty 404 instead.
+    for path in ["/", "/library/albums"] {
+        let (status, _, _) = get(&router, path).await;
+        assert!(
+            matches!(status, StatusCode::OK | StatusCode::NOT_FOUND),
+            "{path}: {status}"
+        );
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn library_lists_refuse_what_the_contract_does_not_allow() {
+    let directory = tempfile::tempdir().unwrap();
+    let router = router(directory.path()).await;
+    for path in [
+        "/api/v1/library/tracks?limit=abc",
+        "/api/v1/library/tracks?offset=-1",
+        "/api/v1/library/tracks?artistId=abc",
+        "/api/v1/library/albums?limit=501",
+        "/api/v1/library/albums?artistId=abc",
+        "/api/v1/library/artists?offset=1.5",
+    ] {
+        let (status, _, body) = get(&router, path).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{path}");
+        let body: Value = serde_json::from_slice(&body).expect("JSON error");
+        assert_eq!(body["code"], "bad_request", "{path}");
+    }
+    let (status, _, _) = get(
+        &router,
+        "/api/v1/library/tracks?limit=500&offset=0&artistId=67e55044-10b1-426f-9247-bb680e5fe0c8",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+}
+
 async fn get(router: &axum::Router, path: &str) -> (StatusCode, axum::http::HeaderMap, Vec<u8>) {
     let request = Request::get(path)
         .header(header::HOST, "127.0.0.1:8090")

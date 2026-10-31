@@ -145,6 +145,7 @@ async fn a_token_signed_for_this_application_passes() {
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(response.headers()["x-frame-options"], "DENY");
+    assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
     let csp = response.headers()["content-security-policy"]
         .to_str()
         .unwrap();
@@ -227,6 +228,37 @@ async fn loopback_needs_no_token_and_other_hosts_are_refused_even_with_one() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn only_api_answers_are_kept_out_of_caches() {
+    let harness = harness().await;
+    for (path, cache_control) in [
+        ("/library/albums", None),
+        ("/api/docs", None),
+        ("/api/nothing", Some("no-store")),
+    ] {
+        let response = harness
+            .router
+            .clone()
+            .oneshot(
+                Request::get(path)
+                    .header(header::HOST, HOST)
+                    .header(TOKEN_HEADER, valid_token())
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            response
+                .headers()
+                .get(header::CACHE_CONTROL)
+                .map(|value| value.to_str().unwrap()),
+            cache_control,
+            "{path}"
+        );
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn a_write_from_the_public_origin_passes_and_one_from_elsewhere_does_not() {
     let harness = harness().await;
     let write = |origin: &str| {
@@ -239,10 +271,13 @@ async fn a_write_from_the_public_origin_passes_and_one_from_elsewhere_does_not()
             .unwrap()
     };
     assert_ne!(status(&harness, write(ORIGIN)).await, StatusCode::FORBIDDEN);
-    assert_eq!(
-        status(&harness, write("https://evil.example.com")).await,
-        StatusCode::FORBIDDEN
-    );
+    for origin in ["https://evil.example.com", "http://harmony.example.com"] {
+        assert_eq!(
+            status(&harness, write(origin)).await,
+            StatusCode::FORBIDDEN,
+            "{origin}"
+        );
+    }
 }
 
 #[tokio::test(flavor = "multi_thread")]

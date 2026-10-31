@@ -3,8 +3,9 @@
 //! server/static (scripts/sync-static.sh) before the server compiles; only
 //! the empty directories are committed.
 
+use crate::respond::ApiError;
 use axum::body::Body;
-use axum::http::{StatusCode, Uri, header};
+use axum::http::{Method, StatusCode, Uri, header};
 use axum::response::{IntoResponse, Response};
 use rust_embed::RustEmbed;
 
@@ -22,8 +23,19 @@ struct Docs;
 struct ApiReference;
 
 /// Serves a Web Client asset, or index.html for any other path so the
-/// client's history routes load on reload.
-pub async fn web(uri: Uri) -> Response {
+/// client's history routes load on reload. An API path no route took gets
+/// the API's own 404, not a page, and only reads reach the client.
+pub async fn web(method: Method, uri: Uri) -> Response {
+    if uri.path() == "/api" || uri.path().starts_with("/api/") {
+        return ApiError::not_found("not found").into_response();
+    }
+    if method != Method::GET && method != Method::HEAD {
+        return (
+            StatusCode::METHOD_NOT_ALLOWED,
+            [(header::ALLOW, "GET, HEAD")],
+        )
+            .into_response();
+    }
     let path = uri.path().trim_start_matches('/');
     if !path.is_empty()
         && let Some(response) = asset::<Web>(path)

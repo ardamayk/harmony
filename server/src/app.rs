@@ -110,7 +110,15 @@ impl AppState {
 
 pub fn router(state: AppState) -> Router {
     let cors = cors(&state.config.cors_origins);
-    let origins = Arc::new(state.config.cors_origins.clone());
+    let mut origins = state.config.cors_origins.clone();
+    origins.extend(
+        state
+            .config
+            .owner_access
+            .iter()
+            .map(|access| access.public_origin.clone()),
+    );
+    let origins = Arc::new(origins);
     Router::new()
         .route("/api/v1/health", get(api::get_health))
         .route("/api/v1/me", get(api::get_me))
@@ -193,8 +201,17 @@ fn browser_headers(mut response: Response, csp: &'static str) -> Response {
     let headers = response.headers_mut();
     for (name, value) in [
         ("content-security-policy", csp),
+        ("cross-origin-opener-policy", "same-origin"),
+        ("cross-origin-resource-policy", "same-origin"),
+        (
+            "permissions-policy",
+            "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
+        ),
         ("referrer-policy", "no-referrer"),
-        ("strict-transport-security", "max-age=31536000"),
+        (
+            "strict-transport-security",
+            "max-age=31536000; includeSubDomains",
+        ),
         ("x-content-type-options", "nosniff"),
         ("x-frame-options", "DENY"),
     ] {
@@ -285,12 +302,23 @@ async fn through_access(access: &OwnerAccess, request: Request, next: Next) -> R
         );
     }
     let path = request.uri().path();
-    let csp = if path.starts_with("/docs") || path.starts_with("/api/docs") {
-        OWNER_DOCS_CSP
-    } else {
-        OWNER_CSP
-    };
-    browser_headers(next.run(request).await, csp)
+    let docs = path.starts_with("/docs") || path.starts_with("/api/docs");
+    let api = path.starts_with("/api/") && !docs;
+    let csp = if docs { OWNER_DOCS_CSP } else { OWNER_CSP };
+    let response = browser_headers(next.run(request).await, csp);
+    if api { no_store(response) } else { response }
+}
+
+/// Keeps an API answer out of caches unless it says otherwise. A Track's audio
+/// carries an ETag, so a replay revalidates instead of downloading it again.
+fn no_store(mut response: Response) -> Response {
+    if !response.headers().contains_key(header::ETAG) {
+        response
+            .headers_mut()
+            .entry(header::CACHE_CONTROL)
+            .or_insert(HeaderValue::from_static("no-store"));
+    }
+    response
 }
 
 fn is_loopback_host(host: &str) -> bool {
@@ -351,7 +379,8 @@ async fn public_origin(settings: &ListenTogetherConfig, request: Request, next: 
 /// send Origin on every cross-origin write, even a body-less `no-cors` POST
 /// that needs no preflight, so only this server's own pages and the CORS
 /// allowlist may change state. Requests without Origin (the desktop core,
-/// scripts) are not from a browser page and pass.
+/// scripts) are not from a browser page and pass. `origins` holds
+/// `OWNER_PUBLIC_URL`'s origin too, so that host's pages match scheme and all.
 async fn trusted_origin(origins: &[String], request: Request, next: Next) -> Response {
     if is_untrusted_write(origins, request.method(), request.headers()) {
         return ApiError::new(
@@ -387,7 +416,9 @@ fn is_untrusted_write(origins: &[String], method: &Method, headers: &HeaderMap) 
                 .get(header::HOST)
                 .and_then(|host| host.to_str().ok()),
         )
-        .is_some_and(|((_, authority), host)| authority.eq_ignore_ascii_case(host));
+        .is_some_and(|((_, authority), host)| {
+            is_loopback_host(host) && authority.eq_ignore_ascii_case(host)
+        });
     !same_origin
 }
 
@@ -499,7 +530,29 @@ fn is_stream_path(path: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::is_stream_path;
+    use super::{header, is_stream_path, no_store};
+    use axum::http::HeaderValue;
+    use axum::response::{IntoResponse, Response};
+
+    #[test]
+    fn no_store_leaves_an_answers_own_caching_alone() {
+        let with = |name, value| {
+            let mut response: Response = ().into_response();
+            response
+                .headers_mut()
+                .insert(name, HeaderValue::from_static(value));
+            no_store(response)
+        };
+        let cache_control =
+            |response: Response| response.headers().get(header::CACHE_CONTROL).cloned();
+        assert_eq!(
+            cache_control(no_store(().into_response())).unwrap(),
+            "no-store"
+        );
+        let cover = with(header::CACHE_CONTROL, "public, max-age=86400");
+        assert_eq!(cache_control(cover).unwrap(), "public, max-age=86400");
+        assert_eq!(cache_control(with(header::ETAG, "\"a\"")), None);
+    }
 
     #[test]
     fn room_events_are_unbounded() {

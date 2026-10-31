@@ -368,7 +368,16 @@ async fn every_guest_answer_carries_the_browser_protections() {
         assert_eq!(headers["x-frame-options"], "DENY");
         assert_eq!(headers["x-content-type-options"], "nosniff");
         assert_eq!(headers["referrer-policy"], "no-referrer");
-        assert_eq!(headers["strict-transport-security"], "max-age=31536000");
+        assert_eq!(
+            headers["strict-transport-security"],
+            "max-age=31536000; includeSubDomains"
+        );
+        assert_eq!(headers["cross-origin-opener-policy"], "same-origin");
+        assert_eq!(headers["cross-origin-resource-policy"], "same-origin");
+        assert_eq!(
+            headers["permissions-policy"],
+            "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+        );
         let csp = headers["content-security-policy"].to_str().unwrap();
         assert!(csp.contains("frame-ancestors 'none'"), "{csp}");
         assert!(csp.contains("script-src 'self';"), "{csp}");

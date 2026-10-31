@@ -76,6 +76,8 @@ impl ListenTogetherConfig {
 /// Where the Owner reaches this server through a proxy that signs each request.
 #[derive(Clone, Debug, PartialEq)]
 pub struct OwnerAccessConfig {
+    /// `OWNER_PUBLIC_URL`'s origin, the one page origin allowed to write there.
+    pub public_origin: String,
     /// `OWNER_JWT_HEADER`, the header that carries the proxy's token.
     pub token_header: HeaderName,
     /// `OWNER_JWKS_URL`, where the proxy publishes its signing keys.
@@ -310,13 +312,18 @@ impl Config {
             addr,
             database_path: get("DATABASE_PATH", "./data/app.db"),
             // The Web Client's dev server (3000) and `vp preview` (4173)
-            // proxy the API but forward the browser's Origin.
-            cors_origins: vec![
-                "http://localhost:3000".to_owned(),
-                "http://127.0.0.1:3000".to_owned(),
-                "http://localhost:4173".to_owned(),
-                "http://127.0.0.1:4173".to_owned(),
-            ],
+            // proxy the API but forward the browser's Origin. A server with
+            // a public Owner address is not a development server.
+            cors_origins: if owner_access.is_some() {
+                Vec::new()
+            } else {
+                vec![
+                    "http://localhost:3000".to_owned(),
+                    "http://127.0.0.1:3000".to_owned(),
+                    "http://localhost:4173".to_owned(),
+                    "http://127.0.0.1:4173".to_owned(),
+                ]
+            },
             version: get("APP_VERSION", "0.1.0"),
             managed_storage_path: get("MANAGED_STORAGE_PATH", "./data/managed"),
             managed_storage_reserve_bytes: byte_count(
@@ -493,7 +500,9 @@ fn owner_access_config(
     let authority = url
         .port()
         .map_or_else(|| host.to_owned(), |port| format!("{host}:{port}"));
+    let public_origin = url.origin().ascii_serialization();
     Ok(Some(OwnerAccessConfig {
+        public_origin,
         token_header,
         jwks_url,
         issuer,
@@ -716,7 +725,10 @@ mod tests {
             config(&settings)
         };
         assert_eq!(config(&[]).expect("off").owner_access, None);
-        let settings = config(&SETTINGS).expect("config").owner_access.expect("on");
+        let on = config(&SETTINGS).expect("config");
+        assert!(on.cors_origins.is_empty());
+        let settings = on.owner_access.expect("on");
+        assert_eq!(settings.public_origin, "https://harmony.example.com");
         assert_eq!(settings.token_header, "x-proxy-assertion");
         assert!(settings.accepts_host("harmony.example.com"));
         assert!(settings.accepts_host("HARMONY.example.com:443"));
