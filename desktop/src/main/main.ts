@@ -73,17 +73,16 @@ async function start() {
 		join(configDirectory, SERVER_HEADERS_FILE_NAME),
 		safeStorage,
 	);
-	const savedHeaders = serverHeaders.load();
-	if (savedHeaders) {
-		await core
-			.request("set_server_headers", savedHeaders)
-			.catch((error: unknown) => {
-				process.stderr.write(
-					`[shell] saved headers refused: ${String(error)}\n`,
-				);
-			});
-	}
 	let quitting = false;
+
+	// Before the first window, so its first requests already carry them.
+	const sendSavedHeaders = async () => {
+		const saved = serverHeaders.load();
+		if (!saved) return;
+		await core.request("set_server_headers", saved).catch((error: unknown) => {
+			process.stderr.write(`[shell] saved headers refused: ${String(error)}\n`);
+		});
+	};
 
 	const sendShellAction = (action: TrayAction | "close-main-window") => {
 		core.request("shell_action", { action }).catch((error: unknown) => {
@@ -120,7 +119,7 @@ async function start() {
 			case "shell:ready":
 				tray = new PlaybackTray(paths.trayIcon, sendShellAction);
 				if (pendingTrayUpdate) tray.update(pendingTrayUpdate);
-				windows.createMainWindow();
+				void sendSavedHeaders().finally(() => windows.createMainWindow());
 				return;
 			case "shell:show-main-window":
 				return windows.showMainWindow();

@@ -58,7 +58,7 @@ use playback::{
 use playback_app_actions::{
     DesktopPlaybackAction, DesktopPlaybackShell, dispatch_desktop_playback_action,
 };
-use playback_lifecycle::{PlaybackLifecycle, PlaybackSnapshotStore};
+use playback_lifecycle::{PlaybackLifecycle, PlaybackSessionSnapshot, PlaybackSnapshotStore};
 use playback_publish::PlayheadThrottle;
 use playback_tray::{PlaybackPosition, PlaybackTray, PlaybackTrayView};
 use processing::{
@@ -208,10 +208,29 @@ async fn stop_saved_playback(state: &Arc<AppState>) {
     }
 }
 
+/// The start-up restore failed without the headers, so it runs again.
+async fn restore_saved_playback(state: &Arc<AppState>, snapshot: &PlaybackSessionSnapshot) {
+    let Ok(snapshot) = snapshot.rebind_media_proxy(state.media_proxy.base_url()) else {
+        return;
+    };
+    let state = state.clone();
+    let restored = runtime::spawn_blocking(move || {
+        state
+            .playback
+            .restore_paused(&snapshot)
+            .map(|_| ())
+            .map_err(|error| error.message)
+    })
+    .await;
+    if !matches!(restored, Ok(Ok(()))) {
+        eprintln!("Saved playback could not be restored.");
+    }
+}
+
 /// The shell hands over what it keeps encrypted, once, at startup. Headers
 /// saved for another origin than the current one are ignored. A server that
 /// needs them could not answer when the core checked the saved Track on start,
-/// so it is checked again here.
+/// so it is checked and restored again here.
 async fn set_server_headers(
     state: &Arc<AppState>,
     origin: String,
@@ -232,8 +251,10 @@ async fn set_server_headers(
         Some(&origin),
     )
     .await;
-    if matches!(restored, Ok(Some(snapshot)) if snapshot.source().is_none()) {
-        stop_saved_playback(state).await;
+    match restored {
+        Ok(Some(snapshot)) if snapshot.source().is_none() => stop_saved_playback(state).await,
+        Ok(Some(snapshot)) => restore_saved_playback(state, &snapshot).await,
+        _ => {}
     }
     Ok(())
 }
