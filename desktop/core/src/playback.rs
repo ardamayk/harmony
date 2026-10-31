@@ -278,6 +278,9 @@ pub(crate) trait MpvProcessAdapter: Send + Sync {
     fn set_speed(&self, _rate: f64) -> Result<(), String> {
         Ok(())
     }
+    fn set_gapless(&self, _enabled: bool) -> Result<(), String> {
+        Ok(())
+    }
     fn load_with_event_boundary(&self, url: &str, load_revision: u64) -> Result<(), String> {
         let _ = load_revision;
         self.load(url)
@@ -667,6 +670,12 @@ impl MpvProcessAdapter for RealMpvProcess {
 
     fn set_speed(&self, rate: f64) -> Result<(), String> {
         self.command(json!(["set_property", "speed", rate]))
+            .map(|_| ())
+    }
+
+    fn set_gapless(&self, enabled: bool) -> Result<(), String> {
+        let mode = if enabled { "weak" } else { "no" };
+        self.command(json!(["set_property", "gapless-audio", mode]))
             .map(|_| ())
     }
 
@@ -2202,6 +2211,16 @@ impl PlaybackController {
         self.update(|state| state.playback_rate = rate)
     }
 
+    pub(crate) fn set_gapless(
+        &self,
+        enabled: bool,
+    ) -> Result<PlaybackSessionState, PlaybackCommandError> {
+        if let Err(error) = self.with_process(|process| process.set_gapless(enabled)) {
+            return self.fail_native(error);
+        }
+        self.update(|state| state.is_gapless = enabled)
+    }
+
     pub(crate) fn set_stop_after_current(
         &self,
         enabled: bool,
@@ -3335,15 +3354,18 @@ fn finish_player_restart(
     next_process: Box<dyn MpvProcessAdapter>,
     next_events: Receiver<MpvEvent>,
 ) -> Result<Receiver<MpvEvent>, RecoveryFailure> {
-    let playback_rate = state
+    let (playback_rate, is_gapless) = state
         .lock()
+        .map(|state| (state.playback_rate, state.is_gapless))
         .map_err(|_| {
             RecoveryFailure::internal(
                 "mpv-recovery-state-unavailable",
                 "Playback speed is unavailable during player recovery.",
             )
-        })?
-        .playback_rate;
+        })?;
+    next_process
+        .set_gapless(is_gapless)
+        .map_err(|message| RecoveryFailure::internal("mpv-restart-failed", message))?;
     apply_snapshot_to_process(
         next_process.as_ref(),
         snapshot,
@@ -7102,6 +7124,16 @@ mod tests {
                 Some("volume:0.80")
             );
         }
+    }
+
+    #[test]
+    fn gapless_can_be_turned_off_and_reports_it() {
+        let (controller, _actions) = start_recording_controller();
+        assert!(controller.state().expect("state").is_gapless);
+
+        let state = controller.set_gapless(false).expect("turn gapless off");
+
+        assert!(!state.is_gapless);
     }
 
     #[test]

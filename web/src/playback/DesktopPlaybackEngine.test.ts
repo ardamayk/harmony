@@ -75,6 +75,7 @@ function createBridge() {
 			setVolume: vi.fn(async () => state),
 			setPlaybackRate: vi.fn(async () => state),
 			setStopAfterCurrent: vi.fn(async () => state),
+			setGapless: vi.fn(async () => state),
 			setTransitionFade: vi.fn(async () => state),
 			setProcessingProfile: vi.fn(async () => state),
 			setReplayGainMode: vi.fn(async () => state),

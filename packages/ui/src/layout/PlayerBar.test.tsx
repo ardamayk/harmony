@@ -795,14 +795,11 @@ describe("PlayerBar", () => {
 				screen.getByRole("button", { name: "Start track" }).click();
 			});
 
-			expect(screen.queryByTestId("up-next")).toBeNull();
+			// Whether the Queue is open or closed.
 			const toggleQueue = screen.getByRole("button", {
 				name: "Toggle queue panel",
 			});
-			fireEvent.click(toggleQueue);
 			expect(screen.getByTestId("up-next")).toBeTruthy();
-			fireEvent.click(toggleQueue);
-			expect(screen.queryByTestId("up-next")).toBeNull();
 			fireEvent.click(toggleQueue);
 			const upNext = screen.getByTestId("up-next");
 			expect(upNext.textContent).toContain("Track 2");

@@ -214,6 +214,7 @@ export function PlayerBar({
 		setVolume,
 		setPlaybackRate,
 		setTransitionFade,
+		setGapless,
 		playNext,
 		addToQueue,
 		selectExclusiveOutput,
@@ -249,12 +250,18 @@ export function PlayerBar({
 	const applyTransitionFade = useEffectEvent((fadeMs: number) =>
 		setTransitionFade(fadeMs),
 	);
+	const applyGapless = useEffectEvent((enabled: boolean) =>
+		setGapless(enabled),
+	);
 	useEffect(() => {
 		applyPlaybackRate(playbackPreferences.playbackRate);
 	}, [playbackPreferences.playbackRate]);
 	useEffect(() => {
 		applyTransitionFade(playbackPreferences.transitionFadeMs);
 	}, [playbackPreferences.transitionFadeMs]);
+	useEffect(() => {
+		applyGapless(playbackPreferences.gaplessPlayback);
+	}, [playbackPreferences.gaplessPlayback]);
 	const canSeek = Boolean(currentTrack || currentExternalTrack);
 	const seekBy = useCallback(
 		(delta: number) => {
@@ -987,10 +994,7 @@ export function PlayerBar({
 							</Portal>
 						) : null}
 					</div>
-					{playbackPreferences.showUpNext &&
-					preferences.layout.collapsed[queuePanelSide] ? (
-						<UpNextPeek />
-					) : null}
+					{playbackPreferences.showUpNext ? <UpNextPeek /> : null}
 				</section>
 
 				<PlaybackControls
@@ -1004,7 +1008,6 @@ export function PlayerBar({
 					effectiveDuration={effectiveDuration}
 					bufferedEnd={bufferedEnd}
 					waveform={waveform}
-					showHoverTimestamp={playbackPreferences.hoverTimestamp}
 					keyboardStepSeconds={playbackPreferences.seekStepSeconds}
 					keyboardLargeStepSeconds={playbackPreferences.seekStepLargeSeconds}
 					shuffleEnabled={shuffleEnabled}
@@ -1021,7 +1024,11 @@ export function PlayerBar({
 					qualityLabel={qualityLabel}
 					isLossless={isLosslessFormat(currentTrack?.format)}
 					qualityDetailRows={qualityDetailRows}
-					isGapless={isGapless === true && hasActiveSource}
+					isGapless={
+						playbackPreferences.gaplessPlayback &&
+						isGapless === true &&
+						hasActiveSource
+					}
 					volume={volume}
 					onToggleMute={toggleMute}
 					signalControl={

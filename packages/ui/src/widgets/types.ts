@@ -34,11 +34,11 @@ export const defaultPlayback: PlaybackPreferences = {
 	seekStepLargeSeconds: 30,
 	playbackRate: 1,
 	transitionFadeMs: 0,
-	showWaveform: true,
+	showWaveform: false,
 	accentFromCover: false,
 	showUpNext: true,
 	autoSkipOnErrorSeconds: 5,
-	hoverTimestamp: true,
+	gaplessPlayback: true,
 };
 
 export const defaultPreferences: UserPreferences = {

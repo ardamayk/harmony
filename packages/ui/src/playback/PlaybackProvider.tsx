@@ -164,6 +164,7 @@ type PlaybackContextValue = {
 	setVolume: (value: number) => void;
 	setPlaybackRate: (rate: number) => void;
 	setTransitionFade: (milliseconds: number) => void;
+	setGapless: (enabled: boolean) => void;
 	/** Appends a Track to the end of the Queue. */
 	addToQueue: (trackId: string) => Promise<void>;
 	setProcessingProfile: (profile: ProcessingProfile) => void;
@@ -961,6 +962,7 @@ export function PlaybackProvider({
 			},
 			setTransitionFade: (milliseconds) =>
 				engine.setTransitionFade?.(milliseconds),
+			setGapless: (enabled) => engine.setGapless?.(enabled),
 			addToQueue: (trackId) => queueTracks([trackId]),
 			setProcessingProfile: (profile) => engine.setProcessingProfile?.(profile),
 			setReplayGainMode: (mode) => engine.setReplayGainMode?.(mode),

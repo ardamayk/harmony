@@ -199,8 +199,8 @@ pub fn apply_playback_patch(
     if let Some(value) = patch.auto_skip_on_error_seconds {
         current.auto_skip_on_error_seconds = value;
     }
-    if let Some(value) = patch.hover_timestamp {
-        current.hover_timestamp = value;
+    if let Some(value) = patch.gapless_playback {
+        current.gapless_playback = value;
     }
 }
 
@@ -291,7 +291,7 @@ mod tests {
     fn patches_change_only_what_they_carry() {
         let mut current = preferences();
         let patch: UserPreferencesPatch = serde_json::from_str(
-            r#"{"theme":{"mode":"dark"},"layout":{"panels":{"left":[],"right":null},"collapsed":{"right":null}},"playback":{"showWaveform":false}}"#,
+            r#"{"theme":{"mode":"dark"},"layout":{"panels":{"left":[],"right":null},"collapsed":{"right":null}},"playback":{"showWaveform":true}}"#,
         )
         .expect("patch");
 
@@ -302,7 +302,7 @@ mod tests {
         assert_eq!(current.layout.panels["left"], Vec::<String>::new());
         assert_eq!(current.layout.panels["right"], ["discover"]);
         assert!(!current.layout.collapsed["right"]);
-        assert!(!current.playback.show_waveform);
+        assert!(current.playback.show_waveform);
         assert!(current.playback.show_up_next);
     }
 

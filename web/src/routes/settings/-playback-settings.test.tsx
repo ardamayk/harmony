@@ -41,12 +41,20 @@ describe("PlaybackSettingsSection", () => {
 		);
 
 		const waveform = screen.getByRole("switch", { name: "Waveform seek bar" });
-		expect(waveform.getAttribute("aria-checked")).toBe("true");
+		expect(waveform.getAttribute("aria-checked")).toBe("false");
 		fireEvent.click(waveform);
 		expect(onPreferencesChange).toHaveBeenLastCalledWith(
 			expect.objectContaining({
-				playback: expect.objectContaining({ showWaveform: false }),
+				playback: expect.objectContaining({ showWaveform: true }),
 			}),
 		);
+		expect(
+			screen.queryByRole("switch", { name: "Hover timestamp" }),
+		).toBeNull();
+		expect(
+			screen
+				.getByRole("switch", { name: "Gapless playback" })
+				.getAttribute("aria-checked"),
+		).toBe("true");
 	});
 });

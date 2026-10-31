@@ -2692,7 +2692,7 @@ components:
         - accentFromCover
         - showUpNext
         - autoSkipOnErrorSeconds
-        - hoverTimestamp
+        - gaplessPlayback
       properties:
         seekStepSeconds:
           type: integer
@@ -2727,9 +2727,9 @@ components:
           minimum: 0
           maximum: 60
           description: Countdown before a failed track is skipped; 0 waits for the user.
-        hoverTimestamp:
+        gaplessPlayback:
           type: boolean
-          description: Show the hovered position as a timestamp over the seek bar.
+          description: Play Tracks back to back without a gap where the client can.
     PlaybackPreferencesPatch:
       type: object
       description: Sparse form of PlaybackPreferences; absent fields are left unchanged.
@@ -2760,7 +2760,7 @@ components:
           type: integer
           minimum: 0
           maximum: 60
-        hoverTimestamp:
+        gaplessPlayback:
           type: boolean
     UserPreferences:
       type: object

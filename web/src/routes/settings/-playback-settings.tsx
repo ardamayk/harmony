@@ -33,9 +33,10 @@ const TOGGLES: Array<{ key: ToggleKey; label: string; description: string }> = [
 		description: "Show the next queued track beside the now-playing info.",
 	},
 	{
-		key: "hoverTimestamp",
-		label: "Hover timestamp",
-		description: "Show the time under the pointer while hovering the seek bar.",
+		key: "gaplessPlayback",
+		label: "Gapless playback",
+		description:
+			"Play tracks back to back without a gap (desktop). Off hides its mark in the player.",
 	},
 ];
 

@@ -1153,6 +1153,10 @@ async fn dispatch(state: Arc<AppState>, method: &str, params: Value) -> Reply {
             })
             .await
         }
+        "desktop_playback_set_gapless" => {
+            let enabled: bool = param(&params, "enabled")?;
+            blocking(&state, move |state| state.playback.set_gapless(enabled)).await
+        }
         "desktop_playback_set_processing_profile" => {
             let profile: ProcessingProfile = param(&params, "profile")?;
             blocking(&state, move |state| {

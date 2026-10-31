@@ -154,7 +154,7 @@ export const zPlaybackPreferences = z.object({
     accentFromCover: z.boolean(),
     showUpNext: z.boolean(),
     autoSkipOnErrorSeconds: z.int().gte(0).lte(60),
-    hoverTimestamp: z.boolean()
+    gaplessPlayback: z.boolean()
 });
 
 /**
@@ -169,7 +169,7 @@ export const zPlaybackPreferencesPatch = z.object({
     accentFromCover: z.boolean().optional(),
     showUpNext: z.boolean().optional(),
     autoSkipOnErrorSeconds: z.int().gte(0).lte(60).optional(),
-    hoverTimestamp: z.boolean().optional()
+    gaplessPlayback: z.boolean().optional()
 });
 
 export const zUserPreferences = z.object({

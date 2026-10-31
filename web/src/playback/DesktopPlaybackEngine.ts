@@ -28,6 +28,7 @@ type DesktopPlaybackBridge = {
 	setPlaybackRate(rate: number): Promise<PlaybackSessionState>;
 	setStopAfterCurrent(enabled: boolean): Promise<PlaybackSessionState>;
 	setTransitionFade(milliseconds: number): Promise<PlaybackSessionState>;
+	setGapless(enabled: boolean): Promise<PlaybackSessionState>;
 	setProcessingProfile(
 		profile: ProcessingProfile,
 	): Promise<PlaybackSessionState>;
@@ -64,6 +65,7 @@ const desktopPlaybackBridge: DesktopPlaybackBridge = {
 		invoke("desktop_playback_set_stop_after_current", { enabled }),
 	setTransitionFade: (milliseconds) =>
 		invoke("desktop_playback_set_transition_fade", { milliseconds }),
+	setGapless: (enabled) => invoke("desktop_playback_set_gapless", { enabled }),
 	setProcessingProfile: (profile) =>
 		invoke("desktop_playback_set_processing_profile", { profile }),
 	setReplayGainMode: (mode) =>
@@ -178,6 +180,10 @@ export class DesktopPlaybackEngine implements PlaybackEngine {
 
 	setTransitionFade(milliseconds: number) {
 		this.runCommand(() => this.bridge.setTransitionFade(milliseconds));
+	}
+
+	setGapless(enabled: boolean) {
+		this.runCommand(() => this.bridge.setGapless(enabled));
 	}
 
 	setProcessingProfile(profile: ProcessingProfile) {

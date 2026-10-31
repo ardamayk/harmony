@@ -133,6 +133,8 @@ export interface PlaybackEngine {
 	setStopAfterCurrent?(enabled: boolean): void;
 	/** Volume ramp around user-initiated transitions, in milliseconds; 0 disables. */
 	setTransitionFade?(milliseconds: number): void;
+	/** Natural Track boundaries without a gap, where the engine can. */
+	setGapless?(enabled: boolean): void;
 	setProcessingProfile?(profile: ProcessingProfile): void;
 	setReplayGainMode?(mode: ReplayGainMode): void;
 	setEqualizerPreset?(preset: Exclude<EqualizerPreset, "custom">): void;

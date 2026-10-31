@@ -1386,8 +1386,8 @@ export interface components {
             showUpNext: boolean;
             /** @description Countdown before a failed track is skipped; 0 waits for the user. */
             autoSkipOnErrorSeconds: number;
-            /** @description Show the hovered position as a timestamp over the seek bar. */
-            hoverTimestamp: boolean;
+            /** @description Play Tracks back to back without a gap where the client can. */
+            gaplessPlayback: boolean;
         };
         /** @description Sparse form of PlaybackPreferences; absent fields are left unchanged. */
         PlaybackPreferencesPatch: {
@@ -1399,7 +1399,7 @@ export interface components {
             accentFromCover?: boolean;
             showUpNext?: boolean;
             autoSkipOnErrorSeconds?: number;
-            hoverTimestamp?: boolean;
+            gaplessPlayback?: boolean;
         };
         UserPreferences: {
             theme: components["schemas"]["ThemePreferences"];

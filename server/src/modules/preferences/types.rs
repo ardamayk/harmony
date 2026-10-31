@@ -37,7 +37,7 @@ pub struct PlaybackPreferences {
     pub accent_from_cover: bool,
     pub show_up_next: bool,
     pub auto_skip_on_error_seconds: i64,
-    pub hover_timestamp: bool,
+    pub gapless_playback: bool,
 }
 
 /// The sparse form: only the fields the client sent, so a false boolean is
@@ -62,7 +62,7 @@ pub struct PlaybackPreferencesPatch {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub auto_skip_on_error_seconds: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub hover_timestamp: Option<bool>,
+    pub gapless_playback: Option<bool>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -143,10 +143,10 @@ pub fn default_playback() -> PlaybackPreferences {
         seek_step_large_seconds: 30,
         playback_rate: 1.0,
         transition_fade_ms: 0,
-        show_waveform: true,
-        accent_from_cover: true,
+        show_waveform: false,
+        accent_from_cover: false,
         show_up_next: true,
         auto_skip_on_error_seconds: 5,
-        hover_timestamp: true,
+        gapless_playback: true,
     }
 }

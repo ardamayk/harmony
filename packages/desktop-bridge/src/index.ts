@@ -62,6 +62,7 @@ export const CORE_COMMANDS = [
 	"desktop_playback_set_playback_rate",
 	"desktop_playback_set_stop_after_current",
 	"desktop_playback_set_transition_fade",
+	"desktop_playback_set_gapless",
 	"desktop_playback_set_processing_profile",
 	"desktop_playback_set_replay_gain",
 	"desktop_playback_set_equalizer_preset",

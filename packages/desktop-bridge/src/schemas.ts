@@ -100,6 +100,7 @@ export const DESKTOP_COMMAND_ARGS = {
 	desktop_playback_set_transition_fade: z.strictObject({
 		milliseconds: nonNegativeInteger,
 	}),
+	desktop_playback_set_gapless: z.strictObject({ enabled: z.boolean() }),
 	desktop_playback_set_processing_profile: z.strictObject({
 		profile: z.enum(["direct", "processed"]),
 	}),
