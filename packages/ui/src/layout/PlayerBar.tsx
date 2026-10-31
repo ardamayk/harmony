@@ -127,7 +127,6 @@ export function PlayerBar({
 	onToggleFavorite,
 	isCurrentStationFavorite = false,
 	onToggleStationFavorite,
-	onToggleMiniPlayer,
 	windowControls,
 	canShowWaveform = false,
 	externalSourceName,
@@ -139,8 +138,6 @@ export function PlayerBar({
 	/** Favorite state of the current saved Radio Station; previews are never favorites. */
 	isCurrentStationFavorite?: boolean;
 	onToggleStationFavorite?: (stationId: string, isFavorite: boolean) => void;
-	/** Desktop only: opens or closes the always-on-top mini player window. */
-	onToggleMiniPlayer?: () => void;
 	/** Window buttons for a host without a title bar; full-screen views cover the Top Nav's. */
 	windowControls?: WindowControls;
 	/** Whether the Music Server advertises track-waveform.v1. */
@@ -295,7 +292,6 @@ export function PlayerBar({
 			toggleLyrics,
 			toggleQueue,
 			toggleHelp,
-			toggleMiniPlayer: onToggleMiniPlayer,
 		},
 		{
 			seekStepSeconds: playbackPreferences.seekStepSeconds,

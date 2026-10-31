@@ -89,7 +89,6 @@ const QUEUE_INVALIDATED_EVENT: &str = "desktop-queue-invalidated";
 const IMPORT_PROGRESS_EVENT: &str = "desktop-import-progress";
 const SHELL_SHOW_MAIN_WINDOW: &str = "shell:show-main-window";
 const SHELL_HIDE_MAIN_WINDOW: &str = "shell:hide-main-window";
-const SHELL_TOGGLE_MINI_WINDOW: &str = "shell:toggle-mini-window";
 const SHELL_WINDOW_TITLE: &str = "shell:window-title";
 const SHELL_TRAY: &str = "shell:tray";
 const SHELL_EXIT: &str = "shell:exit";
@@ -1257,7 +1256,6 @@ fn shell_action(name: &str) -> Result<DesktopPlaybackAction, Value> {
         "toggle-play" => DesktopPlaybackAction::TogglePlay,
         "previous" => DesktopPlaybackAction::Previous,
         "next" => DesktopPlaybackAction::Next,
-        "toggle-mini-player" => DesktopPlaybackAction::ToggleMiniPlayer,
         "quit" => DesktopPlaybackAction::Quit,
         _ => return Err(Value::String(format!("Unknown shell action '{name}'."))),
     })
@@ -1298,11 +1296,6 @@ impl DesktopPlaybackShell for RpcDesktopPlaybackShell<'_> {
         })
         .map(|_| ())
         .map_err(|error| error.message)
-    }
-
-    fn toggle_mini_window(&self) -> Result<(), String> {
-        self.state.output.emit(SHELL_TOGGLE_MINI_WINDOW, ());
-        Ok(())
     }
 
     fn exit(&self) {

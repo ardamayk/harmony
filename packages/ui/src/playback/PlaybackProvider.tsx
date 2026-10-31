@@ -260,15 +260,12 @@ export function PlaybackProvider({
 	api,
 	engine,
 	autoSkipOnErrorSeconds = 5,
-	shouldCoordinateQueue = true,
 }: {
 	children: ReactNode;
 	api: PlaybackApi;
 	engine: PlaybackEngine;
 	/** Countdown before a failed Track is skipped; 0 waits for the user. */
 	autoSkipOnErrorSeconds?: number;
-	/** Only the main desktop window coordinates the native queue. */
-	shouldCoordinateQueue?: boolean;
 }) {
 	const apiRef = useRef(api);
 	const roomPlayback = useRoomPlayback();
@@ -414,7 +411,7 @@ export function PlaybackProvider({
 
 	useEffect(() => {
 		// During a Room the sync layer gives the engine its Queue context.
-		if (isInRoom || !shouldCoordinateQueue || !engine.syncQueueContext) return;
+		if (isInRoom || !engine.syncQueueContext) return;
 		const currentIndex = queue.findIndex(
 			(item) => item.id === currentQueueItemIdRef.current,
 		);
@@ -426,7 +423,7 @@ export function PlaybackProvider({
 			.catch((error) => {
 				console.warn("Failed to sync native playback Queue context", { error });
 			});
-	}, [engine, isInRoom, queue, shouldCoordinateQueue]);
+	}, [engine, isInRoom, queue]);
 
 	const playTrackInternal = useCallback(
 		async (trackId: string, queueOverride?: QueueItem[]) => {
@@ -455,7 +452,6 @@ export function PlaybackProvider({
 	}, [queue, session.source]);
 
 	useEffect(() => {
-		if (!shouldCoordinateQueue) return;
 		if (session.repeatMode === "off") {
 			repeatCancellationRequestedModeRef.current = null;
 			return;
@@ -468,13 +464,7 @@ export function PlaybackProvider({
 			return;
 		repeatCancellationRequestedModeRef.current = session.repeatMode;
 		engine.cycleRepeatMode();
-	}, [
-		engine,
-		queue.length,
-		session.repeatMode,
-		session.source,
-		shouldCoordinateQueue,
-	]);
+	}, [engine, queue.length, session.repeatMode, session.source]);
 
 	const advanceToNextQueueItem = useCallback(() => {
 		const index = queueRef.current.findIndex(
@@ -507,7 +497,7 @@ export function PlaybackProvider({
 	const abRepeat = useAbRepeat(engine, session);
 	// Both act on the engine alone, which a Room would take for commands.
 	const stopLocalTimers = useEffectEvent(() => {
-		if (shouldCoordinateQueue) sleepTimer.setSleepTimer({ kind: "off" });
+		sleepTimer.setSleepTimer({ kind: "off" });
 		abRepeat.clear();
 	});
 	useEffect(() => {
@@ -550,7 +540,6 @@ export function PlaybackProvider({
 		setErrorCause(failedTrackId && !api.headTrackStream ? "unknown" : null);
 		setCountdownSeconds(
 			failedTrackId &&
-				shouldCoordinateQueue &&
 				autoSkipOnErrorSeconds > 0 &&
 				// One Player's failure does not skip the Track for everyone.
 				!isInRoom

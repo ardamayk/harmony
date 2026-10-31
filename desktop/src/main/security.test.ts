@@ -64,7 +64,7 @@ describe("trusted renderer URLs", () => {
 		);
 		expect(
 			isTrustedRendererUrl(
-				"http://localhost:3000/mini",
+				"http://localhost:3000/library/albums",
 				"http://localhost:3000",
 			),
 		).toBe(true);

@@ -175,11 +175,7 @@ function renderPlayerBar(
 			<PlaybackProvider api={api} engine={engine}>
 				<PlaybackStarter />
 				<RadioStarter />
-				<PlayerBar
-					onPlaylistMutated={onPlaylistMutated}
-					onToggleMiniPlayer={vi.fn()}
-					{...props}
-				/>
+				<PlayerBar onPlaylistMutated={onPlaylistMutated} {...props} />
 			</PlaybackProvider>
 		</LayoutProvider>,
 	);
@@ -1020,12 +1016,11 @@ describe("PlayerBar", () => {
 		expect(within(details).getByText("Normal")).toBeTruthy();
 	});
 
-	it("hides shortcut and mini player buttons while keeping keyboard help available", () => {
+	it("hides the shortcut button while keeping keyboard help available", () => {
 		renderPlayerBar();
 		expect(
 			screen.queryByRole("button", { name: "Keyboard shortcuts" }),
 		).toBeNull();
-		expect(screen.queryByRole("button", { name: "Mini player" })).toBeNull();
 		fireEvent.keyDown(document.body, { key: "?" });
 		expect(
 			screen.getByRole("dialog", { name: "Keyboard shortcuts" }),

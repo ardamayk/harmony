@@ -43,9 +43,6 @@ describe("rendererFile", () => {
 		expect(await rendererFile(root, "app://earthly/")).toBe(
 			join(root, "index.html"),
 		);
-		expect(await rendererFile(root, "app://earthly/mini")).toBe(
-			join(root, "index.html"),
-		);
 		expect(await rendererFile(root, "app://earthly/library/albums/abc")).toBe(
 			join(root, "index.html"),
 		);
@@ -61,7 +58,7 @@ describe("rendererFile", () => {
 describe("createRendererHandler", () => {
 	it("adds the CSP to every response", async () => {
 		const handler = createRendererHandler(root, async () => new Response("ok"));
-		const response = await handler(new Request("app://earthly/mini"));
+		const response = await handler(new Request("app://earthly/library"));
 
 		expect(response.status).toBe(200);
 		expect(response.headers.get("Content-Security-Policy")).toBe(

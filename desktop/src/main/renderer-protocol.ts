@@ -1,6 +1,6 @@
 // Serves the built web UI (web/dist) at app://earthly/. Paths without a
 // matching file fall back to index.html so TanStack Router's history routes
-// (/library/albums, /mini, ...) load on reload and in the mini window.
+// (/library/albums, ...) load on reload.
 
 import { stat } from "node:fs/promises";
 import { extname, join, normalize, sep } from "node:path";

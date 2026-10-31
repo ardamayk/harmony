@@ -34,7 +34,6 @@ type SeekBarProps = {
 	/** Normalized peaks (0..255) drawn behind the track; null keeps the thin bar. */
 	waveform?: number[] | null;
 	disabled?: boolean;
-	showHoverTimestamp?: boolean;
 	/** Arrow-key step on the focused bar; Shift uses the large step. */
 	keyboardStepSeconds?: number;
 	keyboardLargeStepSeconds?: number;
@@ -54,7 +53,6 @@ export function SeekBar({
 	bufferedEnd = null,
 	waveform = null,
 	disabled = false,
-	showHoverTimestamp = true,
 	keyboardStepSeconds = 5,
 	keyboardLargeStepSeconds = 30,
 	onSeek,
@@ -145,7 +143,7 @@ export function SeekBar({
 	};
 
 	const tooltipFraction = scrubFraction ?? hoverFraction;
-	const showTooltip = showHoverTimestamp && canSeek && tooltipFraction !== null;
+	const showTooltip = canSeek && tooltipFraction !== null;
 
 	return (
 		<div

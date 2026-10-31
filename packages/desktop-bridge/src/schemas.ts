@@ -127,10 +127,6 @@ export const DESKTOP_COMMAND_ARGS = {
 	desktop_select_import_folder: noArgs,
 	// The URL itself is checked by the shell (web schemes only).
 	desktop_open_external_url: z.strictObject({ url: z.string() }),
-	desktop_open_mini_player: noArgs,
-	desktop_close_mini_player: noArgs,
-	desktop_toggle_mini_player: noArgs,
-	desktop_show_main_window: noArgs,
 } as const satisfies Record<DesktopCommand, z.ZodType>;
 
 export type DesktopCommandArgsMap = {

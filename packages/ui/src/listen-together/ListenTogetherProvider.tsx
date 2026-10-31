@@ -148,13 +148,10 @@ export function ListenTogetherProvider({
 	children,
 	api,
 	engine,
-	shouldDriveEngine = true,
 }: {
 	children: ReactNode;
 	api: ListenTogetherApi;
 	engine: PlaybackEngine;
-	/** One window drives a shared engine; the mini player only sends commands. */
-	shouldDriveEngine?: boolean;
 }) {
 	const [role, setRole] = useState<ListenTogetherRole>("loading");
 	const [isAvailable, setIsAvailable] = useState(false);
@@ -299,7 +296,7 @@ export function ListenTogetherProvider({
 
 	useEffect(() => {
 		const openRoom = roomRef.current;
-		if (!hasRoom || !shouldDriveEngine || !openRoom) return undefined;
+		if (!hasRoom || !openRoom) return undefined;
 		driverRef.current ??= new RoomSyncDriver({
 			engine,
 			getClock: () => apiRef.current.getListenTogetherClock(),
@@ -309,7 +306,7 @@ export function ListenTogetherProvider({
 		const driver = driverRef.current;
 		driver.start(openRoom);
 		return () => driver.suspend();
-	}, [hasRoom, shouldDriveEngine, engine, resolveSource, sendCommand]);
+	}, [hasRoom, engine, resolveSource, sendCommand]);
 
 	useEffect(() => {
 		if (room) driverRef.current?.update(room);

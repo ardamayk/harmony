@@ -18,7 +18,6 @@ import {
 	createRootRouteWithContext,
 	Outlet,
 	useNavigate,
-	useRouterState,
 } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { GuestBar } from "#/components/guest-bar";
@@ -32,7 +31,6 @@ import { isDesktopClient } from "#/desktop/bridge";
 import { SidebarPlaylists } from "#/components/sidebar-playlists";
 import { DesktopConnectionGate } from "#/desktop/DesktopConnectionGate";
 import { DesktopWindowFrame } from "#/desktop/DesktopWindowFrame";
-import { toggleMiniPlayer } from "#/desktop/mini-player-bridge";
 import { desktopWindowControls } from "#/desktop/window-controls";
 import { useFavoriteRadioStations } from "#/hooks/use-favorite-radio-stations";
 import { useFavoriteTracks } from "#/hooks/use-favorite-tracks";
@@ -45,7 +43,6 @@ import {
 	readGuestPreferences,
 	writeGuestPreferences,
 } from "#/lib/guest-preferences";
-import { isMiniPlayerRoute } from "#/lib/mini-player-route";
 import { createPlaybackApi } from "#/lib/playback-api";
 import { invalidatePlaylistCache } from "#/lib/playlist-query-cache";
 import { getSharedPlaybackEngine } from "#/playback/shared-playback-engine";
@@ -80,9 +77,6 @@ function PlayerBarWithSync() {
 				currentRadioStation ? isStationFavorite(currentRadioStation.id) : false
 			}
 			onToggleStationFavorite={hideRadio ? undefined : toggleStationFavorite}
-			onToggleMiniPlayer={
-				isDesktopClient() ? () => void toggleMiniPlayer() : undefined
-			}
 			windowControls={isDesktopClient() ? desktopWindowControls : undefined}
 			canShowWaveform={canShowWaveform}
 			externalSourceName={externalSourceName}
@@ -102,23 +96,16 @@ function RootLayout() {
 }
 
 function ConnectedRootLayout() {
-	const isMiniPlayer = useRouterState({
-		select: (state) => isMiniPlayerRoute(state.location.pathname),
-	});
 	return (
-		<ListenTogetherProvider
-			api={apiClient}
-			engine={getSharedPlaybackEngine()}
-			shouldDriveEngine={!isMiniPlayer}
-		>
+		<ListenTogetherProvider api={apiClient} engine={getSharedPlaybackEngine()}>
 			<ListenTogetherGate>
-				<AppLayout isMiniPlayer={isMiniPlayer} />
+				<AppLayout />
 			</ListenTogetherGate>
 		</ListenTogetherProvider>
 	);
 }
 
-function AppLayout({ isMiniPlayer }: { isMiniPlayer: boolean }) {
+function AppLayout() {
 	const navigate = useNavigate();
 	const queryClient = useQueryClient();
 	const [searchOpen, setSearchOpen] = useState(false);
@@ -162,47 +149,41 @@ function AppLayout({ isMiniPlayer }: { isMiniPlayer: boolean }) {
 				<PlaybackProvider
 					api={api}
 					engine={playbackEngine}
-					shouldCoordinateQueue={!isMiniPlayer}
 					autoSkipOnErrorSeconds={
 						// Older servers answer without a playback section.
 						initial.playback?.autoSkipOnErrorSeconds ??
 						defaultPlayback.autoSkipOnErrorSeconds
 					}
 				>
-					{isMiniPlayer ? (
-						// The mini player window renders only the compact player.
-						<Outlet />
-					) : (
-						<ImportSessionProvider>
-							<QueueRowMenuProvider
-								menu={QueueTrackMenu}
-								onNavigate={(href) => {
-									void navigate({ to: href }).catch((error) =>
-										console.warn("Failed to navigate from queue", {
-											href,
-											error,
-										}),
-									);
-								}}
+					<ImportSessionProvider>
+						<QueueRowMenuProvider
+							menu={QueueTrackMenu}
+							onNavigate={(href) => {
+								void navigate({ to: href }).catch((error) =>
+									console.warn("Failed to navigate from queue", {
+										href,
+										error,
+									}),
+								);
+							}}
+						>
+							<AppShell
+								bottom={<PlayerBarWithSync />}
+								sidebarPlaylists={<SidebarPlaylists />}
+								onSearch={() => setSearchOpen(true)}
+								windowControls={
+									isDesktopClient() ? desktopWindowControls : undefined
+								}
 							>
-								<AppShell
-									bottom={<PlayerBarWithSync />}
-									sidebarPlaylists={<SidebarPlaylists />}
-									onSearch={() => setSearchOpen(true)}
-									windowControls={
-										isDesktopClient() ? desktopWindowControls : undefined
-									}
-								>
-									<GuestBar />
-									<Outlet />
-									<LibrarySearchDialog
-										open={searchOpen}
-										onOpenChange={setSearchOpen}
-									/>
-								</AppShell>
-							</QueueRowMenuProvider>
-						</ImportSessionProvider>
-					)}
+								<GuestBar />
+								<Outlet />
+								<LibrarySearchDialog
+									open={searchOpen}
+									onOpenChange={setSearchOpen}
+								/>
+							</AppShell>
+						</QueueRowMenuProvider>
+					</ImportSessionProvider>
 				</PlaybackProvider>
 			</div>
 		</LayoutProvider>

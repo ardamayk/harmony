@@ -767,40 +767,6 @@ describe("PlaybackProvider", () => {
 		expect(engine.getState().source).toMatchObject({ queueItemId: "new-item" });
 	});
 
-	it("does not coordinate queue, repeat, or error skipping from an observer window", async () => {
-		const engine = new InMemoryPlaybackEngine();
-		await engine.play({
-			type: "track",
-			track,
-			playbackUrl: "/stream/track-1",
-			queueItemId: "item-1",
-		});
-		engine.cycleRepeatMode();
-		const cycleRepeatMode = vi.spyOn(engine, "cycleRepeatMode");
-		const next = vi.spyOn(engine, "next");
-		const syncQueueContext = vi.fn(async () => {});
-		Object.assign(engine, { syncQueueContext });
-		render(
-			<PlaybackProvider
-				api={createApi()}
-				engine={engine}
-				shouldCoordinateQueue={false}
-			>
-				<Harness />
-			</PlaybackProvider>,
-		);
-		await waitFor(() =>
-			expect(screen.getByTestId("queue").textContent).toBe("track-1,track-2"),
-		);
-		expect(syncQueueContext).not.toHaveBeenCalled();
-		expect(cycleRepeatMode).not.toHaveBeenCalled();
-		await act(async () =>
-			engine.fail({ code: "playback-failed", message: "Playback failed" }),
-		);
-		expect(screen.getByTestId("error-countdown").textContent).toBe("");
-		expect(next).not.toHaveBeenCalled();
-	});
-
 	it("advances Queue after engine reports Track ended", async () => {
 		const { engine } = renderPlayback();
 		await act(async () =>

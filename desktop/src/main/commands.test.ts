@@ -17,10 +17,6 @@ function deps(overrides: Partial<CommandDeps> = {}): CommandDeps {
 			.fn<CommandDeps["pickImportFolder"]>()
 			.mockResolvedValue([]),
 		openExternal: vi.fn<CommandDeps["openExternal"]>().mockResolvedValue(),
-		openMiniWindow: vi.fn(),
-		closeMiniWindow: vi.fn(),
-		toggleMiniWindow: vi.fn(),
-		showMainWindow: vi.fn(),
 		serverHeaders: { assertAvailable: vi.fn(), sync: vi.fn() },
 		...overrides,
 	};
@@ -161,7 +157,7 @@ describe("handleInvoke", () => {
 			["desktop_select_import_files", { paths: ["/etc/passwd"] }],
 			["desktop_open_external_url", { url: 42 }],
 			["desktop_open_external_url", undefined],
-			["desktop_show_main_window", []],
+			["desktop_select_import_folder", []],
 		];
 		for (const [command, args] of cases) {
 			const result = await handleInvoke(shell, command, args);
@@ -170,7 +166,7 @@ describe("handleInvoke", () => {
 		expect(shell.requestCore).not.toHaveBeenCalled();
 		expect(shell.pickImportFiles).not.toHaveBeenCalled();
 		expect(shell.openExternal).not.toHaveBeenCalled();
-		expect(shell.showMainWindow).not.toHaveBeenCalled();
+		expect(shell.pickImportFolder).not.toHaveBeenCalled();
 	});
 
 	it("names the command and the offending fields, not their values", async () => {
@@ -341,16 +337,6 @@ describe("handleInvoke", () => {
 		expect(refused.ok).toBe(false);
 		expect(openExternal).toHaveBeenCalledTimes(1);
 		expect(openExternal).toHaveBeenCalledWith("https://www.last.fm/music/x");
-	});
-
-	it("runs window commands in the shell", async () => {
-		const shell = deps();
-		await handleInvoke(shell, "desktop_toggle_mini_player", undefined);
-		await handleInvoke(shell, "desktop_show_main_window", undefined);
-
-		expect(shell.toggleMiniWindow).toHaveBeenCalledTimes(1);
-		expect(shell.showMainWindow).toHaveBeenCalledTimes(1);
-		expect(shell.requestCore).not.toHaveBeenCalled();
 	});
 });
 

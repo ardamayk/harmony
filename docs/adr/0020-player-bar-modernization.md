@@ -26,4 +26,6 @@ A real crossfade was rejected: mpv plays one file at a time, and `acrossfade` ne
 
 ## Mini player is a second app window under the same policy
 
+> Removed: the Desktop Client no longer has a mini player, so it has one window.
+
 The mini player is a dynamically created, undecorated, always-on-top Tauri window that loads the bundled app at `/mini`. It shares playback truth through the existing `desktop-playback-state` broadcast and needs no extra playback plumbing. The renderer capability now targets both app windows with the same minimal permissions, and the permissions test pins that deliberately.

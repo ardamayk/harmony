@@ -9,11 +9,8 @@ import {
 	IPC,
 	type InvokeResult,
 	type WindowAction,
-	type WindowLabel,
 } from "@repo/desktop-bridge";
 import { contextBridge, type IpcRendererEvent, ipcRenderer } from "electron";
-
-const label = ipcRenderer.sendSync(IPC.windowLabel) as WindowLabel | null;
 
 const sendWindowAction = (action: WindowAction) =>
 	ipcRenderer.send(IPC.window, action);
@@ -38,7 +35,6 @@ const bridge: EarthlyDesktopBridge = {
 		};
 	},
 	window: {
-		label: label ?? "main",
 		minimize: () => sendWindowAction("minimize"),
 		toggleMaximize: () => sendWindowAction("toggle-maximize"),
 		close: () => sendWindowAction("close"),

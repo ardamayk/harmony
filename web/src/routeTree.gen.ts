@@ -12,7 +12,6 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as HomeRouteImport } from './routes/home'
 import { Route as JoinRouteImport } from './routes/join'
-import { Route as MiniRouteImport } from './routes/mini'
 import { Route as FavoritesIndexRouteImport } from './routes/favorites/index'
 import { Route as LibraryIndexRouteImport } from './routes/library/index'
 import { Route as LibraryAlbumIdRouteImport } from './routes/library/$albumId'
@@ -43,11 +42,6 @@ const HomeRoute = HomeRouteImport.update({
 const JoinRoute = JoinRouteImport.update({
   id: '/join',
   path: '/join',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const MiniRoute = MiniRouteImport.update({
-  id: '/mini',
-  path: '/mini',
   getParentRoute: () => rootRouteImport,
 } as any)
 const FavoritesIndexRoute = FavoritesIndexRouteImport.update({
@@ -135,7 +129,6 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/home': typeof HomeRoute
   '/join': typeof JoinRoute
-  '/mini': typeof MiniRoute
   '/library/$albumId': typeof LibraryAlbumIdRoute
   '/playlists/$playlistId': typeof PlaylistsPlaylistIdRoute
   '/radio/$stationId': typeof RadioStationIdRoute
@@ -157,7 +150,6 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/home': typeof HomeRoute
   '/join': typeof JoinRoute
-  '/mini': typeof MiniRoute
   '/library/$albumId': typeof LibraryAlbumIdRoute
   '/playlists/$playlistId': typeof PlaylistsPlaylistIdRoute
   '/radio/$stationId': typeof RadioStationIdRoute
@@ -180,7 +172,6 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/home': typeof HomeRoute
   '/join': typeof JoinRoute
-  '/mini': typeof MiniRoute
   '/library/$albumId': typeof LibraryAlbumIdRoute
   '/playlists/$playlistId': typeof PlaylistsPlaylistIdRoute
   '/radio/$stationId': typeof RadioStationIdRoute
@@ -204,7 +195,6 @@ export interface FileRouteTypes {
     | '/'
     | '/home'
     | '/join'
-    | '/mini'
     | '/library/$albumId'
     | '/playlists/$playlistId'
     | '/radio/$stationId'
@@ -226,7 +216,6 @@ export interface FileRouteTypes {
     | '/'
     | '/home'
     | '/join'
-    | '/mini'
     | '/library/$albumId'
     | '/playlists/$playlistId'
     | '/radio/$stationId'
@@ -248,7 +237,6 @@ export interface FileRouteTypes {
     | '/'
     | '/home'
     | '/join'
-    | '/mini'
     | '/library/$albumId'
     | '/playlists/$playlistId'
     | '/radio/$stationId'
@@ -271,7 +259,6 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   HomeRoute: typeof HomeRoute
   JoinRoute: typeof JoinRoute
-  MiniRoute: typeof MiniRoute
   LibraryAlbumIdRoute: typeof LibraryAlbumIdRoute
   PlaylistsPlaylistIdRoute: typeof PlaylistsPlaylistIdRoute
   RadioStationIdRoute: typeof RadioStationIdRoute
@@ -311,13 +298,6 @@ declare module '@tanstack/react-router' {
       path: '/join'
       fullPath: '/join'
       preLoaderRoute: typeof JoinRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/mini': {
-      id: '/mini'
-      path: '/mini'
-      fullPath: '/mini'
-      preLoaderRoute: typeof MiniRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/favorites/': {
@@ -439,7 +419,6 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   HomeRoute: HomeRoute,
   JoinRoute: JoinRoute,
-  MiniRoute: MiniRoute,
   LibraryAlbumIdRoute: LibraryAlbumIdRoute,
   PlaylistsPlaylistIdRoute: PlaylistsPlaylistIdRoute,
   RadioStationIdRoute: RadioStationIdRoute,

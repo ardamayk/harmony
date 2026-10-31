@@ -15,7 +15,6 @@ export {
 	useHiddenFromGuest,
 } from "./guest-access";
 export { LyricsOverlay } from "./LyricsOverlay";
-export { MiniPlayerWindow } from "./MiniPlayerWindow";
 export { NowPlayingView } from "./NowPlayingView";
 export { PlaybackErrorBanner } from "./PlaybackErrorBanner";
 export { PlaybackSignal } from "./PlaybackSignal";
