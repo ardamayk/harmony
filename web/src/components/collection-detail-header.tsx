@@ -10,7 +10,6 @@ import {
 	SkipForward,
 	Tags,
 } from "lucide-react";
-import { CollectionCoverStack } from "#/components/collection-cover-strip";
 import {
 	DetailStickyAction,
 	DetailStickyBar,
@@ -100,10 +99,16 @@ export function CollectionDetailHeader({
 				)}
 			</DetailStickyBar>
 			<div>
-				{/* `isolate` keeps the stacked covers' z-index under the sticky bar. */}
-				<div className="isolate grid gap-6 sm:grid-cols-media sm:items-stretch">
-					{coverTracks && coverTracks.length > 0 ? (
-						<CollectionCoverStack tracks={coverTracks} />
+				<div className="grid gap-6 sm:grid-cols-media sm:items-stretch">
+					{coverTracks?.[0] ? (
+						<AlbumArt
+							coverUrl={apiClient.getAlbumCoverUrl(
+								coverTracks[0].albumId,
+								1024,
+							)}
+							title={title}
+							className="size-56 shrink-0 rounded-md text-3xl shadow-lg"
+						/>
 					) : (
 						<div className="flex size-32 shrink-0 items-center justify-center rounded-md bg-muted text-caption shadow-lg">
 							<Icon className="size-12" />

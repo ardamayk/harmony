@@ -67,7 +67,7 @@ describe("CollectionDetailHeader", () => {
 		).toBe(true);
 	});
 
-	it("renders a stacked unique album cover for playlists", () => {
+	it("shows the first Track's Album cover", () => {
 		const { container } = render(
 			<CollectionDetailHeader
 				kind="Playlist"
@@ -119,72 +119,11 @@ describe("CollectionDetailHeader", () => {
 			/>,
 		);
 
-		expect(container.querySelector(".grid-cols-2")).toBeNull();
 		expect(
-			container.querySelector('[data-testid="collection-cover-stack"]'),
-		).toBeTruthy();
-		expect(container.querySelectorAll("img")).toHaveLength(4);
-		expect(
-			new Set(
-				Array.from(container.querySelectorAll("img")).map((img) =>
-					img.getAttribute("src"),
-				),
+			Array.from(container.querySelectorAll("img")).map((img) =>
+				img.getAttribute("src"),
 			),
-		).toEqual(new Set(["/cover/a1", "/cover/a2", "/cover/a3", "/cover/a4"]));
-		expect(
-			container.querySelector('[data-testid="collection-cover-stack"]')
-				?.className,
-		).toContain("h-56");
-		expect(
-			container.querySelector('[data-testid="collection-cover-stack"]')
-				?.className,
-		).not.toContain("bg-muted");
-	});
-
-	it("deduplicates playlist stack covers by album", () => {
-		const { container } = render(
-			<CollectionDetailHeader
-				kind="Playlist"
-				title="Favorites"
-				subtitle="Default playlist"
-				metaTags={["3 tracks"]}
-				trackCount={3}
-				coverTracks={[
-					{
-						...normalizedTrackFields,
-						id: "t1",
-						title: "A",
-						albumId: "a1",
-						artistName: "Artist",
-						durationMs: 1,
-						format: "flac",
-					},
-					{
-						...normalizedTrackFields,
-						id: "t2",
-						title: "B",
-						albumId: "a1",
-						artistName: "Artist",
-						durationMs: 1,
-						format: "flac",
-					},
-					{
-						...normalizedTrackFields,
-						id: "t3",
-						title: "C",
-						albumId: "a2",
-						artistName: "Artist",
-						durationMs: 1,
-						format: "flac",
-					},
-				]}
-				onPlay={vi.fn()}
-				onShuffle={vi.fn()}
-				onQueue={vi.fn()}
-			/>,
-		);
-
-		expect(container.querySelectorAll("img")).toHaveLength(2);
+		).toEqual(["/cover/a1"]);
 	});
 
 	it("renders right-aligned collection search when controlled search props are provided", () => {

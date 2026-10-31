@@ -182,20 +182,15 @@ describe("genre routes", () => {
 				.getByTestId("genres-page-content")
 				.querySelector(".grid-cols-cards"),
 		).toBeTruthy();
-		expect(
-			container.querySelector('[data-testid="playlist-card-cover-stack"]'),
-		).toBeTruthy();
 		const overlay = container.querySelector("[data-genre-card-overlay]");
-		expect(overlay?.className).toContain("px-3");
+		expect(overlay?.className).toContain("px-2");
 		expect(overlay?.className).toContain("pt-12");
 		expect(overlay?.querySelector("p")?.className).toContain("font-semibold");
 		expect(overlay?.querySelector("p")?.className).not.toContain(
 			"group-hover:underline",
 		);
 		await waitFor(() => {
-			expect(container.querySelectorAll("img").length).toBeGreaterThanOrEqual(
-				4,
-			);
+			expect(container.querySelectorAll("img").length).toBe(2);
 		});
 	});
 
@@ -252,9 +247,6 @@ describe("genre routes", () => {
 		expect(screen.getByText("Blue Monday")).toBeTruthy();
 		expect(screen.getByText("Bizarre Love Triangle")).toBeTruthy();
 		expect(
-			document.querySelector('[data-testid="collection-cover-stack"]'),
-		).toBeTruthy();
-		expect(
 			screen.getAllByRole("button", { name: "Add to favorites" }),
 		).toHaveLength(4);
 		expect(
@@ -296,12 +288,7 @@ describe("genre routes", () => {
 		expect(screen.getByPlaceholderText("Search Synthpop…").className).toContain(
 			"h-11",
 		);
-		expect(
-			container
-				.querySelector('[data-testid="collection-cover-stack"]')
-				?.querySelectorAll("img"),
-		).toHaveLength(4);
-		expect(container.querySelectorAll("img")).toHaveLength(8);
+		expect(container.querySelectorAll("img")).toHaveLength(5);
 
 		fireEvent.change(screen.getByPlaceholderText("Search Synthpop…"), {
 			target: { value: "bizarre" },

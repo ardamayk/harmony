@@ -32,6 +32,7 @@ export { ShortcutHelpOverlay } from "./ShortcutHelpOverlay";
 export { Panel, Slot } from "./Slot";
 export { Toaster } from "./Toaster";
 export {
+	NAV_LINK_CLASS,
 	TOP_NAV_ICON_BUTTON_CLASS,
 	TopNav,
 	type WindowControls,

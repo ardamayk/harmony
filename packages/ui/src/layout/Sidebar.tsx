@@ -9,7 +9,7 @@ import {
 	Tags,
 	Users,
 } from "lucide-react";
-import { useContext } from "react";
+import { type ReactNode, useContext } from "react";
 import { ListenTogetherContext } from "../listen-together/ListenTogetherContext";
 import { type GuestHiddenFeature, isHiddenFromRole } from "./guest-access";
 import { NAV_LINK_CLASS } from "./TopNav";
@@ -30,12 +30,6 @@ const libraryNav: {
 	{ to: "/radio", label: "Radio", icon: Radio, hiddenFromGuest: "radio" },
 	{ to: "/library/tracks", label: "Tracks", icon: Music2 },
 	{
-		to: "/playlists",
-		label: "Playlists",
-		icon: ListMusic,
-		hiddenFromGuest: "playlists",
-	},
-	{
 		to: "/listen-together",
 		label: "Listen Together",
 		icon: Headphones,
@@ -44,11 +38,12 @@ const libraryNav: {
 ];
 
 /**
- * The library sections down the left edge, Settings at the bottom. Docked
+ * The library sections down the left edge, then Playlists with what the host
+ * lists under them, scrolling on their own, and Settings at the bottom. Docked
  * like the Queue Drawer: one line toward the page, no box. Below `lg` only
  * the icons stay, so the page keeps its room at the main target width.
  */
-export function Sidebar() {
+export function Sidebar({ playlists }: { playlists?: ReactNode }) {
 	const listenTogether = useContext(ListenTogetherContext);
 	const role = listenTogether?.role;
 	const isRoomOpen = role === "owner" && Boolean(listenTogether?.room);
@@ -60,7 +55,7 @@ export function Sidebar() {
 		<aside
 			data-sidebar
 			data-shell-surface
-			className="flex w-62.5 shrink-0 flex-col justify-between border-sidebar-border border-r bg-sidebar px-3 pt-6 pb-(--player-dock-clearance,0.75rem) text-sidebar-foreground max-lg:w-17"
+			className="flex w-62.5 shrink-0 flex-col border-sidebar-border border-r bg-sidebar px-3 pt-6 pb-(--player-dock-clearance,0.75rem) text-sidebar-foreground max-lg:w-17"
 		>
 			<nav aria-label="Library" className="flex flex-col gap-1">
 				{visibleNav.map(({ to, label, icon: Icon }) => {
@@ -79,6 +74,24 @@ export function Sidebar() {
 					);
 				})}
 			</nav>
+			<div className="mt-6 flex min-h-0 flex-1 flex-col gap-1">
+				{isHiddenFromRole(role, "playlists") ? null : (
+					<>
+						<Link
+							to="/playlists"
+							activeOptions={{ exact: true }}
+							title="Playlists"
+							className={`${NAV_LINK_CLASS} ${RAIL_LINK_CLASS} shrink-0`}
+						>
+							<ListMusic className={NAV_ICON_CLASS} />
+							<span className="max-lg:sr-only">Playlists</span>
+						</Link>
+						<div className="scrollbar-hidden min-h-0 flex-1 overflow-y-auto max-lg:hidden">
+							{playlists}
+						</div>
+					</>
+				)}
+			</div>
 			<Link
 				to="/settings"
 				title="Settings"

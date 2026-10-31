@@ -1,11 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useMemo } from "react";
-import { CollectionCoverCardStack } from "#/components/collection-cover-strip";
 import {
-	CollectionGrid,
-	COLLECTION_PAGE_CONTAINER_CLASS,
 	CARD_INTERACTION_CLASS,
+	CARD_OVERLAY_CLASS,
+	COLLECTION_PAGE_CONTAINER_CLASS,
+	CollectionCardArt,
+	CollectionGrid,
 } from "#/components/collection-grid-layout";
 import { PageHeader, PageShell } from "#/components/page-layout";
 import { apiClient } from "#/lib/api";
@@ -63,18 +64,17 @@ export function GenresPage() {
 								CARD_INTERACTION_CLASS,
 							)}
 						>
-							<CollectionCoverCardStack
-								tracks={genre.tracks}
-								seed={`genre:${genre.name}`}
-							/>
-							<div
-								data-genre-card-overlay
-								className="absolute inset-x-0 bottom-0 z-50 bg-gradient-to-t from-background/97 via-background/86 via-45% to-transparent px-3 pt-12 pb-3 text-foreground"
-							>
-								<p className="truncate font-semibold text-heading text-sm leading-tight tracking-tight">
+							{genre.tracks[0] ? (
+								<CollectionCardArt
+									albumId={genre.tracks[0].albumId}
+									title={genre.name}
+								/>
+							) : null}
+							<div data-genre-card-overlay className={CARD_OVERLAY_CLASS}>
+								<p className="truncate font-semibold text-heading text-xs leading-tight">
 									{genre.name}
 								</p>
-								<p className="mt-0.5 truncate text-xs text-caption leading-tight">
+								<p className="truncate text-xs text-caption leading-tight">
 									{genre.trackCount} track{genre.trackCount === 1 ? "" : "s"}
 								</p>
 							</div>

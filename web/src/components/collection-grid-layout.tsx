@@ -1,3 +1,4 @@
+import { AlbumArt } from "@repo/ui";
 import type { ComponentProps, ReactNode } from "react";
 import { Button } from "#/components/ui/button";
 import {
@@ -8,6 +9,7 @@ import {
 	EmptyMedia,
 	EmptyTitle,
 } from "#/components/ui/empty";
+import { apiClient } from "#/lib/api";
 import { PAGE_CONTENT_WIDTH_CLASS } from "#/lib/page-layout-classes";
 import { cn } from "#/lib/utils";
 
@@ -39,6 +41,27 @@ export const COLLECTION_GRID_CLASS =
 // card edges while they move.
 export const CARD_INTERACTION_CLASS =
 	"transform-gpu backface-hidden outline-none transition duration-300 ease-out hover:-translate-y-1 hover:border-heading/35 hover:shadow-card-lift focus-visible:-translate-y-1 focus-visible:border-heading/60 focus-visible:shadow-card-lift motion-reduce:transform-none motion-reduce:transition-none";
+
+/** Name and details over the bottom of a card's cover. */
+export const CARD_OVERLAY_CLASS =
+	"absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-background/97 via-background/86 via-45% to-transparent px-2 pt-12 pb-2 text-foreground";
+
+/** A card's whole cover; Playlists and Genres show their first Track's Album. */
+export function CollectionCardArt({
+	albumId,
+	title,
+}: {
+	albumId: string;
+	title: string;
+}) {
+	return (
+		<AlbumArt
+			coverUrl={apiClient.getAlbumCoverUrl(albumId, 512)}
+			title={title}
+			className="absolute inset-0 size-full transform-gpu text-2xl transition duration-500 ease-out group-hover:scale-104 group-focus-visible:scale-104"
+		/>
+	);
+}
 
 export function CollectionPageContainer({
 	className,

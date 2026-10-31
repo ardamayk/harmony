@@ -2,9 +2,10 @@ import type { Playlist } from "@repo/api-client";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { ListMusic, TriangleAlert } from "lucide-react";
-import { CollectionCoverCardStack } from "#/components/collection-cover-strip";
 import {
+	CARD_OVERLAY_CLASS,
 	COLLECTION_PAGE_CONTAINER_CLASS,
+	CollectionCardArt,
 	CollectionGrid,
 	CollectionGridSkeleton,
 	CollectionGridState,
@@ -77,7 +78,7 @@ function PlaylistCard({ playlist }: { playlist: Playlist }) {
 		enabled: playlist.trackCount > 0,
 		staleTime: PLAYLIST_PREVIEW_STALE_TIME_MS,
 	});
-	const tracks = preview.data?.tracks ?? [];
+	const firstTrack = preview.data?.tracks[0];
 
 	return (
 		<Link
@@ -88,20 +89,14 @@ function PlaylistCard({ playlist }: { playlist: Playlist }) {
 				CARD_INTERACTION_CLASS,
 			)}
 		>
-			{tracks.length > 0 ? (
-				<CollectionCoverCardStack
-					tracks={tracks}
-					seed={`playlist:${playlist.id}`}
-				/>
+			{firstTrack ? (
+				<CollectionCardArt albumId={firstTrack.albumId} title={playlist.name} />
 			) : null}
-			<div
-				data-playlist-card-overlay
-				className="absolute inset-x-0 bottom-0 z-50 bg-gradient-to-t from-background/97 via-background/86 via-45% to-transparent px-3 pt-12 pb-3 text-foreground"
-			>
-				<p className="truncate font-semibold text-heading text-sm leading-tight tracking-tight">
+			<div data-playlist-card-overlay className={CARD_OVERLAY_CLASS}>
+				<p className="truncate font-semibold text-heading text-xs leading-tight">
 					{playlist.name}
 				</p>
-				<p className="mt-0.5 truncate text-xs text-caption leading-tight">
+				<p className="truncate text-xs text-caption leading-tight">
 					{playlist.trackCount} track{playlist.trackCount === 1 ? "" : "s"}
 				</p>
 			</div>

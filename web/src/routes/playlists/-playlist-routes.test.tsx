@@ -246,30 +246,21 @@ describe("playlist routes", () => {
 		expect(screen.queryByRole("button", { name: "Play" })).toBeNull();
 		expect(screen.queryByRole("button", { name: "Shuffle" })).toBeNull();
 		await waitFor(() => {
-			expect(container.querySelectorAll("img")).toHaveLength(4);
-		});
-		expect(
-			Array.from(container.querySelectorAll("img")).map((img) =>
-				img.getAttribute("src"),
-			),
-		).toEqual(
-			expect.arrayContaining([
+			expect(container.querySelector("img")?.getAttribute("src")).toBe(
 				"/cover/a1",
-				"/cover/a2",
-				"/cover/a3",
-				"/cover/a4",
-			]),
-		);
+			);
+		});
+		expect(container.querySelectorAll("img")).toHaveLength(1);
 		const overlay = container.querySelector("[data-playlist-card-overlay]");
-		expect(overlay?.className).toContain("px-3");
+		expect(overlay?.className).toContain("px-2");
 		expect(overlay?.className).toContain("pt-12");
 		expect(overlay?.querySelector("p")?.className).toContain("font-semibold");
 		expect(overlay?.querySelector("p")?.className).not.toContain(
 			"group-hover:underline",
 		);
 		expect(
-			container.querySelector('[data-testid="playlist-card-cover-stack"]'),
-		).toBeTruthy();
+			container.querySelectorAll("[data-playlist-card-overlay]").length,
+		).toBeGreaterThan(0);
 	});
 
 	it("keeps the playlist header visible while showing the shared loading grid", () => {
@@ -429,28 +420,10 @@ describe("playlist routes", () => {
 	});
 
 	it("filters playlist detail actions to the visible tracks", async () => {
-		const { container } = renderWithQuery(
-			<PlaylistDetailContent playlistId="p1" />,
-		);
+		renderWithQuery(<PlaylistDetailContent playlistId="p1" />);
 
 		await screen.findByRole("heading", { name: "Favorites" });
-		expect(
-			container.querySelector('[data-testid="collection-cover-stack"]'),
-		).toBeTruthy();
-		expect(
-			container
-				.querySelector('[data-testid="collection-cover-stack"]')
-				?.querySelectorAll("img"),
-		).toHaveLength(4);
-		expect(
-			new Set(
-				Array.from(
-					container
-						.querySelector('[data-testid="collection-cover-stack"]')
-						?.querySelectorAll("img") ?? [],
-				).map((img) => img.getAttribute("src")),
-			),
-		).toEqual(new Set(["/cover/a1", "/cover/a2", "/cover/a3", "/cover/a4"]));
+		expect(screen.getByRole("heading", { name: "Favorites" })).toBeTruthy();
 
 		fireEvent.change(screen.getByPlaceholderText("Search Favorites…"), {
 			target: { value: "temptation" },

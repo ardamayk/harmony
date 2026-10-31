@@ -29,6 +29,7 @@ import { QueueTrackMenu } from "#/components/queue-track-menu";
 import { RootErrorComponent } from "#/components/root-error";
 import { ThemeSync } from "#/components/theme-sync";
 import { isDesktopClient } from "#/desktop/bridge";
+import { SidebarPlaylists } from "#/components/sidebar-playlists";
 import { DesktopConnectionGate } from "#/desktop/DesktopConnectionGate";
 import { DesktopWindowFrame } from "#/desktop/DesktopWindowFrame";
 import { toggleMiniPlayer } from "#/desktop/mini-player-bridge";
@@ -186,6 +187,7 @@ function AppLayout({ isMiniPlayer }: { isMiniPlayer: boolean }) {
 							>
 								<AppShell
 									bottom={<PlayerBarWithSync />}
+									sidebarPlaylists={<SidebarPlaylists />}
 									onSearch={() => setSearchOpen(true)}
 									windowControls={
 										isDesktopClient() ? desktopWindowControls : undefined

@@ -40,6 +40,8 @@ export function AppShell(props: AppShellProps) {
 type AppShellProps = {
 	children?: ReactNode;
 	bottom?: ReactNode;
+	/** What the host lists under the Sidebar's Playlists link. */
+	sidebarPlaylists?: ReactNode;
 	/** Opens the host's library search from the top bar's search field. */
 	onSearch?: () => void;
 	/** Minimize/maximize/close in the Top Nav, for a host without a title bar. */
@@ -49,6 +51,7 @@ type AppShellProps = {
 function AppShellFrame({
 	children,
 	bottom,
+	sidebarPlaylists,
 	onSearch,
 	windowControls,
 }: AppShellProps) {
@@ -102,7 +105,7 @@ function AppShellFrame({
 						} as CSSProperties
 					}
 				>
-					<Sidebar />
+					<Sidebar playlists={sidebarPlaylists} />
 					<main
 						data-queue-open={queueTakesSpace ? "" : undefined}
 						className={`flex h-full min-w-0 flex-1 flex-col overflow-auto bg-background pr-0 data-[queue-open]:pr-(--queue-drawer-clearance) transition-padding duration-300 ease-out ${
