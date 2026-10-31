@@ -8,7 +8,15 @@ import {
 	LoaderCircle,
 	X,
 } from "lucide-react";
-import { type CSSProperties, memo, useId, useState } from "react";
+import { toast } from "@repo/ui";
+import {
+	type CSSProperties,
+	memo,
+	useEffect,
+	useId,
+	useRef,
+	useState,
+} from "react";
 import { Button } from "#/components/ui/button";
 import { Checkbox } from "#/components/ui/checkbox";
 import {
@@ -35,6 +43,7 @@ import {
 	type ImportFileEntry,
 	SUPPORTED_AUDIO_FILE_ACCEPT,
 	summarizeImportEntries,
+	summarizeImportResult,
 	useManagedImportWorkflow,
 } from "./-managed-import-workflow";
 
@@ -51,6 +60,21 @@ export function ImportMusicDialog({
 	finalFocus?: () => HTMLElement | true;
 }) {
 	const workflow = useManagedImportWorkflow({ onOpenChange, onCommitted });
+	const { isConfirming, isCompleted, entries, handleCancel } = workflow;
+	const wasConfirming = useRef(false);
+	// An open dialog shows its own results; a closed one ends with a toast.
+	useEffect(() => {
+		if (isConfirming) {
+			wasConfirming.current = true;
+			return;
+		}
+		if (!wasConfirming.current || !isCompleted) return;
+		wasConfirming.current = false;
+		if (isOpen) return;
+		const { level, message } = summarizeImportResult(entries);
+		toast[level](message);
+		void handleCancel();
+	}, [isConfirming, isCompleted, isOpen, entries, handleCancel]);
 
 	return (
 		<>
@@ -63,9 +87,11 @@ export function ImportMusicDialog({
 				>
 					{workflow.isCompleted
 						? "Import results"
-						: workflow.isBusy
-							? "Import in progress"
-							: "Ready for review"}
+						: workflow.isConfirming
+							? "Importing…"
+							: workflow.isBusy
+								? "Import in progress"
+								: "Ready for review"}
 				</Button>
 			) : null}
 			<Dialog open={isOpen} onOpenChange={workflow.handleOpenChange}>

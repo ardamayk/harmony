@@ -1909,6 +1909,7 @@ impl Service {
         staged_path: &str,
         error: Error,
     ) -> Error {
+        tracing::warn!(error = %error, "Managed Import upload interrupted");
         let removed = if staged_path.is_empty() {
             None
         } else {

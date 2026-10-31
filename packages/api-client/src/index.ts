@@ -390,7 +390,11 @@ export function createApiClient(config: ApiClientConfig) {
 			});
 			upload.addEventListener("error", () => {
 				removeAbortListener();
-				reject(new Error("Managed Import upload failed"));
+				reject(
+					new Error(
+						"The connection to the Music Server was lost during the upload.",
+					),
+				);
 			});
 			upload.addEventListener("abort", () => {
 				removeAbortListener();

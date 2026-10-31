@@ -32,7 +32,10 @@ export async function runImportUploads<T>(
 	const waiting: Array<() => void> = [];
 	async function runAttempt(item: T, isRetry: boolean) {
 		if (activeCount >= MAX_CONCURRENT_UPLOADS) {
-			await new Promise<void>((resolve) => waiting.push(resolve));
+			// A retry goes first: at the back it would wait out the whole batch.
+			await new Promise<void>((resolve) =>
+				isRetry ? waiting.unshift(resolve) : waiting.push(resolve),
+			);
 		} else activeCount += 1;
 		try {
 			signal?.throwIfAborted();

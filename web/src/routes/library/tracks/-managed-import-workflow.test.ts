@@ -2,6 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 import {
 	type ImportFileEntry,
 	summarizeImportEntries,
+	summarizeImportResult,
 } from "./-managed-import-workflow";
 
 function entry(patch: Partial<ImportFileEntry>): ImportFileEntry {
@@ -67,6 +68,27 @@ describe("summarizeImportEntries", () => {
 
 	it("is empty-safe", () => {
 		expect(summarizeImportEntries([]).percent).toBe(0);
+	});
+});
+
+describe("summarizeImportResult", () => {
+	const finished = (...outcomes: ImportFileEntry["outcome"][]) =>
+		outcomes.map((outcome) => ({ outcome }) as ImportFileEntry);
+
+	it("names what was imported and what was not", () => {
+		expect(
+			summarizeImportResult(finished("imported", "replaced", "imported")),
+		).toEqual({ level: "success", message: "3 Tracks imported" });
+		expect(
+			summarizeImportResult(finished("imported", "rejected", "failed")),
+		).toEqual({
+			level: "warning",
+			message: "1 Track imported, 1 rejected, 1 failed",
+		});
+		expect(summarizeImportResult(finished("failed", "failed"))).toEqual({
+			level: "error",
+			message: "2 failed",
+		});
 	});
 });
 

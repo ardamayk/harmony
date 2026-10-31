@@ -48,13 +48,15 @@ export function ImportTransferDetails({
 		Math.floor((now - (entry.startedAt ?? now)) / 1000),
 	);
 	const bytes = entry.transferredBytes ?? 0;
+	const retrySeconds = Math.ceil(((entry.retryAt ?? now) - now) / 1000);
 	return (
 		<div className="text-caption text-xs">
 			{!isExpanded && entry.phase === "retry_wait" ? (
 				<p>
-					Retrying in{" "}
-					{Math.max(0, Math.ceil(((entry.retryAt ?? now) - now) / 1000))}s ·{" "}
-					{entry.retryCount}/3
+					{retrySeconds > 0
+						? `Retrying in ${retrySeconds}s`
+						: "Waiting for a free upload slot"}{" "}
+					· {entry.retryCount}/3
 				</p>
 			) : null}
 			{!isExpanded && entry.phase === "uploading" ? (

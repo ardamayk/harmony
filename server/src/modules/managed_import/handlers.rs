@@ -578,12 +578,15 @@ async fn confirm_batch(
         }
     };
     let service = service(&state);
-    let result = detached(move |cancel| async move {
+    // Unlike `detached`, this outlives the connection: once the Owner confirms,
+    // losing the answer must not leave the Batch half imported.
+    let result = tokio::spawn(async move {
         service
-            .confirm_batch(&cancel, &batch_id, &confirmation)
+            .confirm_batch(&CancellationToken::new(), &batch_id, &confirmation)
             .await
     })
-    .await;
+    .await
+    .expect("Managed Import task panicked");
     respond(result, StatusCode::OK, "/api/v1/import-batches")
 }
 
