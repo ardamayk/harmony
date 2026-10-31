@@ -30,7 +30,9 @@ RUN --mount=type=cache,id=harmony-cargo-registry,target=/usr/local/cargo/registr
         && cp target/release/earthly-music-server /usr/local/bin/earthly-music-server'
 
 FROM alpine:3.21
-RUN apk add --no-cache ca-certificates ffmpeg
+RUN apk add --no-cache ca-certificates ffmpeg su-exec \
+    && addgroup -S -g 10001 harmony \
+    && adduser -S -D -H -u 10001 -G harmony -h /data harmony
 # The External Source's yt-dlp (ADR 0032) is the operator's own install: only a
 # local build with --build-arg WITH_YT_DLP=true adds it, from PyPI. Published
 # images are built without it.
@@ -44,6 +46,7 @@ RUN if [ "$WITH_YT_DLP" = "true" ]; then \
 WORKDIR /app
 COPY --from=builder /usr/local/bin/earthly-music-server /app/server
 COPY --from=builder /src/server/migrations /app/migrations
+COPY server/docker-entrypoint.sh /app/entrypoint.sh
 COPY LICENSE web/public/third-party-notices.txt /app/licenses/
 COPY licenses /app/licenses/
 RUN apk list --installed > /app/licenses/alpine-packages.txt
@@ -53,4 +56,6 @@ ENV DATABASE_PATH=/data/app.db
 ENV MANAGED_STORAGE_PATH=/data/managed
 EXPOSE 8090
 VOLUME ["/data", "/music"]
-ENTRYPOINT ["/app/server"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s \
+    CMD wget -q -O /dev/null "http://$SERVER_ADDR/api/v1/health"
+ENTRYPOINT ["/app/entrypoint.sh"]

@@ -91,7 +91,7 @@ Put `~/.local/bin` on the server's `PATH`, or set `YT_DLP=$HOME/.local/bin/yt-dl
 
 ### Docker
 
-`server/Dockerfile` builds the Music Server image: the Web Client and docs, the release binary, ffmpeg (Opus and M4A inspection) and the migrations, which the server reads at startup. The build context is the repository root (`docker build -f server/Dockerfile .`, or `docker compose up -d --build` from the root).
+`server/Dockerfile` builds the Music Server image: the Web Client and docs, the release binary, ffmpeg (Opus and M4A inspection) and the migrations, which the server reads at startup. The container starts as root only to give `/data` to its `harmony` user (UID 10001), which runs the server, so files under `MUSIC_PATH` must be readable by it. The build context is the repository root (`docker build -f server/Dockerfile .`, or `docker compose up -d --build` from the root).
 
 `.github/workflows/server-image.yml` publishes it to `ghcr.io/ardamayk/harmony-server`: `main` and `sha-<commit>` after CI passes on main, `<version>` and `latest` from a `v*` tag.
 
