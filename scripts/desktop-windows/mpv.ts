@@ -55,10 +55,9 @@ export async function stageMpv(
 		rmSync(work, { recursive: true, force: true });
 	}
 
-	// shortcut: a Linux CI runner cannot start a Windows executable, so a
-	// release relies on the archive's SHA-256 alone; run it there if CI moves
-	// to Windows.
-	if (process.env.CI) return;
+	// A Linux CI runner cannot start a Windows executable: a release relies on
+	// the archive's SHA-256, and mpv-update.yml runs a new mpv on Windows first.
+	if (process.env.CI && process.platform !== "win32") return;
 
 	// Run the staged copy through WSL interop: this also proves the DLL set
 	// is complete, since a missing DLL fails before --version prints.

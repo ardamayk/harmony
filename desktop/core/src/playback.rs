@@ -44,8 +44,8 @@ const MPV_COMMAND_TIMEOUT: Duration = Duration::from_secs(5);
 /// added the `loadfile` index argument `load_at` sends.
 #[cfg(not(windows))]
 const MPV_REQUIRED_VERSION: &str = include_str!("../mpv-minimum-version.txt");
-/// The Windows package carries its own mpv. The official 0.41.0 release build
-/// reports its git version.
+/// The Windows package carries its own mpv. Its official release build reports
+/// its git version.
 #[cfg(windows)]
 const MPV_REQUIRED_VERSION: &str = include_str!("../mpv-windows-version.txt");
 const MPV_START_TIMEOUT: Duration = Duration::from_secs(3);

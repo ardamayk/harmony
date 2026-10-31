@@ -4,7 +4,8 @@ name: Release
 # Releases as 0.1.<run number>, where installed clients' electron-updater finds
 # it (ADR 0039). A `v*` tag publishes package.json's version and the Music
 # Server image under it. Run by hand, it stops at the workflow artifacts and
-# publishes nothing.
+# publishes nothing, unless `publish` is set: mpv-update.yml's push cannot
+# trigger this workflow, so it runs it that way.
 on:
   push:
     branches: [main]
@@ -20,6 +21,10 @@ on:
       - .github/workflows/release.yml
       - "!**/*.md"
   workflow_dispatch:
+    inputs:
+      publish:
+        type: boolean
+        default: false
 
 # Only the newest push on a ref is worth shipping.
 concurrency:
@@ -133,7 +138,7 @@ jobs:
   publish:
     name: GitHub Release
     needs: [version, windows, linux]
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || inputs.publish
     runs-on: ubuntu-latest
     permissions:
       contents: write

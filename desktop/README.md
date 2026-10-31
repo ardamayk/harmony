@@ -54,7 +54,7 @@ The same shell and core run on Windows; only the platform layer differs, and Lin
 The Windows client is built entirely inside WSL; there is no Windows clone or Windows toolchain.
 
 - The core is cross-built for `x86_64-pc-windows-gnu` with WSL's mingw-w64 and needs no extra DLLs at run time.
-- Pinned mpv is the official `mpv-v0.41.0-x86_64-w64-mingw32.zip` release build. It is downloaded once into `~/.cache/earthly-audio-windows` and checked against its SHA-256. It reports `0.41.0-dev-g41f6a6450`, pinned in `core/mpv-windows-version.txt`, and `mpv.exe` ships with the DLLs beside it.
+- Pinned mpv is the official `mpv-<version>-x86_64-w64-mingw32.zip` release build; `mpv-update.yml` moves it to a new release. It is downloaded once into `~/.cache/earthly-audio-windows` and checked against its SHA-256. It reports `0.41.0-dev-g41f6a6450`, pinned in `core/mpv-windows-version.txt`, and `mpv.exe` ships with the DLLs beside it.
 - electron-builder packages the shell with its `dir` target (`electron-builder.yml`). It neither signs nor edits the executable; `scripts/desktop-windows/icon.ts` sets the icon with resedit. A release adds `--installer` for the NSIS target, whose uninstaller needs Wine.
 - The result is copied to `%LOCALAPPDATA%\EarthlyAudio` (`EARTHLY_AUDIO_WINDOWS_OUT` overrides it) and started from there through WSL interop.
 

@@ -1,0 +1,134 @@
+name: mpv update
+
+# Moves the mpv the Windows package carries to a release at least a week old,
+# without a person when every step proves itself (ADR 0039). GITHUB_TOKEN's
+# pushes start no workflows, so this runs CI and Release by workflow_dispatch.
+# `main` accepts the push only because CI passed on that exact commit.
+on:
+  schedule:
+    - cron: "0 4 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: mpv-update
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  update:
+    name: Update the pin
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      status: ${{ steps.update.outputs.status }}
+      version: ${{ steps.update.outputs.version }}
+      branch: ${{ steps.push.outputs.branch }}
+      commit: ${{ steps.push.outputs.commit }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2
+      - id: update
+        run: node scripts/desktop-windows/mpv-update.ts update
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - id: push
+        if: steps.update.outputs.status == 'ready'
+        run: |
+          branch="mpv-update/v$VERSION"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch --create "$branch"
+          git add desktop/core/mpv-version.txt desktop/core/mpv-windows-version.txt licenses/mpv-windows/sources.txt scripts/build-pinned-mpv.sh scripts/desktop-windows/config.ts
+          git commit --message "build(desktop): move mpv to $VERSION"
+          git push --force origin "$branch"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+        env:
+          VERSION: ${{ steps.update.outputs.version }}
+
+  windows:
+    name: Run the new mpv on Windows
+    needs: update
+    # By hand it checks the current pin, so this job is tried before it matters.
+    if: needs.update.outputs.status == 'ready' || github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.update.outputs.commit || github.sha }}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "24"
+      # mpv.ts extracts through `python3`, which a Windows runner names `python`.
+      - run: cp "$(command -v python)" "$(dirname "$(command -v python)")/python3.exe"
+      - run: node scripts/desktop-windows/mpv-update.ts check-build
+
+  ci:
+    name: CI on the new pin
+    needs: update
+    if: needs.update.outputs.status == 'ready'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - run: |
+          gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref "$BRANCH"
+          for _ in {1..30}; do
+            run=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --branch "$BRANCH" --commit "$COMMIT" --json databaseId --jq '.[0].databaseId // empty')
+            [[ -n "$run" ]] && break
+            sleep 10
+          done
+          [[ -n "$run" ]]
+          gh run watch "$run" --repo "$GITHUB_REPOSITORY" --exit-status --interval 60
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ needs.update.outputs.branch }}
+          COMMIT: ${{ needs.update.outputs.commit }}
+
+  ship:
+    name: Push to main and release
+    needs: [update, windows, ci]
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.update.outputs.commit }}
+      # Only a fast-forward: a rebased commit would not carry CI's result.
+      - run: |
+          git push origin "$COMMIT:refs/heads/main"
+          git push origin --delete "$BRANCH"
+          gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref main -f publish=true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ needs.update.outputs.branch }}
+          COMMIT: ${{ needs.update.outputs.commit }}
+
+  issue:
+    name: Ask a person
+    needs: [update, windows, ci, ship]
+    if: always() && (needs.update.outputs.status == 'manual' || contains(needs.*.result, 'failure'))
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - run: |
+          title="Update the Windows mpv to ${VERSION:-a new release}"
+          open=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "\"$title\" in:title" --json number --jq length)
+          if [[ "$open" != 0 ]]; then
+            exit 0
+          fi
+          gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --label ready-for-human --body "The automatic update stopped: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID
+
+          It needs \`scripts/desktop-windows/config.ts\`, \`desktop/core/mpv-windows-version.txt\`, \`licenses/mpv-windows/\`, \`desktop/core/mpv-version.txt\` and \`scripts/build-pinned-mpv.sh\`. If \`main\` moved during the run, the next run tries again."
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.update.outputs.version }}
