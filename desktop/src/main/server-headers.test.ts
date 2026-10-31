@@ -54,6 +54,13 @@ describe("ServerHeadersStore", () => {
 		expect(headers.load()?.headers).toEqual(HEADERS);
 	});
 
+	it("removes headers saved as an empty set", () => {
+		const { path, headers } = store();
+		headers.sync(ORIGIN, HEADERS);
+		headers.sync(ORIGIN, {});
+		expect(existsSync(path)).toBe(false);
+	});
+
 	it("removes another server's headers", () => {
 		const { path, headers } = store();
 		headers.sync(ORIGIN, HEADERS);

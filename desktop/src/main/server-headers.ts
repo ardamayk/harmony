@@ -54,16 +54,16 @@ export class ServerHeadersStore {
 	}
 
 	/**
-	 * Records what the core just saved: new headers replace the old ones, and
-	 * without any, headers that belong to another server are removed.
+	 * Records what the core just saved: new headers replace the old ones, an
+	 * empty set removes them, and without any, another server's are removed.
 	 */
 	sync(origin: string, headers: Record<string, string> | undefined): void {
-		if (headers) {
+		if (headers && Object.keys(headers).length > 0) {
 			const plain = JSON.stringify({ origin, headers });
 			writeFileSync(this.path, this.cipher.encryptString(plain), {
 				mode: 0o600,
 			});
-		} else if (this.load()?.origin !== origin) {
+		} else if (headers || this.load()?.origin !== origin) {
 			rmSync(this.path, { force: true });
 		}
 	}

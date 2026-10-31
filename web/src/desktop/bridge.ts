@@ -11,6 +11,11 @@ export type ServerConnection = {
 	origin: string;
 };
 
+/** What the core holds: the names of its custom headers, never their values. */
+export type SavedServerConnection = ServerConnection & {
+	headerNames: string[];
+};
+
 export type ConnectionCheck = ServerConnection & {
 	version: string;
 	capabilities: string[];
@@ -52,7 +57,7 @@ export function openExternalUrl(url: string): Promise<void> {
 	return invoke("desktop_open_external_url", { url });
 }
 
-export function getServerConnection(): Promise<ServerConnection | null> {
+export function getServerConnection(): Promise<SavedServerConnection | null> {
 	return invoke("get_server_connection");
 }
 

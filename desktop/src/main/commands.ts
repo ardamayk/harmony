@@ -68,7 +68,9 @@ async function saveConnection(
 	deps: CommandDeps,
 	args: { origin: string; headers?: Record<string, string> },
 ) {
-	if (args.headers) deps.serverHeaders.assertAvailable();
+	if (args.headers && Object.keys(args.headers).length > 0) {
+		deps.serverHeaders.assertAvailable();
+	}
 	const check = (await deps.requestCore("save_server_connection", args)) as {
 		origin: string;
 	};

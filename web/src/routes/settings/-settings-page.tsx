@@ -8,6 +8,7 @@ import { getDesktopMpvStatus, isDesktopClient } from "#/desktop/bridge";
 import { apiClient } from "#/lib/api";
 import { cn } from "#/lib/utils";
 import { themePresetOptions } from "#/themes/presets";
+import { DesktopConnectionSection } from "./-desktop-connection-settings";
 import { ImportSettingsSection } from "./-import-settings";
 import { PlaybackSettingsSection } from "./-playback-settings";
 import { ServerDependenciesSection } from "./-server-dependencies";
@@ -112,6 +113,8 @@ export function SettingsPage() {
 			</section>
 
 			<PlaybackSettingsSection />
+
+			{isDesktop ? <DesktopConnectionSection /> : null}
 
 			{hideImport ? null : <ImportSettingsSection />}
 

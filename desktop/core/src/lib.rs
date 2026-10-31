@@ -134,12 +134,14 @@ struct DeviceAttenuation {
 #[serde(rename_all = "camelCase")]
 struct ServerConnection {
     origin: String,
+    header_names: Vec<String>,
 }
 
 fn get_server_connection(state: &AppState) -> Result<Option<ServerConnection>, ConnectionError> {
     let origin = state.origin.read().map_err(|_| state_error())?;
     Ok(origin.as_ref().map(|origin| ServerConnection {
         origin: origin.as_str().to_owned(),
+        header_names: state.bridge.header_names(origin),
     }))
 }
 

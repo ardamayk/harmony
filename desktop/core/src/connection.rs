@@ -281,6 +281,14 @@ impl HttpBridge {
         }
     }
 
+    /// The saved headers' names, for showing; their values stay here.
+    pub fn header_names(&self, origin: &ServerOrigin) -> Vec<String> {
+        self.headers_for(origin)
+            .keys()
+            .map(|name| name.as_str().to_owned())
+            .collect()
+    }
+
     fn headers_for(&self, origin: &ServerOrigin) -> HeaderMap {
         self.saved_headers
             .read()
@@ -1029,6 +1037,8 @@ mod tests {
             .await
             .expect("media request");
         bridge.test_server(&other).await.expect("other origin");
+        assert_eq!(bridge.header_names(&saved), ["x-proxy-key"]);
+        assert!(bridge.header_names(&other).is_empty());
 
         let key = Some("secret".to_owned());
         assert_eq!(
