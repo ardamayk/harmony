@@ -80,6 +80,16 @@ mise run desktop:clean   # remove target/desktop-windows and the installed clien
 
 Installers are not built yet; an electron-builder NSIS target would come later.
 
+### Releases
+
+A `v*` tag matching `desktop/package.json`'s version publishes this package as a GitHub Release once CI passes (`.github/workflows/release.yml`): an unsigned, portable `Harmony-<version>-windows-x64.zip` and its SHA-256, without automatic updates. Bump the version, commit, then tag:
+
+```bash
+git tag v0.1.0 && git push origin v0.1.0
+```
+
+Running the workflow by hand builds the same zip as a workflow artifact and publishes nothing.
+
 ## Sentry (optional)
 
 The core reports panics, mpv process failures and each Playback Source load (source type and trigger, never its URL) to your own Sentry only when `SENTRY_DSN` is set; `SENTRY_ENVIRONMENT` and `SENTRY_TRACES_SAMPLE_RATE` work as for the Music Server ([server/README.md](../server/README.md#sentry-optional), [ADR 0033](../docs/adr/0033-opt-in-sentry-for-the-rust-programs.md)). The shell starts the core with its own environment, unfiltered:
