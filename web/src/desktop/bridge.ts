@@ -57,8 +57,12 @@ export function openExternalUrl(url: string): Promise<void> {
 	return invoke("desktop_open_external_url", { url });
 }
 
-export function getServerConnection(): Promise<SavedServerConnection | null> {
-	return invoke("get_server_connection");
+export async function getServerConnection(): Promise<SavedServerConnection | null> {
+	const saved = await invoke<
+		(ServerConnection & { headerNames?: string[] }) | null
+	>("get_server_connection");
+	// A core older than the renderer does not name them.
+	return saved && { ...saved, headerNames: saved.headerNames ?? [] };
 }
 
 /** Without `headers`, the saved server is tested with the ones it has. */
