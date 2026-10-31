@@ -678,7 +678,7 @@ mod tests {
 
     #[test]
     fn owner_access_needs_all_three_settings_and_an_https_domain() {
-        let team = ("CF_ACCESS_TEAM_DOMAIN", "zenima.cloudflareaccess.com");
+        let team = ("CF_ACCESS_TEAM_DOMAIN", "example.cloudflareaccess.com");
         let audience = ("CF_ACCESS_AUD", "abc123");
         let url = ("OWNER_PUBLIC_URL", "https://harmony.example.com");
         assert_eq!(config(&[]).expect("off").owner_access, None);

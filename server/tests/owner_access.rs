@@ -19,7 +19,7 @@ use tower::ServiceExt;
 
 const HOST: &str = "harmony.example.com";
 const ORIGIN: &str = "https://harmony.example.com";
-const TEAM: &str = "zenima.cloudflareaccess.com";
+const TEAM: &str = "example.cloudflareaccess.com";
 const AUDIENCE: &str = "app-audience";
 const KEY_ID: &str = "test-key";
 const PRIVATE_KEY: &[u8] = include_bytes!("../testdata/owner-access-test-key.pem");
