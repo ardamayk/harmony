@@ -69,8 +69,8 @@ function CoverImage({
 				IMAGE_LEFT,
 				IMAGE_WIDTH,
 				bandTop,
-				atEnd ? 0.6 : 0.05,
-				atEnd ? 0 : 0.05,
+				atEnd ? 0.6 : 0,
+				0,
 			)}
 		/>
 	);
@@ -127,12 +127,20 @@ function keepWashOnBand(
 		const contentBox = (band.lastElementChild ?? band).getBoundingClientRect();
 		const left = contentBox.left - bandBox.left;
 		const atEnd = placement === "end";
-		const imageWidth = atEnd ? bandBox.height : contentBox.width;
+		// The band bleeds behind the Queue Drawer; the page ends at its edge.
+		const { paddingLeft, paddingRight } = getComputedStyle(band);
+		const pageWidth =
+			bandBox.width -
+			Number.parseFloat(paddingRight) +
+			Number.parseFloat(paddingLeft);
+		const imageWidth = atEnd ? bandBox.height : pageWidth;
 		const measures = {
 			"--cover-wash-height": bandBox.height,
 			"--cover-wash-content-left": left,
 			"--cover-wash-content-width": contentBox.width,
-			"--cover-wash-image-left": left + contentBox.width - imageWidth,
+			"--cover-wash-image-left": atEnd
+				? left + contentBox.width - imageWidth
+				: 0,
 			"--cover-wash-image-width": imageWidth,
 		};
 		for (const surface of [topNavWash, band]) {
@@ -159,7 +167,7 @@ function keepWashOnBand(
  * list begins; no colour yet leaves the plain page background. The colour
  * runs up behind the Top Nav at the band's top step, then scrolls away with
  * the band. With `backdropUrl`, that image replaces the colour: veiled, across
- * what the band holds, and fading into the page.
+ * the page and cropped to the band.
  */
 export function CoverWash({
 	cacheKey,
