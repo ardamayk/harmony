@@ -17,15 +17,11 @@ export const IPC = {
 	event: "earthly:event",
 	/** renderer → main: one {@link WindowAction} for the sender's window. */
 	window: "earthly:window",
-	/** renderer → main (sync): the sender window's {@link WindowLabel}. */
-	windowLabel: "earthly:window-label",
 	/** renderer → main: whether the sender's window is maximized. */
 	windowIsMaximized: "earthly:window-is-maximized",
 	/** main → renderer: the window was maximized (`true`) or restored. */
 	windowMaximized: "earthly:window-maximized",
 } as const;
-
-export type WindowLabel = "main" | "mini";
 
 export type WindowAction = "minimize" | "toggle-maximize" | "close";
 
@@ -76,15 +72,11 @@ export const CORE_COMMANDS = [
 	"desktop_playback_cycle_repeat_mode",
 ] as const;
 
-/** Commands the main process answers itself: windows, pickers, links. */
+/** Commands the main process answers itself: pickers, links. */
 export const SHELL_COMMANDS = [
 	"desktop_select_import_files",
 	"desktop_select_import_folder",
 	"desktop_open_external_url",
-	"desktop_open_mini_player",
-	"desktop_close_mini_player",
-	"desktop_toggle_mini_player",
-	"desktop_show_main_window",
 ] as const;
 
 export type CoreCommand = (typeof CORE_COMMANDS)[number];
@@ -124,7 +116,6 @@ export type InvokeResult =
 export type Unlisten = () => void;
 
 export type DesktopWindowApi = {
-	readonly label: WindowLabel;
 	minimize(): void;
 	toggleMaximize(): void;
 	close(): void;

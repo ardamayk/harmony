@@ -3,19 +3,17 @@ import { isDesktopClient } from "#/desktop/bridge";
 import { desktopWindow } from "#/desktop/desktop-api";
 
 /**
- * The main Desktop Client window draws no system title bar or border (see
+ * The Desktop Client window draws no system title bar or border (see
  * desktop/src/main/windows.ts), so the page supplies the frame: rounded
  * corners (`data-desktop-window` styles in styles.css) that square off while
  * maximized. Electron resizes frameless windows from their edges itself.
  */
 export function DesktopWindowFrame() {
-	const [isMainWindow] = useState(
-		() => isDesktopClient() && desktopWindow().label === "main",
-	);
+	const [isDesktop] = useState(isDesktopClient);
 	const [isMaximized, setIsMaximized] = useState(false);
 
 	useEffect(() => {
-		if (!isMainWindow) return;
+		if (!isDesktop) return;
 		const root = document.documentElement;
 		root.dataset.desktopWindow = "";
 		const appWindow = desktopWindow();
@@ -29,14 +27,14 @@ export function DesktopWindowFrame() {
 			delete root.dataset.desktopWindow;
 			stop();
 		};
-	}, [isMainWindow]);
+	}, [isDesktop]);
 
 	useEffect(() => {
-		if (!isMainWindow) return;
+		if (!isDesktop) return;
 		const root = document.documentElement;
 		if (isMaximized) root.dataset.windowMaximized = "";
 		else delete root.dataset.windowMaximized;
-	}, [isMainWindow, isMaximized]);
+	}, [isDesktop, isMaximized]);
 
 	return null;
 }

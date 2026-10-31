@@ -34,7 +34,7 @@ The renderer runs sandboxed with context isolation and no Node.js, under a CSP t
 
 The proxy starts with the core, rejects redirects and non-media methods, and shuts down with it. A second Desktop Client instance shows the running one's window instead; another process occupying port `43129` makes startup fail closed with an actionable error. Bounded command responses retain the 32 MiB safety limit; only HLS manifests are buffered, with a separate 1 MiB limit, so their child URIs can be rewritten safely.
 
-Settings live in `~/.config/audio.earthly.desktop` (server connection, Playback Session snapshot, processing settings, mini player placement), the same directory the Tauri client used.
+Settings live in `~/.config/audio.earthly.desktop` (server connection, Playback Session snapshot, processing settings), the same directory the Tauri client used.
 
 The Desktop Client does not bundle a Go server, database, or server lifecycle.
 

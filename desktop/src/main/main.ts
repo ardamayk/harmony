@@ -21,7 +21,6 @@ import { handleInvoke, IMPORT_EXTENSIONS, runWindowAction } from "./commands";
 import { CoreProcess } from "./core-process";
 import { devServerOrigin, shellPaths } from "./paths";
 import { SERVER_HEADERS_FILE_NAME, ServerHeadersStore } from "./server-headers";
-import { PlacementStore } from "./placement-store";
 import { createRendererHandler } from "./renderer-protocol";
 import {
 	isTrustedRendererUrl,
@@ -96,9 +95,6 @@ async function start() {
 		rendererUrl,
 		preload: paths.preload,
 		icon: paths.icon,
-		miniPlacement: new PlacementStore(
-			join(configDirectory, "mini-window.json"),
-		),
 		onMainWindowCloseRequested: () => sendShellAction("close-main-window"),
 	});
 	let tray: PlaybackTray | null = null;
@@ -127,8 +123,6 @@ async function start() {
 				return windows.showMainWindow();
 			case "shell:hide-main-window":
 				return windows.hideMainWindow();
-			case "shell:toggle-mini-window":
-				return windows.toggleMiniWindow();
 			case "shell:window-title":
 				return windows.setMainWindowTitle((payload as { title: string }).title);
 			case "shell:tray":
@@ -139,9 +133,7 @@ async function start() {
 				return quit();
 		}
 		if (!FORWARDED_EVENTS.has(name)) return;
-		for (const window of windows.all()) {
-			window.webContents.send(IPC.event, name, payload);
-		}
+		windows.forwardEvent(name, payload);
 	});
 
 	core.on("exit", (code, signal) => {
@@ -198,21 +190,11 @@ async function start() {
 					return result.canceled ? [] : result.filePaths;
 				},
 				openExternal: (url) => shell.openExternal(url),
-				openMiniWindow: () => windows.openMiniWindow(),
-				closeMiniWindow: () => windows.closeMiniWindow(),
-				toggleMiniWindow: () => windows.toggleMiniWindow(),
-				showMainWindow: () => windows.showMainWindow(),
 				serverHeaders,
 			},
 			command,
 			args,
 		);
-	});
-
-	ipcMain.on(IPC.windowLabel, (event) => {
-		event.returnValue = isTrusted(event)
-			? windows.labelOf(windowOf(event))
-			: null;
 	});
 
 	ipcMain.handle(IPC.windowIsMaximized, (event) =>

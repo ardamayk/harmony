@@ -24,10 +24,6 @@ export type CommandDeps = {
 	pickImportFiles(): Promise<string[]>;
 	pickImportFolder(): Promise<string[]>;
 	openExternal(url: string): Promise<void>;
-	openMiniWindow(): void;
-	closeMiniWindow(): void;
-	toggleMiniWindow(): void;
-	showMainWindow(): void;
 	serverHeaders: Pick<ServerHeadersStore, "assertAvailable" | "sync">;
 };
 
@@ -91,14 +87,6 @@ async function runShellCommand(
 			return registerImportPaths(deps, await deps.pickImportFolder());
 		case "desktop_open_external_url":
 			return deps.openExternal(validateExternalUrl(invoke.args.url));
-		case "desktop_open_mini_player":
-			return deps.openMiniWindow();
-		case "desktop_close_mini_player":
-			return deps.closeMiniWindow();
-		case "desktop_toggle_mini_player":
-			return deps.toggleMiniWindow();
-		case "desktop_show_main_window":
-			return deps.showMainWindow();
 	}
 }
 

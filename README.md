@@ -12,7 +12,7 @@ Not a Navidrome fork — modern OpenAPI backend (Rust), React SPA, modular monol
 - **Playback:** a server-side queue grouped by source (album, playlist, added by you), seek, volume, sleep timer, and Last.fm play counts when the operator sets a key.
 - **Lyrics:** synced or plain lyrics from the file, or from LRCLIB when the file has none, in a full-screen Lyrics view.
 - **Radio:** stations from the Radio Browser catalog, streamed through the Music Server's proxy.
-- **Clients:** the Web Client in a browser, and the Linux Desktop Client (Electron) with native mpv playback and a mini player.
+- **Clients:** the Web Client in a browser, and the Linux Desktop Client (Electron) with native mpv playback.
 - **Themes:** seven presets in light, dark or system mode. In dark mode each preset is built from a neutral and an opposite accent. Vintage Harbor can take its accent from the playing cover.
 
 ## Product & design

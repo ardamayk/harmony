@@ -8,7 +8,6 @@ export type TrayUpdate = {
 	toggleLabel: string;
 	nextLabel: string;
 	openLabel: string;
-	miniLabel: string;
 	quitLabel: string;
 	/** Present only when the core decides the tooltip is due. */
 	tooltip?: string;
@@ -20,7 +19,6 @@ export type TrayAction =
 	| "toggle-play"
 	| "previous"
 	| "next"
-	| "toggle-mini-player"
 	| "quit";
 
 export class PlaybackTray {
@@ -58,7 +56,6 @@ export class PlaybackTray {
 				},
 				{ type: "separator" },
 				{ label: update.openLabel, click: action("open-main-window") },
-				{ label: update.miniLabel, click: action("toggle-mini-player") },
 				{ label: update.quitLabel, click: action("quit") },
 			]),
 		);

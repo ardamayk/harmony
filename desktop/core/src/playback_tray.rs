@@ -18,7 +18,6 @@ pub(crate) struct TrayUpdate {
     pub(crate) toggle_label: &'static str,
     pub(crate) next_label: &'static str,
     pub(crate) open_label: &'static str,
-    pub(crate) mini_label: &'static str,
     pub(crate) quit_label: &'static str,
     /// Present only when the tooltip is due (see [`TooltipThrottle`]).
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -48,7 +47,6 @@ impl PlaybackTray {
             toggle_label: view.toggle_label,
             next_label: view.next_label,
             open_label: view.open_label,
-            mini_label: view.mini_label,
             quit_label: view.quit_label,
             tooltip: None,
         };
@@ -133,7 +131,6 @@ pub(crate) struct PlaybackTrayView {
     pub(crate) toggle_label: &'static str,
     pub(crate) next_label: &'static str,
     pub(crate) open_label: &'static str,
-    pub(crate) mini_label: &'static str,
     pub(crate) quit_label: &'static str,
 }
 
@@ -151,7 +148,6 @@ impl PlaybackTrayView {
             toggle_label: if is_playing { "Pause" } else { "Play" },
             next_label: "Next",
             open_label: "Open Harmony",
-            mini_label: "Mini player",
             quit_label: "Quit Harmony",
         }
     }

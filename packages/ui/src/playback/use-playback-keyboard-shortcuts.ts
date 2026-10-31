@@ -12,8 +12,6 @@ export interface PlaybackKeyboardActions {
 	toggleLyrics?: () => void;
 	toggleQueue?: () => void;
 	toggleHelp?: () => void;
-	/** Desktop only: Ctrl+Shift+M opens or closes the mini player window. */
-	toggleMiniPlayer?: () => void;
 }
 
 export interface PlaybackKeyboardOptions {
@@ -50,7 +48,6 @@ export function describePlaybackShortcuts({
 		{ keys: ["L"], description: "Lyrics" },
 		{ keys: ["Q"], description: "Queue panel" },
 		{ keys: ["?"], description: "Keyboard shortcuts" },
-		{ keys: ["Ctrl", "Shift", "M"], description: "Mini player (desktop)" },
 	];
 }
 
@@ -111,7 +108,6 @@ export function usePlaybackKeyboardShortcuts(
 		toggleLyrics,
 		toggleQueue,
 		toggleHelp,
-		toggleMiniPlayer,
 	}: PlaybackKeyboardActions,
 	{
 		seekStepSeconds = DEFAULT_SEEK_STEP_SECONDS,
@@ -137,18 +133,6 @@ export function usePlaybackKeyboardShortcuts(
 					return;
 				default:
 					break;
-			}
-			if (
-				event.ctrlKey &&
-				event.shiftKey &&
-				!event.altKey &&
-				!event.metaKey &&
-				event.key.toLowerCase() === "m"
-			) {
-				if (!toggleMiniPlayer || event.repeat) return;
-				event.preventDefault();
-				toggleMiniPlayer();
-				return;
 			}
 			if (event.ctrlKey || event.metaKey || event.altKey) return;
 			if (shouldIgnorePlaybackShortcut(event.target)) return;
@@ -214,7 +198,6 @@ export function usePlaybackKeyboardShortcuts(
 		toggleLyrics,
 		toggleQueue,
 		toggleHelp,
-		toggleMiniPlayer,
 		seekStepSeconds,
 		seekStepLargeSeconds,
 		volumeStep,

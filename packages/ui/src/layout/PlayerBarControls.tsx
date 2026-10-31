@@ -6,7 +6,6 @@ import {
 	ListMusic,
 	MicVocal,
 	Pause,
-	PictureInPicture2,
 	Play,
 	Repeat,
 	Repeat1,
@@ -63,7 +62,6 @@ type PlaybackControlsProps = {
 	effectiveDuration: number;
 	bufferedEnd?: number | null;
 	waveform?: number[] | null;
-	showHoverTimestamp?: boolean;
 	keyboardStepSeconds?: number;
 	keyboardLargeStepSeconds?: number;
 	shuffleEnabled: boolean;
@@ -304,7 +302,6 @@ function PlaybackProgress({
 	effectiveDuration,
 	bufferedEnd = null,
 	waveform = null,
-	showHoverTimestamp = true,
 	keyboardStepSeconds,
 	keyboardLargeStepSeconds,
 	onSeek,
@@ -316,7 +313,6 @@ function PlaybackProgress({
 	effectiveDuration: number;
 	bufferedEnd?: number | null;
 	waveform?: number[] | null;
-	showHoverTimestamp?: boolean;
 	keyboardStepSeconds?: number;
 	keyboardLargeStepSeconds?: number;
 	onSeek: (seconds: number) => void;
@@ -351,7 +347,6 @@ function PlaybackProgress({
 					bufferedEnd={bufferedEnd}
 					waveform={waveform}
 					disabled={!canSeek}
-					showHoverTimestamp={showHoverTimestamp}
 					keyboardStepSeconds={keyboardStepSeconds}
 					keyboardLargeStepSeconds={keyboardLargeStepSeconds}
 					onSeek={onSeek}
@@ -382,8 +377,6 @@ type VolumeAndQueueControlsProps = {
 	/** Absent while nothing is playing; the Lyrics button is then disabled. */
 	onOpenLyrics?: () => void;
 	onOpenHelp?: () => void;
-	/** Desktop only; absent hides the button. */
-	onToggleMiniPlayer?: () => void;
 	onToggleMute: () => void;
 	onVolumeChange: (value: number) => void;
 };
@@ -406,7 +399,6 @@ export function VolumeAndQueueControls({
 	onToggleQueue,
 	onOpenLyrics,
 	onOpenHelp,
-	onToggleMiniPlayer,
 	onToggleMute,
 	onVolumeChange,
 }: VolumeAndQueueControlsProps) {
@@ -489,21 +481,6 @@ export function VolumeAndQueueControls({
 					</span>
 				) : null}
 			</button>
-			{onToggleMiniPlayer ? (
-				<button
-					type="button"
-					data-player-control
-					className={cn(
-						CONTROL_BUTTON_CLASS,
-						SIDE_BUTTON_CLASS,
-						"hidden shrink-0 sm:inline-flex",
-					)}
-					onClick={onToggleMiniPlayer}
-					aria-label="Mini player"
-				>
-					<PictureInPicture2 className={SIDE_ICON_CLASS} />
-				</button>
-			) : null}
 			{onOpenHelp ? (
 				<button
 					type="button"

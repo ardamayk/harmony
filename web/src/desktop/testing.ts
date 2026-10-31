@@ -51,7 +51,6 @@ export function installDesktopBridge(
 			};
 		},
 		window: {
-			label: "main",
 			minimize: () => {},
 			toggleMaximize: () => {},
 			close: () => {},

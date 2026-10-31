@@ -281,7 +281,7 @@ html[data-window-maximized] body::after {
 }
 
 /* Desktop Client: undecorated windows move by dragging the regions marked
-   data-window-drag-region (Top Nav, mini player); double-clicking one
+   data-window-drag-region (Top Nav); double-clicking one
    maximizes. Controls inside stay clickable. Browsers ignore app-region. */
 [data-window-drag-region] {
 	-webkit-app-region: drag;

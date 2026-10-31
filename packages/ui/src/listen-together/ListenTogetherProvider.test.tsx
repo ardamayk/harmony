@@ -6,7 +6,15 @@ import {
 } from "@repo/api-client";
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { useLayoutEffect } from "react";
-import { afterEach, describe, expect, it, type Mock, vi } from "vite-plus/test";
+import {
+	afterEach,
+	beforeEach,
+	describe,
+	expect,
+	it,
+	type Mock,
+	vi,
+} from "vite-plus/test";
 import {
 	type PlaybackApi,
 	PlaybackProvider,
@@ -21,6 +29,7 @@ import {
 	type ListenTogetherApi,
 	ListenTogetherProvider,
 } from "./ListenTogetherProvider";
+import { RoomSyncDriver } from "./RoomSyncDriver";
 
 const toastError = vi.fn();
 vi.mock("sonner", () => ({
@@ -166,15 +175,10 @@ function Probe() {
 function renderProvider(
 	fixture: ReturnType<typeof createApi>,
 	engine = new InMemoryPlaybackEngine(),
-	shouldDriveEngine = true,
 ) {
 	const playbackApi = createPlaybackApi();
 	render(
-		<ListenTogetherProvider
-			api={fixture.api}
-			engine={engine}
-			shouldDriveEngine={shouldDriveEngine}
-		>
+		<ListenTogetherProvider api={fixture.api} engine={engine}>
 			<PlaybackProvider api={playbackApi} engine={engine}>
 				<Probe />
 			</PlaybackProvider>
@@ -493,21 +497,6 @@ describe("ListenTogetherProvider", () => {
 		expect(context.ending).toBe("left");
 	});
 
-	it("does not drive the engine from a window that only sends commands", async () => {
-		const fixture = createApi({ room: { ...baseRoom, playing: true } });
-		const engine = new InMemoryPlaybackEngine();
-		const play = vi.spyOn(engine, "play");
-		renderProvider(fixture, engine, false);
-		await waitFor(() => expect(context.room).not.toBeNull());
-
-		await act(async () => playback.togglePlay());
-
-		expect(play).not.toHaveBeenCalled();
-		expect(fixture.calls.sendListenTogetherCommand).toHaveBeenCalledWith({
-			type: "pause",
-		});
-	});
-
 	it("shows a rate limit as a toast and stays in the Room", async () => {
 		const fixture = createApi();
 		fixture.calls.sendListenTogetherCommand.mockRejectedValue(
@@ -524,8 +513,14 @@ describe("ListenTogetherProvider", () => {
 });
 
 describe("playback during a Room", () => {
+	// These pin what the Provider sends; following the Room is RoomSyncDriver's.
+	beforeEach(() => {
+		vi.spyOn(RoomSyncDriver.prototype, "start").mockImplementation(() => {});
+	});
+
 	afterEach(() => {
 		cleanup();
+		vi.restoreAllMocks();
 		vi.clearAllMocks();
 	});
 
@@ -537,7 +532,7 @@ describe("playback during a Room", () => {
 			pause: vi.spyOn(engine, "pause"),
 			seek: vi.spyOn(engine, "seek"),
 		};
-		const { playbackApi } = renderProvider(fixture, engine, false);
+		const { playbackApi } = renderProvider(fixture, engine);
 		await waitFor(() => expect(playback.queue.length).toBeGreaterThan(0));
 		const commands = fixture.calls.sendListenTogetherCommand as unknown as Mock<
 			(command: ListenTogetherCommand) => Promise<ListenTogetherRoom>
