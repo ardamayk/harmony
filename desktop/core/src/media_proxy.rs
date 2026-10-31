@@ -121,6 +121,17 @@ async fn forward_media_request(
 ) -> Result<Response<Body>, ConnectionError> {
     ensure_read_method(request.method())?;
     let relative_url = proxy_relative_url(request.uri(), &state.token)?;
+    let origin = state
+        .origin
+        .read()
+        .map_err(|_| proxy_state_error())?
+        .clone()
+        .ok_or_else(|| {
+            ConnectionError::new(
+                ConnectionErrorCode::InvalidOrigin,
+                "Configure a Music Server before requesting desktop media.",
+            )
+        })?;
     let mut timer = audio_stream_type(request.uri()).map(|source_type| {
         let range = request.headers().get("range");
         StreamTimer::start(source_type, range.and_then(|value| value.to_str().ok()))
@@ -145,17 +156,6 @@ async fn forward_media_request(
         headers,
         body: None,
     };
-    let origin = state
-        .origin
-        .read()
-        .map_err(|_| proxy_state_error())?
-        .clone()
-        .ok_or_else(|| {
-            ConnectionError::new(
-                ConnectionErrorCode::InvalidOrigin,
-                "Configure a Music Server before requesting desktop media.",
-            )
-        })?;
     let upstream = state
         .bridge
         .send_media(&origin, media_request)
