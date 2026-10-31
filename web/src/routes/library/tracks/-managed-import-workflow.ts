@@ -15,6 +15,7 @@ import {
 	selectDesktopImportFolder,
 } from "#/desktop/bridge";
 import { apiClient } from "#/lib/api";
+import { readDesktopUpload } from "#/lib/desktop-upload";
 import {
 	importPositionKey,
 	importReviewProblems,
@@ -685,9 +686,7 @@ async function uploadDesktopFile(
 		onProgress,
 		signal,
 	);
-	const body = await response.json();
-	if (!response.ok) throw new ApiError(response.status, body);
-	return body as ManagedImportPreview;
+	return readDesktopUpload(response);
 }
 
 function confirmImportBatch(

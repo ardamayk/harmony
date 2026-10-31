@@ -14,6 +14,7 @@ import {
 	selectDesktopImportFiles,
 } from "#/desktop/bridge";
 import { apiClient } from "#/lib/api";
+import { readDesktopUpload } from "#/lib/desktop-upload";
 import { invalidateLibraryCache } from "#/lib/invalidate-library-cache";
 import { invalidatePlaylistCache } from "#/lib/playlist-query-cache";
 
@@ -196,17 +197,7 @@ async function uploadReplacementFile(
 		onProgress,
 		signal,
 	);
-	const body = (await response.json()) as
-		| ManagedImportPreview
-		| { message?: string };
-	if (!response.ok) {
-		throw new Error(
-			"message" in body && typeof body.message === "string"
-				? body.message
-				: `HTTP ${response.status}`,
-		);
-	}
-	return body as ManagedImportPreview;
+	return readDesktopUpload(response);
 }
 
 function replacementErrorMessage(error: unknown): string {
