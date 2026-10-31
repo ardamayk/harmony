@@ -197,8 +197,10 @@ describe("album detail route", () => {
 		scroller.scrollTop = 120;
 		fireEvent.scroll(scroller);
 		expect(wash.style.getPropertyValue("--cover-wash-scroll")).toBe("120px");
-		// A child would inherit the Desktop Client's drag region past the bar.
-		expect(wash.childElementCount).toBe(0);
+		// A taller child would inherit the Desktop Client's drag region.
+		for (const layer of wash.children) {
+			expect(layer.className).toContain("inset-0");
+		}
 	});
 
 	it("lays the cover under the band and the Top Nav's copy of it", async () => {
@@ -209,7 +211,9 @@ describe("album detail route", () => {
 		const wash = within(screen.getByTestId("top-nav-backdrop")).getByTestId(
 			"top-nav-wash",
 		);
-		expect(wash.style.backgroundImage).toContain("cover");
+		const images = wash.querySelectorAll<HTMLElement>("div");
+		expect(images[0].style.backgroundImage).toContain("/cover/album-1");
+		expect(images[1].style.backgroundImage).toContain("/cover/album-1");
 	});
 
 	it("leaves the Top Nav flat while the cover has no colour", async () => {

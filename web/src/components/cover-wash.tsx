@@ -12,54 +12,99 @@ const WASH_CLASS = "bg-linear-to-b from-(--cover-tint)/40 to-(--cover-tint)/0";
 const TINT_STEP = "color-mix(in oklab, var(--cover-tint) 40%, transparent)";
 const TINT_END = "color-mix(in oklab, var(--cover-tint) 0%, transparent)";
 
-/** Dims the image; `IMAGE_EDGE` darkens it further where header text sits. */
+/** Dims the images; the left side, where header text sits, dims further. */
 const IMAGE_VEIL = "color-mix(in oklab, var(--background) 50%, transparent)";
 const TEXT_VEIL = "color-mix(in oklab, var(--background) 45%, transparent)";
 const SCROLL = "var(--cover-wash-scroll, 0px)";
 const BAND_HEIGHT = "var(--cover-wash-height, 0px)";
 const BAND_TOP = `calc(var(--cover-wash-top, 0px) - ${SCROLL})`;
 
-function imageLayer(imageUrl: string) {
-	return `url(${JSON.stringify(imageUrl)})`;
-}
+// Sized and placed by `measure`, so the Top Nav's copy lines up. The band is
+// wide and short, so an image across all of it shows only a slice: a soft copy
+// spans the content's edges, and the sharp one shows more of the image inside.
+const SHARP_SHARE_OF_CONTENT = 0.65;
+const CONTENT_LEFT = "var(--cover-wash-content-left, 0px)";
+const CONTENT_WIDTH = "var(--cover-wash-content-width, 100%)";
+const SHARP_LEFT = "var(--cover-wash-image-left, 0px)";
+const SHARP_WIDTH = "var(--cover-wash-image-width, 100%)";
 
-// Sized and placed by `measure`, so the Top Nav's copy lines up.
-const IMAGE_WIDTH = "var(--cover-wash-image-width, 100%)";
-const IMAGE_LEFT = "var(--cover-wash-image-left, 0px)";
-const IMAGE_RIGHT = `calc(${IMAGE_LEFT} + ${IMAGE_WIDTH})`;
-/** Melts the image's sides into the page, slowly on the side with the text. */
-const IMAGE_EDGE = `linear-gradient(to right, var(--background) ${IMAGE_LEFT}, ${TEXT_VEIL} calc(${IMAGE_LEFT} + 12rem), transparent calc(${IMAGE_LEFT} + 28rem), transparent calc(${IMAGE_RIGHT} - 4rem), var(--background) ${IMAGE_RIGHT})`;
+const TEXT_SIDE = `linear-gradient(to right, ${TEXT_VEIL} ${CONTENT_LEFT}, transparent calc(${CONTENT_LEFT} + ${CONTENT_WIDTH} * 0.5))`;
 
-function bandImageStyle(imageUrl: string): CSSProperties {
+/** One image, centred on the band and faded towards its sides. */
+function imageLayerStyle(
+	url: string,
+	left: string,
+	width: string,
+	bandTop: string,
+	fade: number,
+): CSSProperties {
 	return {
-		backgroundImage: `linear-gradient(${IMAGE_VEIL}, var(--background)), ${IMAGE_EDGE}, ${imageLayer(imageUrl)}`,
-		backgroundSize: `auto, auto, ${IMAGE_WIDTH} auto`,
-		backgroundPosition: `0 0, 0 0, ${IMAGE_LEFT} 50%`,
+		backgroundImage: `url(${JSON.stringify(url)})`,
+		backgroundSize: `${width} auto`,
+		backgroundPosition: `${left} calc(${bandTop} + (${BAND_HEIGHT} - ${width}) / 2)`,
 		backgroundRepeat: "no-repeat",
+		maskImage: `linear-gradient(to right, transparent ${left}, var(--background) calc(${left} + ${width} * ${fade}), var(--background) calc(${left} + ${width} * ${1 - fade}), transparent calc(${left} + ${width}))`,
 	};
 }
 
-// The band's top step, then the band. Background layers and not a taller
-// child: the Top Nav is the Desktop Client's drag region, a child inherits it
-// past the clip, and every click over the page below would move the window.
-function topNavWashStyle(imageUrl?: string): CSSProperties {
-	if (!imageUrl) {
-		return {
-			backgroundImage: `linear-gradient(${TINT_STEP}, ${TINT_STEP}), linear-gradient(${TINT_STEP}, ${TINT_END})`,
-			backgroundSize: `100% 100%, 100% ${BAND_HEIGHT}`,
-			backgroundPosition: `0 calc(0px - ${SCROLL}), 0 ${BAND_TOP}`,
-			backgroundRepeat: "no-repeat",
-		};
-	}
-	// The veil runs on past the band as the plain page, so the rest of the
-	// image, taller than the band, never shows below it.
-	return {
-		backgroundImage: `linear-gradient(${IMAGE_VEIL}, ${IMAGE_VEIL}), linear-gradient(${IMAGE_VEIL}, var(--background) ${BAND_HEIGHT}), ${IMAGE_EDGE}, ${imageLayer(imageUrl)}`,
-		backgroundSize: `100% 100%, 100% calc(${BAND_HEIGHT} + ${IMAGE_WIDTH}), 100% 100%, ${IMAGE_WIDTH} auto`,
-		backgroundPosition: `0 calc(0px - ${SCROLL}), 0 ${BAND_TOP}, 0 0, ${IMAGE_LEFT} calc(${BAND_TOP} + (${BAND_HEIGHT} - ${IMAGE_WIDTH}) / 2)`,
-		backgroundRepeat: "no-repeat",
-	};
+function CoverImages({
+	softUrl,
+	sharpUrl,
+	bandTop,
+}: {
+	softUrl: string;
+	sharpUrl: string;
+	bandTop: string;
+}) {
+	return (
+		<>
+			<div
+				className="absolute inset-0"
+				style={imageLayerStyle(
+					softUrl,
+					CONTENT_LEFT,
+					CONTENT_WIDTH,
+					bandTop,
+					0.05,
+				)}
+			/>
+			<div
+				className="absolute inset-0"
+				style={imageLayerStyle(
+					sharpUrl,
+					SHARP_LEFT,
+					SHARP_WIDTH,
+					bandTop,
+					0.22,
+				)}
+			/>
+		</>
+	);
 }
+
+const BAND_VEIL_STYLE: CSSProperties = {
+	backgroundImage: `linear-gradient(${IMAGE_VEIL}, var(--background)), ${TEXT_SIDE}`,
+};
+
+// The veil runs on past the band as the plain page, so the rest of the image,
+// taller than the band, never shows below it.
+const TOP_NAV_VEIL_STYLE: CSSProperties = {
+	backgroundImage: `linear-gradient(${IMAGE_VEIL}, ${IMAGE_VEIL}), linear-gradient(${IMAGE_VEIL}, var(--background) ${BAND_HEIGHT}), ${TEXT_SIDE}`,
+	backgroundSize: `100% 100%, 100% calc(${BAND_HEIGHT} + ${CONTENT_WIDTH}), 100% 100%`,
+	backgroundPosition: `0 calc(0px - ${SCROLL}), 0 ${BAND_TOP}, 0 0`,
+	backgroundRepeat: "no-repeat",
+};
+
+// The band's top step, then the band, as background layers. Everything in the
+// Top Nav stays the bar's own height: it is the Desktop Client's drag region,
+// a taller child inherits it past the clip, and every click over the page
+// below would move the window.
+const TOP_NAV_TINT_STYLE: CSSProperties = {
+	backgroundImage: `linear-gradient(${TINT_STEP}, ${TINT_STEP}), linear-gradient(${TINT_STEP}, ${TINT_END})`,
+	backgroundSize: `100% 100%, 100% ${BAND_HEIGHT}`,
+	backgroundPosition: `0 calc(0px - ${SCROLL}), 0 ${BAND_TOP}`,
+	backgroundRepeat: "no-repeat",
+};
 
 /**
  * Keeps the Top Nav's copy of the band on the band: at the band's height and
@@ -79,18 +124,22 @@ function keepWashOnBand(topNavWash: HTMLElement, band: HTMLElement | null) {
 			"--cover-wash-top",
 			`${topNavWash.offsetHeight}px`,
 		);
-		topNavWash.style.setProperty(
-			"--cover-wash-height",
-			`${band.getBoundingClientRect().height}px`,
-		);
-		// The image spans what the band holds, edge to edge.
 		const bandBox = band.getBoundingClientRect();
-		const contentBox = (band.firstElementChild ?? band).getBoundingClientRect();
-		const width = contentBox.width;
+		// Last, after the images when the band has them.
+		const contentBox = (band.lastElementChild ?? band).getBoundingClientRect();
 		const left = contentBox.left - bandBox.left;
+		const sharpWidth = contentBox.width * SHARP_SHARE_OF_CONTENT;
+		const measures = {
+			"--cover-wash-height": bandBox.height,
+			"--cover-wash-content-left": left,
+			"--cover-wash-content-width": contentBox.width,
+			"--cover-wash-image-left": left + (contentBox.width - sharpWidth) / 2,
+			"--cover-wash-image-width": sharpWidth,
+		};
 		for (const surface of [topNavWash, band]) {
-			surface.style.setProperty("--cover-wash-image-width", `${width}px`);
-			surface.style.setProperty("--cover-wash-image-left", `${left}px`);
+			for (const [name, pixels] of Object.entries(measures)) {
+				surface.style.setProperty(name, `${pixels}px`);
+			}
 		}
 	};
 	follow();
@@ -110,8 +159,8 @@ function keepWashOnBand(topNavWash: HTMLElement, band: HTMLElement | null) {
  * scroller's edges, behind the Queue Drawer too, and ends where the page's
  * list begins; no colour yet leaves the plain page background. The colour
  * runs up behind the Top Nav at the band's top step, then scrolls away with
- * the band. With `backdropUrl`, that image replaces the colour, across what
- * the band holds, veiled and fading into the page.
+ * the band. With `backdropUrl`, the images replace the colour: veiled, across
+ * what the band holds, and fading into the page.
  */
 export function CoverWash({
 	cacheKey,
@@ -123,7 +172,7 @@ export function CoverWash({
 	/** Shared with the Player Bar for Album covers, so a cover is read once. */
 	cacheKey: string;
 	imageUrl: string;
-	/** A larger copy than `imageUrl`, which is read only for its colour. */
+	/** A larger copy; `imageUrl` is its soft copy as well as its colour. */
 	backdropUrl?: string;
 	/** Layout for what the band holds, such as an Artist photo laid on it. */
 	className?: string;
@@ -150,13 +199,24 @@ export function CoverWash({
 				ref={bandRef}
 				className={cn(
 					"-mt-6 -ml-(--shell-inset) -mr-(--page-edge-right) pt-6 pr-(--page-edge-right) pb-6 pl-(--shell-inset)",
-					!bandImage && WASH_CLASS,
+					bandImage ? "relative isolate" : WASH_CLASS,
 					className,
 				)}
-				style={
-					bandImage ? { ...tintStyle, ...bandImageStyle(bandImage) } : tintStyle
-				}
+				style={tintStyle}
 			>
+				{bandImage ? (
+					<div
+						aria-hidden
+						className="pointer-events-none absolute inset-0 -z-10 overflow-hidden"
+					>
+						<CoverImages
+							softUrl={imageUrl}
+							sharpUrl={bandImage}
+							bandTop="0px"
+						/>
+						<div className="absolute inset-0" style={BAND_VEIL_STYLE} />
+					</div>
+				) : null}
 				{children}
 			</div>
 			{/* After the band, whose ref `followBand` needs set by then. */}
@@ -166,8 +226,21 @@ export function CoverWash({
 						ref={followBand}
 						data-testid="top-nav-wash"
 						className="absolute inset-0 bg-background"
-						style={{ ...tintStyle, ...topNavWashStyle(bandImage) }}
-					/>
+						style={
+							bandImage ? tintStyle : { ...tintStyle, ...TOP_NAV_TINT_STYLE }
+						}
+					>
+						{bandImage ? (
+							<>
+								<CoverImages
+									softUrl={imageUrl}
+									sharpUrl={bandImage}
+									bandTop={BAND_TOP}
+								/>
+								<div className="absolute inset-0" style={TOP_NAV_VEIL_STYLE} />
+							</>
+						) : null}
+					</div>
 				</TopNavBackdrop>
 			) : null}
 		</>
