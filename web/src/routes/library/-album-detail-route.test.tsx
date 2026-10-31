@@ -213,7 +213,6 @@ describe("album detail route", () => {
 		);
 		const images = wash.querySelectorAll<HTMLElement>("div");
 		expect(images[0].style.backgroundImage).toContain("/cover/album-1");
-		expect(images[1].style.backgroundImage).toContain("/cover/album-1");
 	});
 
 	it("leaves the Top Nav flat while the cover has no colour", async () => {

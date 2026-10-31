@@ -19,15 +19,11 @@ const SCROLL = "var(--cover-wash-scroll, 0px)";
 const BAND_HEIGHT = "var(--cover-wash-height, 0px)";
 const BAND_TOP = `calc(var(--cover-wash-top, 0px) - ${SCROLL})`;
 
-// Sized and placed by `measure`, so the Top Nav's copy lines up. The band is
-// wide and short, so an image across all of it shows only a slice: a soft copy
-// spans the content's edges, too blurred to read as a second image, and the
-// sharp one shows more of the image inside.
-const SHARP_SHARE_OF_CONTENT = 0.65;
+// Sized and placed by `measure`, so the Top Nav's copy lines up.
 const CONTENT_LEFT = "var(--cover-wash-content-left, 0px)";
 const CONTENT_WIDTH = "var(--cover-wash-content-width, 100%)";
-const SHARP_LEFT = "var(--cover-wash-image-left, 0px)";
-const SHARP_WIDTH = "var(--cover-wash-image-width, 100%)";
+const IMAGE_LEFT = "var(--cover-wash-image-left, 0px)";
+const IMAGE_WIDTH = "var(--cover-wash-image-width, 100%)";
 
 const TEXT_SIDE = `linear-gradient(to right, ${TEXT_VEIL} ${CONTENT_LEFT}, transparent calc(${CONTENT_LEFT} + ${CONTENT_WIDTH} * 0.5))`;
 
@@ -55,57 +51,28 @@ function imageLayerStyle(
 	};
 }
 
-function CoverImages({
-	softUrl,
-	sharpUrl,
+function CoverImage({
+	url,
 	bandTop,
 	placement,
 }: {
-	softUrl: string;
-	sharpUrl: string;
+	url: string;
 	bandTop: string;
 	placement: BackdropPlacement;
 }) {
-	if (placement === "end") {
-		return (
-			<div
-				className="absolute inset-0"
-				style={imageLayerStyle(
-					sharpUrl,
-					SHARP_LEFT,
-					SHARP_WIDTH,
-					bandTop,
-					0.6,
-					0,
-				)}
-			/>
-		);
-	}
+	const atEnd = placement === "end";
 	return (
-		<>
-			<div
-				className="absolute inset-0 blur-3xl"
-				style={imageLayerStyle(
-					softUrl,
-					CONTENT_LEFT,
-					CONTENT_WIDTH,
-					bandTop,
-					0.05,
-					0.05,
-				)}
-			/>
-			<div
-				className="absolute inset-0"
-				style={imageLayerStyle(
-					sharpUrl,
-					SHARP_LEFT,
-					SHARP_WIDTH,
-					bandTop,
-					0.22,
-					0.22,
-				)}
-			/>
-		</>
+		<div
+			className="absolute inset-0"
+			style={imageLayerStyle(
+				url,
+				IMAGE_LEFT,
+				IMAGE_WIDTH,
+				bandTop,
+				atEnd ? 0.6 : 0.05,
+				atEnd ? 0 : 0.05,
+			)}
+		/>
 	);
 }
 
@@ -160,16 +127,13 @@ function keepWashOnBand(
 		const contentBox = (band.lastElementChild ?? band).getBoundingClientRect();
 		const left = contentBox.left - bandBox.left;
 		const atEnd = placement === "end";
-		const sharpWidth = atEnd
-			? bandBox.height
-			: contentBox.width * SHARP_SHARE_OF_CONTENT;
+		const imageWidth = atEnd ? bandBox.height : contentBox.width;
 		const measures = {
 			"--cover-wash-height": bandBox.height,
 			"--cover-wash-content-left": left,
 			"--cover-wash-content-width": contentBox.width,
-			"--cover-wash-image-left":
-				left + (contentBox.width - sharpWidth) / (atEnd ? 1 : 2),
-			"--cover-wash-image-width": sharpWidth,
+			"--cover-wash-image-left": left + contentBox.width - imageWidth,
+			"--cover-wash-image-width": imageWidth,
 		};
 		for (const surface of [topNavWash, band]) {
 			for (const [name, pixels] of Object.entries(measures)) {
@@ -194,7 +158,7 @@ function keepWashOnBand(
  * scroller's edges, behind the Queue Drawer too, and ends where the page's
  * list begins; no colour yet leaves the plain page background. The colour
  * runs up behind the Top Nav at the band's top step, then scrolls away with
- * the band. With `backdropUrl`, the images replace the colour: veiled, across
+ * the band. With `backdropUrl`, that image replaces the colour: veiled, across
  * what the band holds, and fading into the page.
  */
 export function CoverWash({
@@ -208,7 +172,7 @@ export function CoverWash({
 	/** Shared with the Player Bar for Album covers, so a cover is read once. */
 	cacheKey: string;
 	imageUrl: string;
-	/** A larger copy; `imageUrl` is its soft copy as well as its colour. */
+	/** A larger copy; `imageUrl` is read for its colour. */
 	backdropUrl?: string;
 	backdropPlacement?: BackdropPlacement;
 	/** Layout for what the band holds, such as an Artist photo laid on it. */
@@ -247,9 +211,8 @@ export function CoverWash({
 						aria-hidden
 						className="pointer-events-none absolute inset-0 -z-10 overflow-hidden"
 					>
-						<CoverImages
-							softUrl={imageUrl}
-							sharpUrl={bandImage}
+						<CoverImage
+							url={bandImage}
 							placement={backdropPlacement}
 							bandTop="0px"
 						/>
@@ -271,9 +234,8 @@ export function CoverWash({
 					>
 						{bandImage ? (
 							<>
-								<CoverImages
-									softUrl={imageUrl}
-									sharpUrl={bandImage}
+								<CoverImage
+									url={bandImage}
 									placement={backdropPlacement}
 									bandTop={BAND_TOP}
 								/>
