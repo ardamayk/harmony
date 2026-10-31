@@ -21,7 +21,8 @@ const BAND_TOP = `calc(var(--cover-wash-top, 0px) - ${SCROLL})`;
 
 // Sized and placed by `measure`, so the Top Nav's copy lines up. The band is
 // wide and short, so an image across all of it shows only a slice: a soft copy
-// spans the content's edges, and the sharp one shows more of the image inside.
+// spans the content's edges, too blurred to read as a second image, and the
+// sharp one shows more of the image inside.
 const SHARP_SHARE_OF_CONTENT = 0.65;
 const CONTENT_LEFT = "var(--cover-wash-content-left, 0px)";
 const CONTENT_WIDTH = "var(--cover-wash-content-width, 100%)";
@@ -83,7 +84,7 @@ function CoverImages({
 	return (
 		<>
 			<div
-				className="absolute inset-0"
+				className="absolute inset-0 blur-3xl"
 				style={imageLayerStyle(
 					softUrl,
 					CONTENT_LEFT,
