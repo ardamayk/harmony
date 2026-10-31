@@ -11,6 +11,8 @@ use std::io::Cursor;
 
 /// The longest-edge sizes a scaled-down cover can be asked for.
 pub const COVER_SIZES: [i64; 5] = [64, 128, 256, 512, 1024];
+/// The size large views ask for, the one a sharper cover can stand in at.
+pub const LARGEST_COVER_SIZE: i64 = 1024;
 const JPEG_QUALITY: u8 = 82;
 
 pub async fn album_cover(

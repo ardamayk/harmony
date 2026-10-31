@@ -1,11 +1,12 @@
 //! HTTP for library reads: parse the request, call the service, respond.
 
-use super::covers;
+use super::covers::{self, LARGEST_COVER_SIZE};
 use super::repository::LibraryError;
 use super::service::Service;
 use super::types::{self, Track};
 use super::waveform::WaveformError;
 use crate::app::AppState;
+use crate::modules::artist_info::ArtistInfoError;
 use crate::query::GoQuery;
 use crate::respond::{ApiError, ApiResult};
 use axum::extract::{Path, State};
@@ -109,19 +110,31 @@ async fn get_album_cover(
             .filter(|size| covers::COVER_SIZES.contains(size))
             .ok_or_else(|| ApiError::bad_request("size must be one of 64, 128, 256, 512, 1024"))?,
     };
+    if size == LARGEST_COVER_SIZE {
+        match state.artist_info.sharper_cover(&album_id).await {
+            Ok(Some(cover)) => return Ok(cover_response(cover.media_type, cover.data)),
+            Ok(None) | Err(ArtistInfoError::NotFound) => {}
+            // The Album's own cover still answers.
+            Err(error) => tracing::warn!(album_id, %error, "sharper cover lookup failed"),
+        }
+    }
     let cover = Service::new(state.db)
         .album_cover(&album_id, size)
         .await
         .map_err(not_found("album cover not found"))?;
-    Ok((
+    Ok(cover_response(cover.media_type, cover.data))
+}
+
+fn cover_response(media_type: String, data: Vec<u8>) -> Response {
+    (
         StatusCode::OK,
         [
-            (header::CONTENT_TYPE, cover.media_type),
+            (header::CONTENT_TYPE, media_type),
             (header::CACHE_CONTROL, "public, max-age=86400".to_owned()),
         ],
-        cover.data,
+        data,
     )
-        .into_response())
+        .into_response()
 }
 
 async fn list_tracks(

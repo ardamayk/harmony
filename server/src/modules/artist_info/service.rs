@@ -11,6 +11,10 @@ use std::time::Duration;
 use tokio::sync::Semaphore;
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
+/// A cover at least this wide fills the Album page well enough to keep.
+const SHARP_COVER_EDGE: u32 = 1000;
+/// How far from square a cover and Deezer's may be and still be one picture.
+const MAX_COVER_ASPECT_DIFFERENCE: f64 = 0.05;
 /// A lookup that found nothing is repeated after 30 days. One that failed,
 /// mostly a burst (the Artists page asking for every photo at once) over a
 /// rate limit, after five minutes.
@@ -349,6 +353,59 @@ impl ArtistInfo {
         Ok(genres.unwrap_or_default())
     }
 
+    /// A sharper copy of the Album's cover from Deezer, `None` when its own
+    /// is sharp enough or Deezer has nothing better (yet). Scaled covers of
+    /// the Album keep using its own, so a list never looks anything up.
+    pub async fn sharper_cover(&self, album_id: &str) -> Result<Option<Photo>, ArtistInfoError> {
+        let own = self.library.album_cover(album_id, 0).await?;
+        let stored = self
+            .repo
+            .album_cover(album_id)
+            .await?
+            .filter(|(source_sha256, _)| *source_sha256 == own.source_sha256)
+            .map(|(_, stored)| stored);
+        if !self.should_look_up(stored.as_ref(), None) {
+            return Ok(stored.and_then(|stored| stored.value));
+        }
+        let found = match dimensions(&own.data) {
+            Some((width, height)) if width.max(height) < SHARP_COVER_EDGE => {
+                self.find_sharper_cover(album_id, (width, height)).await
+            }
+            _ => Ok(None),
+        };
+        let (outcome, cover) = settle(album_id, found);
+        self.repo
+            .put_album_cover(album_id, &own.source_sha256, outcome, cover.as_ref())
+            .await?;
+        Ok(cover)
+    }
+
+    async fn find_sharper_cover(
+        &self,
+        album_id: &str,
+        own: (u32, u32),
+    ) -> Result<Option<Photo>, String> {
+        let album = self
+            .library
+            .get_album(album_id)
+            .await
+            .map_err(|error| error.to_string())?
+            .album;
+        let _slot = self.deezer_slots.acquire().await.expect("semaphore open");
+        let Some(url) = deezer::find_album_cover(
+            &self.client,
+            &self.sources.deezer,
+            &album.artist_name,
+            &album.title,
+        )
+        .await?
+        else {
+            return Ok(None);
+        };
+        let (media_type, data) = super::fetch::bytes(&self.client, &url).await?;
+        Ok(is_sharper_copy(own, dimensions(&data)).then_some(Photo { media_type, data }))
+    }
+
     /// Keeps looking up Albums in the background for as long as the server runs.
     pub fn spawn_explicit_sweep(self: Arc<Self>) {
         tokio::spawn(async move {
@@ -436,6 +493,23 @@ impl ArtistInfo {
     }
 }
 
+fn dimensions(image: &[u8]) -> Option<(u32, u32)> {
+    image::ImageReader::new(std::io::Cursor::new(image))
+        .with_guessed_format()
+        .ok()?
+        .into_dimensions()
+        .ok()
+}
+
+/// Whether Deezer's image is larger than the cover and the same shape.
+fn is_sharper_copy(own: (u32, u32), found: Option<(u32, u32)>) -> bool {
+    let aspect = |(width, height): (u32, u32)| f64::from(width) / f64::from(height.max(1));
+    found.is_some_and(|found| {
+        found.0.max(found.1) > own.0.max(own.1)
+            && (aspect(found) - aspect(own)).abs() <= MAX_COVER_ASPECT_DIFFERENCE
+    })
+}
+
 /// How the lookup ended, to store, and what it found.
 fn settle<T>(id: &str, found: Result<Option<T>, String>) -> (Outcome, Option<T>) {
     match found {
@@ -479,9 +553,11 @@ mod tests {
         // MusicBrainz's first answer is a 503, which is retried.
         let musicbrainz_busy = Arc::new(AtomicBool::new(true));
         let photo_url = format!("{origin}/img/skillet.jpg");
+        let cover_url = format!("{origin}/img/cover.png");
         let app = Router::new().fallback(move |uri: Uri| {
             counter.fetch_add(1, Ordering::SeqCst);
             let photo_url = photo_url.clone();
+            let cover_url = cover_url.clone();
             let musicbrainz_busy = musicbrainz_busy.clone();
             async move {
                 let query = uri.query().unwrap_or("");
@@ -495,7 +571,7 @@ mod tests {
                         {"title": "Hero", "title_short": "Hero"}
                     ]}),
                     "/search/album" if query.contains("Awake") => json!({"data": [
-                        {"id": 9, "title": "Awake (Deluxe)", "artist": {"id": 7, "name": "Skillet"}}
+                        {"id": 9, "title": "Awake (Deluxe)", "cover_xl": cover_url, "artist": {"id": 7, "name": "Skillet"}}
                     ]}),
                     "/album/9" => json!({"id": 9, "genres": {"data": [{"id": 152, "name": "Rock"}]}}),
                     "/album/9/tracks" => json!({"data": [
@@ -509,6 +585,9 @@ mod tests {
                             {"name": "Hero (Live)", "playcount": "900"},
                             {"name": "Hero", "playcount": "8000000"}
                         ]}})
+                    }
+                    "/img/cover.png" => {
+                        return ([(header::CONTENT_TYPE, "image/png")], png(1000, 1000)).into_response();
                     }
                     "/img/skillet.jpg" => {
                         return ([(header::CONTENT_TYPE, "image/jpeg")], b"jpeg".to_vec()).into_response();
@@ -674,6 +753,85 @@ mod tests {
             made,
             "stored counts make no request"
         );
+    }
+
+    fn png(width: u32, height: u32) -> Vec<u8> {
+        let image = image::RgbImage::from_pixel(width, height, image::Rgb([200, 40, 10]));
+        let mut data = Vec::new();
+        image
+            .write_to(
+                &mut std::io::Cursor::new(&mut data),
+                image::ImageFormat::Png,
+            )
+            .unwrap();
+        data
+    }
+
+    async fn set_cover(pool: &sqlx::SqlitePool, cover: Vec<u8>) {
+        sqlx::query("UPDATE albums SET cover_mime = 'image/png', cover_data = ? WHERE id = 'al'")
+            .bind(cover)
+            .execute(pool)
+            .await
+            .unwrap();
+    }
+
+    async fn album_pool(dir: &tempfile::TempDir) -> sqlx::SqlitePool {
+        let migrations = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations");
+        let pool =
+            crate::db::open_and_migrate(dir.path().join("app.db").to_str().unwrap(), &migrations)
+                .await
+                .unwrap();
+        seed_tracks(&pool, &["Hero"]).await;
+        pool
+    }
+
+    #[tokio::test]
+    async fn fetches_a_sharper_cover_once_and_again_for_a_new_own_cover() {
+        let (sources, requests) = fake_sources().await;
+        let (dir, info) = service(sources, true).await;
+        let pool = album_pool(&dir).await;
+        set_cover(&pool, png(500, 500)).await;
+
+        let cover = info.sharper_cover("al").await.unwrap().expect("cover");
+        assert_eq!(cover.media_type, "image/png");
+        assert_eq!(dimensions(&cover.data), Some((1000, 1000)));
+        let made = requests.load(Ordering::SeqCst);
+        assert!(info.sharper_cover("al").await.unwrap().is_some());
+        assert_eq!(requests.load(Ordering::SeqCst), made, "a stored cover");
+
+        set_cover(&pool, png(600, 600)).await;
+        assert!(info.sharper_cover("al").await.unwrap().is_some());
+        assert!(requests.load(Ordering::SeqCst) > made, "a new own cover");
+    }
+
+    #[tokio::test]
+    async fn keeps_a_sharp_cover_and_asks_nobody() {
+        let (sources, requests) = fake_sources().await;
+        let (dir, info) = service(sources, true).await;
+        let pool = album_pool(&dir).await;
+        set_cover(&pool, png(1000, 1000)).await;
+
+        assert_eq!(info.sharper_cover("al").await.unwrap(), None);
+        assert_eq!(requests.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn looks_nothing_up_while_lookups_are_off() {
+        let (sources, requests) = fake_sources().await;
+        let (dir, info) = service(sources, false).await;
+        let pool = album_pool(&dir).await;
+        set_cover(&pool, png(500, 500)).await;
+
+        assert_eq!(info.sharper_cover("al").await.unwrap(), None);
+        assert_eq!(requests.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn a_sharper_copy_is_larger_and_the_same_shape() {
+        assert!(is_sharper_copy((500, 500), Some((1000, 1000))));
+        assert!(!is_sharper_copy((500, 500), Some((500, 500))));
+        assert!(!is_sharper_copy((800, 500), Some((1000, 1000))));
+        assert!(!is_sharper_copy((500, 500), None));
     }
 
     #[tokio::test]

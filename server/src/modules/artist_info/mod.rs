@@ -12,4 +12,4 @@ mod service;
 mod wikipedia;
 
 pub use handlers::routes;
-pub use service::{ArtistInfo, Sources};
+pub use service::{ArtistInfo, ArtistInfoError, Sources};

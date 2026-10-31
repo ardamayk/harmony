@@ -60,7 +60,7 @@ The Music Server calls these services itself, so clients never contact them dire
 
 | Service | Key | Used for | Switch |
 |---------|-----|----------|--------|
-| [Deezer](https://developers.deezer.com/api) | no | Artist photo, popular Tracks, genres for Albums whose tags name none | `ARTIST_INFO_ENABLED=false` |
+| [Deezer](https://developers.deezer.com/api) | no | Artist photo, popular Tracks, genres for Albums whose tags name none, sharper Album covers for covers under 1000 px | `ARTIST_INFO_ENABLED=false` |
 | [MusicBrainz](https://musicbrainz.org/doc/MusicBrainz_API) → [Wikidata](https://www.wikidata.org) → [Wikipedia](https://en.wikipedia.org/api/rest_v1/) | no | Artist biography, in `ARTIST_INFO_LANGUAGE` (default `en`) | `ARTIST_INFO_ENABLED=false` |
 | [Last.fm](https://www.last.fm/api) | `LASTFM_API_KEY` | Track play counts | off without a key |
 | [LRCLIB](https://lrclib.net) | no | Lyrics for Tracks whose files have none | `LYRICS_LOOKUP_ENABLED=false` |

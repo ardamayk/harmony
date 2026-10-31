@@ -11,6 +11,8 @@ use serde_json::Value;
 const ALBUM_ATTEMPTS: usize = 3;
 /// Deezer's empty-picture URLs have no image id between the slashes.
 const PLACEHOLDER_PATH: &str = "/images/artist//";
+/// The same for Album covers.
+const COVER_PLACEHOLDER_PATH: &str = "/images/cover//";
 /// How many of an Album's Tracks are asked for.
 const ALBUM_TRACKS: &str = "200";
 /// How many top Tracks are asked for; Deezer answers at most 50.
@@ -32,6 +34,8 @@ struct AlbumHit {
     title: String,
     #[serde(default)]
     explicit_lyrics: bool,
+    #[serde(default)]
+    cover_xl: String,
     artist: Artist,
 }
 
@@ -152,6 +156,27 @@ pub async fn find_album_genres(
         .map(|genre| genre.name.trim().to_owned())
         .filter(|name| !name.is_empty())
         .collect())
+}
+
+/// The address of this Album's largest cover, `None` when Deezer has no such
+/// Album or no picture for it.
+pub async fn find_album_cover(
+    client: &reqwest::Client,
+    base_url: &str,
+    artist_name: &str,
+    title: &str,
+) -> Result<Option<String>, String> {
+    let query = format!("{artist_name} {title}");
+    let hits: Hits<AlbumHit> = search(client, base_url, "album", &query).await?;
+    Ok(hits
+        .into_iter()
+        .find(|hit| {
+            same_name(&hit.artist.name, artist_name)
+                && same_title(&hit.title, title)
+                && !hit.cover_xl.is_empty()
+                && !hit.cover_xl.contains(COVER_PLACEHOLDER_PATH)
+        })
+        .map(|hit| hit.cover_xl))
 }
 
 /// The base titles of the Tracks Deezer marks explicit on this Album, `None`

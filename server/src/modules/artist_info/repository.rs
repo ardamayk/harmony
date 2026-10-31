@@ -1,5 +1,5 @@
 //! The module's only database access: stored Artist photos, biographies,
-//! top Track titles and play counts, and Album genres, with the outcome of
+//! top Track titles and play counts, and Album genres and covers, with the outcome of
 //! their last lookup.
 
 use sqlx::SqlitePool;
@@ -326,6 +326,64 @@ impl Repository {
                 .and_then(|genres| serde_json::from_str(&genres).ok()),
             age_seconds: row.age_seconds,
         }))
+    }
+
+    /// The stored sharper cover and the hash of the cover it stands in for.
+    pub async fn album_cover(
+        &self,
+        album_id: &str,
+    ) -> Result<Option<(String, Stored<Photo>)>, RepositoryError> {
+        let row = sqlx::query!(
+            r#"SELECT source_sha256, outcome, media_type, data,
+                CAST((julianday('now') - julianday(checked_at)) * 86400 AS INTEGER) AS "age_seconds!: i64"
+            FROM album_online_covers WHERE album_id = ?1"#,
+            album_id
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .context(|| format!("get Album online cover {album_id}"))?;
+        Ok(row.map(|row| {
+            let value = match (row.media_type, row.data) {
+                (Some(media_type), Some(data)) => Some(Photo { media_type, data }),
+                _ => None,
+            };
+            (
+                row.source_sha256,
+                Stored {
+                    outcome: Outcome::parse(&row.outcome),
+                    value,
+                    age_seconds: row.age_seconds,
+                },
+            )
+        }))
+    }
+
+    pub async fn put_album_cover(
+        &self,
+        album_id: &str,
+        source_sha256: &str,
+        outcome: Outcome,
+        cover: Option<&Photo>,
+    ) -> Result<(), RepositoryError> {
+        let outcome = outcome.as_str();
+        let media_type = cover.map(|cover| cover.media_type.as_str());
+        let data = cover.map(|cover| cover.data.as_slice());
+        sqlx::query!(
+            "INSERT INTO album_online_covers (album_id, source_sha256, outcome, media_type, data, checked_at)
+            VALUES (?1, ?2, ?3, ?4, ?5, CURRENT_TIMESTAMP)
+            ON CONFLICT (album_id) DO UPDATE SET source_sha256 = excluded.source_sha256,
+                outcome = excluded.outcome, media_type = excluded.media_type,
+                data = excluded.data, checked_at = excluded.checked_at",
+            album_id,
+            source_sha256,
+            outcome,
+            media_type,
+            data
+        )
+        .execute(&self.pool)
+        .await
+        .context(|| format!("store Album online cover {album_id}"))?;
+        Ok(())
     }
 
     pub async fn put_album_genres(
