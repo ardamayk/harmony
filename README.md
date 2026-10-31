@@ -123,10 +123,11 @@ Appearance and playback preferences (theme, layout, seek steps, transition fade)
 
 ## Docker
 
-`docker-compose.yml` builds the Music Server image from `server/Dockerfile` (with FFmpeg) and serves the Web Client from it:
+`docker-compose.yml` runs the Music Server image (with FFmpeg), which serves the Web Client too. Pull the published one, `ghcr.io/ardamayk/harmony-server` (`HARMONY_IMAGE_TAG` picks `main`, `latest` or a version; unset = `main`), or build your own from `server/Dockerfile`:
 
 ```bash
-docker compose up -d --build
+docker compose pull && docker compose up -d   # the published image
+docker compose up -d --build                  # your own build
 ```
 
 Open http://localhost:8090. The container uses the host's network and binds to `127.0.0.1:8090`, because the server accepts only loopback addresses. The database and imported music live in the `app-data` volume (`/data`); add any variable from [Configuration](#configuration) under `environment:`. The image has no yt-dlp by default; to use the External Source, set the `WITH_YT_DLP` build argument to `true` (in Compose: `build.args`) and rebuild, see [server/README.md](server/README.md#external-source-yt-dlp). Docker Compose runs only the Music Server; the Desktop Client runs on the host and connects to it.

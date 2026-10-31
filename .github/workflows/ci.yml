@@ -10,7 +10,8 @@ on:
   workflow_call:
 
 concurrency:
-  group: ci-${{ github.ref }}
+  # By workflow too, so a Release's own CI never replaces main's.
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:

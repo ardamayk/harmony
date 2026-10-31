@@ -1,0 +1,56 @@
+name: Server image
+
+# Publishes the Music Server image to GitHub Container Registry: `main` and
+# `sha-<commit>` once CI passes on main; `<version>` and `latest` from a `v*`
+# tag through release.yml.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_call:
+
+concurrency:
+  group: server-image-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  publish:
+    name: Build and push
+    # A fork's pull request from a branch called main also reaches
+    # workflow_run, so only this repository's pushes count.
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    env:
+      IMAGE: ghcr.io/ardamayk/harmony-server
+      SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ env.SHA }}
+      - run: docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin <<< "$GH_TOKEN"
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - run: |
+          tags=(--tag "$IMAGE:sha-${SHA::12}")
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            tags+=(--tag "$IMAGE:${GITHUB_REF_NAME#v}" --tag "$IMAGE:latest")
+          else
+            tags+=(--tag "$IMAGE:main")
+          fi
+          docker build --file server/Dockerfile \
+            --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
+            --label "org.opencontainers.image.revision=$SHA" \
+            "${tags[@]}" .
+          docker push --all-tags "$IMAGE"

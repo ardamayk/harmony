@@ -1,5 +1,6 @@
 services:
   server:
+    image: ghcr.io/ardamayk/harmony-server:${HARMONY_IMAGE_TAG:-main}
     build:
       context: .
       dockerfile: server/Dockerfile

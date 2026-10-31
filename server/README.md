@@ -93,7 +93,9 @@ Put `~/.local/bin` on the server's `PATH`, or set `YT_DLP=$HOME/.local/bin/yt-dl
 
 `server/Dockerfile` builds the Music Server image: the Web Client and docs, the release binary, ffmpeg (Opus and M4A inspection) and the migrations, which the server reads at startup. The build context is the repository root (`docker build -f server/Dockerfile .`, or `docker compose up -d --build` from the root).
 
-The image is built locally and has no yt-dlp by default. The `WITH_YT_DLP` build argument installs it from PyPI into your own image:
+`.github/workflows/server-image.yml` publishes it to `ghcr.io/ardamayk/harmony-server`: `main` and `sha-<commit>` after CI passes on main, `<version>` and `latest` from a `v*` tag.
+
+The published image has no yt-dlp, and neither does a local build by default. The `WITH_YT_DLP` build argument installs it from PyPI into your own image:
 
 ```bash
 docker build -f server/Dockerfile --build-arg WITH_YT_DLP=true -t earthly-music-server .
