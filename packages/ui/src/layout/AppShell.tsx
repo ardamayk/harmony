@@ -81,6 +81,9 @@ function AppShellFrame({
 					} as CSSProperties
 				}
 				data-app-shell
+				data-queue-visible={
+					preferences.layout.collapsed[queuePanel] ? undefined : ""
+				}
 				className="relative flex h-full min-h-0 w-full min-w-3xl flex-1 flex-col overflow-hidden bg-background text-foreground"
 			>
 				<TopNav onSearch={onSearch} windowControls={windowControls} />

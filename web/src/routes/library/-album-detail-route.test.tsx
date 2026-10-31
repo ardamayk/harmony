@@ -201,6 +201,17 @@ describe("album detail route", () => {
 		expect(wash.childElementCount).toBe(0);
 	});
 
+	it("lays the cover under the band and the Top Nav's copy of it", async () => {
+		mocks.coverAccent.mockReturnValue({ "--cover-tint": "hsl(10 50% 55%)" });
+		renderWithQuery(<AlbumDetailContent albumId="album-1" />);
+		await screen.findByRole("heading", { name: "1989" });
+
+		const wash = within(screen.getByTestId("top-nav-backdrop")).getByTestId(
+			"top-nav-wash",
+		);
+		expect(wash.style.backgroundImage).toContain("cover");
+	});
+
 	it("leaves the Top Nav flat while the cover has no colour", async () => {
 		renderWithQuery(<AlbumDetailContent albumId="album-1" />);
 		await screen.findByRole("heading", { name: "1989" });

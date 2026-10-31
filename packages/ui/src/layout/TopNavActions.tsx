@@ -71,7 +71,7 @@ export function TopNavBackdropSlot() {
 			ref={setBackdrop}
 			aria-hidden
 			data-top-nav-backdrop
-			className="pointer-events-none absolute inset-y-0 right-0 left-62.5 overflow-hidden max-lg:left-17"
+			className="pointer-events-none absolute inset-y-0 right-0 left-62.5 overflow-hidden transition-[right] duration-300 ease-out max-lg:left-17 in-data-queue-visible:right-(--queue-drawer-width,18rem)"
 		/>
 	);
 }
