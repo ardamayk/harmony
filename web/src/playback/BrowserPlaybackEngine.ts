@@ -6,6 +6,7 @@ import type {
 	PlaybackSource,
 } from "@repo/ui";
 import { DEFAULT_PLAYBACK_SESSION_STATE } from "@repo/ui";
+import { recordClientMetric } from "#/lib/client-metrics";
 
 export interface BrowserPlaybackMedia extends EventTarget {
 	currentTime: number;
@@ -175,9 +176,16 @@ export class BrowserPlaybackEngine implements PlaybackEngine {
 		}
 
 		try {
+			const startedAt = performance.now();
 			if (source) await this.setMediaSource(source);
 			await this.media.play();
 			this.update({ status: "playing", error: null });
+			if (source) {
+				recordClientMetric(
+					"client.playback.start",
+					performance.now() - startedAt,
+				);
+			}
 		} catch (error) {
 			this.update({
 				status: "error",

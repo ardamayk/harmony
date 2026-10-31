@@ -6,6 +6,7 @@ import { createRoot } from "react-dom/client";
 import { getServerConnection, isDesktopClient } from "./desktop/bridge";
 import { hasDesktopBridge } from "./desktop/desktop-api";
 import { getApiBaseUrl } from "./env";
+import { startClientMetrics } from "./lib/client-metrics";
 import { suppressEscapeFocusRing } from "./lib/escape-focus-ring";
 import {
 	createQueryPersister,
@@ -63,6 +64,7 @@ if (!rootElement) {
 }
 
 suppressEscapeFocusRing();
+startClientMetrics();
 
 const shouldRenderQueryDevtools =
 	import.meta.env.DEV &&

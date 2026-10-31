@@ -25,12 +25,16 @@ The release is `earthly-music-server@<APP_VERSION>` and `earthly-audio-core@<cra
 | Errors and panics | yes | `error` tracing lines and panics, including those `CatchPanicLayer` answers with 500 | panics, the core failing, the mpv process failing (one issue), a Playback Source failing to start |
 | Tracing | yes | one transaction per request named `<method> <route template>`; External Source search, resolve, stream and artwork as child spans with yt-dlp's queue, run and parse, the resolve and upstream first byte as their children; a resolve that joins another request's yt-dlp run has only its wait (`external_source.resolve.wait`), and the run is recorded once, by the request that started it | one transaction per Playback Source load, `loadfile` to playing, failed or replaced, with `file-loaded` as a child span |
 | Logs | yes (0.42+) | `info` and `warn` tracing lines, also kept as breadcrumbs | not sent: the core writes plain stderr lines, not tracing |
-| Metrics | yes (0.48+) | distributions `external_source.{search,resolve,artwork,stream}.duration`, `external_source.yt_dlp.{queue,duration}`, `external_source.stream.ttfb`, `external_source.stream.bytes`; counter `external_source.resolve.cache` | distributions `playback.load.duration`, `playback.load.file_loaded` |
+| Metrics | yes (0.48+) | distributions `external_source.{search,resolve,artwork,stream}.duration`, `external_source.yt_dlp.{queue,duration}`, `external_source.stream.ttfb`, `external_source.stream.bytes`, `import.{upload,inspect,confirm,confirm_batch}.duration`, `import.upload.bytes`, `track.stream.{ttfb,duration,bytes}`, `cover.scale.duration`, `waveform.generate.duration`, `outbound.request.duration` by host, and the `client.*` metrics below; counter `external_source.resolve.cache` | distributions `playback.load.duration`, `playback.load.file_loaded` |
 | Profiling | **no** | not available | not available |
 
 Sentry has no profiler for Rust: its profiling covers Python, Node.js, mobile, browser and .NET SDKs, and the Rust SDK removed its experimental profiling in 0.31.6. Native crash minidumps (`sentry-minidump`, new in 0.49.3) are not used: they need a separate crash-handler process.
 
 The request transaction ends when the response starts, so a stream's transaction measures up to its first byte; the stream's length and bytes are metrics recorded when its body ends. Each request polls in its own Sentry hub, so concurrent requests do not share a scope.
+
+## The Web and Desktop Clients
+
+Neither client talks to Sentry. Their renderer measures the page with the browser's own Performance API (`client.page.{ttfb,fcp,lcp,cls}`, the longest interaction as `client.interaction.inp`, and `client.playback.start` in the browser) and posts the numbers to `POST /api/v1/client-metrics` on the Owner's listener, which passes known names on as metrics. So there is no browser SDK, no DSN in a client and no third party, and a server without `SENTRY_DSN` drops them. Guests have no such route and stop reporting at the first refusal.
 
 ## What is never sent
 

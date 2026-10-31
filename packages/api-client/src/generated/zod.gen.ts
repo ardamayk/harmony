@@ -157,6 +157,14 @@ export const zPlaybackPreferences = z.object({
     gaplessPlayback: z.boolean()
 });
 
+export const zClientMetrics = z.object({
+    client: z.enum(['web', 'desktop']),
+    metrics: z.array(z.object({
+        name: z.string(),
+        value: z.number().gte(0)
+    })).max(32)
+});
+
 /**
  * Sparse form of PlaybackPreferences; absent fields are left unchanged.
  */
@@ -1089,6 +1097,11 @@ export const zGetHealthResponse = zHealthResponse;
  * Current user
  */
 export const zGetMeResponse = zUser;
+
+/**
+ * Accepted
+ */
+export const zReportClientMetricsResponse = z.void();
 
 /**
  * User preferences

@@ -116,6 +116,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/v1/me", get(api::get_me))
         .merge(modules::docs::routes())
         .merge(modules::preferences::routes())
+        .merge(modules::client_metrics::routes())
         .merge(modules::library::routes())
         .merge(modules::artist_info::routes())
         .merge(modules::lyrics::routes())

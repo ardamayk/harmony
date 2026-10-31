@@ -956,9 +956,25 @@ impl Service {
         self.storage.batch_limit()
     }
 
+    async fn inspect(
+        &self,
+        path: &str,
+        cancel: &CancellationToken,
+        progress_job: Option<&str>,
+    ) -> Result<MediaInspection> {
+        let started = std::time::Instant::now();
+        let inspection = self.run_inspection(path, cancel, progress_job).await;
+        crate::observability::distribution_ms(
+            "import.inspect.duration",
+            started.elapsed(),
+            &[("outcome", if inspection.is_ok() { "ok" } else { "failed" })],
+        );
+        inspection
+    }
+
     /// Runs the Strict Import Profile on a blocking thread; with a job the
     /// progress persists in steps.
-    async fn inspect(
+    async fn run_inspection(
         &self,
         path: &str,
         cancel: &CancellationToken,

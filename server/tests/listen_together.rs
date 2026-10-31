@@ -325,6 +325,36 @@ fn probe(method: &str, path: &str, cookie: Option<&str>) -> Request<Body> {
 /// Every documented operation that is not on a list above is refused, even
 /// with a live session, so a new route fails closed until it is listed.
 #[tokio::test(flavor = "multi_thread")]
+async fn client_metrics_go_through_the_owners_listener_only() {
+    let harness = harness().await;
+    let report = |client: &str| {
+        Some(json!({
+            "client": client,
+            "metrics": [
+                {"name": "client.page.lcp", "value": 120.5},
+                {"name": "client.from.a.newer.version", "value": 1},
+            ],
+        }))
+    };
+    const ROUTE: &str = "/api/v1/client-metrics";
+    let accepted = on_owner(Method::POST, ROUTE, report("web"));
+    assert_eq!(
+        status_of(&harness.owner, accepted).await,
+        StatusCode::NO_CONTENT
+    );
+    let unknown = on_owner(Method::POST, ROUTE, report("a script"));
+    assert_eq!(
+        status_of(&harness.owner, unknown).await,
+        StatusCode::BAD_REQUEST
+    );
+    let guest = on_guest(Method::POST, ROUTE, None, report("web"));
+    assert_eq!(
+        status_of(&harness.guest, guest).await,
+        StatusCode::NOT_FOUND
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn every_guest_answer_carries_the_browser_protections() {
     let harness = harness().await;
     let (_, page, _) = send(&harness.guest, on_guest(Method::GET, "/join", None, None)).await;

@@ -30,10 +30,12 @@ pub async fn album_cover(
         return Ok(stored);
     }
     let data = original.data.clone();
+    let started = std::time::Instant::now();
     let scaled = tokio::task::spawn_blocking(move || scale(&data, size))
         .await
         .ok()
         .flatten();
+    crate::observability::distribution_ms("cover.scale.duration", started.elapsed(), &[]);
     let Some(scaled) = scaled else {
         return Ok(original);
     };

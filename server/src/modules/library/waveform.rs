@@ -280,7 +280,13 @@ impl WaveformService {
                     .acquire()
                     .await
                     .map_err(|error| error.to_string())?;
+                let started = std::time::Instant::now();
                 let peaks = generate_with_ffmpeg(path, duration_ms).await?;
+                crate::observability::distribution_ms(
+                    "waveform.generate.duration",
+                    started.elapsed(),
+                    &[],
+                );
                 let record = WaveformRecord {
                     peaks,
                     source_size_bytes: size,

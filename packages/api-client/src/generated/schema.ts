@@ -38,6 +38,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/client-metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Report how a client's page and playback performed
+         * @description Passed to the owner's Sentry when SENTRY_DSN is set (ADR 0033); otherwise dropped. Unknown names are ignored, so a newer client still works with an older Music Server.
+         */
+        post: operations["reportClientMetrics"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/preferences": {
         parameters: {
             query?: never;
@@ -1389,6 +1409,15 @@ export interface components {
             /** @description Play Tracks back to back without a gap where the client can. */
             gaplessPlayback: boolean;
         };
+        ClientMetrics: {
+            /** @enum {string} */
+            client: "web" | "desktop";
+            metrics: {
+                /** @description Such as client.page.lcp or client.playback.start. */
+                name: string;
+                value: number;
+            }[];
+        };
         /** @description Sparse form of PlaybackPreferences; absent fields are left unchanged. */
         PlaybackPreferencesPatch: {
             seekStepSeconds?: number;
@@ -2499,6 +2528,37 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             429: components["responses"]["RateLimited"];
+        };
+    };
+    reportClientMetrics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClientMetrics"];
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid report */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
     getPreferences: {

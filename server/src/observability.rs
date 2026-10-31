@@ -4,16 +4,19 @@
 //!
 //! What is sent: errors and panics, `info` and `warn` lines as Sentry logs,
 //! one transaction per request named by its route template, child spans
-//! and metrics for the External Source's timings. What is never sent:
+//! for the External Source, and metrics for how long the server's and the
+//! clients' work takes. What is never sent:
 //! request URLs, query strings, search queries, ids in paths, headers,
 //! client addresses, and URLs or file paths in free text, which
 //! [`scrub_text`] replaces before anything leaves the process.
 
 use crate::config::SentryConfig;
+use axum::body::Body;
 use axum::extract::{MatchedPath, Request};
-use axum::http::StatusCode;
+use axum::http::{StatusCode, header};
 use axum::middleware::Next;
 use axum::response::Response;
+use futures_util::StreamExt;
 use sentry::protocol::{Context, Event, Log, LogAttribute, SpanId, SpanStatus, Unit, Value};
 use sentry::{Hub, SentryFutureExt, TransactionContext, TransactionOrSpan};
 use std::borrow::Cow;
@@ -41,6 +44,7 @@ const ROUTE_WORDS: &[&str] = &[
     "artwork",
     "biography",
     "catalog",
+    "client-metrics",
     "clock",
     "commands",
     "confirm",
@@ -274,6 +278,99 @@ pub fn distribution(
         metric = metric.attribute(*key, *value);
     }
     metric.capture();
+}
+
+pub fn distribution_bytes(name: &'static str, bytes: u64, attributes: &[(&'static str, &str)]) {
+    distribution(name, bytes as f64, Unit::Byte, attributes);
+}
+
+/// A number a client measured, labelled with which client it was.
+pub fn client_metric(name: &str, value: f64, is_duration: bool, client: &'static str) {
+    if Hub::current().client().is_none() {
+        return;
+    }
+    let metric = sentry::metrics::distribution(name.to_owned(), value).attribute("client", client);
+    if is_duration {
+        metric.unit(Unit::Millisecond).capture();
+    } else {
+        metric.capture();
+    }
+}
+
+fn outcome(status: StatusCode) -> &'static str {
+    if status.is_success() { "ok" } else { "failed" }
+}
+
+/// Middleware body: how long a route took, and whether it worked.
+pub async fn timed(name: &'static str, request: Request, next: Next) -> Response {
+    let started = Instant::now();
+    let response = next.run(request).await;
+    distribution_ms(
+        name,
+        started.elapsed(),
+        &[("outcome", outcome(response.status()))],
+    );
+    response
+}
+
+/// Middleware body for an upload: [`timed`], and how much arrived.
+pub async fn timed_upload(
+    name: &'static str,
+    bytes: &'static str,
+    request: Request,
+    next: Next,
+) -> Response {
+    let length = request
+        .headers()
+        .get(header::CONTENT_LENGTH)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.parse::<u64>().ok());
+    let response = timed(name, request, next).await;
+    if let Some(length) = length.filter(|_| response.status().is_success()) {
+        distribution_bytes(bytes, length, &[]);
+    }
+    response
+}
+
+/// Reports a body's duration and size when it ends, however it ends.
+struct StreamedBody {
+    duration: &'static str,
+    bytes: &'static str,
+    started: Instant,
+    sent: u64,
+}
+
+impl StreamedBody {
+    // A method, so the stream's closure keeps the whole report and it drops
+    // with the stream rather than here.
+    fn add(&mut self, bytes: usize) {
+        self.sent += bytes as u64;
+    }
+}
+
+impl Drop for StreamedBody {
+    fn drop(&mut self) {
+        distribution_ms(self.duration, self.started.elapsed(), &[]);
+        distribution_bytes(self.bytes, self.sent, &[]);
+    }
+}
+
+/// Measures how long `response`'s body takes to send and how much it sends.
+pub fn measure_body(response: Response, duration: &'static str, bytes: &'static str) -> Response {
+    let mut report = StreamedBody {
+        duration,
+        bytes,
+        started: Instant::now(),
+        sent: 0,
+    };
+    let (parts, body) = response.into_parts();
+    let stream = body.into_data_stream().map(move |chunk| {
+        if let Ok(chunk) = &chunk {
+            report.add(chunk.len());
+        }
+        chunk
+    });
+    Response::from_parts(parts, Body::from_stream(stream))
 }
 
 pub fn count(name: &'static str, attributes: &[(&'static str, &str)]) {

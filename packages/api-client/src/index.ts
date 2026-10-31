@@ -111,6 +111,7 @@ export type LibrarySearchResult = Schemas["LibrarySearchResult"];
 export type LibrarySearchResultType = Schemas["LibrarySearchResultType"];
 export type LibrarySearchMatch = Schemas["LibrarySearchMatch"];
 export type Playlist = Schemas["Playlist"];
+export type ClientMetrics = Schemas["ClientMetrics"];
 export type PlaylistList = Schemas["PlaylistList"];
 export type PlaylistDetail = Omit<WirePlaylistDetail, "tracks"> & {
 	tracks: Track[];
@@ -848,6 +849,12 @@ export function createApiClient(config: ApiClientConfig) {
 				"searchRadioStations",
 				`/api/v1/radio/search${buildRadioSearchQuery(params)}`,
 			),
+		reportClientMetrics: (body: ClientMetrics) =>
+			request<void>("reportClientMetrics", "/api/v1/client-metrics", {
+				method: "POST",
+				body: JSON.stringify(body),
+				keepalive: true,
+			}),
 		listRadioCatalogCountries: () =>
 			request<RadioCatalogOptionList>(
 				"listRadioCatalogCountries",

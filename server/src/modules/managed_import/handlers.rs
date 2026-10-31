@@ -5,10 +5,12 @@ use super::ManagedImport;
 use super::errors::{Error, Issue, Result as ImportResult, Sentinel};
 use super::model::*;
 use crate::app::AppState;
+use crate::observability;
 use crate::respond::{ApiError, ErrorBody};
 use axum::body::{Body, Bytes};
 use axum::extract::{Path, State};
 use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
+use axum::middleware;
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post, put};
 use axum::{Json, Router};
@@ -50,15 +52,32 @@ pub fn routes() -> Router<AppState> {
         )
         .route(
             "/api/v1/import-batches/{batch_id}/confirm",
-            post(confirm_batch),
+            post(confirm_batch).layer(middleware::from_fn(|request, next| {
+                observability::timed("import.confirm_batch.duration", request, next)
+            })),
         )
         .route("/api/v1/imports", post(create_job))
         .route(
             "/api/v1/imports/{import_id}",
             get(get_job).delete(cancel_job),
         )
-        .route("/api/v1/imports/{import_id}/file", put(upload_file))
-        .route("/api/v1/imports/{import_id}/confirm", post(confirm))
+        .route(
+            "/api/v1/imports/{import_id}/file",
+            put(upload_file).layer(middleware::from_fn(|request, next| {
+                observability::timed_upload(
+                    "import.upload.duration",
+                    "import.upload.bytes",
+                    request,
+                    next,
+                )
+            })),
+        )
+        .route(
+            "/api/v1/imports/{import_id}/confirm",
+            post(confirm).layer(middleware::from_fn(|request, next| {
+                observability::timed("import.confirm.duration", request, next)
+            })),
+        )
         .route(
             "/api/v1/imports/{import_id}/replacement",
             post(confirm_replacement),

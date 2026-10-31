@@ -63,6 +63,30 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "429":
           $ref: "#/components/responses/RateLimited"
+  /api/v1/client-metrics:
+    post:
+      tags: [system]
+      operationId: reportClientMetrics
+      summary: Report how a client's page and playback performed
+      description: >-
+        Passed to the owner's Sentry when SENTRY_DSN is set (ADR 0033);
+        otherwise dropped. Unknown names are ignored, so a newer client still
+        works with an older Music Server.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClientMetrics"
+      responses:
+        "204":
+          description: Accepted
+        "400":
+          description: Invalid report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /api/v1/preferences:
     get:
       tags: [preferences]
@@ -2730,6 +2754,26 @@ components:
         gaplessPlayback:
           type: boolean
           description: Play Tracks back to back without a gap where the client can.
+    ClientMetrics:
+      type: object
+      required: [client, metrics]
+      properties:
+        client:
+          type: string
+          enum: [web, desktop]
+        metrics:
+          type: array
+          maxItems: 32
+          items:
+            type: object
+            required: [name, value]
+            properties:
+              name:
+                type: string
+                description: Such as client.page.lcp or client.playback.start.
+              value:
+                type: number
+                minimum: 0
     PlaybackPreferencesPatch:
       type: object
       description: Sparse form of PlaybackPreferences; absent fields are left unchanged.

@@ -8,6 +8,7 @@ use crate::app::AppState;
 use crate::auth;
 use crate::gojson;
 use crate::modules::library::LibraryError;
+use crate::observability;
 use crate::query::GoQuery;
 use crate::respond::ApiError;
 use axum::body::{Body, Bytes};
@@ -19,7 +20,7 @@ use axum::{Json, Router};
 use futures_util::StreamExt;
 use serde::Deserialize;
 use serde_json::value::RawValue;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 const MAX_REQUEST_BYTES: usize = 1024 * 1024;
 const KEEP_ALIVE: Duration = Duration::from_secs(15);
@@ -308,6 +309,7 @@ async fn stream_track(
     method: Method,
     headers: HeaderMap,
 ) -> Response {
+    let started = Instant::now();
     let path = match Service::new(&state).track_file_path(&track_id).await {
         Ok(path) => path,
         Err(LibraryError::NotFound) => {
@@ -316,6 +318,10 @@ async fn stream_track(
         Err(error) => return internal(error),
     };
     match serve_file::serve(&method, &headers, std::path::Path::new(&path)).await {
+        Ok(response) if method == Method::GET => {
+            observability::distribution_ms("track.stream.ttfb", started.elapsed(), &[]);
+            observability::measure_body(response, "track.stream.duration", "track.stream.bytes")
+        }
         Ok(response) => response,
         Err(serve_file::ServeError::NotFound) => {
             ApiError::not_found("track file not found").into_response()
