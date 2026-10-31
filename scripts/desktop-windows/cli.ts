@@ -2,7 +2,7 @@
 // in WSL the desktop:* tasks reach it through scripts/desktop.sh.
 //   build  Web Client (unless --web-built), shell bundle, release core
 //          cross-built with mingw-w64, pinned mpv; electron-builder's `dir`
-//          target, copied to the Windows output folder
+//          target (NSIS with --installer), copied to the Windows output folder
 //          (%LOCALAPPDATA%\EarthlyAudio by default)
 //   start  the built client; --wait waits until it exits
 //   dev    the built client with a fresh shell bundle and debug core,
@@ -119,6 +119,8 @@ async function build(options: Set<string>) {
 		"--x64",
 		"--config",
 		"electron-builder.yml",
+		"--publish",
+		"never",
 	]);
 	// The shell bundles everything it imports; packed node_modules would mean
 	// a runtime dependency slipped into desktop/package.json.
@@ -253,13 +255,13 @@ const commands: Record<
 	string,
 	{ run: (options: Set<string>) => void | Promise<void>; options: string[] }
 > = {
-	build: { run: build, options: ["--web-built"] },
+	build: { run: build, options: ["--web-built", "--installer"] },
 	start: { run: start, options: ["--wait"] },
 	dev: { run: dev, options: [] },
 	clean: { run: clean, options: [] },
 };
 const usage =
-	"Usage: node scripts/desktop-windows/cli.ts build [--web-built]|start [--wait]|dev|clean";
+	"Usage: node scripts/desktop-windows/cli.ts build [--web-built] [--installer]|start [--wait]|dev|clean";
 const [command = "", ...options] = process.argv.slice(2);
 const selected = commands[command];
 if (!selected) {
