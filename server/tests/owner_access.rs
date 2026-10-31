@@ -231,7 +231,7 @@ async fn loopback_needs_no_token_and_other_hosts_are_refused_even_with_one() {
 async fn only_api_answers_are_kept_out_of_caches() {
     let harness = harness().await;
     for (path, cache_control) in [
-        ("/library/albums", None),
+        ("/library/albums", Some("no-cache")),
         ("/api/docs", None),
         ("/api/nothing", Some("no-store")),
     ] {

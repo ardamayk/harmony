@@ -9,7 +9,9 @@ use crate::respond::ApiError;
 use crate::{api, modules, observability, static_assets};
 use axum::Router;
 use axum::extract::{Request, State};
-use axum::http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode, header};
+use axum::http::{
+    Extensions, HeaderMap, HeaderName, HeaderValue, Method, StatusCode, Version, header,
+};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
@@ -17,22 +19,31 @@ use sqlx::SqlitePool;
 use std::sync::Arc;
 use std::time::Duration;
 use tower_http::catch_panic::CatchPanicLayer;
+use tower_http::compression::CompressionLayer;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(60);
-/// What a browser may load on the Guest Listener: the Web Client's own files
-/// and Google Fonts, which `web/src/styles.css` imports. Styles stay inline
+/// Below this, compressing saves less than it costs.
+const MIN_COMPRESSED_BYTES: u64 = 1024;
+const COMPRESSED_TYPES: &[&str] = &[
+    "text/html",
+    "text/css",
+    "text/javascript",
+    "application/javascript",
+    "application/json",
+    "image/svg+xml",
+];
+/// What a browser may load on the Guest Listener: the Web Client's own files.
+/// Styles stay inline
 /// because components set them at runtime.
 const GUEST_CSP: &str = "default-src 'self'; script-src 'self'; \
-    style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; \
-    font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob:; \
+    style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; \
     media-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'self'; \
     frame-ancestors 'none'";
 /// The Owner's Web Client on its public address. Its covers and previews
 /// can come from outside services, so images and media reach further.
 const OWNER_CSP: &str = "default-src 'self'; script-src 'self'; \
-    style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; \
-    font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; \
+    style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: https:; \
     media-src 'self' blob: https:; object-src 'none'; base-uri 'none'; form-action 'self'; \
     frame-ancestors 'none'";
 /// The docs and Scalar run their own scripts, so only framing is limited.
@@ -145,6 +156,7 @@ pub fn router(state: AppState) -> Router {
         .layer(middleware::from_fn_with_state(state.clone(), loopback_host))
         .layer(cors)
         .layer(CatchPanicLayer::new())
+        .layer(compression())
         // Outermost, so the request's transaction covers the other layers
         // and a caught panic is reported within it. A no-op without Sentry.
         .layer(middleware::from_fn(observability::http_transaction))
@@ -185,6 +197,7 @@ pub fn guest_router(state: AppState) -> Option<Router> {
                 async move { public_host(&settings, request, next).await }
             }))
             .layer(CatchPanicLayer::new())
+            .layer(compression())
             .layer(middleware::from_fn(guest_headers))
             .layer(middleware::from_fn(observability::http_transaction))
             .with_state(state),
@@ -218,6 +231,30 @@ fn browser_headers(mut response: Response, csp: &'static str) -> Response {
         headers.insert(name, HeaderValue::from_static(value));
     }
     response
+}
+
+/// Text worth compressing. Named rather than excluded: a stream the server
+/// merely passes on, such as a radio station, must keep arriving as it comes.
+fn is_compressible(_: StatusCode, _: Version, headers: &HeaderMap, _: &Extensions) -> bool {
+    let content_type = headers
+        .get(header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or_default();
+    let is_small = headers
+        .get(header::CONTENT_LENGTH)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.parse::<u64>().ok())
+        .is_some_and(|length| length < MIN_COMPRESSED_BYTES);
+    !is_small
+        && COMPRESSED_TYPES
+            .iter()
+            .any(|kind| content_type.starts_with(kind))
+}
+
+type CompressWhen = fn(StatusCode, Version, &HeaderMap, &Extensions) -> bool;
+
+fn compression() -> CompressionLayer<CompressWhen> {
+    CompressionLayer::new().compress_when(is_compressible as _)
 }
 
 fn cors(origins: &[String]) -> CorsLayer {
@@ -530,9 +567,32 @@ fn is_stream_path(path: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{header, is_stream_path, no_store};
-    use axum::http::HeaderValue;
+    use super::{
+        Extensions, StatusCode, Version, header, is_compressible, is_stream_path, no_store,
+    };
+    use axum::http::{HeaderMap, HeaderValue};
     use axum::response::{IntoResponse, Response};
+
+    #[test]
+    fn compresses_text_but_not_audio_or_event_streams() {
+        let compresses = |content_type: &'static str, length: &'static str| {
+            let mut headers = HeaderMap::new();
+            headers.insert(header::CONTENT_TYPE, HeaderValue::from_static(content_type));
+            headers.insert(header::CONTENT_LENGTH, HeaderValue::from_static(length));
+            is_compressible(
+                StatusCode::OK,
+                Version::HTTP_11,
+                &headers,
+                &Extensions::new(),
+            )
+        };
+        assert!(compresses("text/javascript", "544433"));
+        assert!(compresses("application/json", "2048"));
+        assert!(!compresses("application/json", "12"));
+        assert!(!compresses("audio/flac", "544433"));
+        assert!(!compresses("text/event-stream", "544433"));
+        assert!(!compresses("application/octet-stream", "544433"));
+    }
 
     #[test]
     fn no_store_leaves_an_answers_own_caching_alone() {
