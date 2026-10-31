@@ -2252,7 +2252,11 @@ describe("tracks route", () => {
 			name: "Select strict-import.flac",
 		});
 		fireEvent.click(screen.getByRole("button", { name: "Confirm Import" }));
-		await screen.findByText("confirmation response lost");
+		await waitFor(() =>
+			expect(mocks.confirmManagedImportBatch).toHaveBeenCalled(),
+		);
+		await act(() => new Promise((resolve) => setTimeout(resolve)));
+		expect(screen.queryByText("confirmation response lost")).toBeNull();
 		expect(checkbox.getAttribute("aria-disabled")).toBe("true");
 		expect(
 			screen.getByRole("button", { name: "Close Import Music" }),

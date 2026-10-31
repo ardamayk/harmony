@@ -88,6 +88,29 @@ type ImportEntrySummary = {
 	percent: number;
 };
 
+/** The result of a finished import, for a listener whose dialog is closed. */
+export function summarizeImportResult(entries: ImportFileEntry[]): {
+	level: "success" | "warning" | "error";
+	message: string;
+} {
+	const count = (...outcomes: ImportFileEntry["outcome"][]) =>
+		entries.filter((entry) => outcomes.includes(entry.outcome)).length;
+	const imported = count("imported", "replaced");
+	const rejected = count("rejected");
+	const failed = count("failed");
+	const parts = [
+		imported > 0 &&
+			`${imported} ${imported === 1 ? "Track" : "Tracks"} imported`,
+		rejected > 0 && `${rejected} rejected`,
+		failed > 0 && `${failed} failed`,
+	].filter(Boolean);
+	const hasProblems = rejected + failed > 0;
+	return {
+		level: !hasProblems ? "success" : imported > 0 ? "warning" : "error",
+		message: parts.join(", ") || "No Tracks imported",
+	};
+}
+
 export function summarizeImportEntries(
 	entries: ImportFileEntry[],
 ): ImportEntrySummary {
@@ -507,6 +530,12 @@ async function handleConfirmationFailure(
 		if (batch.status === "completed") {
 			await releaseNativeSelections(state.entries);
 			if (hasLibraryMutation(batch)) await onCommitted();
+			state.setErrorMessage("");
+			return;
+		}
+		// The server finishes a confirmed Batch without this connection, and
+		// the session's polling picks the result up.
+		if (batch.status === "confirming" && !(error instanceof ApiError)) {
 			state.setErrorMessage("");
 			return;
 		}

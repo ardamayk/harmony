@@ -286,7 +286,11 @@ describe("ListenTogetherProvider", () => {
 		await waitFor(() =>
 			expect(screen.getByTestId("revision").textContent).toBe("5"),
 		);
-		expect(fixture.calls.subscribeListenTogetherRoomEvents).toHaveBeenCalled();
+		await waitFor(() =>
+			expect(
+				fixture.calls.subscribeListenTogetherRoomEvents,
+			).toHaveBeenCalled(),
+		);
 	});
 
 	it("reads no personal Queue for a Guest", async () => {
