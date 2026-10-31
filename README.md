@@ -132,6 +132,30 @@ docker compose up -d --build                  # your own build
 
 Open http://localhost:8090. The container uses the host's network and binds to `127.0.0.1:8090`, because the server accepts only loopback addresses. The database and imported music live in the `app-data` volume (`/data`); add any variable from [Configuration](#configuration) under `environment:`. The image has no yt-dlp by default; to use the External Source, set the `WITH_YT_DLP` build argument to `true` (in Compose: `build.args`) and rebuild, see [server/README.md](server/README.md#external-source-yt-dlp). Docker Compose runs only the Music Server; the Desktop Client runs on the host and connects to it.
 
+### Back up and roll back
+
+Everything the Music Server keeps is in the `app-data` volume: the database and the imported music. Stop the server for a backup, because a running server still has writes in the database's WAL file. Run these from the folder with `docker-compose.yml`; the archive lands in `backups/`.
+
+```bash
+mkdir -p backups
+docker compose stop server
+docker compose run --rm --no-deps -v "$PWD/backups:/backups" --entrypoint tar server \
+  -czf "/backups/harmony-$(date +%F).tar.gz" -C /data .
+docker compose start server
+```
+
+Take one before every upgrade, and keep a copy on another machine.
+
+A release can change the database when the server starts, and those changes are never undone, so an older image is not guaranteed to run on a database a newer one has opened. To roll back, restore the backup taken before the upgrade and start the version it belongs to. Set `HARMONY_IMAGE_TAG` in `.env` to that version or `sha-<commit>`, then restore. The restore replaces everything in the volume, so anything imported since the backup is lost.
+
+```bash
+docker compose stop server
+docker compose run --rm --no-deps -v "$PWD/backups:/backups" --entrypoint sh server \
+  -c 'find /data -mindepth 1 -delete && tar -xzf /backups/harmony-YYYY-MM-DD.tar.gz -C /data'
+docker compose pull server
+docker compose up -d server
+```
+
 ## Build and run
 
 ```bash

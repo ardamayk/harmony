@@ -6,6 +6,7 @@
 !.env.example
 .turbo
 graphify-out
+backups
 **/node_modules
 **/dist
 **/target

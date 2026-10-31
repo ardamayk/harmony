@@ -26,3 +26,6 @@ mise.local.toml
 # Built Web Client and docs, embedded by the Music Server at compile time.
 server/static/*/*
 !server/static/*/.gitkeep
+
+# Volume backups from the README
+/backups
