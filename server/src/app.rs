@@ -4,11 +4,12 @@
 
 use crate::config::{Config, ListenTogetherConfig};
 use crate::dependencies::Report;
+use crate::owner_access::OwnerAccess;
 use crate::respond::ApiError;
 use crate::{api, modules, observability, static_assets};
 use axum::Router;
-use axum::extract::Request;
-use axum::http::{HeaderMap, HeaderName, Method, StatusCode, header};
+use axum::extract::{Request, State};
+use axum::http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode, header};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
@@ -19,6 +20,24 @@ use tower_http::catch_panic::CatchPanicLayer;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(60);
+/// What a browser may load on the Guest Listener: the Web Client's own files
+/// and Google Fonts, which `web/src/styles.css` imports. Styles stay inline
+/// because components set them at runtime.
+const GUEST_CSP: &str = "default-src 'self'; script-src 'self'; \
+    style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; \
+    font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob:; \
+    media-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'self'; \
+    frame-ancestors 'none'";
+/// The Owner's Web Client behind Cloudflare Access. Its covers and previews
+/// can come from outside services, so images and media reach further.
+const OWNER_CSP: &str = "default-src 'self'; script-src 'self'; \
+    style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; \
+    font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; \
+    media-src 'self' blob: https:; object-src 'none'; base-uri 'none'; form-action 'self'; \
+    frame-ancestors 'none'";
+/// The docs and Scalar run their own scripts, so only framing is limited.
+const OWNER_DOCS_CSP: &str = "object-src 'none'; base-uri 'none'; frame-ancestors 'none'";
+const ACCESS_TOKEN_HEADER: &str = "cf-access-jwt-assertion";
 
 #[derive(Clone)]
 pub struct AppState {
@@ -35,6 +54,7 @@ pub struct AppState {
     pub managed_import: Arc<modules::managed_import::ManagedImport>,
     pub external_source: Arc<modules::external_source::ExternalSource>,
     pub listen_together: Arc<modules::listen_together::ListenTogether>,
+    pub owner_access: Option<Arc<OwnerAccess>>,
 }
 
 impl AppState {
@@ -67,6 +87,10 @@ impl AppState {
             &config,
             modules::library::LibraryService::new(db.clone()),
         );
+        let owner_access = config
+            .owner_access
+            .clone()
+            .map(|settings| Arc::new(OwnerAccess::new(settings)));
         Self {
             config: Arc::new(config),
             dependencies: Arc::new(dependencies),
@@ -80,6 +104,7 @@ impl AppState {
             managed_import: Arc::new(managed_import),
             external_source: Arc::new(external_source),
             listen_together: Arc::new(listen_together),
+            owner_access,
         }
     }
 }
@@ -109,7 +134,7 @@ pub fn router(state: AppState) -> Router {
             let origins = origins.clone();
             async move { trusted_origin(&origins, request, next).await }
         }))
-        .layer(middleware::from_fn(loopback_host))
+        .layer(middleware::from_fn_with_state(state.clone(), loopback_host))
         .layer(cors)
         .layer(CatchPanicLayer::new())
         // Outermost, so the request's transaction covers the other layers
@@ -152,9 +177,30 @@ pub fn guest_router(state: AppState) -> Option<Router> {
                 async move { public_host(&settings, request, next).await }
             }))
             .layer(CatchPanicLayer::new())
+            .layer(middleware::from_fn(guest_headers))
             .layer(middleware::from_fn(observability::http_transaction))
             .with_state(state),
     )
+}
+
+/// The Guest Listener faces the internet, so every answer, a refusal included,
+/// tells the browser to keep it out of frames and off plain HTTP.
+async fn guest_headers(request: Request, next: Next) -> Response {
+    browser_headers(next.run(request).await, GUEST_CSP)
+}
+
+fn browser_headers(mut response: Response, csp: &'static str) -> Response {
+    let headers = response.headers_mut();
+    for (name, value) in [
+        ("content-security-policy", csp),
+        ("referrer-policy", "no-referrer"),
+        ("strict-transport-security", "max-age=31536000"),
+        ("x-content-type-options", "nosniff"),
+        ("x-frame-options", "DENY"),
+    ] {
+        headers.insert(name, HeaderValue::from_static(value));
+    }
+    response
 }
 
 fn cors(origins: &[String]) -> CorsLayer {
@@ -196,8 +242,9 @@ fn cors(origins: &[String]) -> CorsLayer {
 /// loopback, but any website can make the user's browser call it. This
 /// refuses a Host that is not a loopback name, so a page that rebinds its own
 /// domain to 127.0.0.1 (DNS rebinding) cannot use the API as its own origin.
-/// A request without a Host does not come from a browser.
-async fn loopback_host(request: Request, next: Next) -> Response {
+/// A request without a Host does not come from a browser. The one other Host
+/// is `OWNER_PUBLIC_URL`'s, and it needs a token from Cloudflare Access.
+async fn loopback_host(State(state): State<AppState>, request: Request, next: Next) -> Response {
     let host = request
         .headers()
         .get(header::HOST)
@@ -210,14 +257,48 @@ async fn loopback_host(request: Request, next: Next) -> Response {
                 .map(|authority| authority.to_string())
         });
     match host {
-        Some(host) if !is_loopback_host(&host) => ApiError::new(
-            StatusCode::FORBIDDEN,
-            "forbidden_host",
-            "the Music Server only answers requests addressed to a loopback host",
-        )
-        .into_response(),
+        Some(host) if !is_loopback_host(&host) => match &state.owner_access {
+            Some(access) if access.accepts_host(&host) => {
+                through_access(access, request, next).await
+            }
+            _ => ApiError::new(
+                StatusCode::FORBIDDEN,
+                "forbidden_host",
+                "the Music Server only answers requests addressed to a loopback host",
+            )
+            .into_response(),
+        },
         _ => next.run(request).await,
     }
+}
+
+async fn through_access(access: &OwnerAccess, request: Request, next: Next) -> Response {
+    let token = request
+        .headers()
+        .get(ACCESS_TOKEN_HEADER)
+        .and_then(|value| value.to_str().ok());
+    let allowed = match token {
+        Some(token) => access.verify(token).await,
+        None => false,
+    };
+    if !allowed {
+        return browser_headers(
+            ApiError::new(
+                StatusCode::FORBIDDEN,
+                "forbidden_access",
+                "sign in through Cloudflare Access",
+            )
+            .into_response(),
+            OWNER_DOCS_CSP,
+        );
+    }
+    let path = request.uri().path();
+    let csp = if path.starts_with("/docs") || path.starts_with("/api/docs") {
+        OWNER_DOCS_CSP
+    } else {
+        OWNER_CSP
+    };
+    browser_headers(next.run(request).await, csp)
 }
 
 fn is_loopback_host(host: &str) -> bool {

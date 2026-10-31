@@ -325,6 +325,27 @@ fn probe(method: &str, path: &str, cookie: Option<&str>) -> Request<Body> {
 /// Every documented operation that is not on a list above is refused, even
 /// with a live session, so a new route fails closed until it is listed.
 #[tokio::test(flavor = "multi_thread")]
+async fn every_guest_answer_carries_the_browser_protections() {
+    let harness = harness().await;
+    let (_, page, _) = send(&harness.guest, on_guest(Method::GET, "/join", None, None)).await;
+    let wrong_host = Request::get("/api/v1/health")
+        .header(header::HOST, "other.example.com")
+        .body(Body::empty())
+        .unwrap();
+    let (status, refused, _) = send(&harness.guest, wrong_host).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    for headers in [page, refused] {
+        assert_eq!(headers["x-frame-options"], "DENY");
+        assert_eq!(headers["x-content-type-options"], "nosniff");
+        assert_eq!(headers["referrer-policy"], "no-referrer");
+        assert_eq!(headers["strict-transport-security"], "max-age=31536000");
+        let csp = headers["content-security-policy"].to_str().unwrap();
+        assert!(csp.contains("frame-ancestors 'none'"), "{csp}");
+        assert!(csp.contains("script-src 'self';"), "{csp}");
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn every_other_documented_operation_is_refused_on_the_guest_listener() {
     let harness = harness().await;
     let room = open_room(&harness).await;

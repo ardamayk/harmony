@@ -2,6 +2,8 @@
 status: accepted
 ---
 
+> [ADR 0038](0038-owner-access-through-cloudflare-access.md) adds a public Owner address behind Cloudflare Access. Everything here about the Guest Listener stands.
+
 # Listen Together through Rooms on the Owner's Music Server
 
 Friends want to listen to one person's library at the same time: the same Track at the same playhead, where either side can pause, seek or pick the next Track, and opening the lyrics opens them for everyone. Protected hosting alone does not give this. A friend who can reach the Music Server can browse and play, but each Playback Session stays independent, so nothing keeps them together.

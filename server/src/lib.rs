@@ -13,6 +13,7 @@ pub mod inspect;
 pub mod migrate;
 pub mod modules;
 pub mod observability;
+pub mod owner_access;
 pub mod query;
 pub mod respond;
 pub mod searchdata;

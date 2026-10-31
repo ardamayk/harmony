@@ -39,6 +39,9 @@ pub struct Config {
     /// Where Guests reach this server, off unless `GUEST_ADDR` and
     /// `PUBLIC_URL` are both set (ADR 0037).
     pub listen_together: Option<ListenTogetherConfig>,
+    /// The Owner's address behind Cloudflare Access, off unless all three of
+    /// its settings are set (ADR 0038).
+    pub owner_access: Option<OwnerAccessConfig>,
     /// `LISTEN_TOGETHER_MAX_GUESTS`: at most this many Guests in a Room.
     pub listen_together_max_guests: usize,
     /// `LISTEN_TOGETHER_ROOM_HOURS`: how long a Room lasts.
@@ -62,6 +65,26 @@ pub struct ListenTogetherConfig {
 
 impl ListenTogetherConfig {
     /// Whether a Host header names `PUBLIC_URL`.
+    pub fn accepts_host(&self, host: &str) -> bool {
+        self.hosts
+            .iter()
+            .any(|accepted| accepted.eq_ignore_ascii_case(host))
+    }
+}
+
+/// Where the Owner reaches this server through Cloudflare Access.
+#[derive(Clone, Debug, PartialEq)]
+pub struct OwnerAccessConfig {
+    /// `CF_ACCESS_TEAM_DOMAIN`, such as `example.cloudflareaccess.com`.
+    pub team_domain: String,
+    /// `CF_ACCESS_AUD`, the Access application's audience tag.
+    pub audience: String,
+    /// The Host values that mean `OWNER_PUBLIC_URL`, as for `PUBLIC_URL`.
+    hosts: [String; 2],
+}
+
+impl OwnerAccessConfig {
+    /// Whether a Host header names `OWNER_PUBLIC_URL`.
     pub fn accepts_host(&self, host: &str) -> bool {
         self.hosts
             .iter()
@@ -177,6 +200,14 @@ pub enum ConfigError {
     // not repeat the value.
     #[error("PUBLIC_URL must be an origin such as https://music.example.com: {0}")]
     InvalidPublicUrl(&'static str),
+    #[error(
+        "OWNER_PUBLIC_URL, CF_ACCESS_TEAM_DOMAIN and CF_ACCESS_AUD must be set together: {0} is missing"
+    )]
+    IncompleteOwnerAccess(&'static str),
+    #[error("OWNER_PUBLIC_URL must be an https origin such as https://music.example.com: {0}")]
+    InvalidOwnerPublicUrl(&'static str),
+    #[error("CF_ACCESS_TEAM_DOMAIN {0:?} must look like example.cloudflareaccess.com")]
+    InvalidAccessTeamDomain(String),
     #[error("LISTEN_TOGETHER_MAX_GUESTS {0:?} must be a whole number from 1 to 8")]
     InvalidMaxGuests(String),
     #[error("LISTEN_TOGETHER_ROOM_HOURS {0:?} must be a whole number from 1 to 168")]
@@ -265,6 +296,7 @@ impl Config {
         let sentry = sentry_config(&lookup)?;
         let addr = get("SERVER_ADDR", "127.0.0.1:8090");
         let listen_together = listen_together_config(&lookup, &addr)?;
+        let owner_access = owner_access_config(&lookup, listen_together.as_ref())?;
         let listen_together_max_guests = max_guests(&lookup)?;
         let listen_together_room_hours = room_hours(&lookup)?;
         Ok(Self {
@@ -317,6 +349,7 @@ impl Config {
             external_source,
             sentry,
             listen_together,
+            owner_access,
             listen_together_max_guests,
             listen_together_room_hours,
         })
@@ -384,6 +417,67 @@ fn listen_together_config(
         guest_addr,
         public_origin: url.origin().ascii_serialization(),
         secure,
+        hosts: [authority, format!("{host}:{port}")],
+    }))
+}
+
+/// Opening the Owner's listener to a public host needs all three settings: a
+/// host without Access in front of it would be the whole server, unprotected.
+fn owner_access_config(
+    lookup: &impl Fn(&str) -> Option<String>,
+    listen_together: Option<&ListenTogetherConfig>,
+) -> Result<Option<OwnerAccessConfig>, ConfigError> {
+    let value = |key: &str| {
+        lookup(key)
+            .map(|value| value.trim().to_owned())
+            .filter(|value| !value.is_empty())
+    };
+    let (public_url, team_domain, audience) = match (
+        value("OWNER_PUBLIC_URL"),
+        value("CF_ACCESS_TEAM_DOMAIN"),
+        value("CF_ACCESS_AUD"),
+    ) {
+        (None, None, None) => return Ok(None),
+        (None, ..) => return Err(ConfigError::IncompleteOwnerAccess("OWNER_PUBLIC_URL")),
+        (_, None, _) => return Err(ConfigError::IncompleteOwnerAccess("CF_ACCESS_TEAM_DOMAIN")),
+        (_, _, None) => return Err(ConfigError::IncompleteOwnerAccess("CF_ACCESS_AUD")),
+        (Some(public_url), Some(team_domain), Some(audience)) => {
+            (public_url, team_domain, audience)
+        }
+    };
+    let invalid = ConfigError::InvalidOwnerPublicUrl;
+    let url = url::Url::parse(&public_url).map_err(|_| invalid("it is not an absolute URL"))?;
+    if url.scheme() != "https" {
+        return Err(invalid("the scheme must be https"));
+    }
+    if !url.username().is_empty() || url.password().is_some() {
+        return Err(invalid("it cannot hold a user name or password"));
+    }
+    if url.path() != "/" || url.query().is_some() || url.fragment().is_some() {
+        return Err(invalid("it cannot have a path, query or fragment"));
+    }
+    let Some(url::Host::Domain(host)) = url.host() else {
+        return Err(invalid("it needs a domain name"));
+    };
+    if listen_together.is_some_and(|settings| settings.accepts_host(host)) {
+        return Err(invalid("it must differ from PUBLIC_URL"));
+    }
+    let team = team_domain.strip_suffix(".cloudflareaccess.com");
+    if !team.is_some_and(|team| {
+        !team.is_empty()
+            && team
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+    }) {
+        return Err(ConfigError::InvalidAccessTeamDomain(team_domain));
+    }
+    let port = url.port_or_known_default().unwrap_or_default();
+    let authority = url
+        .port()
+        .map_or_else(|| host.to_owned(), |port| format!("{host}:{port}"));
+    Ok(Some(OwnerAccessConfig {
+        team_domain,
+        audience,
         hosts: [authority, format!("{host}:{port}")],
     }))
 }
@@ -580,6 +674,55 @@ mod tests {
         for origin in ["http://localhost:3000", "http://localhost:4173"] {
             assert!(config.cors_origins.iter().any(|o| o == origin), "{origin}");
         }
+    }
+
+    #[test]
+    fn owner_access_needs_all_three_settings_and_an_https_domain() {
+        let team = ("CF_ACCESS_TEAM_DOMAIN", "zenima.cloudflareaccess.com");
+        let audience = ("CF_ACCESS_AUD", "abc123");
+        let url = ("OWNER_PUBLIC_URL", "https://harmony.example.com");
+        assert_eq!(config(&[]).expect("off").owner_access, None);
+        let settings = config(&[url, team, audience])
+            .expect("config")
+            .owner_access
+            .expect("on");
+        assert!(settings.accepts_host("harmony.example.com"));
+        assert!(settings.accepts_host("HARMONY.example.com:443"));
+        assert!(!settings.accepts_host("example.com"));
+        assert_eq!(
+            config(&[url, audience]).err(),
+            Some(ConfigError::IncompleteOwnerAccess("CF_ACCESS_TEAM_DOMAIN"))
+        );
+        assert_eq!(
+            config(&[team, audience]).err(),
+            Some(ConfigError::IncompleteOwnerAccess("OWNER_PUBLIC_URL"))
+        );
+        assert_eq!(
+            config(&[url, team]).err(),
+            Some(ConfigError::IncompleteOwnerAccess("CF_ACCESS_AUD"))
+        );
+        assert!(matches!(
+            config(&[
+                ("OWNER_PUBLIC_URL", "http://harmony.example.com"),
+                team,
+                audience
+            ]),
+            Err(ConfigError::InvalidOwnerPublicUrl(_))
+        ));
+        assert!(matches!(
+            config(&[url, ("CF_ACCESS_TEAM_DOMAIN", "evil.example.com"), audience]),
+            Err(ConfigError::InvalidAccessTeamDomain(_))
+        ));
+        assert!(matches!(
+            config(&[
+                url,
+                team,
+                audience,
+                ("GUEST_ADDR", "127.0.0.1:8091"),
+                ("PUBLIC_URL", "https://harmony.example.com")
+            ]),
+            Err(ConfigError::InvalidOwnerPublicUrl(_))
+        ));
     }
 
     #[test]
