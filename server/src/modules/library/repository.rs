@@ -5,8 +5,8 @@
 
 use super::genres::decode_genres;
 use super::types::*;
+use crate::db::Db;
 use sha2::{Digest, Sha256};
-use sqlx::SqlitePool;
 use std::collections::HashMap;
 
 #[derive(Debug, thiserror::Error)]
@@ -53,7 +53,7 @@ pub struct WaveformRecord {
 
 #[derive(Clone)]
 pub struct Repository {
-    pool: SqlitePool,
+    pool: Db,
 }
 
 impl Repository {
@@ -152,7 +152,7 @@ fn ids_json(ids: &[String]) -> String {
 }
 
 impl Repository {
-    pub fn new(pool: SqlitePool) -> Self {
+    pub fn new(pool: Db) -> Self {
         Self { pool }
     }
 

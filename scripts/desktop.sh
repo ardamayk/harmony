@@ -14,6 +14,12 @@ command="${1:?Desktop command is required: dev, build, start or clean}"
 shift
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
 
+# `mise run dev` starts both programs from one environment; this keeps the
+# Desktop core out of the Music Server's Sentry project (ADR 0033).
+if [[ -n "${DESKTOP_SENTRY_DSN:-}" ]]; then
+	export SENTRY_DSN="$DESKTOP_SENTRY_DSN"
+fi
+
 waitFlag=""
 # Node warns that the repository root sets no package type; that is noise here.
 target="$(node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/desktop-target.ts)"

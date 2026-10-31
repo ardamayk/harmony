@@ -7,10 +7,11 @@ use super::commit::{insert_album_artist_credits, insert_track_artist_credits, up
 use super::deletion::delete_unreferenced_artists;
 use super::identity::{album_key_of, normalize_identity};
 use super::storage::{Limits, Storage};
+use crate::db::Db;
 use crate::inspect::{self, NormalizedMetadata};
 use serde::{Deserialize, Serialize};
+use sqlx::SqliteConnection;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
-use sqlx::{SqliteConnection, SqlitePool};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -114,7 +115,7 @@ fn same_credits(credits: &[Credit], names: &[String]) -> bool {
         })
 }
 
-async fn open(path: &Path, writable: bool) -> Result<SqlitePool> {
+async fn open(path: &Path, writable: bool) -> Result<Db> {
     let metadata = std::fs::symlink_metadata(path)
         .map_err(|error| format!("open existing repair database: {error}"))?;
     if !metadata.is_file() || metadata.len() == 0 {
@@ -131,6 +132,7 @@ async fn open(path: &Path, writable: bool) -> Result<SqlitePool> {
         .after_connect(|connection, _| Box::pin(crate::searchdata::register_on(connection)))
         .connect_with(options)
         .await
+        .map(Db::from)
         .map_err(message)
 }
 
@@ -422,7 +424,7 @@ pub async fn preview(database_path: &str, managed_root: &str) -> Result<ArtistCr
 }
 
 /// Reserves a new backup file, then `VACUUM INTO` it and checks it.
-async fn backup(pool: &SqlitePool, path: &Path) -> Result<()> {
+async fn backup(pool: &Db, path: &Path) -> Result<()> {
     let file = std::fs::OpenOptions::new()
         .write(true)
         .create_new(true)
@@ -473,7 +475,7 @@ impl ArtistCreditRepairReport {
         result
     }
 
-    async fn apply_with(&mut self, pool: &SqlitePool, backup_path: &str) -> Result<()> {
+    async fn apply_with(&mut self, pool: &Db, backup_path: &str) -> Result<()> {
         reject_pending(&mut *pool.acquire().await.map_err(message)?).await?;
         if backup_path.trim().is_empty() {
             return Err("backup path is required".to_owned());

@@ -4,8 +4,10 @@
 
 use super::repository::{LibraryError, Repository, WaveformRecord};
 use super::types::TrackWaveform;
+use crate::observability;
 use futures_util::FutureExt;
 use futures_util::future::{BoxFuture, Shared};
+use sentry::SentryFutureExt;
 use std::collections::HashMap;
 use std::os::unix::fs::MetadataExt;
 use std::process::Stdio;
@@ -206,7 +208,7 @@ pub struct WaveformService {
 
 impl WaveformService {
     /// `available` reflects the ffmpeg Server Dependency.
-    pub fn new(pool: sqlx::SqlitePool, available: bool) -> Self {
+    pub fn new(pool: crate::db::Db, available: bool) -> Self {
         Self {
             repo: Repository::new(pool),
             available,
@@ -274,18 +276,26 @@ impl WaveformService {
         let semaphore = self.semaphore.clone();
         let registry = self.in_flight.clone();
         let id = track_id.to_owned();
-        let task = tokio::spawn(async move {
+        let work = async move {
             let result = async {
+                let queued = std::time::Instant::now();
                 let _permit = semaphore
                     .acquire()
                     .await
                     .map_err(|error| error.to_string())?;
                 let started = std::time::Instant::now();
                 let peaks = generate_with_ffmpeg(path, duration_ms).await?;
-                crate::observability::distribution_ms(
-                    "waveform.generate.duration",
-                    started.elapsed(),
+                let generated = started.elapsed();
+                observability::distribution_ms("waveform.generate.duration", generated, &[]);
+                observability::record_span(
+                    queued,
+                    "waveform.generate",
+                    queued.elapsed(),
                     &[],
+                    &observability::sequential(&[
+                        ("waveform.queue", Some(started - queued)),
+                        ("waveform.ffmpeg", Some(generated)),
+                    ]),
                 );
                 let record = WaveformRecord {
                     peaks,
@@ -303,7 +313,9 @@ impl WaveformService {
                 .expect("waveform generations lock")
                 .remove(&id);
             result
-        });
+        };
+        // The request's own hub, so the generation it waits for is its span.
+        let task = tokio::spawn(work.bind_hub(sentry::Hub::current()));
         let shared = async move {
             match task.await {
                 Ok(Ok(peaks)) => Ok(Arc::new(peaks)),

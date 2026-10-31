@@ -3,8 +3,9 @@
 //! only plain lyrics while another edition of the same length (within 2 s,
 //! so the timing fits) is synced; the search finds that one.
 
+use crate::observability;
 use serde::Deserialize;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 /// A longer Retry-After counts as a failure, retried a few minutes later.
 const MAX_RETRY_WAIT: Duration = Duration::from_secs(2);
@@ -140,11 +141,11 @@ async fn request<T: serde::de::DeserializeOwned>(
 }
 
 async fn get(client: &reqwest::Client, url: &url::Url) -> Result<reqwest::Response, String> {
-    client
-        .get(url.clone())
-        .send()
-        .await
-        .map_err(|error| format!("GET {url}: {error}"))
+    let started = Instant::now();
+    let result = client.get(url.clone()).send().await;
+    let worked = matches!(&result, Ok(response) if !response.status().is_server_error());
+    observability::outbound_request(url.as_str(), started, worked);
+    result.map_err(|error| format!("GET {url}: {error}"))
 }
 
 fn retry_after(response: &reqwest::Response) -> Option<Duration> {

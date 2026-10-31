@@ -1,7 +1,7 @@
 //! The module's only database access: lyrics looked up online, with the
 //! outcome of the last lookup.
 
-use sqlx::SqlitePool;
+use crate::db::Db;
 
 #[derive(Debug, thiserror::Error)]
 #[error("{0}: {1}")]
@@ -44,11 +44,11 @@ pub struct Stored {
 
 #[derive(Clone)]
 pub struct Repository {
-    pool: SqlitePool,
+    pool: Db,
 }
 
 impl Repository {
-    pub fn new(pool: SqlitePool) -> Self {
+    pub fn new(pool: Db) -> Self {
         Self { pool }
     }
 

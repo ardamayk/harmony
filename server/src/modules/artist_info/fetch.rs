@@ -27,23 +27,6 @@ impl From<JsonError> for String {
     }
 }
 
-/// How long an outside service took, by host: the only part of a lookup's
-/// address that names no Artist, Album or search.
-fn report(url: &str, started: Instant, worked: bool) {
-    let host = url::Url::parse(url)
-        .ok()
-        .and_then(|url| url.host_str().map(str::to_owned))
-        .unwrap_or_default();
-    observability::distribution_ms(
-        "outbound.request.duration",
-        started.elapsed(),
-        &[
-            ("host", host.as_str()),
-            ("outcome", if worked { "ok" } else { "failed" }),
-        ],
-    );
-}
-
 pub async fn json<T: DeserializeOwned>(
     client: &reqwest::Client,
     url: &str,
@@ -51,7 +34,7 @@ pub async fn json<T: DeserializeOwned>(
 ) -> Result<T, JsonError> {
     let started = Instant::now();
     let result = get_json(client, url, query).await;
-    report(url, started, result.is_ok());
+    observability::outbound_request(url, started, result.is_ok());
     result
 }
 
@@ -89,7 +72,7 @@ async fn get_json<T: DeserializeOwned>(
 pub async fn bytes(client: &reqwest::Client, url: &str) -> Result<(String, Vec<u8>), String> {
     let started = Instant::now();
     let result = get_bytes(client, url).await;
-    report(url, started, result.is_ok());
+    observability::outbound_request(url, started, result.is_ok());
     result
 }
 

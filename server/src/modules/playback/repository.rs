@@ -2,8 +2,7 @@
 //! IMMEDIATE transaction that first advances the revision, so a stale
 //! expected revision fails with a conflict before anything changes.
 
-use crate::db;
-use sqlx::{Sqlite, SqlitePool, Transaction};
+use crate::db::{self, Db, Tx};
 
 #[derive(Debug, thiserror::Error)]
 pub enum QueueError {
@@ -42,10 +41,8 @@ pub struct Snapshot {
 
 #[derive(Clone)]
 pub struct Repository {
-    pool: SqlitePool,
+    pool: Db,
 }
-
-type Tx = Transaction<'static, Sqlite>;
 
 async fn item_ids(transaction: &mut Tx, user_id: &str) -> Result<Vec<String>, QueueError> {
     Ok(sqlx::query_scalar!(
@@ -119,7 +116,7 @@ async fn set_positions(
 }
 
 impl Repository {
-    pub fn new(pool: SqlitePool) -> Self {
+    pub fn new(pool: Db) -> Self {
         Self { pool }
     }
 

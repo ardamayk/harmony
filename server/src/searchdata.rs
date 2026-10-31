@@ -157,7 +157,7 @@ fn title_versions(value: &str) -> Vec<String> {
 ///
 /// These statements call the registered functions, which the schema
 /// database sqlx checks against lacks, so they are not macro-checked.
-pub async fn rebuild(pool: &sqlx::SqlitePool, force: bool) -> Result<(), String> {
+pub async fn rebuild(pool: &crate::db::Db, force: bool) -> Result<(), String> {
     let mut transaction = crate::db::begin_write(pool)
         .await
         .map_err(|error| format!("begin Library Search rebuild: {error}"))?;

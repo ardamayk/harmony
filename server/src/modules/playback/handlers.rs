@@ -320,7 +320,12 @@ async fn stream_track(
     match serve_file::serve(&method, &headers, std::path::Path::new(&path)).await {
         Ok(response) if method == Method::GET => {
             observability::distribution_ms("track.stream.ttfb", started.elapsed(), &[]);
-            observability::measure_body(response, "track.stream.duration", "track.stream.bytes")
+            observability::measure_body(
+                response,
+                "track.stream.body",
+                "track.stream.duration",
+                "track.stream.bytes",
+            )
         }
         Ok(response) => response,
         Err(serve_file::ServeError::NotFound) => {

@@ -34,6 +34,8 @@ const ALLOWED_REQUEST_HEADERS: &[&str] = &[
     // Queue mutations carry their Queue Revision as a precondition.
     "if-match",
     "range",
+    // Ties a media stream to the Music Server's side of it (ADR 0033).
+    "sentry-trace",
     "x-permanent-delete",
     "x-track-replacement",
 ];

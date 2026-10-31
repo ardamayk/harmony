@@ -4,8 +4,10 @@
 //!
 //! What is sent: errors and panics, `info` and `warn` lines as Sentry logs,
 //! one transaction per request named by its route template, child spans
-//! for the External Source, and metrics for how long the server's and the
-//! clients' work takes. What is never sent:
+//! for its database work (the SQL text, whose values are `?` placeholders),
+//! outside services and slow local work, a transaction for each Track
+//! stream's body, and metrics for how long the server's and the clients'
+//! work takes. What is never sent:
 //! request URLs, query strings, search queries, ids in paths, headers,
 //! client addresses, and URLs or file paths in free text, which
 //! [`scrub_text`] replaces before anything leaves the process.
@@ -17,7 +19,9 @@ use axum::http::{StatusCode, header};
 use axum::middleware::Next;
 use axum::response::Response;
 use futures_util::StreamExt;
-use sentry::protocol::{Context, Event, Log, LogAttribute, SpanId, SpanStatus, Unit, Value};
+use sentry::protocol::{
+    Context, Event, Log, LogAttribute, SpanId, SpanStatus, TraceContext, Unit, Value,
+};
 use sentry::{Hub, SentryFutureExt, TransactionContext, TransactionOrSpan};
 use std::borrow::Cow;
 use std::sync::Arc;
@@ -32,6 +36,11 @@ const PATH: &str = "<path>";
 const REDACTED: &str = "<redacted>";
 /// What replaces a path segment of an `/api/` path that is not a route word.
 const ID: &str = "<id>";
+
+/// Envelopes waiting to be sent. The transport sends one at a time, a few per
+/// second through a tunnel, so its default of 30 loses the transactions of a
+/// single page load.
+const TRANSPORT_QUEUE: usize = 1024;
 
 /// The fixed words of the API's paths (packages/contracts/openapi.yaml).
 /// Any other segment of an `/api/` path is an id, a token or a name: an
@@ -101,6 +110,7 @@ pub fn client_options(config: &SentryConfig, version: &str) -> sentry::ClientOpt
         .send_default_pii(false)
         .server_name(SERVER_NAME)
         .max_request_body_size(sentry::MaxRequestBodySize::None)
+        .transport_channel_capacity(TRANSPORT_QUEUE)
         .before_send(|event| Some(scrub_event(event)))
         .before_send_log(|log| Some(scrub_log(log)));
     options.dsn = Some(config.dsn.clone());
@@ -129,7 +139,8 @@ where
 /// the request's own hub so concurrent requests keep apart. It holds the
 /// method, the route template and the status: never the URL, its query or
 /// path ids, headers or the client's address. A stream's transaction ends
-/// when its response starts.
+/// when its response starts. It joins the trace of a `sentry-trace` header,
+/// which ties the Desktop core's load and stream to this request.
 pub async fn http_transaction(request: Request, next: Next) -> Response {
     let current = Hub::current();
     if current.client().is_none() {
@@ -142,9 +153,14 @@ pub async fn http_transaction(request: Request, next: Next) -> Response {
         .to_owned();
     let method = request.method().as_str().to_owned();
     let hub = Arc::new(Hub::new_from_top(current));
-    let transaction = hub.start_transaction(TransactionContext::new(
+    let headers = request
+        .headers()
+        .iter()
+        .filter_map(|(name, value)| Some((name.as_str(), value.to_str().ok()?)));
+    let transaction = hub.start_transaction(TransactionContext::continue_from_headers(
         &format!("{method} {route}"),
         "http.server",
+        headers,
     ));
     transaction.set_origin("auto.http.earthly");
     transaction.set_data("http.request.method", method.into());
@@ -231,14 +247,46 @@ pub fn record_span(
     data: &[(&'static str, Value)],
     steps: &[Step],
 ) {
+    add_span(started, op, op, total, data, steps);
+}
+
+/// A database query as a span of the current request. `sql` is literal: sqlx
+/// takes no other text from this crate's queries, and values are `?`, so it
+/// names nothing of the Library.
+pub fn record_query(started: Instant, sql: &str, idle_connections: usize) {
+    add_span(
+        started,
+        "db.sql.query",
+        sql,
+        started.elapsed(),
+        &[
+            ("db.system", "sqlite".into()),
+            ("db.pool.idle", idle_connections.into()),
+        ],
+        &[],
+    );
+}
+
+fn add_span(
+    started: Instant,
+    op: &str,
+    description: &str,
+    total: Duration,
+    data: &[(&'static str, Value)],
+    steps: &[Step],
+) {
     let Some(parent) = sentry::configure_scope(|scope| scope.get_span()) else {
         return;
     };
     let start = SystemTime::now()
         .checked_sub(started.elapsed())
         .unwrap_or_else(SystemTime::now);
-    let span =
-        TransactionOrSpan::from(parent.start_child_with_details(op, op, SpanId::default(), start));
+    let span = TransactionOrSpan::from(parent.start_child_with_details(
+        op,
+        description,
+        SpanId::default(),
+        start,
+    ));
     for (key, value) in data {
         span.set_data(key, value.clone());
     }
@@ -248,6 +296,33 @@ pub fn record_span(
             .finish_with_timestamp(step_start + step.duration);
     }
     span.finish_with_timestamp(start + total);
+}
+
+/// How long an outside service took, as a metric and a span of the current
+/// request, by host: the only part of its address that names no Artist,
+/// Album, Track or search.
+pub fn outbound_request(url: &str, started: Instant, worked: bool) {
+    let host = url::Url::parse(url)
+        .ok()
+        .and_then(|url| url.host_str().map(str::to_owned))
+        .unwrap_or_default();
+    let outcome = if worked { "ok" } else { "failed" };
+    let total = started.elapsed();
+    distribution_ms(
+        "outbound.request.duration",
+        total,
+        &[("host", host.as_str()), ("outcome", outcome)],
+    );
+    record_span(
+        started,
+        "http.client",
+        total,
+        &[
+            ("server.address", host.as_str().into()),
+            ("outcome", outcome.into()),
+        ],
+        &[],
+    );
 }
 
 /// A duration metric in milliseconds, tied to the current trace.
@@ -332,44 +407,166 @@ pub async fn timed_upload(
     response
 }
 
-/// Reports a body's duration and size when it ends, however it ends.
+#[derive(Default)]
+struct Wait {
+    total: Duration,
+    longest: Duration,
+}
+
+impl Wait {
+    fn add(&mut self, waited: Duration) {
+        self.total += waited;
+        self.longest = self.longest.max(waited);
+    }
+}
+
+/// How a stream's time divides between waiting for its source's next chunk
+/// and waiting for its reader to take the last one. This tells a stalled
+/// source from a reader that stopped reading, and it counts a stream left
+/// open: the reader's last wait ends when the stream does.
+struct Turns {
+    source: Wait,
+    reader: Wait,
+    since: Instant,
+    at_source: bool,
+}
+
+impl Turns {
+    fn new() -> Self {
+        Self {
+            source: Wait::default(),
+            reader: Wait::default(),
+            since: Instant::now(),
+            at_source: false,
+        }
+    }
+
+    fn turn(&mut self) {
+        let waited = self.since.elapsed();
+        self.since = Instant::now();
+        if self.at_source {
+            self.source.add(waited);
+        } else {
+            self.reader.add(waited);
+        }
+        self.at_source = !self.at_source;
+    }
+}
+
+/// Reports a body when it ends, however it ends: its duration and size as
+/// metrics, and all of it as a transaction in the trace of the request whose
+/// transaction ended when the body started.
 struct StreamedBody {
+    name: &'static str,
     duration: &'static str,
     bytes: &'static str,
     started: Instant,
     sent: u64,
+    /// `Content-Length`: hyper stops at that many bytes without asking for
+    /// the end, so reaching it is the end.
+    length: Option<u64>,
+    turns: Turns,
+    /// Until the body ends, the reader may still close it.
+    outcome: &'static str,
+    request: Option<TraceContext>,
 }
 
 impl StreamedBody {
-    // A method, so the stream's closure keeps the whole report and it drops
-    // with the stream rather than here.
-    fn add(&mut self, bytes: usize) {
-        self.sent += bytes as u64;
+    fn chunk<E>(&mut self, chunk: Option<&Result<bytes::Bytes, E>>) {
+        match chunk {
+            Some(Ok(chunk)) => {
+                self.sent += chunk.len() as u64;
+                if self.length == Some(self.sent) {
+                    self.outcome = "complete";
+                }
+            }
+            Some(Err(_)) => self.outcome = "failed",
+            None => self.outcome = "complete",
+        }
+    }
+
+    fn trace(&self, request: &TraceContext) {
+        let total = self.started.elapsed();
+        let start = SystemTime::now()
+            .checked_sub(total)
+            .unwrap_or_else(SystemTime::now);
+        let transaction = sentry::start_transaction_with_timestamp(
+            TransactionContext::new_with_details(
+                self.name,
+                "http.server.body",
+                request.trace_id,
+                None,
+                Some(request.span_id),
+            ),
+            start,
+        );
+        transaction.set_tag("outcome", self.outcome);
+        transaction.set_data("bytes", self.sent.into());
+        for (key, wait) in [
+            ("source_wait_ms", self.turns.source.total),
+            ("source_wait_longest_ms", self.turns.source.longest),
+            ("reader_wait_ms", self.turns.reader.total),
+            ("reader_wait_longest_ms", self.turns.reader.longest),
+        ] {
+            transaction.set_data(key, wait.as_millis().to_string().into());
+        }
+        transaction.set_status(match self.outcome {
+            "complete" => SpanStatus::Ok,
+            "failed" => SpanStatus::InternalError,
+            _ => SpanStatus::Cancelled,
+        });
+        transaction.finish_with_timestamp(start + total);
     }
 }
 
 impl Drop for StreamedBody {
     fn drop(&mut self) {
-        distribution_ms(self.duration, self.started.elapsed(), &[]);
-        distribution_bytes(self.bytes, self.sent, &[]);
+        self.turns.turn();
+        let outcome = [("outcome", self.outcome)];
+        distribution_ms(self.duration, self.started.elapsed(), &outcome);
+        distribution_bytes(self.bytes, self.sent, &outcome);
+        if let Some(request) = &self.request {
+            self.trace(request);
+        }
     }
 }
 
-/// Measures how long `response`'s body takes to send and how much it sends.
-pub fn measure_body(response: Response, duration: &'static str, bytes: &'static str) -> Response {
-    let mut report = StreamedBody {
+/// Measures `response`'s body as `name`: how long it takes to send, how much
+/// it sends, what it waited on and how it ended.
+pub fn measure_body(
+    response: Response,
+    name: &'static str,
+    duration: &'static str,
+    bytes: &'static str,
+) -> Response {
+    let report = StreamedBody {
+        name,
         duration,
         bytes,
         started: Instant::now(),
         sent: 0,
+        length: response
+            .headers()
+            .get(header::CONTENT_LENGTH)
+            .and_then(|value| value.to_str().ok()?.parse().ok()),
+        turns: Turns::new(),
+        outcome: "reader_closed",
+        request: sentry::configure_scope(|scope| scope.get_span())
+            .map(|span| span.get_trace_context()),
     };
     let (parts, body) = response.into_parts();
-    let stream = body.into_data_stream().map(move |chunk| {
-        if let Ok(chunk) = &chunk {
-            report.add(chunk.len());
-        }
-        chunk
-    });
+    let stream = futures_util::stream::unfold(
+        (body.into_data_stream(), report),
+        |(mut body, mut report)| async move {
+            report.turns.turn();
+            let chunk = body.next().await;
+            report.turns.turn();
+            report.chunk(chunk.as_ref());
+            chunk.map(|chunk| (chunk, (body, report)))
+        },
+    )
+    // `unfold` panics if polled again after its end.
+    .fuse();
     Response::from_parts(parts, Body::from_stream(stream))
 }
 
@@ -1022,5 +1219,180 @@ mod tests {
             .find(|span| span.op.as_deref() == Some("yt_dlp"))
             .expect("yt_dlp");
         assert_eq!(yt_dlp.parent_span_id, Some(parent.span_id));
+    }
+
+    fn transactions(envelopes: &[sentry::Envelope]) -> Vec<sentry::protocol::Transaction<'static>> {
+        envelopes
+            .iter()
+            .flat_map(|envelope| envelope.items())
+            .filter_map(|item| match item {
+                EnvelopeItem::Transaction(transaction) => Some((**transaction).clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn trace_of(transaction: &sentry::protocol::Transaction<'static>) -> TraceContext {
+        let Some(Context::Trace(trace)) = transaction.contexts.get("trace") else {
+            panic!("trace context");
+        };
+        (**trace).clone()
+    }
+
+    /// A stream through the request middleware, read until `read` chunks.
+    fn streamed(read: usize, length: Option<u64>) -> Vec<sentry::protocol::Transaction<'static>> {
+        let router = Router::new()
+            .route(
+                "/stream",
+                get(move || async move {
+                    let chunks = [Ok::<_, std::convert::Infallible>("ab"), Ok("cd")];
+                    let mut response =
+                        Response::new(Body::from_stream(futures_util::stream::iter(chunks)));
+                    if let Some(length) = length {
+                        response
+                            .headers_mut()
+                            .insert(header::CONTENT_LENGTH, length.into());
+                    }
+                    measure_body(
+                        response,
+                        "track.stream.body",
+                        "track.stream.duration",
+                        "track.stream.bytes",
+                    )
+                }),
+            )
+            .layer(middleware::from_fn(http_transaction));
+        let envelopes = sentry::test::with_captured_envelopes_options(
+            || {
+                let runtime = tokio::runtime::Builder::new_current_thread()
+                    .build()
+                    .expect("runtime");
+                runtime.block_on(async {
+                    let request = axum::http::Request::get("/stream")
+                        .header(
+                            "sentry-trace",
+                            "771a43a4192642f0b136d5159a501700-1a2b3c4d5e6f7a8b",
+                        )
+                        .body(Body::empty())
+                        .expect("request");
+                    let response = router.oneshot(request).await.expect("response");
+                    let mut stream = response.into_body().into_data_stream().boxed();
+                    for _ in 0..read {
+                        stream.next().await;
+                    }
+                });
+            },
+            options(),
+        );
+        transactions(&envelopes)
+    }
+
+    #[test]
+    fn a_stream_body_joins_the_trace_it_was_asked_for_in() {
+        let sent = streamed(usize::from(u8::MAX), None);
+        let [request, body] = sent.as_slice() else {
+            panic!("two transactions, got {}", sent.len());
+        };
+        assert_eq!(request.name.as_deref(), Some("GET /stream"));
+        assert_eq!(body.name.as_deref(), Some("track.stream.body"));
+        let (request, body) = (trace_of(request), trace_of(body));
+        assert_eq!(
+            request.trace_id.to_string(),
+            "771a43a4192642f0b136d5159a501700"
+        );
+        assert_eq!(
+            request.parent_span_id.map(|id| id.to_string()).as_deref(),
+            Some("1a2b3c4d5e6f7a8b")
+        );
+        assert_eq!(body.trace_id, request.trace_id);
+        assert_eq!(body.parent_span_id, Some(request.span_id));
+        assert_eq!(body.status, Some(SpanStatus::Ok));
+        assert_eq!(body.data.get("bytes"), Some(&Value::from(4)));
+    }
+
+    #[test]
+    fn a_stream_the_reader_left_says_so() {
+        let sent = streamed(1, Some(4));
+        let body = sent
+            .iter()
+            .find(|transaction| transaction.name.as_deref() == Some("track.stream.body"))
+            .expect("body transaction");
+        assert_eq!(
+            body.tags.get("outcome").map(String::as_str),
+            Some("reader_closed")
+        );
+        let body = trace_of(body);
+        assert_eq!(body.status, Some(SpanStatus::Cancelled));
+        assert_eq!(body.data.get("bytes"), Some(&Value::from(2)));
+    }
+
+    /// hyper stops at `Content-Length` and drops the body unasked.
+    #[test]
+    fn a_body_that_reached_its_length_is_complete_though_never_asked_for_its_end() {
+        let sent = streamed(2, Some(4));
+        let body = sent
+            .iter()
+            .find(|transaction| transaction.name.as_deref() == Some("track.stream.body"))
+            .expect("body transaction");
+        assert_eq!(
+            body.tags.get("outcome").map(String::as_str),
+            Some("complete")
+        );
+    }
+
+    #[test]
+    fn turns_divide_the_time_between_source_and_reader() {
+        let mut turns = Turns::new();
+        turns.turn(); // The reader asks.
+        std::thread::sleep(Duration::from_millis(20));
+        turns.turn(); // The chunk arrives.
+        std::thread::sleep(Duration::from_millis(40));
+        turns.turn(); // The reader asks again.
+        assert!(turns.source.total >= Duration::from_millis(20));
+        assert!(turns.source.total < turns.reader.total);
+        assert_eq!(turns.source.longest, turns.source.total);
+    }
+
+    #[test]
+    fn outbound_requests_name_only_their_host() {
+        let envelopes = sentry::test::with_captured_envelopes_options(
+            || {
+                let transaction = sentry::start_transaction(TransactionContext::new(
+                    "GET /api/v1/library/tracks/{track_id}/lyrics",
+                    "http.server",
+                ));
+                sentry::configure_scope(|scope| {
+                    scope.set_span(Some(transaction.clone().into()));
+                });
+                outbound_request(
+                    "https://lrclib.example/api/get?track_name=secret-title",
+                    Instant::now(),
+                    true,
+                );
+                transaction.finish();
+            },
+            options(),
+        );
+        let mut sent = Vec::new();
+        for envelope in &envelopes {
+            envelope.to_writer(&mut sent).expect("serialize");
+        }
+        assert!(!String::from_utf8_lossy(&sent).contains("secret-title"));
+        let transaction = envelopes
+            .iter()
+            .flat_map(|envelope| envelope.items())
+            .find_map(|item| match item {
+                EnvelopeItem::Transaction(transaction) => Some(transaction.clone()),
+                _ => None,
+            })
+            .expect("transaction");
+        let [span] = transaction.spans.as_slice() else {
+            panic!("one span, got {}", transaction.spans.len());
+        };
+        assert_eq!(span.op.as_deref(), Some("http.client"));
+        assert_eq!(
+            span.data.get("server.address"),
+            Some(&Value::from("lrclib.example"))
+        );
     }
 }

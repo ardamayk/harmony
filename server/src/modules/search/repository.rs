@@ -1,8 +1,8 @@
 //! The Library Search snapshot reads (librarysearch/repository.go).
 
 use super::index::{Entity, FieldRef, Index, PreparedText};
+use crate::db::Db;
 use crate::searchdata::Text;
-use sqlx::SqlitePool;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -16,11 +16,11 @@ pub enum IndexError {
 
 #[derive(Clone)]
 pub struct Repository {
-    pool: SqlitePool,
+    pool: Db,
 }
 
 impl Repository {
-    pub fn new(pool: SqlitePool) -> Self {
+    pub fn new(pool: Db) -> Self {
         Self { pool }
     }
 

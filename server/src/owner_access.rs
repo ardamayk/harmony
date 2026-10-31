@@ -124,8 +124,11 @@ impl OwnerAccess {
         if last_refresh.is_some_and(|last| last.elapsed() < MIN_REFRESH_INTERVAL) {
             return;
         }
+        let started = std::time::Instant::now();
         *last_refresh = Some(Instant::now());
-        match self.fetch().await {
+        let keys = self.fetch().await;
+        crate::observability::outbound_request(&self.settings.jwks_url, started, keys.is_ok());
+        match keys {
             Ok(keys) => *self.keys.write().expect("owner keys lock") = keys,
             Err(error) => tracing::error!(%error, "Owner JWT keys unavailable"),
         }

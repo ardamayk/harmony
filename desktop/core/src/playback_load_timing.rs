@@ -1,11 +1,13 @@
 //! How long a Playback Source takes to start: from sending mpv `loadfile`
 //! (or from the boundary where mpv moved to an appended entry) to
-//! `file-loaded`, and to the first `playback-restart`, when audio actually
-//! plays. One stderr line per start, naming only the source type and what
+//! `start-file`, when mpv has closed the previous file, to `file-loaded`,
+//! and to the first `playback-restart`, when audio actually plays. One
+//! stderr line per start, naming only the source type and what
 //! started it, never its URL. A load replaced by the next one before it
 //! plays gets its own line, so no start goes unreported. With Sentry
 //! configured (ADR 0033), each report is also a transaction and metrics.
 
+use crate::observability::{self, LoadTrace};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
@@ -47,6 +49,7 @@ pub(crate) enum LoadMark {
     /// mpv accepted the `loadfile` of this load revision; later events are
     /// about its file.
     Accepted(u64),
+    FileStarted,
     FileLoaded,
     Playing,
     Failed,
@@ -59,7 +62,10 @@ struct Load {
     source_type: &'static str,
     trigger: LoadTrigger,
     sent_at: Instant,
+    accepted: Option<Duration>,
+    file_started: Option<Duration>,
     file_loaded: Option<Duration>,
+    trace: LoadTrace,
 }
 
 /// How a timed load ended.
@@ -90,8 +96,13 @@ pub(crate) struct LoadReport {
     pub(crate) outcome: LoadOutcome,
     pub(crate) source_type: &'static str,
     pub(crate) trigger: LoadTrigger,
+    /// mpv took the `loadfile`.
+    pub(crate) accepted: Option<Duration>,
+    /// mpv finished with the previous file and began this one.
+    pub(crate) file_started: Option<Duration>,
     pub(crate) file_loaded: Option<Duration>,
     pub(crate) elapsed: Duration,
+    pub(crate) trace: LoadTrace,
 }
 
 impl LoadReport {
@@ -100,8 +111,11 @@ impl LoadReport {
             outcome,
             source_type: load.source_type,
             trigger: load.trigger,
+            accepted: load.accepted,
+            file_started: load.file_started,
             file_loaded: load.file_loaded,
             elapsed: load.sent_at.elapsed(),
+            trace: load.trace,
         }
     }
 
@@ -114,12 +128,15 @@ impl LoadReport {
                 "Playback Source replaced before it started: {fields} load_to_replaced_ms={elapsed}"
             ),
             LoadOutcome::Started => {
-                let file_loaded = self
-                    .file_loaded
-                    .map(|elapsed| format!(" load_to_file_loaded_ms={}", elapsed.as_millis()))
-                    .unwrap_or_default();
+                let stage = |name: &str, elapsed: Option<Duration>| {
+                    elapsed
+                        .map(|elapsed| format!(" load_to_{name}_ms={}", elapsed.as_millis()))
+                        .unwrap_or_default()
+                };
+                let file_started = stage("file_started", self.file_started);
+                let file_loaded = stage("file_loaded", self.file_loaded);
                 format!(
-                    "Playback Source started: {fields}{file_loaded} load_to_playing_ms={elapsed}"
+                    "Playback Source started: {fields}{file_started}{file_loaded} load_to_playing_ms={elapsed}"
                 )
             }
             LoadOutcome::Failed => {
@@ -149,7 +166,10 @@ impl LoadTimer {
             source_type,
             trigger,
             sent_at: Instant::now(),
+            accepted: None,
+            file_started: None,
             file_loaded: None,
+            trace: observability::start_load_trace(),
         })?;
         Some(LoadReport::new(replaced, LoadOutcome::Replaced))
     }
@@ -162,10 +182,15 @@ impl LoadTimer {
             LoadMark::Accepted(revision) => {
                 if load.revision == Some(revision) {
                     load.revision = None;
+                    load.accepted = Some(load.sent_at.elapsed());
                 }
                 None
             }
             _ if load.revision.is_some() => None,
+            LoadMark::FileStarted => {
+                load.file_started.get_or_insert(load.sent_at.elapsed());
+                None
+            }
             LoadMark::FileLoaded => {
                 load.file_loaded.get_or_insert(load.sent_at.elapsed());
                 None
@@ -198,10 +223,13 @@ mod tests {
         assert_eq!(timer.observe(LoadMark::Playing), None);
         assert_eq!(timer.observe(LoadMark::Accepted(1)), None);
         assert_eq!(timer.observe(LoadMark::FileLoaded), None);
+        assert_eq!(timer.observe(LoadMark::FileStarted), None);
         assert_eq!(timer.observe(LoadMark::Accepted(2)), None);
+        assert_eq!(timer.observe(LoadMark::FileStarted), None);
         assert_eq!(timer.observe(LoadMark::FileLoaded), None);
         let report = timer.observe(LoadMark::Playing).expect("report");
         assert_eq!(report.outcome, LoadOutcome::Started);
+        assert!(report.accepted.is_some() && report.file_started.is_some());
         assert!(report.file_loaded.is_some());
         let line = report.line();
         assert!(
@@ -210,7 +238,11 @@ mod tests {
         );
         assert_eq!(
             numbers(&line),
-            ["load_to_file_loaded_ms", "load_to_playing_ms"]
+            [
+                "load_to_file_started_ms",
+                "load_to_file_loaded_ms",
+                "load_to_playing_ms"
+            ]
         );
         // A seek's playback-restart later is not a load.
         assert_eq!(timer.observe(LoadMark::Playing), None);

@@ -7,8 +7,8 @@ use super::model::*;
 use super::repository::Repository;
 use super::service::{Hook, Service};
 use super::storage::{Limits, Storage};
+use crate::db::Db;
 use bytes::Bytes;
-use sqlx::SqlitePool;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
@@ -17,7 +17,7 @@ const FLAC: &[u8] = include_bytes!("../../../testdata/strict-import.flac");
 
 struct Harness {
     _dir: tempfile::TempDir,
-    pool: SqlitePool,
+    pool: Db,
     root: PathBuf,
     service: Service,
 }

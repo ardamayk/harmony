@@ -7,6 +7,7 @@
 //! stripped from audio and reported as now playing.
 
 use super::types::{NowPlaying, Station};
+use crate::observability;
 use crate::respond::ApiError;
 use axum::body::Body;
 use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
@@ -22,7 +23,7 @@ use sha2::Sha256;
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::sync::{Arc, RwLock};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use url::{Host, Url};
 
 const NOW_PLAYING_STALE_AFTER: Duration = Duration::from_secs(60);
@@ -496,10 +497,20 @@ impl SafeUpstream {
             request = request.header(header::RANGE, range);
         }
         Box::pin(async move {
-            let response = request
-                .send()
-                .await
-                .map_err(|error| describe_request_error(&url, &error))?;
+            let started = Instant::now();
+            let response = request.send().await;
+            // No host: unlike the fixed services, a station's names what is playing.
+            observability::record_span(
+                started,
+                "radio.upstream",
+                started.elapsed(),
+                &[(
+                    "outcome",
+                    if response.is_ok() { "ok" } else { "failed" }.into(),
+                )],
+                &[],
+            );
+            let response = response.map_err(|error| describe_request_error(&url, &error))?;
             Ok(UpstreamResponse {
                 status: response.status().as_u16(),
                 headers: response.headers().clone(),

@@ -92,9 +92,9 @@ Running the workflow by hand builds the same zip as a workflow artifact and publ
 
 ## Sentry (optional)
 
-The core reports panics, mpv process failures and each Playback Source load (source type and trigger, never its URL) to your own Sentry only when `SENTRY_DSN` is set; `SENTRY_ENVIRONMENT` and `SENTRY_TRACES_SAMPLE_RATE` work as for the Music Server ([server/README.md](../server/README.md#sentry-optional), [ADR 0033](../docs/adr/0033-opt-in-sentry-for-the-rust-programs.md)). The shell starts the core with its own environment, unfiltered:
+The core reports panics, mpv process failures, each Playback Source load (source type and trigger, never its URL) and each audio stream through the media proxy (source type, byte range and what it waited on) to your own Sentry only when `SENTRY_DSN` is set; `SENTRY_ENVIRONMENT` and `SENTRY_TRACES_SAMPLE_RATE` work as for the Music Server ([server/README.md](../server/README.md#sentry-optional), [ADR 0033](../docs/adr/0033-opt-in-sentry-for-the-rust-programs.md)). The shell starts the core with its own environment, unfiltered:
 
-- **Linux:** set them where the client starts, for example in `mise.local.toml` for `mise run desktop:dev`.
+- **Linux:** set them where the client starts, for example in `mise.local.toml` for `mise run desktop:dev`. With `mise run dev` the Music Server shares that file, so set `DESKTOP_SENTRY_DSN` too: `scripts/desktop.sh` then gives the core that DSN and leaves `SENTRY_DSN` to the server.
 - **Windows:** set them as user environment variables for the installed client (`mise run desktop:start` passes none from WSL). `mise run desktop:dev` forwards those set in WSL through `WSLENV`.
 
 An invalid value leaves Sentry off and the core running; it says so on stderr.

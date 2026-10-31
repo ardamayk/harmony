@@ -10,7 +10,7 @@ pub struct Service {
 }
 
 impl Service {
-    pub fn new(pool: sqlx::SqlitePool) -> Self {
+    pub fn new(pool: crate::db::Db) -> Self {
         Self {
             repo: Repository::new(pool),
         }

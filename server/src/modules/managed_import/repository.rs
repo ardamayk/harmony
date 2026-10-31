@@ -5,13 +5,13 @@
 use super::errors::{Error, Issue, Result, Sentinel};
 use super::history;
 use super::model::*;
-use crate::db;
-use sqlx::{SqliteConnection, SqlitePool};
+use crate::db::{self, Db, Held, Tx};
+use sqlx::SqliteConnection;
 use std::collections::HashMap;
 
 #[derive(Clone)]
 pub struct Repository {
-    pub(super) pool: SqlitePool,
+    pub(super) pool: Db,
 }
 
 /// `requireOne`: a guarded UPDATE or DELETE that matched no row.
@@ -127,27 +127,21 @@ pub(super) fn batch_file_from_job(job: &ImportJob) -> Result<BatchFile> {
 }
 
 impl Repository {
-    pub fn new(pool: SqlitePool) -> Self {
+    pub fn new(pool: Db) -> Self {
         Self { pool }
     }
 
-    pub(super) async fn conn(&self) -> Result<sqlx::pool::PoolConnection<sqlx::Sqlite>> {
+    pub(super) async fn conn(&self) -> Result<Held<sqlx::pool::PoolConnection<sqlx::Sqlite>>> {
         self.pool.acquire().await.map_err(Error::from)
     }
 
-    pub(super) async fn begin(
-        &self,
-        operation: &str,
-    ) -> Result<sqlx::Transaction<'static, sqlx::Sqlite>> {
+    pub(super) async fn begin(&self, operation: &str) -> Result<Tx> {
         db::begin_write(&self.pool)
             .await
             .map_err(|error| Error::from(error).context(format!("begin {operation}")))
     }
 
-    pub(super) async fn commit(
-        tx: sqlx::Transaction<'static, sqlx::Sqlite>,
-        operation: &str,
-    ) -> Result<()> {
+    pub(super) async fn commit(tx: Tx, operation: &str) -> Result<()> {
         tx.commit()
             .await
             .map_err(|error| Error::from(error).context(format!("commit {operation}")))

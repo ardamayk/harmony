@@ -1,8 +1,8 @@
 //! Playlist rows (playlists/repository.go, queries.sql).
 
 use super::service::DEFAULT_FAVORITES_NAME;
+use crate::db::Db;
 use serde::Serialize;
-use sqlx::SqlitePool;
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -23,11 +23,11 @@ pub enum PlaylistError {
 
 #[derive(Clone)]
 pub struct Repository {
-    pool: SqlitePool,
+    pool: Db,
 }
 
 impl Repository {
-    pub fn new(pool: SqlitePool) -> Self {
+    pub fn new(pool: Db) -> Self {
         Self { pool }
     }
 
