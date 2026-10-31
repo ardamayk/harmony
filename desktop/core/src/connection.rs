@@ -1,11 +1,12 @@
 use futures_util::StreamExt;
+use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use reqwest::redirect::Policy;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
 use std::fmt;
 use std::fs;
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Mutex, RwLock};
 use std::time::Duration;
 use tokio_util::sync::CancellationToken;
 use url::{Host, Url};
@@ -37,6 +38,18 @@ const ALLOWED_REQUEST_HEADERS: &[&str] = &[
     "x-track-replacement",
 ];
 
+/// Headers reqwest sets itself, or that would change what a request means.
+const RESERVED_SERVER_HEADERS: &[&str] = &[
+    "connection",
+    "content-length",
+    "host",
+    "te",
+    "trailer",
+    "transfer-encoding",
+    "upgrade",
+];
+const MAX_SERVER_HEADERS: usize = 8;
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ServerOrigin {
     url: Url,
@@ -47,10 +60,9 @@ impl ServerOrigin {
         let mut url = Url::parse(value).map_err(|_| {
             ConnectionError::new(
                 ConnectionErrorCode::InvalidOrigin,
-                "Enter a complete Music Server URL such as http://127.0.0.1:8090.",
+                "Enter a complete Music Server URL such as http://127.0.0.1:8090 or https://music.example.com.",
             )
         })?;
-        let is_http = matches!(url.scheme(), "http" | "https");
         let is_loopback = match url.host() {
             Some(Host::Domain(host)) => host.eq_ignore_ascii_case("localhost"),
             Some(Host::Ipv4(address)) => address.is_loopback(),
@@ -62,10 +74,15 @@ impl ServerOrigin {
             && matches!(url.path(), "" | "/")
             && url.query().is_none()
             && url.fragment().is_none();
-        if !is_http || !is_loopback || !has_origin_only {
+        let is_safe_scheme = match url.scheme() {
+            "https" => url.host().is_some(),
+            "http" => is_loopback,
+            _ => false,
+        };
+        if !is_safe_scheme || !has_origin_only {
             return Err(ConnectionError::new(
                 ConnectionErrorCode::InvalidOrigin,
-                "Music Server URL must be an HTTP(S) loopback origin without credentials, path, query, or fragment.",
+                "Music Server URL must be an https origin, or http on loopback, without credentials, path, query, or fragment.",
             ));
         }
 
@@ -102,12 +119,42 @@ impl ServerOrigin {
     }
 }
 
+/// Headers the operator's proxy needs on every request to one Music Server.
+/// Their values never leave the core: not to the renderer, and not to a log.
+#[derive(Clone, Debug, Default)]
+pub struct ServerHeaders(HeaderMap);
+
+impl ServerHeaders {
+    pub fn parse(headers: &BTreeMap<String, String>) -> Result<Self, ConnectionError> {
+        let invalid =
+            |message: String| ConnectionError::new(ConnectionErrorCode::InvalidRequest, message);
+        if headers.len() > MAX_SERVER_HEADERS {
+            return Err(invalid(format!(
+                "A Music Server connection allows at most {MAX_SERVER_HEADERS} custom headers."
+            )));
+        }
+        let mut parsed = HeaderMap::with_capacity(headers.len());
+        for (name, value) in headers {
+            let header = HeaderName::try_from(name.trim())
+                .ok()
+                .filter(|header| !RESERVED_SERVER_HEADERS.contains(&header.as_str()))
+                .ok_or_else(|| invalid(format!("Custom header name {name:?} is not allowed.")))?;
+            let mut value = HeaderValue::try_from(value.trim())
+                .map_err(|_| invalid(format!("Custom header {name} has an invalid value.")))?;
+            value.set_sensitive(true);
+            parsed.insert(header, value);
+        }
+        Ok(Self(parsed))
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ConnectionErrorCode {
     InvalidOrigin,
     InvalidRequest,
     Unreachable,
+    AccessDenied,
     InvalidResponse,
     ResponseTooLarge,
     ProxyUnavailable,
@@ -177,6 +224,8 @@ pub struct HttpBridge {
     client: reqwest::Client,
     streaming_client: reqwest::Client,
     max_response_bytes: usize,
+    /// Kept with its origin, so another server never receives them.
+    saved_headers: RwLock<Option<(ServerOrigin, ServerHeaders)>>,
 }
 
 impl HttpBridge {
@@ -215,16 +264,59 @@ impl HttpBridge {
             client,
             streaming_client,
             max_response_bytes,
+            saved_headers: RwLock::default(),
         })
+    }
+
+    /// Replaces the headers saved for `origin`.
+    pub fn save_headers(&self, origin: &ServerOrigin, headers: ServerHeaders) {
+        *self.saved_headers.write().expect("server headers lock") = Some((origin.clone(), headers));
+    }
+
+    /// Forgets saved headers that belong to another origin than `origin`.
+    pub fn keep_headers_of(&self, origin: &ServerOrigin) {
+        let mut saved = self.saved_headers.write().expect("server headers lock");
+        if saved.as_ref().is_some_and(|(owner, _)| owner != origin) {
+            *saved = None;
+        }
+    }
+
+    fn headers_for(&self, origin: &ServerOrigin) -> HeaderMap {
+        self.saved_headers
+            .read()
+            .expect("server headers lock")
+            .as_ref()
+            .filter(|(owner, _)| owner == origin)
+            .map(|(_, headers)| headers.0.clone())
+            .unwrap_or_default()
     }
 
     pub async fn test_server(
         &self,
         origin: &ServerOrigin,
     ) -> Result<ConnectionCheck, ConnectionError> {
+        self.test_server_with(origin, self.headers_for(origin))
+            .await
+    }
+
+    /// Tests `origin` with headers that are not saved yet.
+    pub async fn test_server_with_headers(
+        &self,
+        origin: &ServerOrigin,
+        headers: &ServerHeaders,
+    ) -> Result<ConnectionCheck, ConnectionError> {
+        self.test_server_with(origin, headers.0.clone()).await
+    }
+
+    async fn test_server_with(
+        &self,
+        origin: &ServerOrigin,
+        headers: HeaderMap,
+    ) -> Result<ConnectionCheck, ConnectionError> {
         let response = self
             .client
             .get(origin.endpoint(HEALTH_PATH)?)
+            .headers(headers)
             .send()
             .await
             .map_err(|_| {
@@ -233,6 +325,16 @@ impl HttpBridge {
                     "Could not reach Music Server. Check that it is running and the URL is correct.",
                 )
             })?;
+        let status = response.status();
+        if status.is_redirection()
+            || status == reqwest::StatusCode::UNAUTHORIZED
+            || status == reqwest::StatusCode::FORBIDDEN
+        {
+            return Err(ConnectionError::new(
+                ConnectionErrorCode::AccessDenied,
+                "The server or a proxy in front of it refused this client. Check the custom headers and whether they have expired.",
+            ));
+        }
         if !response.status().is_success() {
             return Err(ConnectionError::new(
                 ConnectionErrorCode::InvalidResponse,
@@ -322,6 +424,7 @@ impl HttpBridge {
             }
             outgoing = outgoing.header(name, value);
         }
+        outgoing = outgoing.headers(self.headers_for(origin));
         if let Some(body) = request.body {
             outgoing = outgoing.body(body);
         }
@@ -367,6 +470,7 @@ impl HttpBridge {
         let response = self
             .streaming_client
             .put(origin.endpoint(path)?)
+            .headers(self.headers_for(origin))
             .header("accept", "application/json")
             .header("content-type", content_type)
             .header("content-length", content_length)
@@ -467,12 +571,16 @@ impl HttpBridge {
             }
             outgoing = outgoing.header(name, value);
         }
-        let response = outgoing.send().await.map_err(|_| {
-            ConnectionError::new(
-                ConnectionErrorCode::Unreachable,
-                "Music Server media request failed. Check that the server is still running.",
-            )
-        })?;
+        let response = outgoing
+            .headers(self.headers_for(origin))
+            .send()
+            .await
+            .map_err(|_| {
+                ConnectionError::new(
+                    ConnectionErrorCode::Unreachable,
+                    "Music Server media request failed. Check that the server is still running.",
+                )
+            })?;
         if response.status().is_redirection() {
             return Err(ConnectionError::new(
                 ConnectionErrorCode::InvalidResponse,
@@ -491,6 +599,7 @@ impl HttpBridge {
         let mut request = self
             .streaming_client
             .get(url)
+            .headers(self.headers_for(origin))
             .header(reqwest::header::ACCEPT, "text/event-stream");
         if let Some(last_event_id) = last_event_id {
             request = request.header("Last-Event-ID", last_event_id);
@@ -682,7 +791,8 @@ impl ConnectionStore {
 mod tests {
     use super::{
         API_REQUEST_TIMEOUT, ConnectionErrorCode, ConnectionStore, EXTERNAL_SOURCE_REQUEST_TIMEOUT,
-        HttpBridge, HttpRequest, HttpRequestCancellations, ServerOrigin, api_request_timeout,
+        HttpBridge, HttpRequest, HttpRequestCancellations, MAX_SERVER_HEADERS, ServerHeaders,
+        ServerOrigin, api_request_timeout,
     };
     use std::collections::BTreeMap;
     use std::fs;
@@ -690,8 +800,10 @@ mod tests {
     use std::net::TcpListener;
     use std::path::PathBuf;
     use std::sync::mpsc::{self, Sender};
+    use std::sync::{Arc, Mutex};
     use std::thread;
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio_util::io::ReaderStream;
 
     fn serve_health(capabilities: &[&str]) -> String {
@@ -808,9 +920,153 @@ mod tests {
             "http://127.0.0.1:8090#fragment",
             "ws://127.0.0.1:8090",
             "http://attacker.example@127.0.0.1:8090",
+            "http://music.example.com",
+            "https://music.example.com/path",
+            "https://user:secret@music.example.com",
+            "https://music.example.com?x=1",
         ] {
             let error = ServerOrigin::parse(value).expect_err("origin should fail");
             assert_eq!(error.code, ConnectionErrorCode::InvalidOrigin, "{value}");
+        }
+    }
+
+    #[test]
+    fn an_https_origin_may_be_anywhere() {
+        let origin = ServerOrigin::parse("https://music.example.com/").expect("valid origin");
+
+        assert_eq!(origin.as_str(), "https://music.example.com");
+    }
+
+    #[test]
+    fn custom_headers_refuse_reserved_and_malformed_names() {
+        let parse = |name: &str, value: &str| {
+            ServerHeaders::parse(&BTreeMap::from([(name.to_owned(), value.to_owned())]))
+        };
+        assert!(parse("X-Proxy-Key", "secret").is_ok());
+        for name in ["Host", "content-length", "Transfer-Encoding", "not a name"] {
+            let error = parse(name, "x").expect_err("name should fail");
+            assert_eq!(error.code, ConnectionErrorCode::InvalidRequest, "{name}");
+        }
+        let error = parse("X-Proxy-Key", "secret\nvalue").expect_err("value should fail");
+        assert!(!error.message.contains("secret"), "{}", error.message);
+        let too_many = (0..=MAX_SERVER_HEADERS)
+            .map(|index| (format!("x-{index}"), "v".to_owned()))
+            .collect();
+        assert!(ServerHeaders::parse(&too_many).is_err());
+    }
+
+    /// A Music Server that records each request's custom header and answers
+    /// `status` to all of them.
+    async fn recording_server(status: &'static str) -> (String, Arc<Mutex<Vec<Option<String>>>>) {
+        let seen: Arc<Mutex<Vec<Option<String>>>> = Arc::default();
+        let recorded = seen.clone();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind");
+        let origin = format!("http://{}", listener.local_addr().expect("address"));
+        tokio::spawn(async move {
+            loop {
+                let (mut socket, _) = listener.accept().await.expect("accept");
+                let mut buffer = vec![0; 4096];
+                let read = socket.read(&mut buffer).await.expect("read");
+                let head = String::from_utf8_lossy(&buffer[..read]).to_ascii_lowercase();
+                recorded.lock().expect("seen").push(
+                    head.lines()
+                        .find_map(|line| line.strip_prefix("x-proxy-key: "))
+                        .map(|value| value.trim().to_owned()),
+                );
+                let body = r#"{"status":"ok","version":"1","capabilities":["api.v1","playback.queue-events.v1","managed-import-batches.v1","managed-track-deletion.v1","managed-track-replacement.v1"]}"#;
+                let reply = format!(
+                    "HTTP/1.1 {status}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                socket.write_all(reply.as_bytes()).await.expect("write");
+            }
+        });
+        (origin, seen)
+    }
+
+    fn proxy_key() -> ServerHeaders {
+        ServerHeaders::parse(&BTreeMap::from([(
+            "X-Proxy-Key".to_owned(),
+            "secret".to_owned(),
+        )]))
+        .expect("headers")
+    }
+
+    #[tokio::test]
+    async fn saved_headers_reach_their_own_origin_and_no_other() {
+        let (saved, saved_seen) = recording_server("200 OK").await;
+        let (other, other_seen) = recording_server("200 OK").await;
+        let saved = ServerOrigin::parse(&saved).expect("origin");
+        let other = ServerOrigin::parse(&other).expect("origin");
+        let bridge = HttpBridge::new().expect("bridge");
+        bridge.save_headers(&saved, proxy_key());
+
+        bridge.test_server(&saved).await.expect("saved origin");
+        bridge
+            .send(
+                &saved,
+                HttpRequest {
+                    method: "GET".to_owned(),
+                    url: "/api/v1/me".to_owned(),
+                    headers: BTreeMap::new(),
+                    body: None,
+                },
+            )
+            .await
+            .expect("api request");
+        bridge
+            .send_media(
+                &saved,
+                HttpRequest {
+                    method: "GET".to_owned(),
+                    url: "/api/v1/tracks/a/stream".to_owned(),
+                    headers: BTreeMap::new(),
+                    body: None,
+                },
+            )
+            .await
+            .expect("media request");
+        bridge.test_server(&other).await.expect("other origin");
+
+        let key = Some("secret".to_owned());
+        assert_eq!(
+            *saved_seen.lock().expect("seen"),
+            vec![key.clone(), key.clone(), key]
+        );
+        assert_eq!(*other_seen.lock().expect("seen"), vec![None]);
+    }
+
+    #[tokio::test]
+    async fn changing_the_origin_forgets_the_old_servers_headers() {
+        let (first, _) = recording_server("200 OK").await;
+        let (second, seen) = recording_server("200 OK").await;
+        let first = ServerOrigin::parse(&first).expect("origin");
+        let second = ServerOrigin::parse(&second).expect("origin");
+        let bridge = HttpBridge::new().expect("bridge");
+        bridge.save_headers(&first, proxy_key());
+
+        bridge.keep_headers_of(&first);
+        assert!(!bridge.headers_for(&first).is_empty());
+        bridge.keep_headers_of(&second);
+        bridge.test_server(&second).await.expect("second origin");
+
+        assert!(bridge.headers_for(&first).is_empty());
+        assert_eq!(*seen.lock().expect("seen"), vec![None]);
+    }
+
+    #[tokio::test]
+    async fn a_refusing_proxy_is_not_reported_as_an_unreachable_server() {
+        for status in ["302 Found", "401 Unauthorized", "403 Forbidden"] {
+            let (origin, _) = recording_server(status).await;
+            let origin = ServerOrigin::parse(&origin).expect("origin");
+            let error = HttpBridge::new()
+                .expect("bridge")
+                .test_server(&origin)
+                .await
+                .expect_err("refused");
+            assert_eq!(error.code, ConnectionErrorCode::AccessDenied, "{status}");
         }
     }
 

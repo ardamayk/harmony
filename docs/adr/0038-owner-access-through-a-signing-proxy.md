@@ -27,3 +27,4 @@ Running the Music Server on a VPS leaves the Owner on the far side of an SSH tun
 - This narrows ADR 0037's "never exposed": the listener is reachable from the internet through the proxy. The operator trusts that proxy, and its limits, such as a maximum request size, apply to uploads. Files over such a limit still go through an SSH tunnel.
 - A forwarder in front of `SERVER_ADDR` would undo this, because a loopback Host needs no token. The documentation says so.
 - An operator without a signing proxy keeps the SSH tunnel.
+- The Desktop Client reaches a public address with custom request headers the proxy turns into its token. They are provider-neutral too: the operator enters them on each device, the shell keeps them encrypted with the operating system's keychain, and the core sends them only to the saved origin.

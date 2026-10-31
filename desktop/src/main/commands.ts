@@ -10,6 +10,7 @@ import {
 } from "@repo/desktop-bridge/schemas";
 import { CoreCommandError } from "./core-process";
 import { validateExternalUrl } from "./security";
+import type { ServerHeadersStore } from "./server-headers";
 
 /** Audio files the native picker offers; the core re-checks each one. */
 export const IMPORT_EXTENSIONS = ["flac", "mp3", "m4a", "ogg", "opus", "wav"];
@@ -27,6 +28,7 @@ export type CommandDeps = {
 	closeMiniWindow(): void;
 	toggleMiniWindow(): void;
 	showMainWindow(): void;
+	serverHeaders: Pick<ServerHeadersStore, "assertAvailable" | "sync">;
 };
 
 /**
@@ -46,6 +48,9 @@ export async function handleInvoke(
 		const parsed = parseInvoke(command, args);
 		if (!parsed.ok) throw new CoreCommandError(parsed.error);
 		const invoke = parsed.value;
+		if (invoke.command === "save_server_connection") {
+			return { ok: true, value: await saveConnection(deps, invoke.args) };
+		}
 		const value = isCoreCommand(invoke.command)
 			? await deps.requestCore(
 					invoke.command,
@@ -56,6 +61,19 @@ export async function handleInvoke(
 	} catch (error) {
 		return { ok: false, error: errorValue(error) };
 	}
+}
+
+/** Refuses before saving when the headers could not survive a restart. */
+async function saveConnection(
+	deps: CommandDeps,
+	args: { origin: string; headers?: Record<string, string> },
+) {
+	if (args.headers) deps.serverHeaders.assertAvailable();
+	const check = (await deps.requestCore("save_server_connection", args)) as {
+		origin: string;
+	};
+	deps.serverHeaders.sync(check.origin, args.headers);
+	return check;
 }
 
 type ShellInvoke = Extract<ParsedInvoke, { command: ShellCommand }>;

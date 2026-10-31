@@ -40,7 +40,7 @@ use adaptive_system_rate::{
 };
 use connection::{
     ConnectionCheck, ConnectionError, ConnectionErrorCode, ConnectionStore, HttpBridge,
-    HttpRequest, HttpRequestCancellations, HttpResponse, ServerOrigin,
+    HttpRequest, HttpRequestCancellations, HttpResponse, ServerHeaders, ServerOrigin,
 };
 use desktop_import::{
     DesktopImportError, ImportSelection, ImportSelectionStore, ImportUploadProgress, ProgressSink,
@@ -69,6 +69,7 @@ use queue_events::QueueEventService;
 use rpc::{Output, Reply, Request, param, reply};
 use serde::Serialize;
 use serde_json::{Value, json};
+use std::collections::BTreeMap;
 use std::io::BufRead;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -145,22 +146,65 @@ fn get_server_connection(state: &AppState) -> Result<Option<ServerConnection>, C
 async fn test_server_connection(
     state: &AppState,
     origin: String,
+    headers: Option<BTreeMap<String, String>>,
 ) -> Result<ConnectionCheck, ConnectionError> {
     let origin = ServerOrigin::parse(&origin)?;
-    state.bridge.test_server(&origin).await
+    match headers {
+        Some(headers) => {
+            let headers = ServerHeaders::parse(&headers)?;
+            state
+                .bridge
+                .test_server_with_headers(&origin, &headers)
+                .await
+        }
+        None => state.bridge.test_server(&origin).await,
+    }
 }
 
+/// Without `headers`, a server keeps the ones it already has.
 async fn save_server_connection(
     state: &AppState,
     origin: String,
+    headers: Option<BTreeMap<String, String>>,
 ) -> Result<ConnectionCheck, ConnectionError> {
     let origin = ServerOrigin::parse(&origin)?;
-    let check = state.bridge.test_server(&origin).await?;
+    let headers = headers.as_ref().map(ServerHeaders::parse).transpose()?;
+    let check = match &headers {
+        Some(headers) => {
+            state
+                .bridge
+                .test_server_with_headers(&origin, headers)
+                .await?
+        }
+        None => state.bridge.test_server(&origin).await?,
+    };
     state.store.save(&origin)?;
+    match headers {
+        Some(headers) => state.bridge.save_headers(&origin, headers),
+        None => state.bridge.keep_headers_of(&origin),
+    }
     *state.origin.write().map_err(|_| state_error())? = Some(origin);
     state.queue_events.reconnect();
     state.output.emit(CONNECTION_CHANGED_EVENT, &check);
     Ok(check)
+}
+
+/// The shell hands over what it keeps encrypted, once, at startup. Headers
+/// saved for another origin than the current one are ignored.
+fn set_server_headers(
+    state: &AppState,
+    origin: String,
+    headers: BTreeMap<String, String>,
+) -> Result<(), ConnectionError> {
+    let origin = ServerOrigin::parse(&origin)?;
+    let current = state.origin.read().map_err(|_| state_error())?.clone();
+    if current.as_ref() == Some(&origin) {
+        state
+            .bridge
+            .save_headers(&origin, ServerHeaders::parse(&headers)?);
+        state.queue_events.reconnect();
+    }
+    Ok(())
 }
 
 async fn desktop_http_request(
@@ -956,11 +1000,18 @@ async fn dispatch(state: Arc<AppState>, method: &str, params: Value) -> Reply {
         "get_server_connection" => reply(get_server_connection(&state)),
         "test_server_connection" => {
             let origin = param(&params, "origin")?;
-            reply(test_server_connection(&state, origin).await)
+            let headers = param(&params, "headers")?;
+            reply(test_server_connection(&state, origin, headers).await)
         }
         "save_server_connection" => {
             let origin = param(&params, "origin")?;
-            reply(save_server_connection(&state, origin).await)
+            let headers = param(&params, "headers")?;
+            reply(save_server_connection(&state, origin, headers).await)
+        }
+        "set_server_headers" => {
+            let origin = param(&params, "origin")?;
+            let headers = param(&params, "headers")?;
+            reply(set_server_headers(&state, origin, headers))
         }
         "desktop_http_request" => {
             let request = param(&params, "request")?;

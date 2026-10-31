@@ -15,6 +15,7 @@ import {
 	getServerConnection,
 	initializeMediaProxy,
 	isDesktopClient,
+	type ServerHeaders,
 	saveServerConnection,
 	testServerConnection,
 } from "./bridge";
@@ -22,6 +23,18 @@ import {
 type DesktopConnectionGateProps = {
 	children: ReactNode;
 };
+
+type HeaderRow = { name: string; value: string };
+
+const EMPTY_HEADER: HeaderRow = { name: "", value: "" };
+const MAX_HEADER_ROWS = 8;
+
+/** The rows the user filled in, or undefined to leave saved headers alone. */
+function serverHeaders(rows: HeaderRow[]): ServerHeaders | undefined {
+	const filled = rows.filter((row) => row.name.trim() !== "");
+	if (filled.length === 0) return undefined;
+	return Object.fromEntries(filled.map((row) => [row.name.trim(), row.value]));
+}
 
 /** How often an unreachable saved server is tried again. */
 const OFFLINE_RETRY_MS = 15_000;
@@ -33,6 +46,7 @@ export function DesktopConnectionGate({
 	const [isLoading, setIsLoading] = useState(isDesktop);
 	const [isConnected, setIsConnected] = useState(!isDesktop);
 	const [origin, setOrigin] = useState("http://127.0.0.1:8090");
+	const [headerRows, setHeaderRows] = useState([EMPTY_HEADER]);
 	const [verified, setVerified] = useState<ConnectionCheck | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [isTesting, setIsTesting] = useState(false);
@@ -124,7 +138,10 @@ export function DesktopConnectionGate({
 		setError(null);
 		setVerified(null);
 		try {
-			const check = await testServerConnection(origin);
+			const check = await testServerConnection(
+				origin,
+				serverHeaders(headerRows),
+			);
 			setOrigin(check.origin);
 			setVerified(check);
 		} catch (connectionError) {
@@ -138,7 +155,7 @@ export function DesktopConnectionGate({
 		setIsSaving(true);
 		setError(null);
 		try {
-			await saveServerConnection(origin);
+			await saveServerConnection(origin, serverHeaders(headerRows));
 			await initializeMediaProxy();
 			setIsConnected(true);
 		} catch (connectionError) {
@@ -158,7 +175,7 @@ export function DesktopConnectionGate({
 						Connect to your Music Server
 					</h1>
 					<p className="text-sm text-muted-foreground">
-						Development builds accept only a server bound to this machine.
+						Enter an https address, or a loopback address on this machine.
 					</p>
 				</div>
 
@@ -173,10 +190,19 @@ export function DesktopConnectionGate({
 								setOrigin(event.target.value);
 								setVerified(null);
 							}}
-							placeholder="http://127.0.0.1:8090"
+							placeholder="https://music.example.com"
 							required
 						/>
 					</div>
+					{origin.startsWith("https://") ? (
+						<HeaderFields
+							rows={headerRows}
+							onChange={(rows) => {
+								setHeaderRows(rows);
+								setVerified(null);
+							}}
+						/>
+					) : null}
 					{error ? (
 						<p className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
 							{error}
@@ -207,6 +233,64 @@ export function DesktopConnectionGate({
 				</form>
 			</section>
 		</main>
+	);
+}
+
+/** For a proxy in front of the server; the values stay on this device. */
+function HeaderFields({
+	rows,
+	onChange,
+}: {
+	rows: HeaderRow[];
+	onChange: (rows: HeaderRow[]) => void;
+}) {
+	const update = (index: number, change: Partial<HeaderRow>) =>
+		onChange(
+			rows.map((row, rowIndex) =>
+				rowIndex === index ? { ...row, ...change } : row,
+			),
+		);
+	return (
+		<div className="flex flex-col gap-3">
+			<p className="text-sm text-muted-foreground">
+				Custom headers, if a proxy in front of your server asks for them. They
+				are stored encrypted on this device.
+			</p>
+			{rows.map((row, index) => (
+				<div key={index} className="grid grid-cols-2 gap-3">
+					<div className="flex flex-col gap-2">
+						<Label htmlFor={`server-header-name-${index}`}>Header name</Label>
+						<Input
+							id={`server-header-name-${index}`}
+							value={row.name}
+							autoComplete="off"
+							spellCheck={false}
+							onChange={(event) => update(index, { name: event.target.value })}
+						/>
+					</div>
+					<div className="flex flex-col gap-2">
+						<Label htmlFor={`server-header-value-${index}`}>Header value</Label>
+						<Input
+							id={`server-header-value-${index}`}
+							type="password"
+							value={row.value}
+							autoComplete="off"
+							onChange={(event) => update(index, { value: event.target.value })}
+						/>
+					</div>
+				</div>
+			))}
+			<div>
+				<Button
+					type="button"
+					variant="outline"
+					disabled={rows.length >= MAX_HEADER_ROWS}
+					onClick={() => onChange([...rows, EMPTY_HEADER])}
+				>
+					Add header
+				</Button>
+			</div>
+		</div>
 	);
 }
 

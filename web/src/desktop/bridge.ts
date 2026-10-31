@@ -4,6 +4,9 @@ import { hasDesktopBridge, invoke, listen, type Unlisten } from "./desktop-api";
 
 let mediaProxyBaseUrl: string | null = null;
 
+/** Sent once to the shell and the core; the renderer never reads them back. */
+export type ServerHeaders = Record<string, string>;
+
 export type ServerConnection = {
 	origin: string;
 };
@@ -53,12 +56,25 @@ export function getServerConnection(): Promise<ServerConnection | null> {
 	return invoke("get_server_connection");
 }
 
-export function testServerConnection(origin: string): Promise<ConnectionCheck> {
-	return invoke("test_server_connection", { origin });
+/** Without `headers`, the saved server is tested with the ones it has. */
+export function testServerConnection(
+	origin: string,
+	headers?: ServerHeaders,
+): Promise<ConnectionCheck> {
+	return invoke("test_server_connection", {
+		origin,
+		...(headers ? { headers } : {}),
+	});
 }
 
-export function saveServerConnection(origin: string): Promise<ConnectionCheck> {
-	return invoke("save_server_connection", { origin });
+export function saveServerConnection(
+	origin: string,
+	headers?: ServerHeaders,
+): Promise<ConnectionCheck> {
+	return invoke("save_server_connection", {
+		origin,
+		...(headers ? { headers } : {}),
+	});
 }
 
 export function selectDesktopImportFiles(): Promise<DesktopImportSelection[]> {

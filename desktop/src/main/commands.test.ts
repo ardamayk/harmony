@@ -21,6 +21,7 @@ function deps(overrides: Partial<CommandDeps> = {}): CommandDeps {
 		closeMiniWindow: vi.fn(),
 		toggleMiniWindow: vi.fn(),
 		showMainWindow: vi.fn(),
+		serverHeaders: { assertAvailable: vi.fn(), sync: vi.fn() },
 		...overrides,
 	};
 }
@@ -40,6 +41,77 @@ describe("handleInvoke", () => {
 			seconds: 42,
 		});
 		expect(result).toEqual({ ok: true, value: { status: "playing" } });
+	});
+
+	it("keeps custom headers once the core has saved the connection", async () => {
+		const requestCore = vi
+			.fn<CommandDeps["requestCore"]>()
+			.mockResolvedValue({ origin: "https://music.example.com" });
+		const serverHeaders = { assertAvailable: vi.fn(), sync: vi.fn() };
+		const headers = { "X-Proxy-Key": "secret" };
+		const result = await handleInvoke(
+			deps({ requestCore, serverHeaders }),
+			"save_server_connection",
+			{ origin: "https://music.example.com/", headers },
+		);
+
+		expect(result.ok).toBe(true);
+		expect(serverHeaders.assertAvailable).toHaveBeenCalledOnce();
+		expect(serverHeaders.sync).toHaveBeenCalledWith(
+			"https://music.example.com",
+			headers,
+		);
+	});
+
+	it("saves nothing when custom headers could not be kept", async () => {
+		const requestCore = vi.fn<CommandDeps["requestCore"]>();
+		const serverHeaders = {
+			assertAvailable: vi.fn(() => {
+				throw new CoreCommandError({ code: "storage", message: "no keychain" });
+			}),
+			sync: vi.fn(),
+		};
+		const result = await handleInvoke(
+			deps({ requestCore, serverHeaders }),
+			"save_server_connection",
+			{ origin: "https://music.example.com", headers: { "X-Key": "secret" } },
+		);
+
+		expect(result).toEqual({
+			ok: false,
+			error: { code: "storage", message: "no keychain" },
+		});
+		expect(requestCore).not.toHaveBeenCalled();
+	});
+
+	it("does not ask for a keychain without custom headers", async () => {
+		const requestCore = vi
+			.fn<CommandDeps["requestCore"]>()
+			.mockResolvedValue({ origin: "http://127.0.0.1:8090" });
+		const serverHeaders = { assertAvailable: vi.fn(), sync: vi.fn() };
+		await handleInvoke(
+			deps({ requestCore, serverHeaders }),
+			"save_server_connection",
+			{ origin: "http://127.0.0.1:8090" },
+		);
+
+		expect(serverHeaders.assertAvailable).not.toHaveBeenCalled();
+		expect(serverHeaders.sync).toHaveBeenCalledWith(
+			"http://127.0.0.1:8090",
+			undefined,
+		);
+	});
+
+	it("keeps set_server_headers away from the renderer", async () => {
+		const requestCore = vi.fn<CommandDeps["requestCore"]>();
+		const result = await handleInvoke(
+			deps({ requestCore }),
+			"set_server_headers",
+			{ origin: "https://attacker.example", headers: {} },
+		);
+
+		expect(result.ok).toBe(false);
+		expect(requestCore).not.toHaveBeenCalled();
 	});
 
 	it("refuses commands outside the allowlist without reaching the core", async () => {

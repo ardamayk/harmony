@@ -11,6 +11,7 @@ import {
 	type IpcMainEvent,
 	type IpcMainInvokeEvent,
 	ipcMain,
+	safeStorage,
 	net,
 	protocol,
 	shell,
@@ -19,6 +20,7 @@ import { join } from "node:path";
 import { handleInvoke, IMPORT_EXTENSIONS, runWindowAction } from "./commands";
 import { CoreProcess } from "./core-process";
 import { devServerOrigin, shellPaths } from "./paths";
+import { SERVER_HEADERS_FILE_NAME, ServerHeadersStore } from "./server-headers";
 import { PlacementStore } from "./placement-store";
 import { createRendererHandler } from "./renderer-protocol";
 import {
@@ -67,6 +69,20 @@ async function start() {
 		args: ["--config-dir", configDirectory],
 		env: process.env,
 	});
+	const serverHeaders = new ServerHeadersStore(
+		join(configDirectory, SERVER_HEADERS_FILE_NAME),
+		safeStorage,
+	);
+	const savedHeaders = serverHeaders.load();
+	if (savedHeaders) {
+		await core
+			.request("set_server_headers", savedHeaders)
+			.catch((error: unknown) => {
+				process.stderr.write(
+					`[shell] saved headers refused: ${String(error)}\n`,
+				);
+			});
+	}
 	let quitting = false;
 
 	const sendShellAction = (action: TrayAction | "close-main-window") => {
@@ -185,6 +201,7 @@ async function start() {
 				closeMiniWindow: () => windows.closeMiniWindow(),
 				toggleMiniWindow: () => windows.toggleMiniWindow(),
 				showMainWindow: () => windows.showMainWindow(),
+				serverHeaders,
 			},
 			command,
 			args,

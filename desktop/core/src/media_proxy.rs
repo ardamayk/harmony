@@ -413,6 +413,7 @@ fn error_response(error: ConnectionError) -> Response<Body> {
         ConnectionErrorCode::InvalidOrigin | ConnectionErrorCode::InvalidRequest => {
             StatusCode::BAD_REQUEST
         }
+        ConnectionErrorCode::AccessDenied => StatusCode::FORBIDDEN,
         ConnectionErrorCode::Unreachable => StatusCode::BAD_GATEWAY,
         ConnectionErrorCode::ProxyUnavailable => StatusCode::SERVICE_UNAVAILABLE,
         ConnectionErrorCode::InvalidResponse

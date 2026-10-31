@@ -36,14 +36,23 @@ const bytes = z.custom<number[]>(
 	{ message: "Expected an array of bytes" },
 );
 
+/** Headers a proxy in front of the Music Server needs on every request. */
+const serverHeaders = z.record(z.string(), z.string());
+
 /**
  * The arguments of each command the renderer may send. Its keys are exactly
  * the allowlist (CORE_COMMANDS and SHELL_COMMANDS); extra fields are refused.
  */
 export const DESKTOP_COMMAND_ARGS = {
 	get_server_connection: noArgs,
-	test_server_connection: z.strictObject({ origin: z.string() }),
-	save_server_connection: z.strictObject({ origin: z.string() }),
+	test_server_connection: z.strictObject({
+		origin: z.string(),
+		headers: serverHeaders.optional(),
+	}),
+	save_server_connection: z.strictObject({
+		origin: z.string(),
+		headers: serverHeaders.optional(),
+	}),
 	desktop_http_request: z.strictObject({
 		request: z.strictObject({
 			method: z.string(),

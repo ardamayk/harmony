@@ -94,6 +94,7 @@ describe("DesktopConnectionGate", () => {
 		expect(await screen.findByText("application")).toBeTruthy();
 		expect(bridge.saveServerConnection).toHaveBeenCalledWith(
 			"http://127.0.0.1:8090",
+			undefined,
 		);
 	});
 
@@ -177,5 +178,53 @@ describe("DesktopConnectionGate", () => {
 				}) as HTMLButtonElement
 			).disabled,
 		).toBe(false);
+	});
+
+	it("sends custom headers for an https server, and none for loopback", async () => {
+		bridge.getServerConnection.mockResolvedValue(null);
+		const origin = "https://music.example.com";
+		bridge.testServerConnection.mockResolvedValue({
+			origin,
+			version: "1",
+			capabilities: [],
+		});
+		bridge.saveServerConnection.mockResolvedValue({ origin });
+		renderGate();
+
+		const url = await screen.findByLabelText("Music Server URL");
+		expect(screen.queryByLabelText("Header name")).toBeNull();
+		fireEvent.change(url, { target: { value: origin } });
+		fireEvent.change(screen.getByLabelText("Header name"), {
+			target: { value: "X-Proxy-Key" },
+		});
+		fireEvent.change(screen.getByLabelText("Header value"), {
+			target: { value: "secret" },
+		});
+		fireEvent.click(screen.getByRole("button", { name: "Test connection" }));
+		await screen.findByText(/Connected to Music Server/);
+		fireEvent.click(screen.getByRole("button", { name: "Save and connect" }));
+
+		await screen.findByText("application");
+		const headers = { "X-Proxy-Key": "secret" };
+		expect(bridge.testServerConnection).toHaveBeenCalledWith(origin, headers);
+		expect(bridge.saveServerConnection).toHaveBeenCalledWith(origin, headers);
+	});
+
+	it("leaves saved headers alone when no row is filled in", async () => {
+		bridge.getServerConnection.mockResolvedValue(null);
+		const origin = "https://music.example.com";
+		bridge.testServerConnection.mockRejectedValue({
+			code: "access_denied",
+			message: "The server refused this client.",
+		});
+		renderGate();
+
+		fireEvent.change(await screen.findByLabelText("Music Server URL"), {
+			target: { value: origin },
+		});
+		fireEvent.click(screen.getByRole("button", { name: "Test connection" }));
+
+		await screen.findByText("The server refused this client.");
+		expect(bridge.testServerConnection).toHaveBeenCalledWith(origin, undefined);
 	});
 });
