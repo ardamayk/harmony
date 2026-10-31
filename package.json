@@ -1,6 +1,7 @@
 {
   "name": "navidrome-replacement",
   "private": true,
+  "license": "AGPL-3.0-or-later",
   "scripts": {
     "prepare": "vp config --hooks --no-agent",
     "dev": "mise run dev",

@@ -1,0 +1,5 @@
+https://github.com/mpv-player/mpv/archive/41f6a645068483470267271e1d09966ca3b9f413.tar.gz mpv-41f6a645.tar.gz
+https://github.com/FFmpeg/FFmpeg/archive/1fcb201ab10cbc98d931e340da6ace292e82b1e1.tar.gz FFmpeg-1fcb201a.tar.gz
+https://github.com/haasn/libplacebo/archive/47587a2d47299f7261a01b77e989b74f80a99769.tar.gz libplacebo-47587a2d.tar.gz
+https://github.com/fribidi/fribidi/releases/download/v1.0.16/fribidi-1.0.16.tar.xz fribidi-1.0.16.tar.xz
+https://ftp.gnu.org/pub/gnu/libiconv/libiconv-1.18.tar.gz libiconv-1.18.tar.gz

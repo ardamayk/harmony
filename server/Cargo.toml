@@ -2,6 +2,7 @@
 name = "earthly-music-server"
 version = "0.1.0"
 description = "Harmony Music Server"
+license = "AGPL-3.0-or-later"
 edition = "2024"
 default-run = "earthly-music-server"
 

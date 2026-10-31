@@ -52,5 +52,6 @@ jobs:
           docker build --file server/Dockerfile \
             --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
             --label "org.opencontainers.image.revision=$SHA" \
+            --label "org.opencontainers.image.licenses=AGPL-3.0-or-later" \
             "${tags[@]}" .
           docker push --all-tags "$IMAGE"

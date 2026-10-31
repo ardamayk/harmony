@@ -17,6 +17,14 @@ extraResources:
     to: core
   - from: ../web/dist
     to: web/dist
+# Beside Harmony.exe, where a reader of the unpacked package finds them.
+extraFiles:
+  - from: ../LICENSE
+    to: LICENSE.txt
+  - from: ../licenses
+    to: licenses
+  - from: ../web/public/third-party-notices.txt
+    to: licenses/third-party-notices.txt
 win:
   target:
     - target: dir

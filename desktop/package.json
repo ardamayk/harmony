@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Harmony Desktop Client: Electron shell around the shared web UI and the Rust core",
+  "license": "AGPL-3.0-or-later",
   "main": "dist/main.cjs",
   "scripts": {
     "dev": "bash ../scripts/run-desktop.sh dev",

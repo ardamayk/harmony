@@ -67,14 +67,19 @@ run = "bash scripts/desktop.sh start"
 # --- Code generation ---------------------------------------------------------
 
 [tasks.generate]
-description = "Regenerate the committed OpenAPI client and the Music Server's offline query data"
-run = ["bash scripts/generate-openapi.sh", "bash scripts/sqlx-prepare.sh"]
+description = "Regenerate the committed OpenAPI client, the Music Server's offline query data and the third-party notices"
+run = [
+	"bash scripts/generate-openapi.sh",
+	"bash scripts/sqlx-prepare.sh",
+	"node scripts/third-party-notices.ts",
+]
 
 [tasks."generate:check"]
-description = "Verify the committed OpenAPI client and offline query data are current"
+description = "Verify the committed OpenAPI client, offline query data and third-party notices are current"
 run = [
 	"bash scripts/check-openapi-generation.sh",
 	"bash scripts/sqlx-prepare.sh --check",
+	"node scripts/third-party-notices.ts --check",
 ]
 
 # --- Build -------------------------------------------------------------------
@@ -152,6 +157,7 @@ run = [
 	"cargo fmt -p earthly-music-server -- --check",
 	"cargo clippy -p earthly-music-server --all-targets -- -D warnings",
 	"bash scripts/sqlx-prepare.sh --check",
+	"node scripts/third-party-notices.ts --check",
 ]
 
 [tasks."desktop:check"]

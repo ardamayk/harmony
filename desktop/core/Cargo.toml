@@ -2,6 +2,7 @@
 name = "earthly-audio-core"
 version = "0.1.0"
 description = "Harmony Desktop Client core: native playback, media proxy and Managed Import, driven by the Electron shell over stdio"
+license = "AGPL-3.0-or-later"
 edition = "2024"
 
 [lib]

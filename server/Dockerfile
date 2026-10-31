@@ -44,6 +44,9 @@ RUN if [ "$WITH_YT_DLP" = "true" ]; then \
 WORKDIR /app
 COPY --from=builder /usr/local/bin/earthly-music-server /app/server
 COPY --from=builder /src/server/migrations /app/migrations
+COPY LICENSE web/public/third-party-notices.txt /app/licenses/
+COPY licenses /app/licenses/
+RUN apk list --installed > /app/licenses/alpine-packages.txt
 ENV SERVER_ADDR=127.0.0.1:8090
 ENV DATABASE_PATH=/data/app.db
 # Imported music lives in the data volume, next to the database.

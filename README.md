@@ -202,6 +202,10 @@ CI is a single workflow (`.github/workflows/ci.yml`): web, server, desktop, and 
 
 If `graphify-out/` exists and `graphify` is available on `PATH`, post-commit and branch-switch post-checkout hooks update the graph in the background.
 
+## License
+
+Harmony is licensed under the [GNU Affero General Public License v3.0 or later](LICENSE). A Windows package and the server image also carry mpv, FFmpeg and other third-party software under their own licences; see [licenses/README.md](licenses/README.md).
+
 ## Developer docs
 
 - [AGENTS.md](AGENTS.md) — conventions for contributors and AI agents

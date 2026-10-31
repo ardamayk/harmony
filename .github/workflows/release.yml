@@ -57,6 +57,12 @@ jobs:
         run: |
           zip -qr "$NAME.zip" "$NAME"
           sha256sum "$NAME.zip" > "$NAME.zip.sha256"
+          # The GPL and LGPL parts' source travels with the binaries.
+          mkdir "$NAME-sources"
+          while read -r url file; do
+            curl --fail --silent --show-error --location --retry 3 --output "$NAME-sources/$file" "$url"
+          done < "$GITHUB_WORKSPACE/licenses/mpv-windows/sources.txt"
+          tar --create --file "$NAME-sources.tar" "$NAME-sources"
         env:
           NAME: ${{ steps.version.outputs.name }}
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -65,10 +71,11 @@ jobs:
           path: |
             ${{ runner.temp }}/${{ steps.version.outputs.name }}.zip
             ${{ runner.temp }}/${{ steps.version.outputs.name }}.zip.sha256
+            ${{ runner.temp }}/${{ steps.version.outputs.name }}-sources.tar
           retention-days: 14
       - if: startsWith(github.ref, 'refs/tags/v')
         working-directory: ${{ runner.temp }}
-        run: gh release create "$GITHUB_REF_NAME" "$NAME.zip" "$NAME.zip.sha256" --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes
+        run: gh release create "$GITHUB_REF_NAME" "$NAME.zip" "$NAME.zip.sha256" "$NAME-sources.tar" --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes
         env:
           GH_TOKEN: ${{ github.token }}
           NAME: ${{ steps.version.outputs.name }}
