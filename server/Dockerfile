@@ -20,7 +20,14 @@ COPY Cargo.toml Cargo.lock ./
 COPY desktop/core ./desktop/core
 COPY packages/contracts/openapi.yaml ./packages/contracts/openapi.yaml
 COPY --from=frontend-builder /src/server ./server
-RUN SQLX_OFFLINE=true cargo build --release -p earthly-music-server
+# Kept between builds, so a change rebuilds the server and not every dependency.
+# The binary leaves the cache here, and touching the embedding file picks up a
+# Web Client change that no Rust file shows.
+RUN --mount=type=cache,id=harmony-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,id=harmony-cargo-target,target=/src/target,sharing=locked \
+    sh -c 'touch server/src/static_assets.rs \
+        && SQLX_OFFLINE=true cargo build --release -p earthly-music-server \
+        && cp target/release/earthly-music-server /usr/local/bin/earthly-music-server'
 
 FROM alpine:3.21
 RUN apk add --no-cache ca-certificates ffmpeg
@@ -35,7 +42,7 @@ RUN if [ "$WITH_YT_DLP" = "true" ]; then \
         && ln -s /opt/yt-dlp/bin/yt-dlp /usr/local/bin/yt-dlp; \
     fi
 WORKDIR /app
-COPY --from=builder /src/target/release/earthly-music-server /app/server
+COPY --from=builder /usr/local/bin/earthly-music-server /app/server
 COPY --from=builder /src/server/migrations /app/migrations
 ENV SERVER_ADDR=127.0.0.1:8090
 ENV DATABASE_PATH=/data/app.db
