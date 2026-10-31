@@ -31,7 +31,6 @@ test("import preview explains the destination and displays a selectable embedded
 		buffer: file,
 	});
 	await expect(dialog.getByText("1 of 1 ready", { exact: true })).toBeVisible();
-	await expect(dialog.getByText("Review albums and covers")).toBeVisible();
 	await expect(page.locator("html")).toHaveClass(/dark/);
 	await expect(
 		dialog.getByText(/Nothing is added to your library until you confirm/),

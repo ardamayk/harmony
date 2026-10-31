@@ -30,8 +30,9 @@ function renderReview(overrides: Partial<ManagedImportAlbumPreview> = {}) {
 	render(
 		<ImportAlbumReview
 			batchId="batch-1"
-			albums={[{ ...album, ...overrides }]}
+			album={{ ...album, ...overrides }}
 			decisions={{}}
+			trackCount={3}
 			isBusy={false}
 			onChange={onChange}
 			onUploaded={async () => {}}
@@ -118,12 +119,10 @@ describe("import album review", () => {
 			expect.objectContaining({ artworkMode: "none", artworkId: undefined }),
 		);
 	});
-	it("explains the review and shows a single destination without a redundant selector", () => {
+	it("names the album and shows a single destination without a redundant selector", () => {
 		renderReview();
-		expect(screen.getByText("Review albums and covers")).toBeTruthy();
-		expect(
-			screen.getByText(/Nothing is added to your library until you confirm/),
-		).toBeTruthy();
+		expect(screen.getByRole("heading", { name: album.title })).toBeTruthy();
+		expect(screen.getByText("The Weeknd · 3 tracks")).toBeTruthy();
 		expect(screen.getByText("Create new album")).toBeTruthy();
 		expect(
 			screen.getByText(/No library album matches this title and album artist/),
