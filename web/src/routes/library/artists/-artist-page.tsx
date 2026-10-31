@@ -136,13 +136,14 @@ export function ArtistDetailContent({ artistId }: { artistId: string }) {
 
 	return (
 		<DetailPageShell testId="artist-detail-content">
-			{/* Deezer's photos are square, so the banner is the cover-colour band
-			    with the whole photo at its full height on the right, fading into
-			    the band (Tidal); name and About sit on its left. With no photo the
-			    band stays, holding the name. */}
+			{/* Deezer's photos are square, so the banner holds the whole photo at
+			    its full height on the right, over its own larger copy as the
+			    band's backdrop (Tidal); name and About sit on its left. With no
+			    photo the band stays, holding the name. */}
 			<CoverWash
 				cacheKey={`artist:${artistId}`}
 				imageUrl={photoUrl}
+				backdropUrl={photoShown ? photoUrl : undefined}
 				className={cn(
 					"relative flex flex-col justify-end overflow-hidden",
 					photoShown && "min-h-artist-banner",
