@@ -28,7 +28,7 @@ const GUEST_CSP: &str = "default-src 'self'; script-src 'self'; \
     font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob:; \
     media-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'self'; \
     frame-ancestors 'none'";
-/// The Owner's Web Client behind Cloudflare Access. Its covers and previews
+/// The Owner's Web Client on its public address. Its covers and previews
 /// can come from outside services, so images and media reach further.
 const OWNER_CSP: &str = "default-src 'self'; script-src 'self'; \
     style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; \
@@ -37,7 +37,6 @@ const OWNER_CSP: &str = "default-src 'self'; script-src 'self'; \
     frame-ancestors 'none'";
 /// The docs and Scalar run their own scripts, so only framing is limited.
 const OWNER_DOCS_CSP: &str = "object-src 'none'; base-uri 'none'; frame-ancestors 'none'";
-const ACCESS_TOKEN_HEADER: &str = "cf-access-jwt-assertion";
 
 #[derive(Clone)]
 pub struct AppState {
@@ -243,7 +242,7 @@ fn cors(origins: &[String]) -> CorsLayer {
 /// refuses a Host that is not a loopback name, so a page that rebinds its own
 /// domain to 127.0.0.1 (DNS rebinding) cannot use the API as its own origin.
 /// A request without a Host does not come from a browser. The one other Host
-/// is `OWNER_PUBLIC_URL`'s, and it needs a token from Cloudflare Access.
+/// is `OWNER_PUBLIC_URL`'s, and it needs a token its proxy signed.
 async fn loopback_host(State(state): State<AppState>, request: Request, next: Next) -> Response {
     let host = request
         .headers()
@@ -273,20 +272,12 @@ async fn loopback_host(State(state): State<AppState>, request: Request, next: Ne
 }
 
 async fn through_access(access: &OwnerAccess, request: Request, next: Next) -> Response {
-    let token = request
-        .headers()
-        .get(ACCESS_TOKEN_HEADER)
-        .and_then(|value| value.to_str().ok());
-    let allowed = match token {
-        Some(token) => access.verify(token).await,
-        None => false,
-    };
-    if !allowed {
+    if !access.allows(request.headers()).await {
         return browser_headers(
             ApiError::new(
                 StatusCode::FORBIDDEN,
                 "forbidden_access",
-                "sign in through Cloudflare Access",
+                "sign in through the proxy in front of this server",
             )
             .into_response(),
             OWNER_DOCS_CSP,

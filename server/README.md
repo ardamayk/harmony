@@ -45,19 +45,23 @@ A Room lives in memory for at most `LISTEN_TOGETHER_ROOM_HOURS`, and a restart e
 
 The Guest Listener answers `429 rate_limited` when a Guest passes a limit; the budgets are constants, listed in ADR 0037, and normal listening stays within them. Reads that run ffmpeg or call an outside service are the strictest, a Guest holds at most 4 audio streams, and a seek is never refused. `POST /api/v1/listen-together/join` has one limit shared by everyone, because the server cannot trust a client address behind a proxy: repeated attempts can delay your friends' joins until they stop.
 
-## Owner access through Cloudflare Access
+## Owner access through a signing proxy
 
-The Owner's listener has no sign-in of its own, so it may reach the internet only behind [Cloudflare Access](https://developers.cloudflare.com/cloudflare-one/applications/) ([ADR 0038](../docs/adr/0038-owner-access-through-cloudflare-access.md)). It is off by default. Set all three variables or none; setting only some stops the server at startup.
+The Owner's listener has no sign-in of its own, so it may reach the internet only behind an identity proxy that signs each request with a JWT ([ADR 0038](../docs/adr/0038-owner-access-through-a-signing-proxy.md)). It is off by default. Without it, reach the Owner's listener through an SSH tunnel. Set all five variables or none; setting only some stops the server at startup.
 
 | Variable | Meaning |
 | --- | --- |
 | `OWNER_PUBLIC_URL` | The Owner's public origin, for example `https://music.example.com`. It must be `https` and differ from `PUBLIC_URL`. |
-| `CF_ACCESS_TEAM_DOMAIN` | Your Zero Trust team domain, for example `example.cloudflareaccess.com`. |
-| `CF_ACCESS_AUD` | The Access application's audience tag. |
+| `OWNER_JWT_HEADER` | The request header that carries the proxy's token. |
+| `OWNER_JWKS_URL` | The proxy's public keys as a JWKS. It must be `https`, or `http` on loopback. |
+| `OWNER_JWT_ISSUER` | The token's `iss`. |
+| `OWNER_JWT_AUDIENCE` | The token's `aud`. |
 
-Order matters. Create the Access application first, then set these variables, and only then route the hostname to `SERVER_ADDR` with `cloudflared`. Use a tunnel: it opens no port, so nothing reaches the Owner's listener without passing Access. Do not put a port forwarder in front of `SERVER_ADDR`, because a request with a loopback `Host` needs no token.
+Tokens must be signed with RS256 or ES256 (P-256) and carry `exp`, `iss`, `aud` and a `kid` that names a key in the JWKS. The server checks them itself, so a mistake in the proxy's policy does not open your Music Server, and it refuses everything when it cannot fetch the keys. Requests addressed to loopback work as before.
 
-With these set, a request for `OWNER_PUBLIC_URL`'s host needs a valid `Cf-Access-Jwt-Assertion` token, signed by your team for that application. The server checks it itself, so a mistake in the Access policy does not open your Music Server, and it refuses everything when it cannot fetch Cloudflare's keys. Requests addressed to loopback work as before.
+Order matters. Set up the proxy's sign-in first, then these variables, and only then route the public hostname to `SERVER_ADDR`. Reach `SERVER_ADDR` only from the proxy on the same host, for example over a tunnel. Do not put a port forwarder in front of it: a request with a loopback `Host` needs no token, so anyone who reaches the forwarder is the Owner.
+
+For Cloudflare Access with a tunnel, for example, the header is `Cf-Access-Jwt-Assertion`, the keys are at `https://<team>.cloudflareaccess.com/cdn-cgi/access/certs`, the issuer is `https://<team>.cloudflareaccess.com`, and the audience is the application's AUD tag.
 
 ## External Source (yt-dlp)
 

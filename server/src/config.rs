@@ -1,6 +1,7 @@
 //! Configuration from the environment, with the same variables, defaults and
 //! validation as the Go server (server/internal/config).
 
+use axum::http::HeaderName;
 use std::net::{IpAddr, SocketAddr};
 
 pub const DEFAULT_MANAGED_STORAGE_RESERVE_BYTES: i64 = 2 * 1024 * 1024 * 1024;
@@ -39,8 +40,8 @@ pub struct Config {
     /// Where Guests reach this server, off unless `GUEST_ADDR` and
     /// `PUBLIC_URL` are both set (ADR 0037).
     pub listen_together: Option<ListenTogetherConfig>,
-    /// The Owner's address behind Cloudflare Access, off unless all three of
-    /// its settings are set (ADR 0038).
+    /// The Owner's address behind a signing proxy, off unless all of its
+    /// settings are set (ADR 0038).
     pub owner_access: Option<OwnerAccessConfig>,
     /// `LISTEN_TOGETHER_MAX_GUESTS`: at most this many Guests in a Room.
     pub listen_together_max_guests: usize,
@@ -72,12 +73,16 @@ impl ListenTogetherConfig {
     }
 }
 
-/// Where the Owner reaches this server through Cloudflare Access.
+/// Where the Owner reaches this server through a proxy that signs each request.
 #[derive(Clone, Debug, PartialEq)]
 pub struct OwnerAccessConfig {
-    /// `CF_ACCESS_TEAM_DOMAIN`, such as `example.cloudflareaccess.com`.
-    pub team_domain: String,
-    /// `CF_ACCESS_AUD`, the Access application's audience tag.
+    /// `OWNER_JWT_HEADER`, the header that carries the proxy's token.
+    pub token_header: HeaderName,
+    /// `OWNER_JWKS_URL`, where the proxy publishes its signing keys.
+    pub jwks_url: String,
+    /// `OWNER_JWT_ISSUER`, the token's `iss`.
+    pub issuer: String,
+    /// `OWNER_JWT_AUDIENCE`, the token's `aud`.
     pub audience: String,
     /// The Host values that mean `OWNER_PUBLIC_URL`, as for `PUBLIC_URL`.
     hosts: [String; 2],
@@ -201,13 +206,15 @@ pub enum ConfigError {
     #[error("PUBLIC_URL must be an origin such as https://music.example.com: {0}")]
     InvalidPublicUrl(&'static str),
     #[error(
-        "OWNER_PUBLIC_URL, CF_ACCESS_TEAM_DOMAIN and CF_ACCESS_AUD must be set together: {0} is missing"
+        "OWNER_PUBLIC_URL, OWNER_JWT_HEADER, OWNER_JWKS_URL, OWNER_JWT_ISSUER and OWNER_JWT_AUDIENCE must be set together: {0} is missing"
     )]
     IncompleteOwnerAccess(&'static str),
     #[error("OWNER_PUBLIC_URL must be an https origin such as https://music.example.com: {0}")]
     InvalidOwnerPublicUrl(&'static str),
-    #[error("CF_ACCESS_TEAM_DOMAIN {0:?} must look like example.cloudflareaccess.com")]
-    InvalidAccessTeamDomain(String),
+    #[error("OWNER_JWT_HEADER {0:?} must be an HTTP header name")]
+    InvalidOwnerJwtHeader(String),
+    #[error("OWNER_JWKS_URL {0:?} must be an https URL, or http on loopback")]
+    InvalidOwnerJwksUrl(String),
     #[error("LISTEN_TOGETHER_MAX_GUESTS {0:?} must be a whole number from 1 to 8")]
     InvalidMaxGuests(String),
     #[error("LISTEN_TOGETHER_ROOM_HOURS {0:?} must be a whole number from 1 to 168")]
@@ -421,30 +428,36 @@ fn listen_together_config(
     }))
 }
 
-/// Opening the Owner's listener to a public host needs all three settings: a
-/// host without Access in front of it would be the whole server, unprotected.
+/// Opening the Owner's listener to a public host needs every setting: a host
+/// without a checked token in front of it would be the whole server, unprotected.
 fn owner_access_config(
     lookup: &impl Fn(&str) -> Option<String>,
     listen_together: Option<&ListenTogetherConfig>,
 ) -> Result<Option<OwnerAccessConfig>, ConfigError> {
-    let value = |key: &str| {
+    const SETTINGS: [&str; 5] = [
+        "OWNER_PUBLIC_URL",
+        "OWNER_JWT_HEADER",
+        "OWNER_JWKS_URL",
+        "OWNER_JWT_ISSUER",
+        "OWNER_JWT_AUDIENCE",
+    ];
+    let values = SETTINGS.map(|key| {
         lookup(key)
             .map(|value| value.trim().to_owned())
             .filter(|value| !value.is_empty())
-    };
-    let (public_url, team_domain, audience) = match (
-        value("OWNER_PUBLIC_URL"),
-        value("CF_ACCESS_TEAM_DOMAIN"),
-        value("CF_ACCESS_AUD"),
-    ) {
-        (None, None, None) => return Ok(None),
-        (None, ..) => return Err(ConfigError::IncompleteOwnerAccess("OWNER_PUBLIC_URL")),
-        (_, None, _) => return Err(ConfigError::IncompleteOwnerAccess("CF_ACCESS_TEAM_DOMAIN")),
-        (_, _, None) => return Err(ConfigError::IncompleteOwnerAccess("CF_ACCESS_AUD")),
-        (Some(public_url), Some(team_domain), Some(audience)) => {
-            (public_url, team_domain, audience)
-        }
-    };
+    });
+    if values.iter().all(Option::is_none) {
+        return Ok(None);
+    }
+    if let Some(missing) = SETTINGS
+        .iter()
+        .zip(&values)
+        .find_map(|(key, value)| value.is_none().then_some(*key))
+    {
+        return Err(ConfigError::IncompleteOwnerAccess(missing));
+    }
+    let [public_url, token_header, jwks_url, issuer, audience] =
+        values.map(Option::unwrap_or_default);
     let invalid = ConfigError::InvalidOwnerPublicUrl;
     let url = url::Url::parse(&public_url).map_err(|_| invalid("it is not an absolute URL"))?;
     if url.scheme() != "https" {
@@ -462,21 +475,28 @@ fn owner_access_config(
     if listen_together.is_some_and(|settings| settings.accepts_host(host)) {
         return Err(invalid("it must differ from PUBLIC_URL"));
     }
-    let team = team_domain.strip_suffix(".cloudflareaccess.com");
-    if !team.is_some_and(|team| {
-        !team.is_empty()
-            && team
-                .chars()
-                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
-    }) {
-        return Err(ConfigError::InvalidAccessTeamDomain(team_domain));
+    let token_header = HeaderName::try_from(token_header.as_str())
+        .map_err(|_| ConfigError::InvalidOwnerJwtHeader(token_header.clone()))?;
+    let keys_are_safe = url::Url::parse(&jwks_url).is_ok_and(|keys| match keys.scheme() {
+        "https" => true,
+        "http" => keys.host().is_some_and(|host| match host {
+            url::Host::Domain(name) => name.eq_ignore_ascii_case("localhost"),
+            url::Host::Ipv4(ip) => ip.is_loopback(),
+            url::Host::Ipv6(ip) => ip.is_loopback(),
+        }),
+        _ => false,
+    });
+    if !keys_are_safe {
+        return Err(ConfigError::InvalidOwnerJwksUrl(jwks_url));
     }
     let port = url.port_or_known_default().unwrap_or_default();
     let authority = url
         .port()
         .map_or_else(|| host.to_owned(), |port| format!("{host}:{port}"));
     Ok(Some(OwnerAccessConfig {
-        team_domain,
+        token_header,
+        jwks_url,
+        issuer,
         audience,
         hosts: [authority, format!("{host}:{port}")],
     }))
@@ -677,50 +697,58 @@ mod tests {
     }
 
     #[test]
-    fn owner_access_needs_all_three_settings_and_an_https_domain() {
-        let team = ("CF_ACCESS_TEAM_DOMAIN", "example.cloudflareaccess.com");
-        let audience = ("CF_ACCESS_AUD", "abc123");
-        let url = ("OWNER_PUBLIC_URL", "https://harmony.example.com");
+    fn owner_access_needs_every_setting_and_an_https_domain() {
+        const URL: (&str, &str) = ("OWNER_PUBLIC_URL", "https://harmony.example.com");
+        const SETTINGS: [(&str, &str); 5] = [
+            URL,
+            ("OWNER_JWT_HEADER", "X-Proxy-Assertion"),
+            ("OWNER_JWKS_URL", "https://proxy.example.com/keys"),
+            ("OWNER_JWT_ISSUER", "https://proxy.example.com"),
+            ("OWNER_JWT_AUDIENCE", "abc123"),
+        ];
+        let with = |key: &'static str, value: &'static str| {
+            let mut settings = SETTINGS;
+            settings
+                .iter_mut()
+                .find(|(name, _)| *name == key)
+                .unwrap()
+                .1 = value;
+            config(&settings)
+        };
         assert_eq!(config(&[]).expect("off").owner_access, None);
-        let settings = config(&[url, team, audience])
-            .expect("config")
-            .owner_access
-            .expect("on");
+        let settings = config(&SETTINGS).expect("config").owner_access.expect("on");
+        assert_eq!(settings.token_header, "x-proxy-assertion");
         assert!(settings.accepts_host("harmony.example.com"));
         assert!(settings.accepts_host("HARMONY.example.com:443"));
         assert!(!settings.accepts_host("example.com"));
-        assert_eq!(
-            config(&[url, audience]).err(),
-            Some(ConfigError::IncompleteOwnerAccess("CF_ACCESS_TEAM_DOMAIN"))
-        );
-        assert_eq!(
-            config(&[team, audience]).err(),
-            Some(ConfigError::IncompleteOwnerAccess("OWNER_PUBLIC_URL"))
-        );
-        assert_eq!(
-            config(&[url, team]).err(),
-            Some(ConfigError::IncompleteOwnerAccess("CF_ACCESS_AUD"))
-        );
+        for (index, (missing, _)) in SETTINGS.iter().enumerate() {
+            let mut partial = SETTINGS.to_vec();
+            partial.remove(index);
+            assert_eq!(
+                config(&partial).err(),
+                Some(ConfigError::IncompleteOwnerAccess(missing))
+            );
+        }
         assert!(matches!(
-            config(&[
-                ("OWNER_PUBLIC_URL", "http://harmony.example.com"),
-                team,
-                audience
-            ]),
+            with("OWNER_PUBLIC_URL", "http://harmony.example.com"),
             Err(ConfigError::InvalidOwnerPublicUrl(_))
         ));
         assert!(matches!(
-            config(&[url, ("CF_ACCESS_TEAM_DOMAIN", "evil.example.com"), audience]),
-            Err(ConfigError::InvalidAccessTeamDomain(_))
+            with("OWNER_JWT_HEADER", "not a header"),
+            Err(ConfigError::InvalidOwnerJwtHeader(_))
         ));
         assert!(matches!(
-            config(&[
-                url,
-                team,
-                audience,
-                ("GUEST_ADDR", "127.0.0.1:8091"),
-                ("PUBLIC_URL", "https://harmony.example.com")
-            ]),
+            with("OWNER_JWKS_URL", "http://proxy.example.com/keys"),
+            Err(ConfigError::InvalidOwnerJwksUrl(_))
+        ));
+        assert!(with("OWNER_JWKS_URL", "http://127.0.0.1:9/keys").is_ok());
+        let mut same_as_guests = SETTINGS.to_vec();
+        same_as_guests.extend([
+            ("GUEST_ADDR", "127.0.0.1:8091"),
+            ("PUBLIC_URL", "https://harmony.example.com"),
+        ]);
+        assert!(matches!(
+            config(&same_as_guests),
             Err(ConfigError::InvalidOwnerPublicUrl(_))
         ));
     }

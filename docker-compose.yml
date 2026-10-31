@@ -14,11 +14,13 @@ services:
       PUBLIC_URL: ${PUBLIC_URL:-}
       LISTEN_TOGETHER_MAX_GUESTS: ${LISTEN_TOGETHER_MAX_GUESTS:-}
       LISTEN_TOGETHER_ROOM_HOURS: ${LISTEN_TOGETHER_ROOM_HOURS:-}
-      # The Owner's public address stays off unless all three are set; see
+      # The Owner's public address stays off unless all are set; see
       # server/README.md.
       OWNER_PUBLIC_URL: ${OWNER_PUBLIC_URL:-}
-      CF_ACCESS_TEAM_DOMAIN: ${CF_ACCESS_TEAM_DOMAIN:-}
-      CF_ACCESS_AUD: ${CF_ACCESS_AUD:-}
+      OWNER_JWT_HEADER: ${OWNER_JWT_HEADER:-}
+      OWNER_JWKS_URL: ${OWNER_JWKS_URL:-}
+      OWNER_JWT_ISSUER: ${OWNER_JWT_ISSUER:-}
+      OWNER_JWT_AUDIENCE: ${OWNER_JWT_AUDIENCE:-}
       # Unset = nothing is sent; see server/README.md.
       SENTRY_DSN: ${SENTRY_DSN:-}
       SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-}

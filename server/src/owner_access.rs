@@ -1,8 +1,10 @@
-//! Cloudflare Access in front of the Owner's listener (ADR 0038). Access
-//! decides who gets in; this checks the token it signs, so a mistake in the
-//! Access policy does not open the Owner's routes to the internet.
+//! The Owner's public address (ADR 0038). The server has no sign-in of its
+//! own, so a proxy in front of it decides who gets in; this checks the token
+//! that proxy signs, so a mistake in the proxy does not open the Owner's
+//! routes to the internet.
 
 use crate::config::OwnerAccessConfig;
+use axum::http::{HeaderMap, HeaderName};
 use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode, decode_header};
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -11,48 +13,61 @@ use std::time::Duration;
 use tokio::sync::Mutex;
 use tokio::time::Instant;
 
-/// Cloudflare rotates its keys, so a token may name one not fetched yet. An
-/// unknown key cannot ask for the certs more often than this.
+/// Proxies rotate their keys, so a token may name one not fetched yet. An
+/// unknown key cannot ask for the key set more often than this.
 const MIN_REFRESH_INTERVAL: Duration = Duration::from_secs(60);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Deserialize)]
-struct Certs {
-    keys: Vec<Cert>,
+struct KeySet {
+    keys: Vec<Jwk>,
 }
 
 #[derive(Deserialize)]
-struct Cert {
+struct Jwk {
     kid: String,
     kty: String,
+    crv: Option<String>,
     n: Option<String>,
     e: Option<String>,
+    x: Option<String>,
+    y: Option<String>,
+}
+
+impl Jwk {
+    /// Each key allows one algorithm, so a token cannot choose how it is
+    /// checked. Any other kind of key is left out.
+    fn decoding_key(&self) -> Option<(DecodingKey, Algorithm)> {
+        match (self.kty.as_str(), self.crv.as_deref()) {
+            ("RSA", _) => Some((
+                DecodingKey::from_rsa_components(self.n.as_deref()?, self.e.as_deref()?).ok()?,
+                Algorithm::RS256,
+            )),
+            ("EC", Some("P-256")) => Some((
+                DecodingKey::from_ec_components(self.x.as_deref()?, self.y.as_deref()?).ok()?,
+                Algorithm::ES256,
+            )),
+            _ => None,
+        }
+    }
 }
 
 pub struct OwnerAccess {
     settings: OwnerAccessConfig,
-    certs_url: String,
     validation: Validation,
     http: reqwest::Client,
-    keys: RwLock<HashMap<String, DecodingKey>>,
+    keys: RwLock<HashMap<String, (DecodingKey, Algorithm)>>,
     last_refresh: Mutex<Option<Instant>>,
 }
 
 impl OwnerAccess {
     pub fn new(settings: OwnerAccessConfig) -> Self {
-        let certs_url = format!("https://{}/cdn-cgi/access/certs", settings.team_domain);
-        Self::with_certs_url(settings, certs_url)
-    }
-
-    /// For tests: where the signing keys come from.
-    pub fn with_certs_url(settings: OwnerAccessConfig, certs_url: String) -> Self {
         let mut validation = Validation::new(Algorithm::RS256);
         validation.set_audience(&[&settings.audience]);
-        validation.set_issuer(&[format!("https://{}", settings.team_domain)]);
+        validation.set_issuer(&[&settings.issuer]);
         validation.set_required_spec_claims(&["exp", "iss", "aud"]);
         Self {
             settings,
-            certs_url,
             validation,
             http: reqwest::Client::builder()
                 .timeout(REQUEST_TIMEOUT)
@@ -68,25 +83,39 @@ impl OwnerAccess {
         self.settings.accepts_host(host)
     }
 
-    /// Whether Access signed this token for this application. Without the
-    /// keys it refuses: a Cloudflare outage must not open the Owner's routes.
-    pub async fn verify(&self, token: &str) -> bool {
+    fn token<'a>(&self, headers: &'a HeaderMap) -> Option<&'a str> {
+        let name: &HeaderName = &self.settings.token_header;
+        headers.get(name).and_then(|value| value.to_str().ok())
+    }
+
+    /// Whether the request carries a token the proxy signed for this server.
+    /// Without the keys it refuses: an outage must not open the Owner's routes.
+    pub async fn allows(&self, headers: &HeaderMap) -> bool {
+        match self.token(headers) {
+            Some(token) => self.verify(token).await,
+            None => false,
+        }
+    }
+
+    async fn verify(&self, token: &str) -> bool {
         let Some(key_id) = decode_header(token).ok().and_then(|header| header.kid) else {
             return false;
         };
         if !self.has_key(&key_id) {
             self.refresh().await;
         }
-        let keys = self.keys.read().expect("Access keys lock");
-        keys.get(&key_id).is_some_and(|key| {
-            decode::<serde_json::Value>(token.as_bytes(), key, &self.validation).is_ok()
+        let keys = self.keys.read().expect("owner keys lock");
+        keys.get(&key_id).is_some_and(|(key, algorithm)| {
+            let mut validation = self.validation.clone();
+            validation.algorithms = vec![*algorithm];
+            decode::<serde_json::Value>(token.as_bytes(), key, &validation).is_ok()
         })
     }
 
     fn has_key(&self, key_id: &str) -> bool {
         self.keys
             .read()
-            .expect("Access keys lock")
+            .expect("owner keys lock")
             .contains_key(key_id)
     }
 
@@ -97,29 +126,24 @@ impl OwnerAccess {
         }
         *last_refresh = Some(Instant::now());
         match self.fetch().await {
-            Ok(keys) => *self.keys.write().expect("Access keys lock") = keys,
-            Err(error) => tracing::error!(%error, "Cloudflare Access keys unavailable"),
+            Ok(keys) => *self.keys.write().expect("owner keys lock") = keys,
+            Err(error) => tracing::error!(%error, "Owner JWT keys unavailable"),
         }
     }
 
-    async fn fetch(&self) -> Result<HashMap<String, DecodingKey>, reqwest::Error> {
-        let certs: Certs = self
+    async fn fetch(&self) -> Result<HashMap<String, (DecodingKey, Algorithm)>, reqwest::Error> {
+        let key_set: KeySet = self
             .http
-            .get(&self.certs_url)
+            .get(&self.settings.jwks_url)
             .send()
             .await?
             .error_for_status()?
             .json()
             .await?;
-        Ok(certs
+        Ok(key_set
             .keys
             .into_iter()
-            .filter(|cert| cert.kty == "RSA")
-            .filter_map(|cert| {
-                let key = DecodingKey::from_rsa_components(cert.n.as_deref()?, cert.e.as_deref()?)
-                    .ok()?;
-                Some((cert.kid, key))
-            })
+            .filter_map(|jwk| Some((jwk.kid.clone(), jwk.decoding_key()?)))
             .collect())
     }
 }

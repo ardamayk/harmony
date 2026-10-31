@@ -2,7 +2,7 @@
 status: accepted
 ---
 
-> [ADR 0038](0038-owner-access-through-cloudflare-access.md) adds a public Owner address behind Cloudflare Access. Everything here about the Guest Listener stands.
+> [ADR 0038](0038-owner-access-through-a-signing-proxy.md) adds a public Owner address behind a proxy that signs each request. Everything here about the Guest Listener stands.
 
 # Listen Together through Rooms on the Owner's Music Server
 

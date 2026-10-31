@@ -1,5 +1,5 @@
-//! The Owner's listener behind Cloudflare Access (ADR 0038): which requests
-//! pass with `OWNER_PUBLIC_URL` as their Host. The key signs only these tests.
+//! The Owner's listener behind a signing proxy (ADR 0038): which requests pass
+//! with `OWNER_PUBLIC_URL` as their Host. The keys sign only these tests.
 
 use axum::Router;
 use axum::body::Body;
@@ -7,7 +7,6 @@ use axum::http::{Request, StatusCode, header};
 use axum::routing::get;
 use earthly_music_server::app::{self, AppState};
 use earthly_music_server::config::Config;
-use earthly_music_server::owner_access::OwnerAccess;
 use earthly_music_server::{db, dependencies};
 use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
 use serde_json::json;
@@ -19,11 +18,16 @@ use tower::ServiceExt;
 
 const HOST: &str = "harmony.example.com";
 const ORIGIN: &str = "https://harmony.example.com";
-const TEAM: &str = "example.cloudflareaccess.com";
+const ISSUER: &str = "https://proxy.example.com";
+const TOKEN_HEADER: &str = "x-proxy-assertion";
 const AUDIENCE: &str = "app-audience";
 const KEY_ID: &str = "test-key";
+const EC_KEY_ID: &str = "test-ec-key";
 const PRIVATE_KEY: &[u8] = include_bytes!("../testdata/owner-access-test-key.pem");
+const EC_PRIVATE_KEY: &[u8] = include_bytes!("../testdata/owner-access-test-ec-key.pem");
 const MODULUS: &str = "u3tD2_VCGWbAf-ivHhPJno6jj13cVcAOAw-zQByNQwAdTCDa7nEV0An4xDSNnyqICTYOldfdM1rspv5R7uUaE--_aozU_x8VwkPdXKKIg0voV4Ld65bxLiXPIw0jrVDTVh7-9d-RCoutni-GVFbeNBIOf6-ItB0w3k_JWSyVIXsiq6q9gkEOeD6wmRJtpuGlNozsBW8Dw4RsAWSetA3OFT6lUw8RigM3FEPLj8fNxsSMJiyl8mac7x023sb7tD2hjWBpApR0LH0EeycH4In9WnYWsxU-wyL3sH_84XgIWaOz94kHkAw5vbCfbxohfwvxFLAzQQvUpCuJY3x_j4DvUw";
+const EC_X: &str = "bzc0qpYU13e-X4rtThke8lxZaSMhG4y093y04ji4ELg";
+const EC_Y: &str = "kDeI-WKbTZNDq02Er2jO8bGmJAq5d_2vezgf--oVKbs";
 const HEALTH: &str = "/api/v1/health";
 
 struct Harness {
@@ -41,7 +45,9 @@ async fn certs_server() -> (String, Arc<AtomicUsize>) {
             counter.fetch_add(1, Ordering::SeqCst);
             async {
                 axum::Json(json!({ "keys": [
-                    { "kid": KEY_ID, "kty": "RSA", "alg": "RS256", "use": "sig", "n": MODULUS, "e": "AQAB" }
+                    { "kid": KEY_ID, "kty": "RSA", "alg": "RS256", "use": "sig", "n": MODULUS, "e": "AQAB" },
+                    { "kid": EC_KEY_ID, "kty": "EC", "crv": "P-256", "alg": "ES256", "use": "sig", "x": EC_X, "y": EC_Y },
+                    { "kid": "ed-key", "kty": "OKP", "crv": "Ed25519", "x": "AAAA" }
                 ]}))
             }
         }),
@@ -62,19 +68,19 @@ async fn harness() -> Harness {
     .await
     .expect("database");
     let managed = directory.path().join("managed");
+    let (certs_url, cert_requests) = certs_server().await;
     let config = Config::from_lookup(|name| match name {
         "MANAGED_STORAGE_PATH" => Some(managed.to_string_lossy().into_owned()),
         "ARTIST_INFO_ENABLED" | "LYRICS_LOOKUP_ENABLED" => Some("false".to_owned()),
         "OWNER_PUBLIC_URL" => Some(ORIGIN.to_owned()),
-        "CF_ACCESS_TEAM_DOMAIN" => Some(TEAM.to_owned()),
-        "CF_ACCESS_AUD" => Some(AUDIENCE.to_owned()),
+        "OWNER_JWT_HEADER" => Some(TOKEN_HEADER.to_owned()),
+        "OWNER_JWKS_URL" => Some(certs_url.clone()),
+        "OWNER_JWT_ISSUER" => Some(ISSUER.to_owned()),
+        "OWNER_JWT_AUDIENCE" => Some(AUDIENCE.to_owned()),
         _ => None,
     })
     .expect("config");
-    let settings = config.owner_access.clone().expect("on");
-    let (certs_url, cert_requests) = certs_server().await;
-    let mut state = AppState::new(config, dependencies::probe_system().await, pool);
-    state.owner_access = Some(Arc::new(OwnerAccess::with_certs_url(settings, certs_url)));
+    let state = AppState::new(config, dependencies::probe_system().await, pool);
     Harness {
         router: app::router(state),
         cert_requests,
@@ -99,13 +105,13 @@ fn token_with(key_id: &str, audience: &str, issuer: &str, expires_in: i64) -> St
 }
 
 fn valid_token() -> String {
-    token_with(KEY_ID, AUDIENCE, &format!("https://{TEAM}"), 300)
+    token_with(KEY_ID, AUDIENCE, ISSUER, 300)
 }
 
 fn request(host: &str, token: Option<&str>) -> axum::http::request::Builder {
     let builder = Request::get(HEALTH).header(header::HOST, host);
     match token {
-        Some(token) => builder.header("cf-access-jwt-assertion", token),
+        Some(token) => builder.header(TOKEN_HEADER, token),
         None => builder,
     }
 }
@@ -145,17 +151,44 @@ async fn a_token_signed_for_this_application_passes() {
     assert!(csp.contains("script-src 'self';"), "{csp}");
 }
 
+fn ec_token(key_id: &str) -> String {
+    let mut header = Header::new(Algorithm::ES256);
+    header.kid = Some(key_id.to_owned());
+    encode(
+        &header,
+        &json!({ "aud": AUDIENCE, "iss": ISSUER, "exp": u32::MAX }),
+        &EncodingKey::from_ec_pem(EC_PRIVATE_KEY).unwrap(),
+    )
+    .unwrap()
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_proxy_may_sign_with_an_elliptic_curve_key() {
+    let harness = harness().await;
+    let token = ec_token(EC_KEY_ID);
+    assert_eq!(status_with(&harness, Some(&token)).await, StatusCode::OK);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_token_cannot_choose_another_algorithm_than_its_key() {
+    let harness = harness().await;
+    let token = ec_token(KEY_ID);
+    assert_eq!(
+        status_with(&harness, Some(&token)).await,
+        StatusCode::FORBIDDEN
+    );
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn every_other_token_on_the_public_host_is_refused() {
     let harness = harness().await;
-    let issuer = format!("https://{TEAM}");
     assert_eq!(status_with(&harness, None).await, StatusCode::FORBIDDEN);
     for token in [
         "not-a-token".to_owned(),
-        token_with(KEY_ID, "another-application", &issuer, 300),
-        token_with(KEY_ID, AUDIENCE, "https://other.cloudflareaccess.com", 300),
-        token_with(KEY_ID, AUDIENCE, &issuer, -300),
-        token_with("unknown-key", AUDIENCE, &issuer, 300),
+        token_with(KEY_ID, "another-application", ISSUER, 300),
+        token_with(KEY_ID, AUDIENCE, "https://other.example.com", 300),
+        token_with(KEY_ID, AUDIENCE, ISSUER, -300),
+        token_with("unknown-key", AUDIENCE, ISSUER, 300),
     ] {
         assert_eq!(
             status_with(&harness, Some(&token)).await,
@@ -172,7 +205,7 @@ async fn a_token_signed_with_the_public_key_as_a_secret_is_refused() {
     header.kid = Some(KEY_ID.to_owned());
     let token = encode(
         &header,
-        &json!({ "aud": [AUDIENCE], "iss": format!("https://{TEAM}"), "exp": u32::MAX }),
+        &json!({ "aud": [AUDIENCE], "iss": ISSUER, "exp": u32::MAX }),
         &EncodingKey::from_secret(MODULUS.as_bytes()),
     )
     .unwrap();
@@ -201,7 +234,7 @@ async fn a_write_from_the_public_origin_passes_and_one_from_elsewhere_does_not()
             .header(header::HOST, HOST)
             .header(header::ORIGIN, origin)
             .header(header::CONTENT_TYPE, "application/json")
-            .header("cf-access-jwt-assertion", valid_token())
+            .header(TOKEN_HEADER, valid_token())
             .body(Body::from("{}"))
             .unwrap()
     };
@@ -215,7 +248,7 @@ async fn a_write_from_the_public_origin_passes_and_one_from_elsewhere_does_not()
 #[tokio::test(flavor = "multi_thread")]
 async fn an_unknown_key_cannot_keep_asking_for_the_certs() {
     let harness = harness().await;
-    let token = token_with("unknown-key", AUDIENCE, &format!("https://{TEAM}"), 300);
+    let token = token_with("unknown-key", AUDIENCE, ISSUER, 300);
     for _ in 0..5 {
         status_with(&harness, Some(&token)).await;
     }
