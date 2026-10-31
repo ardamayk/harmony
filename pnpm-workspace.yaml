@@ -31,3 +31,10 @@ allowBuilds:
   # Pulled in by @scalar/api-reference; only its prebuilt browser bundle is
   # served, so the Vue 2/3 switch script never needs to run.
   vue-demi: false
+
+auditConfig:
+  ignoreGhsas:
+    # minimatch's pattern DoS reaches only electron-builder and
+    # openapi-typescript, build tools that run on this repository's own globs;
+    # glob and rimraf there need the old majors, and no fixed one fits them.
+    - GHSA-g3hv-75wg-m249
