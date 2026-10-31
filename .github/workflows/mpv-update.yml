@@ -65,8 +65,6 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "24"
-      # mpv.ts extracts through `python3`, which a Windows runner names `python`.
-      - run: cp "$(command -v python)" "$(dirname "$(command -v python)")/python3.exe"
       - run: node scripts/desktop-windows/mpv-update.ts check-build
 
   ci:
