@@ -631,4 +631,50 @@ describe("BrowserPlaybackEngine", () => {
 		});
 		engine.destroy();
 	});
+
+	it("shows no error when a newer source interrupts a pending start", async () => {
+		const engine = new BrowserPlaybackEngine({
+			createMedia: () => media,
+			mediaSession: null,
+		});
+		let abortFirstStart: (reason: unknown) => void = () => undefined;
+		media.play.mockImplementationOnce(
+			() =>
+				new Promise<void>((_, reject) => {
+					abortFirstStart = reject;
+				}),
+		);
+		const firstStart = engine.play(trackSource);
+		await vi.waitFor(() => expect(media.play).toHaveBeenCalledOnce());
+
+		let finishSecondStart = () => {};
+		media.play.mockImplementationOnce(
+			() =>
+				new Promise<void>((resolve) => {
+					finishSecondStart = resolve;
+				}),
+		);
+		const newerSource = { ...trackSource, queueItemId: "queue-item-newer" };
+		const secondStart = engine.play(newerSource);
+		await vi.waitFor(() => expect(media.play).toHaveBeenCalledTimes(2));
+
+		// Firefox's wording; the second source is still buffering at this point.
+		abortFirstStart(
+			new DOMException(
+				"The fetching process for the media resource was aborted by the user agent at the user's request.",
+				"AbortError",
+			),
+		);
+		await expect(firstStart).resolves.toBeUndefined();
+		media.dispatchEvent(new Event("play"));
+
+		expect(engine.getState()).toMatchObject({
+			status: "playing",
+			error: null,
+			source: newerSource,
+		});
+		finishSecondStart();
+		await secondStart;
+		engine.destroy();
+	});
 });

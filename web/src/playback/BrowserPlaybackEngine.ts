@@ -187,6 +187,9 @@ export class BrowserPlaybackEngine implements PlaybackEngine {
 				);
 			}
 		} catch (error) {
+			// load() or pause() cut this start short, and whatever called them
+			// owns the state now: the Track did not fail.
+			if (hasErrorName(error, "AbortError")) return;
 			this.update({
 				status: "error",
 				error: {
@@ -706,6 +709,11 @@ function isLiveSource(
 	{ type: "radio-station" | "catalog-preview" }
 > {
 	return source?.type === "radio-station" || source?.type === "catalog-preview";
+}
+
+/** play() rejects with a named DOMException, which is not always an Error. */
+function hasErrorName(error: unknown, name: string): boolean {
+	return (error as { name?: unknown } | null | undefined)?.name === name;
 }
 
 function isHlsStream(url: string) {
