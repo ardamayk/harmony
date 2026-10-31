@@ -29,6 +29,7 @@ import {
 	RENDERER_SCHEME,
 } from "./security";
 import { PlaybackTray, type TrayAction, type TrayUpdate } from "./tray";
+import { startUpdateChecks } from "./updates";
 import { WindowManager } from "./windows";
 
 /** Settings directory shared with the core (and the former Tauri client). */
@@ -57,12 +58,13 @@ if (!app.requestSingleInstanceLock()) {
 
 async function start() {
 	const desktopDirectory = join(__dirname, "..");
-	const paths = shellPaths(desktopDirectory, process.env);
+	const paths = shellPaths(desktopDirectory, process.env, app.isPackaged);
 	const devOrigin = devServerOrigin(process.env);
 	const rendererUrl = devOrigin ?? RENDERER_ORIGIN;
 	const configDirectory = join(app.getPath("appData"), CONFIG_DIRECTORY_NAME);
 
 	await app.whenReady();
+	if (app.isPackaged) startUpdateChecks();
 
 	const core = new CoreProcess({
 		executable: paths.core,

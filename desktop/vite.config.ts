@@ -3,7 +3,7 @@ import { defineConfig } from "vite-plus";
 // The shell is two Node bundles Electron loads directly. They build
 // separately so neither imports a shared chunk: a sandboxed preload may only
 // require "electron", and must be CommonJS. `electron` comes from the runtime;
-// zod (the IPC schemas in main) is bundled, since the app ships no node_modules.
+// its runtime dependencies are bundled, since the app ships no node_modules.
 function bundle(name: string, entry: string) {
 	return {
 		entry: { [name]: entry },
@@ -12,7 +12,11 @@ function bundle(name: string, entry: string) {
 		target: "node24",
 		outDir: "dist",
 		clean: false,
-		deps: { neverBundle: ["electron"], onlyBundle: ["zod"] },
+		deps: {
+			neverBundle: ["electron"],
+			onlyBundle: false as const,
+			alwaysBundle: [/.*/],
+		},
 	};
 }
 

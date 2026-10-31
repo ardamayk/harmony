@@ -1,8 +1,14 @@
-# Windows package of the Desktop Client, built from WSL by
-# scripts/desktop-windows/cli.ts. Only the unpacked `dir` target for now;
-# installers (NSIS) come later.
+# Packages of the Desktop Client. release.yml publishes them to GitHub Releases,
+# where electron-updater (src/main/updates.ts) finds them; see ADR 0039.
+# Windows: scripts/desktop-windows/cli.ts, `dir` for development, `nsis` to ship.
+# Linux: AppImage without mpv, which links the distribution's FFmpeg.
 appId: audio.earthly.desktop
 productName: Harmony
+# Names the Linux executable and the updater cache; "@repo/desktop" fits neither.
+extraMetadata:
+  name: harmony
+  desktopName: harmony.desktop
+  author: ardamayk
 # Unpacked, so the shell's paths stay plain folders beside resources/core.
 asar: false
 # The shell bundles everything it imports, so no node_modules ship.
@@ -10,14 +16,13 @@ files:
   - dist/**
   - resources/**
   - package.json
+  - "!node_modules/**"
 directories:
   output: ../target/desktop-windows/out
 extraResources:
-  - from: ../target/desktop-windows/core
-    to: core
   - from: ../web/dist
     to: web/dist
-# Beside Harmony.exe, where a reader of the unpacked package finds them.
+# Beside the executable, where a reader of the unpacked package finds them.
 extraFiles:
   - from: ../LICENSE
     to: LICENSE.txt
@@ -25,10 +30,33 @@ extraFiles:
     to: licenses
   - from: ../web/public/third-party-notices.txt
     to: licenses/third-party-notices.txt
+publish:
+  provider: github
+  owner: ardamayk
+  repo: harmony
 win:
   target:
     - target: dir
       arch: [x64]
-  # Editing the exe's resources and signing need Wine on Linux.
+  extraResources:
+    - from: ../target/desktop-windows/core
+      to: core
+  # Editing the exe's resources and signing need Wine on Linux; the icon goes
+  # in through scripts/after-pack.mjs.
   signAndEditExecutable: false
+afterPack: scripts/after-pack.mjs
+nsis:
+  artifactName: Harmony-${version}-windows-x64-setup.${ext}
+linux:
+  target:
+    - target: AppImage
+      arch: [x64]
+  category: Audio
+  syncDesktopName: true
+  icon: resources/icon.png
+  extraResources:
+    - from: ../target/release/earthly-audio-core
+      to: core/earthly-audio-core
+appImage:
+  artifactName: Harmony-${version}-linux-x86_64.${ext}
 npmRebuild: false

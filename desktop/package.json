@@ -20,6 +20,9 @@
     "test:mpv:hardware": "cargo test --manifest-path core/Cargo.toml playback::tests::real_pinned_mpv_returns_from_exclusive_to_system_output -- --ignored --test-threads=1",
     "test:import-parity": "EARTHLY_AUDIO_MEDIA_PROXY_PORT=0 cargo test --manifest-path core/Cargo.toml --test managed_import_parity -- --ignored --test-threads=1"
   },
+  "dependencies": {
+    "electron-updater": "6.8.11"
+  },
   "devDependencies": {
     "@repo/desktop-bridge": "workspace:*",
     "@repo/tsconfig": "workspace:*",

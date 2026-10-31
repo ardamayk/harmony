@@ -1,12 +1,14 @@
 import { join, resolve } from "node:path";
 
-/** The default core. Windows only runs the packaged client, where
- * `desktopDirectory` is resources/app and the core ships in resources/core;
- * elsewhere it is the release core `cargo build --release` leaves. */
-const DEFAULT_CORE =
-	process.platform === "win32"
-		? "../core/earthly-audio-core.exe"
+/** The default core. In a packaged client `desktopDirectory` is resources/app
+ * and the core ships in resources/core; Windows only runs the packaged client.
+ * Elsewhere it is the release core `cargo build --release` leaves. */
+function defaultCore(packaged: boolean) {
+	if (process.platform === "win32") return "../core/earthly-audio-core.exe";
+	return packaged
+		? "../core/earthly-audio-core"
 		: "../target/release/earthly-audio-core";
+}
 
 export type ShellPaths = {
 	/** The Rust core binary. */
@@ -26,10 +28,12 @@ export type ShellPaths = {
 export function shellPaths(
 	desktopDirectory: string,
 	env: NodeJS.ProcessEnv,
+	packaged: boolean,
 ): ShellPaths {
 	return {
 		core: resolve(
-			env.EARTHLY_AUDIO_CORE_PATH ?? join(desktopDirectory, DEFAULT_CORE),
+			env.EARTHLY_AUDIO_CORE_PATH ??
+				join(desktopDirectory, defaultCore(packaged)),
 		),
 		rendererRoot: resolve(
 			env.EARTHLY_AUDIO_RENDERER_DIR ?? join(desktopDirectory, "../web/dist"),

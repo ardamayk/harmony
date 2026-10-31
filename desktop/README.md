@@ -26,7 +26,7 @@ mise run start
 
 `desktop:test` runs the core's Rust tests and the shell's Vite+ tests; `desktop:check` runs rustfmt and Clippy (the shell's TypeScript is checked by `web:check`).
 
-Native playback requires pinned mpv `0.41.0`. The desktop scripts validate `/usr/bin/mpv` (or `EARTHLY_AUDIO_MPV_PATH`) and stage it as an ignored sidecar in `core/binaries`; the release build puts it next to the core binary. No mpv binary is committed to Git. Release binary provenance, licensing review, and distribution bundles remain deferred.
+Native playback requires pinned mpv `0.41.0`. The desktop scripts validate `/usr/bin/mpv` (or `EARTHLY_AUDIO_MPV_PATH`) and stage it as an ignored sidecar in `core/binaries`; the release build puts it next to the core binary. No mpv binary is committed to Git. Packages and updates: `.github/workflows/release.yml` and [ADR 0039](../docs/adr/0039-desktop-client-updates-through-github-releases.md). The Linux AppImage uses the system mpv, which must be 0.41.0.
 
 The core starts one audio-only `--idle=yes` child with `--no-config`, so user mpv configuration is never loaded. It resolves an explicitly configured executable first, then the sidecar beside the core, then the staged one, then `/usr/bin/mpv`. It owns the private JSON IPC socket inside a random `0700` directory, changes the socket to `0600`, and removes the whole endpoint when the core exits.
 

@@ -1,12 +1,30 @@
 name: Release
 
-# A `v*` tag publishes the Windows Desktop Client as a GitHub Release and the
-# Music Server image under its version. Run by hand, it stops at the workflow
-# artifact and publishes nothing.
+# Every push to main that changes the Desktop Client publishes it to GitHub
+# Releases as 0.1.<run number>, where installed clients' electron-updater finds
+# it (ADR 0039). A `v*` tag publishes package.json's version and the Music
+# Server image under it. Run by hand, it stops at the workflow artifacts and
+# publishes nothing.
 on:
   push:
+    branches: [main]
     tags: ["v*"]
+    paths:
+      - desktop/**
+      - web/**
+      - packages/**
+      - scripts/desktop-windows/**
+      - licenses/**
+      - Cargo.lock
+      - pnpm-lock.yaml
+      - .github/workflows/release.yml
+      - "!**/*.md"
   workflow_dispatch:
+
+# Only the newest push on a ref is worth shipping.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -29,53 +47,103 @@ jobs:
       packages: write
     uses: ./.github/workflows/server-image.yml
 
+  version:
+    name: Version
+    needs: ci
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - id: version
+        run: |
+          version=$(jq -r .version desktop/package.json)
+          if [[ "$GITHUB_REF_TYPE" != tag ]]; then
+            # electron-updater only moves to a higher version.
+            version="${version%.*}.$GITHUB_RUN_NUMBER"
+          elif [[ "$GITHUB_REF_NAME" != "v$version" ]]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match desktop/package.json $version"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
   windows:
     name: Windows Desktop Client
-    needs: ci
+    needs: version
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2
+      - run: jq --arg version "$VERSION" '.version = $version' desktop/package.json > "$RUNNER_TEMP/package.json" && mv "$RUNNER_TEMP/package.json" desktop/package.json
+      # electron-builder runs the 32-bit NSIS stub under Wine to write the uninstaller.
+      - run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends mingw-w64 wine wine32:i386
+      - run: pnpm install --frozen-lockfile
+      - run: mise run web:build
+      # No build cache: a published package is built from this commit alone.
+      - run: node scripts/desktop-windows/cli.ts build --web-built --installer
+        env:
+          EARTHLY_AUDIO_WINDOWS_OUT: ${{ runner.temp }}/harmony-windows
+      # The GPL and LGPL parts' source travels with the binaries.
+      - run: |
+          sources="Harmony-$VERSION-windows-x64-sources"
+          mkdir "$RUNNER_TEMP/$sources"
+          while read -r url file; do
+            curl --fail --silent --show-error --location --retry 3 --output "$RUNNER_TEMP/$sources/$file" "$url"
+          done < licenses/mpv-windows/sources.txt
+          tar --create --file "target/desktop-windows/out/$sources.tar" --directory "$RUNNER_TEMP" "$sources"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: Harmony-${{ env.VERSION }}-windows-x64
+          path: |
+            target/desktop-windows/out/*.exe
+            target/desktop-windows/out/*.blockmap
+            target/desktop-windows/out/latest.yml
+            target/desktop-windows/out/*-sources.tar
+          retention-days: 14
+
+  linux:
+    name: Linux Desktop Client
+    needs: version
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2
+      - run: jq --arg version "$VERSION" '.version = $version' desktop/package.json > "$RUNNER_TEMP/package.json" && mv "$RUNNER_TEMP/package.json" desktop/package.json
+      - run: pnpm install --frozen-lockfile
+      - run: mise run web:build
+      - run: cargo build --release --manifest-path desktop/core/Cargo.toml
+      - run: pnpm --dir desktop run build:shell
+      - run: pnpm --dir desktop exec electron-builder --linux AppImage --x64 --config electron-builder.yml -c.directories.output=../target/desktop-linux/out --publish never
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: Harmony-${{ env.VERSION }}-linux-x86_64
+          path: |
+            target/desktop-linux/out/*.AppImage
+            target/desktop-linux/out/latest-linux.yml
+          retention-days: 14
+
+  # One step after both builds, so no release appears with a platform missing.
+  publish:
+    name: GitHub Release
+    needs: [version, windows, linux]
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2
-      - id: version
-        run: |
-          version=$(jq -r .version desktop/package.json)
-          if [[ "$GITHUB_REF" == refs/tags/* && "$GITHUB_REF_NAME" != "v$version" ]]; then
-            echo "::error::Tag $GITHUB_REF_NAME does not match desktop/package.json $version"
-            exit 1
-          fi
-          echo "name=Harmony-$version-windows-x64" >> "$GITHUB_OUTPUT"
-      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends mingw-w64
-      - run: pnpm install --frozen-lockfile
-      - run: mise run web:build
-      # No build cache: a published package is built from this tag alone.
-      - run: node scripts/desktop-windows/cli.ts build --web-built
-        env:
-          EARTHLY_AUDIO_WINDOWS_OUT: ${{ runner.temp }}/${{ steps.version.outputs.name }}
-      - working-directory: ${{ runner.temp }}
-        run: |
-          zip -qr "$NAME.zip" "$NAME"
-          sha256sum "$NAME.zip" > "$NAME.zip.sha256"
-          # The GPL and LGPL parts' source travels with the binaries.
-          mkdir "$NAME-sources"
-          while read -r url file; do
-            curl --fail --silent --show-error --location --retry 3 --output "$NAME-sources/$file" "$url"
-          done < "$GITHUB_WORKSPACE/licenses/mpv-windows/sources.txt"
-          tar --create --file "$NAME-sources.tar" "$NAME-sources"
-        env:
-          NAME: ${{ steps.version.outputs.name }}
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          name: ${{ steps.version.outputs.name }}
-          path: |
-            ${{ runner.temp }}/${{ steps.version.outputs.name }}.zip
-            ${{ runner.temp }}/${{ steps.version.outputs.name }}.zip.sha256
-            ${{ runner.temp }}/${{ steps.version.outputs.name }}-sources.tar
-          retention-days: 14
-      - if: startsWith(github.ref, 'refs/tags/v')
-        working-directory: ${{ runner.temp }}
-        run: gh release create "$GITHUB_REF_NAME" "$NAME.zip" "$NAME.zip.sha256" "$NAME-sources.tar" --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes
+          path: packages
+          merge-multiple: true
+      - working-directory: packages
+        run: gh release create "v$VERSION" ./* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --generate-notes
         env:
           GH_TOKEN: ${{ github.token }}
-          NAME: ${{ steps.version.outputs.name }}
+          VERSION: ${{ needs.version.outputs.version }}
