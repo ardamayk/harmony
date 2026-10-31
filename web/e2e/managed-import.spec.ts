@@ -542,14 +542,18 @@ test("Import Music dialog is keyboard accessible and cancelling cleans staging",
 	).toBeVisible({
 		timeout: 20_000,
 	});
+	// While the upload settles, Escape closes without a warning and keeps it going.
+	await expect(
+		dialog.getByRole("button", { name: "Confirm Import" }),
+	).toBeEnabled();
 	const prompts: string[] = [];
 	page.once("dialog", (prompt) => {
 		prompts.push(prompt.message());
 		void prompt.dismiss();
 	});
 	await page.keyboard.press("Escape");
+	await expect.poll(() => prompts).toEqual([CANCEL_PROMPT]);
 	await expect(dialog).toBeVisible();
-	expect(prompts).toEqual([CANCEL_PROMPT]);
 	expect(newStagingFiles(stagingBefore).length).toBeGreaterThan(0);
 
 	// Accepting the warning cancels the batch and removes staging.
