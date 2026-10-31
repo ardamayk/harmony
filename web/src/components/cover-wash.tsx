@@ -13,8 +13,8 @@ const TINT_STEP = "color-mix(in oklab, var(--cover-tint) 40%, transparent)";
 const TINT_END = "color-mix(in oklab, var(--cover-tint) 0%, transparent)";
 
 /** Dims the image; `IMAGE_EDGE` darkens it further where header text sits. */
-const IMAGE_VEIL = "color-mix(in oklab, var(--background) 56%, transparent)";
-const TEXT_VEIL = "color-mix(in oklab, var(--background) 55%, transparent)";
+const IMAGE_VEIL = "color-mix(in oklab, var(--background) 50%, transparent)";
+const TEXT_VEIL = "color-mix(in oklab, var(--background) 45%, transparent)";
 const SCROLL = "var(--cover-wash-scroll, 0px)";
 const BAND_HEIGHT = "var(--cover-wash-height, 0px)";
 const BAND_TOP = `calc(var(--cover-wash-top, 0px) - ${SCROLL})`;
@@ -23,14 +23,12 @@ function imageLayer(imageUrl: string) {
 	return `url(${JSON.stringify(imageUrl)})`;
 }
 
-// Sized and placed by `measure`, so the Top Nav's copy lines up. Past this
-// width only a slice of the image would fit the band's height.
-const IMAGE_MAX_WIDTH_REM = 48;
+// Sized and placed by `measure`, so the Top Nav's copy lines up.
 const IMAGE_WIDTH = "var(--cover-wash-image-width, 100%)";
 const IMAGE_LEFT = "var(--cover-wash-image-left, 0px)";
 const IMAGE_RIGHT = `calc(${IMAGE_LEFT} + ${IMAGE_WIDTH})`;
 /** Melts the image's sides into the page, slowly on the side with the text. */
-const IMAGE_EDGE = `linear-gradient(to right, var(--background) ${IMAGE_LEFT}, ${TEXT_VEIL} calc(${IMAGE_LEFT} + 16rem), transparent calc(${IMAGE_LEFT} + 32rem), transparent calc(${IMAGE_RIGHT} - 4rem), var(--background) ${IMAGE_RIGHT})`;
+const IMAGE_EDGE = `linear-gradient(to right, var(--background) ${IMAGE_LEFT}, ${TEXT_VEIL} calc(${IMAGE_LEFT} + 12rem), transparent calc(${IMAGE_LEFT} + 28rem), transparent calc(${IMAGE_RIGHT} - 4rem), var(--background) ${IMAGE_RIGHT})`;
 
 function bandImageStyle(imageUrl: string): CSSProperties {
 	return {
@@ -85,20 +83,14 @@ function keepWashOnBand(topNavWash: HTMLElement, band: HTMLElement | null) {
 			"--cover-wash-height",
 			`${band.getBoundingClientRect().height}px`,
 		);
-		// The image ends on the content's right edge.
-		const { paddingRight, fontSize } = getComputedStyle(band);
-		const contentRight =
-			band.getBoundingClientRect().width - Number.parseFloat(paddingRight);
-		const width = Math.min(
-			contentRight,
-			IMAGE_MAX_WIDTH_REM * Number.parseFloat(fontSize),
-		);
+		// The image spans what the band holds, edge to edge.
+		const bandBox = band.getBoundingClientRect();
+		const contentBox = (band.firstElementChild ?? band).getBoundingClientRect();
+		const width = contentBox.width;
+		const left = contentBox.left - bandBox.left;
 		for (const surface of [topNavWash, band]) {
 			surface.style.setProperty("--cover-wash-image-width", `${width}px`);
-			surface.style.setProperty(
-				"--cover-wash-image-left",
-				`${contentRight - width}px`,
-			);
+			surface.style.setProperty("--cover-wash-image-left", `${left}px`);
 		}
 	};
 	follow();
@@ -118,8 +110,8 @@ function keepWashOnBand(topNavWash: HTMLElement, band: HTMLElement | null) {
  * scroller's edges, behind the Queue Drawer too, and ends where the page's
  * list begins; no colour yet leaves the plain page background. The colour
  * runs up behind the Top Nav at the band's top step, then scrolls away with
- * the band. With `backdropUrl`, that image lies under the colour at the
- * band's right instead of the colour, veiled and fading into the page.
+ * the band. With `backdropUrl`, that image replaces the colour, across what
+ * the band holds, veiled and fading into the page.
  */
 export function CoverWash({
 	cacheKey,
