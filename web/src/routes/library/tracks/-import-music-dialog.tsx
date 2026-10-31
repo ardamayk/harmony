@@ -1,17 +1,20 @@
 import {
-	Check,
 	ChevronDown,
+	Circle,
 	CircleAlert,
 	CircleCheck,
 	CircleX,
 	Disc3,
 	LoaderCircle,
+	type LucideIcon,
 	X,
 } from "lucide-react";
 import { toast } from "@repo/ui";
 import {
 	type CSSProperties,
+	Fragment,
 	memo,
+	type ReactNode,
 	useEffect,
 	useId,
 	useRef,
@@ -61,6 +64,7 @@ export function ImportMusicDialog({
 }) {
 	const workflow = useManagedImportWorkflow({ onOpenChange, onCommitted });
 	const { isConfirming, isCompleted, entries, handleCancel } = workflow;
+	const isProcessing = entries.some((entry) => entry.state === "unresolved");
 	const wasConfirming = useRef(false);
 	// An open dialog shows its own results; a closed one ends with a toast.
 	useEffect(() => {
@@ -134,18 +138,7 @@ export function ImportMusicDialog({
 					 * `overflow-y-auto` + `overscroll-contain` child swallows wheel
 					 * events and the dialog stops scrolling with the mouse. */}
 					<div className="min-h-0 flex-1 overflow-y-auto overscroll-contain scrollbar-hidden">
-						{!workflow.isCompleted && workflow.batchId ? (
-							<ImportAlbumReview
-								batchId={workflow.batchId}
-								albums={workflow.albums}
-								decisions={workflow.albumDecisions}
-								isBusy={workflow.isSelectionLocked}
-								onChange={workflow.handleAlbumDecision}
-								onUploaded={workflow.handleArtworkUploaded}
-								onUploadStateChange={workflow.handleArtworkUploadState}
-							/>
-						) : null}
-						{!workflow.isCompleted ? (
+						{!workflow.isCompleted && !isProcessing ? (
 							<ImportFileAlternatives
 								entries={workflow.entries}
 								isBusy={workflow.isSelectionLocked}
@@ -165,8 +158,28 @@ export function ImportMusicDialog({
 							: null}
 						<ImportFileList
 							entries={workflow.entries}
-							isBusy={workflow.isSelectionLocked}
+							isBusy={workflow.isSelectionLocked || workflow.isCompleted}
 							isConfirming={workflow.isConfirming}
+							isProcessing={isProcessing}
+							renderAlbumHeader={(group) => {
+								const album = workflow.albums.find(
+									(candidate) => candidate.key === group.key,
+								);
+								return album && workflow.batchId && !workflow.isCompleted ? (
+									<ImportAlbumReview
+										batchId={workflow.batchId}
+										album={album}
+										decisions={workflow.albumDecisions}
+										trackCount={group.entries.length}
+										isBusy={workflow.isSelectionLocked}
+										onChange={workflow.handleAlbumDecision}
+										onUploaded={workflow.handleArtworkUploaded}
+										onUploadStateChange={workflow.handleArtworkUploadState}
+									/>
+								) : (
+									<ImportAlbumHeader group={group} />
+								);
+							}}
 							onSelectionChange={workflow.handleSelectionChange}
 							onDuplicateDecisionChange={workflow.handleDuplicateDecisionChange}
 						/>
@@ -181,14 +194,16 @@ export function ImportMusicDialog({
 								Retry failed uploads
 							</Button>
 						) : null}
-						{workflow.canConfirm &&
-						workflow.entries.some((entry) => entry.state !== "accepted") ? (
+						{workflow.canConfirm ? (
 							<p className="text-caption text-sm">
-								{
-									workflow.entries.filter((entry) => entry.state !== "accepted")
-										.length
-								}{" "}
-								unsuccessful files will not be imported.
+								{workflow.entries.some((entry) => entry.state !== "accepted")
+									? `${
+											workflow.entries.filter(
+												(entry) => entry.state !== "accepted",
+											).length
+										} unsuccessful files will not be imported. `
+									: ""}
+								Nothing is added to your library until you confirm.
 							</p>
 						) : null}
 						<ImportDialogFooter
@@ -446,7 +461,7 @@ function groupImportEntries(entries: ImportFileEntry[]): ImportAlbumGroup[] {
 		const file = entry.preview?.file;
 		const album = file?.album ?? "Selected files";
 		const artists = (file?.albumArtists ?? file?.artists ?? []).join(", ");
-		const key = JSON.stringify([album, artists]);
+		const key = file?.albumKey ?? JSON.stringify([album, artists]);
 		let group = groups.get(key);
 		if (!group) {
 			group = { key, album, artists, entries: [] };
@@ -457,40 +472,52 @@ function groupImportEntries(entries: ImportFileEntry[]): ImportAlbumGroup[] {
 	return Array.from(groups.values());
 }
 
-function ImportFileList({
+export function ImportFileList({
 	entries,
 	isBusy,
 	isConfirming,
+	isProcessing,
+	renderAlbumHeader,
 	onSelectionChange,
 	onDuplicateDecisionChange,
 }: {
 	entries: ImportFileEntry[];
 	isBusy: boolean;
 	isConfirming: boolean;
+	isProcessing: boolean;
+	renderAlbumHeader: (group: ImportAlbumGroup) => ReactNode;
 	onSelectionChange: (key: string, selected: boolean) => void;
 	onDuplicateDecisionChange: (key: string, decision: DuplicateDecision) => void;
 }) {
 	if (entries.length === 0) return null;
+	const renderRow = (entry: ImportFileEntry, albumArtists: string) => (
+		<ImportFileRow
+			key={entry.key}
+			entry={entry}
+			albumArtists={albumArtists}
+			isBusy={isBusy}
+			isConfirming={isConfirming}
+			isProcessing={isProcessing}
+			onSelectionChange={onSelectionChange}
+			onDuplicateDecisionChange={onDuplicateDecisionChange}
+		/>
+	);
 	return (
 		<section
 			aria-label="Import Preview"
 			className="outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
 		>
 			<h3 className="sr-only">Import Preview</h3>
-			{groupImportEntries(entries).flatMap((group) => [
-				<ImportAlbumHeader key={`album-${group.key}`} group={group} />,
-				...group.entries.map((entry) => (
-					<ImportFileRow
-						key={entry.key}
-						entry={entry}
-						albumArtists={group.artists}
-						isBusy={isBusy}
-						isConfirming={isConfirming}
-						onSelectionChange={onSelectionChange}
-						onDuplicateDecisionChange={onDuplicateDecisionChange}
-					/>
-				)),
-			])}
+			{/* Rows hold their place while files are processed: grouping them
+			 * as each preview arrives would push the list around. */}
+			{isProcessing
+				? entries.map((entry) => renderRow(entry, ""))
+				: groupImportEntries(entries).flatMap((group) => [
+						<Fragment key={`album-${group.key}`}>
+							{renderAlbumHeader(group)}
+						</Fragment>,
+						...group.entries.map((entry) => renderRow(entry, group.artists)),
+					])}
 		</section>
 	);
 }
@@ -520,6 +547,7 @@ const ImportFileRow = memo(function ImportFileRow({
 	albumArtists,
 	isConfirming,
 	isBusy,
+	isProcessing,
 	onSelectionChange,
 	onDuplicateDecisionChange,
 }: {
@@ -527,53 +555,72 @@ const ImportFileRow = memo(function ImportFileRow({
 	albumArtists: string;
 	isConfirming: boolean;
 	isBusy: boolean;
+	isProcessing: boolean;
 	onSelectionChange: (key: string, selected: boolean) => void;
 	onDuplicateDecisionChange: (key: string, decision: DuplicateDecision) => void;
 }) {
 	const [isExpanded, setIsExpanded] = useState(false);
 	const detailsId = useId();
 	const filename = entry.preview?.file.originalFilename ?? entry.file.name;
-	const duplicateClassification =
-		entry.preview?.duplicateClassification ?? "none";
+	const status = importStatus(entry, isConfirming);
+	const canSelect =
+		entry.state === "accepted" &&
+		!isProcessing &&
+		!(isConfirming && entry.selected);
 	const isUploading =
 		entry.phase === "uploading" ||
 		(!entry.phase && entry.state === "unresolved" && entry.progress < 100);
 	return (
-		<article className="border-border/50 border-b px-4 py-2 transition-colors hover:bg-muted/20 sm:px-6">
+		<article className="relative border-border/50 border-b px-4 py-2 transition-colors hover:bg-muted/20 sm:px-6">
 			<div className="flex min-h-10 items-center gap-3">
-				{duplicateClassification === "none" ? (
+				{canSelect ? (
 					<SelectionCheckbox
 						label={`Select ${filename}`}
 						checked={entry.selected}
-						disabled={isBusy || entry.state !== "accepted"}
+						disabled={isBusy}
 						onChange={(selected) => onSelectionChange(entry.key, selected)}
 					/>
 				) : (
-					<DuplicateMarker classification={duplicateClassification} />
+					<status.Icon
+						aria-hidden="true"
+						className={cn(
+							"size-4 shrink-0",
+							status.className,
+							status.isActive && "motion-safe:animate-spin",
+						)}
+					/>
 				)}
-				<span className="min-w-0 flex-1">
+				<div className="min-w-0 flex-1">
 					<span
 						className={cn(
-							"block text-heading text-sm",
+							"block text-sm",
+							entry.state === "unresolved" ? "text-caption" : "text-heading",
 							isExpanded ? "break-words" : "truncate",
 						)}
 						title={entry.preview?.file.title ?? filename}
 					>
 						{entry.preview?.file.title ?? filename}
 					</span>
-					<RowCaption
-						entry={entry}
-						albumArtists={albumArtists}
-						isExpanded={isExpanded}
-					/>
-				</span>
+					{/* Sits in the row's second line, so an upload never changes its height. */}
+					{entry.phase === "uploading" || entry.phase === "retry_wait" ? (
+						<ImportTransferDetails entry={entry} />
+					) : (
+						<RowCaption
+							entry={entry}
+							albumArtists={albumArtists}
+							isExpanded={isExpanded}
+						/>
+					)}
+				</div>
 				<span className="flex shrink-0 items-center gap-2">
 					{isUploading ? (
 						<span className="text-caption text-xs tabular-nums">
 							{entry.progress}%
 						</span>
 					) : null}
-					<StatusBadge entry={entry} isConfirming={isConfirming} />
+					<span className={cn("text-xs", status.className)}>
+						{status.label}
+					</span>
 					<Button
 						type="button"
 						variant="muted"
@@ -597,11 +644,8 @@ const ImportFileRow = memo(function ImportFileRow({
 				<ProgressBar
 					label={`${filename} upload progress`}
 					percent={entry.progress}
-					className="h-1.5"
+					className="absolute inset-x-0 bottom-0 h-0.5 rounded-none"
 				/>
-			) : null}
-			{entry.phase === "uploading" || entry.phase === "retry_wait" ? (
-				<ImportTransferDetails entry={entry} />
 			) : null}
 			{isExpanded ? (
 				<div
@@ -614,12 +658,16 @@ const ImportFileRow = memo(function ImportFileRow({
 					<ImportTransferDetails entry={entry} isExpanded />
 				</div>
 			) : null}
-			<DuplicateReview
-				entry={entry}
-				isBusy={isBusy}
-				onDecisionChange={onDuplicateDecisionChange}
-			/>
-			<ImportErrors message={entry.errorMessage} />
+			{isProcessing ? null : (
+				<>
+					<DuplicateReview
+						entry={entry}
+						isBusy={isBusy}
+						onDecisionChange={onDuplicateDecisionChange}
+					/>
+					<ImportErrors message={entry.errorMessage} />
+				</>
+			)}
 		</article>
 	);
 });
@@ -669,84 +717,75 @@ function SelectionCheckbox({
 	);
 }
 
-function DuplicateMarker({
-	classification,
-}: {
-	classification: "exact_duplicate";
-}) {
-	const Icon = classification === "exact_duplicate" ? CircleX : CircleAlert;
-	return (
-		<Icon
-			aria-hidden="true"
-			className={cn(
-				"size-4 shrink-0",
-				classification === "exact_duplicate"
-					? "text-destructive"
-					: "text-caption",
-			)}
-		/>
-	);
-}
-
-function StatusBadge({
-	entry,
-	isConfirming,
-}: {
-	entry: ImportFileEntry;
-	isConfirming: boolean;
-}) {
-	if (isConfirming && entry.selected && !entry.outcome) {
-		return (
-			<span className="flex items-center gap-2 text-caption text-xs">
-				<LoaderCircle aria-hidden="true" className="size-3 animate-spin" />
-				Importing…
-			</span>
-		);
-	}
-	const badge = entry.outcome
-		? outcomeBadges[entry.outcome]
-		: stateBadges[entry.state];
-	return (
-		<span
-			className={cn(
-				"inline-flex items-center gap-1 text-xs [&>svg]:size-3",
-				badge.variant === "destructive" ? "text-destructive" : "text-caption",
-			)}
-		>
-			<badge.Icon aria-hidden="true" className={badge.iconClassName} />
-			{entry.state === "unresolved" ? importPhaseLabel(entry) : badge.label}
-		</span>
-	);
-}
-
-type StatusBadgeSpec = {
+type ImportStatus = {
 	label: string;
-	variant: "default" | "secondary" | "destructive" | "outline";
-	iconClassName?: string;
-	Icon: typeof Check;
+	className: string;
+	Icon: LucideIcon;
+	isActive?: boolean;
 };
 
-const stateBadges: Record<ImportFileEntry["state"], StatusBadgeSpec> = {
-	accepted: { label: "Accepted", variant: "outline", Icon: CircleCheck },
-	rejected: { label: "Rejected", variant: "destructive", Icon: CircleX },
-	unresolved: { label: "Unresolved", variant: "secondary", Icon: LoaderCircle },
-	completed: { label: "Completed", variant: "default", Icon: CircleCheck },
-};
+const doneStatus = (label: string): ImportStatus => ({
+	label,
+	className: "text-success",
+	Icon: CircleCheck,
+});
 
-const outcomeBadges: Record<
-	NonNullable<ImportFileEntry["outcome"]>,
-	StatusBadgeSpec
+const failedStatus = (label: string): ImportStatus => ({
+	label,
+	className: "text-destructive",
+	Icon: CircleX,
+});
+
+const stateStatuses: Record<
+	Exclude<ImportFileEntry["state"], "unresolved">,
+	ImportStatus
 > = {
-	imported: { label: "Imported", variant: "default", Icon: CircleCheck },
-	replaced: { label: "Replaced", variant: "default", Icon: CircleCheck },
-	rejected: { label: "Rejected", variant: "destructive", Icon: CircleX },
-	failed: { label: "Failed", variant: "destructive", Icon: CircleX },
+	accepted: doneStatus("Accepted"),
+	rejected: failedStatus("Rejected"),
+	completed: doneStatus("Completed"),
+};
+
+const outcomeStatuses: Record<
+	NonNullable<ImportFileEntry["outcome"]>,
+	ImportStatus
+> = {
+	imported: doneStatus("Imported"),
+	replaced: doneStatus("Replaced"),
+	rejected: failedStatus("Rejected"),
+	failed: failedStatus("Failed"),
 	not_attempted: {
 		label: "Not attempted",
-		variant: "secondary",
+		className: "text-caption",
 		Icon: CircleAlert,
 	},
 };
+
+function importStatus(
+	entry: ImportFileEntry,
+	isConfirming: boolean,
+): ImportStatus {
+	if (isConfirming && entry.selected && !entry.outcome)
+		return {
+			label: "Importing…",
+			className: "text-foreground",
+			Icon: LoaderCircle,
+			isActive: true,
+		};
+	if (entry.outcome) return outcomeStatuses[entry.outcome];
+	if (entry.state !== "unresolved") return stateStatuses[entry.state];
+	const label = importPhaseLabel(entry);
+	return !entry.phase ||
+		entry.phase === "queued" ||
+		entry.phase === "retry_wait"
+		? { label, className: "text-caption", Icon: Circle }
+		: {
+				label,
+				className:
+					entry.phase === "validating" ? "text-warning" : "text-foreground",
+				Icon: LoaderCircle,
+				isActive: true,
+			};
+}
 
 function DuplicateReview({
 	entry,

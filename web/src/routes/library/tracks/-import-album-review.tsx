@@ -2,8 +2,7 @@ import type {
 	ManagedImportAlbumDecision,
 	ManagedImportAlbumPreview,
 } from "@repo/api-client";
-import { useId, useState } from "react";
-import { Input } from "#/components/ui/input";
+import { useState } from "react";
 import { Label } from "#/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "#/components/ui/radio-group";
 import {
@@ -20,36 +19,16 @@ import type { ImportFileEntry } from "./-managed-import-workflow";
 
 type Props = {
 	batchId: string;
-	albums: ManagedImportAlbumPreview[];
+	album: ManagedImportAlbumPreview;
 	decisions: Record<string, ManagedImportAlbumDecision>;
+	trackCount: number;
 	isBusy: boolean;
 	onChange: (decision: ManagedImportAlbumDecision) => void;
 	onUploaded: () => Promise<void>;
 	onUploadStateChange: (isUploading: boolean) => void;
 };
 
-export function ImportAlbumReview(props: Props) {
-	if (props.albums.length === 0) return null;
-	return (
-		<div className="grid gap-4 px-4 py-4 sm:px-6">
-			<div className="space-y-1">
-				<h3 className="font-medium text-heading">Review albums and covers</h3>
-				<p className="text-sm text-caption">
-					Your file tags determine the album destination. Review the cover
-					before importing. Nothing is added to your library until you confirm.
-				</p>
-			</div>
-			{props.albums.map((album) => (
-				<AlbumReview key={album.key} {...props} album={album} />
-			))}
-		</div>
-	);
-}
-
-function AlbumReview({
-	album,
-	...props
-}: Props & { album: ManagedImportAlbumPreview }) {
+export function ImportAlbumReview({ album, ...props }: Props) {
 	const decision = props.decisions[album.key] ?? defaultAlbumDecision(album);
 	const existing = decision.createSeparate
 		? undefined
@@ -58,7 +37,6 @@ function AlbumReview({
 			);
 	const [error, setError] = useState("");
 	const [isUploading, setIsUploading] = useState(false);
-	const uploadId = useId();
 	const isDisabled = props.isBusy || isUploading;
 	async function upload(file: File | undefined) {
 		if (!file) return;
@@ -89,58 +67,57 @@ function AlbumReview({
 	return (
 		<fieldset
 			disabled={isDisabled}
-			className="grid gap-4 rounded-lg border border-border bg-card/40 p-4 disabled:opacity-60"
+			className="flex flex-wrap items-start gap-x-6 gap-y-4 border-border border-b bg-card/40 px-4 py-4 disabled:opacity-60 sm:px-6"
 		>
-			<legend className="px-1 font-medium text-heading">
+			<legend className="sr-only">
 				{album.title} — {album.albumArtists.join(", ")}
 			</legend>
-			<AlbumDestination
-				album={album}
-				decision={decision}
-				isDisabled={isDisabled}
-				onChange={props.onChange}
-			/>
-			{existing?.hasArtwork ? (
-				<p className="text-caption text-sm">
-					Existing Album cover will be preserved.
-				</p>
-			) : (
-				<>
-					<ImportCoverPicker
-						batchId={props.batchId}
-						album={album}
-						decision={decision}
-						onChange={props.onChange}
-					/>
-					<div className="grid gap-2">
-						<Label htmlFor={uploadId} className="font-normal leading-normal">
-							Upload another cover · JPG or PNG, maximum 20 MiB
-						</Label>
-						<Input
-							id={uploadId}
-							aria-label={`Upload cover for ${album.title}`}
-							type="file"
-							accept=".jpg,.jpeg,.png,image/jpeg,image/png"
-							onChange={(event) => {
-								void upload(event.target.files?.[0]);
-								event.target.value = "";
-							}}
-						/>
-					</div>
-					{existing ? (
-						<p className="text-caption text-sm">
-							Your import confirmation also approves adding this cover to the
-							existing Album.
-						</p>
-					) : null}
-				</>
+			{existing?.hasArtwork ? null : (
+				<ImportCoverPicker
+					batchId={props.batchId}
+					album={album}
+					decision={decision}
+					onChange={props.onChange}
+					onUpload={(file) => void upload(file)}
+				/>
 			)}
-			{isUploading ? <p aria-live="polite">Uploading artwork…</p> : null}
-			{error ? (
-				<p role="alert" className="text-destructive text-sm">
-					{error}
-				</p>
-			) : null}
+			<div className="grid min-w-64 flex-1 gap-3">
+				<div>
+					<h4 className="break-words font-medium text-heading">
+						{album.title}
+					</h4>
+					<p className="break-words text-caption text-sm">
+						{album.albumArtists.join(", ")} · {props.trackCount}{" "}
+						{props.trackCount === 1 ? "track" : "tracks"}
+					</p>
+				</div>
+				<AlbumDestination
+					album={album}
+					decision={decision}
+					isDisabled={isDisabled}
+					onChange={props.onChange}
+				/>
+				{existing?.hasArtwork ? (
+					<p className="text-caption text-sm">
+						Existing Album cover will be preserved.
+					</p>
+				) : existing ? (
+					<p className="text-caption text-sm">
+						Your import confirmation also approves adding this cover to the
+						existing Album.
+					</p>
+				) : null}
+				{isUploading ? (
+					<p aria-live="polite" className="text-caption text-sm">
+						Uploading artwork…
+					</p>
+				) : null}
+				{error ? (
+					<p role="alert" className="text-destructive text-sm">
+						{error}
+					</p>
+				) : null}
+			</div>
 		</fieldset>
 	);
 }
@@ -158,13 +135,11 @@ function AlbumDestination({
 }) {
 	return (
 		<div className="grid gap-2 text-sm">
-			<p className="font-medium text-heading">Album destination</p>
 			{album.existingAlbums.length === 0 ? (
-				<div className="rounded-md border border-border bg-secondary/40 px-3 py-3">
+				<div>
 					<p className="font-medium text-foreground">Create new album</p>
-					<p className="mt-1 text-caption">
-						No library album matches this title and album artist. A new album
-						will be created when you confirm.
+					<p className="text-caption">
+						No library album matches this title and album artist.
 					</p>
 				</div>
 			) : (

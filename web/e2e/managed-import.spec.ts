@@ -266,7 +266,7 @@ test("Settings Import Music action imports a mixed valid and invalid batch throu
 	await expect(
 		untitledRow.getByRole("list", { name: "Import errors" }),
 	).not.toBeEmpty();
-	await expect(untitledRow.getByRole("checkbox")).toBeDisabled();
+	await expect(untitledRow.getByRole("checkbox")).toHaveCount(0);
 	await expect(
 		alphaRow.getByRole("checkbox", { name: "Select alpha.mp3" }),
 	).toBeChecked();

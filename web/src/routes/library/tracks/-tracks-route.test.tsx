@@ -1124,10 +1124,8 @@ describe("tracks route", () => {
 		expect(preview.parentElement?.className).toContain("overscroll-contain");
 		expect(preview.parentElement?.className).toContain("scrollbar-hidden");
 		expect(
-			screen
-				.getByRole("checkbox", { name: "Select broken.flac" })
-				.getAttribute("aria-disabled"),
-		).toBe("true");
+			screen.queryByRole("checkbox", { name: "Select broken.flac" }),
+		).toBeNull();
 		expect(
 			screen
 				.getByRole("checkbox", { name: "Select track.flac" })
@@ -1371,10 +1369,8 @@ describe("tracks route", () => {
 		fireEvent.click(acceptedCheckbox);
 		expect(acceptedCheckbox.getAttribute("aria-checked")).toBe("true");
 		expect(
-			screen
-				.getByRole("checkbox", { name: "Select broken.flac" })
-				.getAttribute("aria-disabled"),
-		).toBe("true");
+			screen.queryByRole("checkbox", { name: "Select broken.flac" }),
+		).toBeNull();
 
 		fireEvent.click(screen.getByRole("button", { name: "Confirm Import" }));
 
@@ -2191,12 +2187,12 @@ describe("tracks route", () => {
 				],
 			},
 		});
-		const checkbox = await screen.findByRole("checkbox", {
-			name: "Select strict-import.flac",
-		});
+		await screen.findByRole("checkbox", { name: "Select strict-import.flac" });
 		fireEvent.click(screen.getByRole("button", { name: "Confirm Import" }));
 		await vi.waitFor(() =>
-			expect(checkbox.getAttribute("aria-disabled")).toBe("true"),
+			expect(
+				screen.queryByRole("checkbox", { name: "Select strict-import.flac" }),
+			).toBeNull(),
 		);
 		finishConfirmation?.();
 	});
@@ -2248,16 +2244,16 @@ describe("tracks route", () => {
 				],
 			},
 		});
-		const checkbox = await screen.findByRole("checkbox", {
-			name: "Select strict-import.flac",
-		});
+		await screen.findByRole("checkbox", { name: "Select strict-import.flac" });
 		fireEvent.click(screen.getByRole("button", { name: "Confirm Import" }));
 		await waitFor(() =>
 			expect(mocks.confirmManagedImportBatch).toHaveBeenCalled(),
 		);
 		await act(() => new Promise((resolve) => setTimeout(resolve)));
 		expect(screen.queryByText("confirmation response lost")).toBeNull();
-		expect(checkbox.getAttribute("aria-disabled")).toBe("true");
+		expect(
+			screen.queryByRole("checkbox", { name: "Select strict-import.flac" }),
+		).toBeNull();
 		expect(
 			screen.getByRole("button", { name: "Close Import Music" }),
 		).toHaveProperty("disabled", false);

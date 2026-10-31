@@ -2,7 +2,7 @@ import type {
 	ManagedImportAlbumDecision,
 	ManagedImportAlbumPreview,
 } from "@repo/api-client";
-import { Check, ImageOff } from "lucide-react";
+import { Check, ImageOff, ImagePlus } from "lucide-react";
 import { useId, useState } from "react";
 import { apiClient } from "#/lib/api";
 import { cn } from "#/lib/utils";
@@ -12,11 +12,13 @@ export function ImportCoverPicker({
 	album,
 	decision,
 	onChange,
+	onUpload,
 }: {
 	batchId: string;
 	album: ManagedImportAlbumPreview;
 	decision: ManagedImportAlbumDecision;
 	onChange: (decision: ManagedImportAlbumDecision) => void;
+	onUpload: (file: File | undefined) => void;
 }) {
 	const groupId = useId();
 	const selectedId =
@@ -33,33 +35,17 @@ export function ImportCoverPicker({
 			label: artwork.jobId
 				? `Embedded cover ${index + 1}`
 				: `Uploaded cover ${index + 1}`,
+			caption: artwork.jobId ? "Embedded" : "Uploaded",
 			src: apiClient.getManagedImportArtworkUrl(batchId, artwork.id),
 		})),
-		{ id: "none", label: "No cover", src: undefined },
+		{ id: "none", label: "No cover", caption: "No cover", src: undefined },
 	];
 	return (
-		<fieldset className="grid gap-3">
-			<legend className="mb-1 font-medium text-heading text-sm">
-				Album cover
-			</legend>
-			<p className="text-caption text-sm">
-				{album.artworks.length > 1
-					? "Different covers were found. Choose one for this album, upload another, or continue without a cover."
-					: album.artworks.length === 1
-						? "One cover is available. Keep it, upload another image, or continue without a cover."
-						: "No embedded cover was found. Upload an image or continue without a cover."}
-			</p>
-			<div className="flex flex-wrap gap-3">
+		<fieldset className="grid gap-2">
+			<legend className="sr-only">Album cover</legend>
+			<div className="flex flex-wrap gap-2">
 				{options.map((option) => (
-					<label
-						key={option.id}
-						className={cn(
-							"relative grid w-32 cursor-pointer gap-2 rounded-md border bg-secondary/30 p-2 text-sm transition-colors focus-within:ring-2 focus-within:ring-ring",
-							selectedId === option.id
-								? "border-primary bg-primary/10"
-								: "border-border hover:bg-secondary/60",
-						)}
-					>
+					<label key={option.id} className={coverTileClassName}>
 						<input
 							type="radio"
 							name={groupId}
@@ -75,16 +61,21 @@ export function ImportCoverPicker({
 								})
 							}
 						/>
-						{option.src ? (
-							<CoverPreview src={option.src} label={option.label} />
-						) : (
-							<div className="flex aspect-square w-full items-center justify-center rounded-md bg-secondary text-caption">
-								<ImageOff className="size-8" aria-hidden="true" />
-							</div>
-						)}
-						<span className="text-center font-medium text-foreground text-xs">
-							{option.label}
+						<span
+							className={cn(
+								"block overflow-hidden rounded-md ring-2 ring-offset-2 ring-offset-background transition-shadow",
+								selectedId === option.id ? "ring-primary" : "ring-transparent",
+							)}
+						>
+							{option.src ? (
+								<CoverPreview src={option.src} label={option.label} />
+							) : (
+								<span className={coverPlaceholderClassName}>
+									<ImageOff className="size-6" aria-hidden="true" />
+								</span>
+							)}
 						</span>
+						{option.caption}
 						{selectedId === option.id ? (
 							<span className="absolute top-1 right-1 rounded-full bg-primary p-1 text-primary-foreground">
 								<Check className="size-3" aria-hidden="true" />
@@ -93,10 +84,38 @@ export function ImportCoverPicker({
 						) : null}
 					</label>
 				))}
+				<label className={coverTileClassName}>
+					<input
+						type="file"
+						className="absolute inset-0 z-10 m-0 size-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
+						aria-label={`Upload cover for ${album.title}`}
+						accept=".jpg,.jpeg,.png,image/jpeg,image/png"
+						onChange={(event) => {
+							onUpload(event.target.files?.[0]);
+							event.target.value = "";
+						}}
+					/>
+					<span className={coverPlaceholderClassName}>
+						<ImagePlus className="size-6" aria-hidden="true" />
+					</span>
+					Upload
+				</label>
 			</div>
+			<p className="max-w-80 text-caption text-xs">
+				{album.artworks.length > 1
+					? "Different covers were found. Choose one, or upload a JPG or PNG up to 20 MiB."
+					: album.artworks.length === 1
+						? "Upload a JPG or PNG up to 20 MiB to use another cover."
+						: "No embedded cover was found. Upload a JPG or PNG up to 20 MiB, or continue without a cover."}
+			</p>
 		</fieldset>
 	);
 }
+
+const coverTileClassName =
+	"relative grid w-24 cursor-pointer gap-1 rounded-md text-center text-caption text-xs transition-colors focus-within:ring-2 focus-within:ring-ring hover:text-heading";
+const coverPlaceholderClassName =
+	"flex aspect-square w-full items-center justify-center rounded-md bg-secondary";
 
 function CoverPreview({ src, label }: { src: string; label: string }) {
 	const [hasError, setHasError] = useState(false);
