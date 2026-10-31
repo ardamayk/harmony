@@ -40,11 +40,14 @@ const DEFAULT_VOLUME: f64 = 0.8;
 const GAPLESS_APPEND_LEAD_SECONDS: f64 = 10.0;
 const EVENT_POLL_INTERVAL: Duration = Duration::from_millis(50);
 const MPV_COMMAND_TIMEOUT: Duration = Duration::from_secs(5);
+/// Linux uses the distribution's mpv, so this is the oldest it accepts: 0.38
+/// added the `loadfile` index argument `load_at` sends.
 #[cfg(not(windows))]
-const MPV_PINNED_VERSION: &str = include_str!("../mpv-version.txt");
-/// The official mpv 0.41.0 Windows release build reports its git version.
+const MPV_REQUIRED_VERSION: &str = include_str!("../mpv-minimum-version.txt");
+/// The Windows package carries its own mpv. The official 0.41.0 release build
+/// reports its git version.
 #[cfg(windows)]
-const MPV_PINNED_VERSION: &str = include_str!("../mpv-windows-version.txt");
+const MPV_REQUIRED_VERSION: &str = include_str!("../mpv-windows-version.txt");
 const MPV_START_TIMEOUT: Duration = Duration::from_secs(3);
 const MPV_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(1);
 const PLAYBACK_FAILED_MESSAGE: &str = "Playback failed. Check the source and try again.";
@@ -543,7 +546,7 @@ fn remove_ipc_directory(path: &Path, context: &str) {
 pub struct MpvStatus {
     /// The executable starts and answers `--version`.
     pub available: bool,
-    /// The found version equals the pinned version this Desktop Client requires.
+    /// The found version satisfies what this Desktop Client requires.
     pub pinned: bool,
     pub pinned_version: String,
     pub version: Option<String>,
@@ -555,7 +558,7 @@ pub fn probe_mpv_status() -> MpvStatus {
 }
 
 fn probe_mpv_binary(binary: &Path) -> MpvStatus {
-    let pinned_version = MPV_PINNED_VERSION.trim().to_owned();
+    let pinned_version = MPV_REQUIRED_VERSION.trim().to_owned();
     let mut command = Command::new(binary);
     command.arg("--version");
     #[cfg(windows)]
@@ -578,17 +581,51 @@ fn probe_mpv_binary(binary: &Path) -> MpvStatus {
     let version = String::from_utf8_lossy(&output.stdout)
         .lines()
         .next()
-        .and_then(|line| line.strip_prefix("mpv v"))
-        .map(|rest| rest.split_whitespace().next().unwrap_or(rest).to_owned());
+        .and_then(mpv_version_from_banner);
     let available = output.status.success() && version.is_some();
-    let pinned = available && version.as_deref() == Some(pinned_version.as_str());
+    let pinned = available
+        && version
+            .as_deref()
+            .is_some_and(|found| mpv_version_satisfies(found, &pinned_version));
     MpvStatus {
         available,
         pinned,
-        detail: (!pinned).then(|| format!("expected pinned mpv {pinned_version}")),
+        detail: (!pinned).then(|| format!("expected {}", mpv_requirement(&pinned_version))),
         pinned_version,
         version,
     }
+}
+
+/// Arch prints `mpv v0.41.0 Copyright…`, Debian and Ubuntu `mpv 0.41.0 Copyright…`.
+fn mpv_version_from_banner(line: &str) -> Option<String> {
+    let rest = line.strip_prefix("mpv ")?;
+    let version = rest.split_whitespace().next()?;
+    Some(version.strip_prefix('v').unwrap_or(version).to_owned())
+}
+
+#[cfg(windows)]
+fn mpv_version_satisfies(found: &str, required: &str) -> bool {
+    found == required
+}
+
+/// A version with no release number is a git build, newer than any release.
+#[cfg(not(windows))]
+fn mpv_version_satisfies(found: &str, required: &str) -> bool {
+    fn release(version: &str) -> Option<(u32, u32)> {
+        let mut numbers = version.split('.');
+        Some((numbers.next()?.parse().ok()?, numbers.next()?.parse().ok()?))
+    }
+    release(found).is_none_or(|found| release(required).is_none_or(|required| found >= required))
+}
+
+#[cfg(windows)]
+fn mpv_requirement(required: &str) -> String {
+    format!("pinned mpv {required}")
+}
+
+#[cfg(not(windows))]
+fn mpv_requirement(required: &str) -> String {
+    format!("mpv {required} or newer")
 }
 
 fn resolve_mpv_binary() -> PathBuf {
@@ -814,19 +851,17 @@ impl Drop for RealMpvProcess {
 
 fn ensure_pinned_mpv(binary: &Path) -> Result<(), String> {
     let status = probe_mpv_binary(binary);
-    if !status.available {
-        return Err(format!(
-            "Pinned mpv could not start: {}",
-            status.detail.unwrap_or_default()
-        ));
+    if status.pinned {
+        return Ok(());
     }
-    if !status.pinned {
-        return Err(format!(
-            "Desktop Client requires pinned mpv {}; set EARTHLY_AUDIO_MPV_PATH to that executable.",
-            status.pinned_version
-        ));
-    }
-    Ok(())
+    Err(format!(
+        "Desktop Client requires {}. Install it, or set EARTHLY_AUDIO_MPV_PATH to that executable. {}",
+        mpv_requirement(&status.pinned_version),
+        status.version.map_or_else(
+            || status.detail.unwrap_or_default(),
+            |version| format!("Found mpv {version}.")
+        )
+    ))
 }
 
 fn create_private_ipc_directory() -> Result<PathBuf, String> {
@@ -5482,6 +5517,21 @@ mod tests {
             state.telemetry.decoder.format.sample_rate_hz == Some(96_000)
         });
         assert_eq!(decoded.telemetry.device.format.sample_rate_hz, Some(96_000));
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn linux_accepts_the_distributions_mpv_from_the_minimum_version() {
+        use super::{mpv_version_from_banner, mpv_version_satisfies};
+        let version = |banner| mpv_version_from_banner(banner).expect("mpv version");
+        assert_eq!(version("mpv v0.41.0 Copyright © 2000"), "0.41.0");
+        assert_eq!(version("mpv 0.37.0 Copyright © 2000"), "0.37.0");
+        assert_eq!(mpv_version_from_banner("not mpv"), None);
+        assert!(mpv_version_satisfies("0.38.0", "0.38.0"));
+        assert!(mpv_version_satisfies("0.41.0-dev-g41f6a6450", "0.38.0"));
+        assert!(mpv_version_satisfies("1.0.0", "0.38.0"));
+        assert!(mpv_version_satisfies("git-2026.10.1", "0.38.0"));
+        assert!(!mpv_version_satisfies("0.37.0", "0.38.0"));
     }
 
     #[cfg_attr(windows, ignore = "asserts Linux raw ALSA device ids")]

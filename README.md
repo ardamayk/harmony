@@ -191,7 +191,7 @@ mise run start
 
 The Desktop Client connects to a running Music Server whose loopback origin (for example `http://127.0.0.1:8090`) you enter on its connection screen, and keeps its own settings in `~/.config/audio.earthly.desktop`.
 
-**mpv:** native playback needs mpv **0.41.0** exactly. The desktop scripts check `/usr/bin/mpv`, or the binary named by `EARTHLY_AUDIO_MPV_PATH`, and copy it next to the Rust core. mpv runs with `--no-config`, so your own mpv configuration is never loaded. Install it from your distribution (or build that version) before `mise run desktop:dev`.
+**mpv:** native playback on Linux needs mpv **0.38.0 or newer**, from your distribution. The Windows package carries its own. The desktop scripts check `/usr/bin/mpv`, or the binary named by `EARTHLY_AUDIO_MPV_PATH`, and copy it next to the Rust core. mpv runs with `--no-config`, so your own mpv configuration is never loaded. Install it from your distribution before `mise run desktop:dev`.
 
 **Output modes** (the text button in the Player Bar):
 
