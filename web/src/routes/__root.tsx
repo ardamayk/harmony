@@ -39,6 +39,7 @@ import {
 	useExternalSourceName,
 	useServerCapability,
 } from "#/hooks/use-server-capability";
+import { useFirstLoad } from "#/hooks/use-first-load";
 import { apiClient } from "#/lib/api";
 import {
 	readGuestPreferences,
@@ -99,7 +100,13 @@ function RootLayout() {
 
 function ConnectedRootLayout() {
 	return (
-		<ListenTogetherProvider api={apiClient} engine={getSharedPlaybackEngine()}>
+		<ListenTogetherProvider
+			api={apiClient}
+			engine={getSharedPlaybackEngine()}
+			// The core refuses a Guest Listener, so a Desktop Client is the Owner's,
+			// and a saved Music Server that is down still opens on its saved lists.
+			fallbackRole={isDesktopClient() ? "owner" : undefined}
+		>
 			<ListenTogetherGate>
 				<AppLayout />
 			</ListenTogetherGate>
@@ -122,6 +129,9 @@ function AppLayout() {
 		queryKey: ["preferences"],
 		queryFn: () => apiClient.getPreferences(),
 		enabled: hasServerPreferences,
+		// The window waits on this, so a Music Server that is down must not hold
+		// it through retries. A later answer reaches the layout as it stands.
+		retry: isDesktopClient() ? false : undefined,
 	});
 
 	const patchPreferences = useMutation({
@@ -131,7 +141,9 @@ function AppLayout() {
 		},
 	});
 
-	if (role === "loading" || preferences.isLoading) {
+	const isFirstLoad = useFirstLoad(role === "loading" || preferences.isLoading);
+
+	if (isFirstLoad) {
 		return <div className="p-8">Loading…</div>;
 	}
 
@@ -142,10 +154,13 @@ function AppLayout() {
 	return (
 		<LayoutProvider
 			initialPreferences={initial}
+			loadedPreferences={hasServerPreferences ? preferences.data : undefined}
 			onPreferencesChange={(prefs) => {
-				if (hasServerPreferences) {
+				if (!hasServerPreferences) writeGuestPreferences(prefs);
+				// Saving the stand-in defaults would replace the Owner's real ones.
+				else if (preferences.data) {
 					patchPreferences.mutate(preferencesPatch(prefs, isPhone));
-				} else writeGuestPreferences(prefs);
+				}
 			}}
 		>
 			<div className="flex h-full min-h-0 flex-1 flex-col overflow-x-auto overflow-y-hidden">

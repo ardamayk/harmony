@@ -175,10 +175,15 @@ function Probe() {
 function renderProvider(
 	fixture: ReturnType<typeof createApi>,
 	engine = new InMemoryPlaybackEngine(),
+	fallbackRole?: "owner",
 ) {
 	const playbackApi = createPlaybackApi();
 	render(
-		<ListenTogetherProvider api={fixture.api} engine={engine}>
+		<ListenTogetherProvider
+			api={fixture.api}
+			engine={engine}
+			fallbackRole={fallbackRole}
+		>
 			<PlaybackProvider api={playbackApi} engine={engine}>
 				<Probe />
 			</PlaybackProvider>
@@ -269,6 +274,41 @@ describe("ListenTogetherProvider", () => {
 		);
 		fixture.calls.getHealth.mockRejectedValue(new Error("network down"));
 		renderProvider(fixture);
+
+		await roleIs("none");
+		expect(context.role).toBe("none");
+	});
+
+	it("takes the shell's role when nothing answers", async () => {
+		const fixture = createApi();
+		fixture.calls.getListenTogetherSession.mockRejectedValue(
+			new Error("network down"),
+		);
+		fixture.calls.getHealth.mockRejectedValue(new Error("network down"));
+		renderProvider(fixture, new InMemoryPlaybackEngine(), "owner");
+
+		await roleIs("owner");
+		expect(context.isAvailable).toBe(false);
+		expect(fixture.calls.getListenTogetherRoom).not.toHaveBeenCalled();
+	});
+
+	it("takes the shell's role when only the session fails", async () => {
+		const fixture = createApi({ room: null });
+		fixture.calls.getListenTogetherSession.mockRejectedValue(
+			new Error("network down"),
+		);
+		renderProvider(fixture, new InMemoryPlaybackEngine(), "owner");
+
+		await roleIs("owner");
+		expect(context.role).toBe("owner");
+	});
+
+	it("believes the Music Server over the shell's role", async () => {
+		renderProvider(
+			createApi({ role: "none", room: null }),
+			new InMemoryPlaybackEngine(),
+			"owner",
+		);
 
 		await roleIs("none");
 		expect(context.role).toBe("none");
