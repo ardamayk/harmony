@@ -68,7 +68,9 @@ export function DeletionRows({ rows }: { rows: string[][] }) {
 			{rows.map(([label, value]) => (
 				<div key={label} className="grid grid-cols-label gap-3">
 					<dt className="text-caption">{label}</dt>
-					<dd className="break-all text-foreground">{value}</dd>
+					<dd className="break-all text-foreground phone:break-normal phone:wrap-anywhere">
+						{value}
+					</dd>
 				</div>
 			))}
 		</dl>
