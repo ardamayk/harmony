@@ -1,0 +1,158 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT\n            queue_item_id AS \"queue_item_id?\",\n            track_id AS \"track_id?\",\n            playing AS \"playing!: bool\",\n            position_ms AS \"position_ms!: i64\",\n            position_at_ms AS \"position_at_ms!: i64\",\n            last_report_at_ms AS \"last_report_at_ms!: i64\",\n            active_device_id AS \"active_device_id?\",\n            active_device_name AS \"active_device_name?\",\n            revision AS \"revision!: i64\",\n            remote_command_revision AS \"remote_command_revision!: i64\",\n            skip_revision AS \"skip_revision?\",\n            skip_direction AS \"skip_direction?\"\n        FROM playback_state WHERE user_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "queue_item_id?",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "playback_state",
+            "name": "queue_item_id"
+          }
+        }
+      },
+      {
+        "name": "track_id?",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "playback_state",
+            "name": "track_id"
+          }
+        }
+      },
+      {
+        "name": "playing!: bool",
+        "ordinal": 2,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "playback_state",
+            "name": "playing"
+          }
+        }
+      },
+      {
+        "name": "position_ms!: i64",
+        "ordinal": 3,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "playback_state",
+            "name": "position_ms"
+          }
+        }
+      },
+      {
+        "name": "position_at_ms!: i64",
+        "ordinal": 4,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "playback_state",
+            "name": "position_at_ms"
+          }
+        }
+      },
+      {
+        "name": "last_report_at_ms!: i64",
+        "ordinal": 5,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "playback_state",
+            "name": "last_report_at_ms"
+          }
+        }
+      },
+      {
+        "name": "active_device_id?",
+        "ordinal": 6,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "playback_state",
+            "name": "active_device_id"
+          }
+        }
+      },
+      {
+        "name": "active_device_name?",
+        "ordinal": 7,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "playback_state",
+            "name": "active_device_name"
+          }
+        }
+      },
+      {
+        "name": "revision!: i64",
+        "ordinal": 8,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "playback_state",
+            "name": "revision"
+          }
+        }
+      },
+      {
+        "name": "remote_command_revision!: i64",
+        "ordinal": 9,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "playback_state",
+            "name": "remote_command_revision"
+          }
+        }
+      },
+      {
+        "name": "skip_revision?",
+        "ordinal": 10,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "playback_state",
+            "name": "skip_revision"
+          }
+        }
+      },
+      {
+        "name": "skip_direction?",
+        "ordinal": 11,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "playback_state",
+            "name": "skip_direction"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      true,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "053b737ba47c7474ef613dd631251bc547264e302c36e092dd7e1cb9a3294cb0"
+}

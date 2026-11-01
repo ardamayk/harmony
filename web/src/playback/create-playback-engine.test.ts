@@ -1,9 +1,8 @@
 import type { PlaybackSessionState, PlaybackSource } from "@repo/ui";
-import { DEFAULT_PLAYBACK_SESSION_STATE } from "@repo/ui";
+import { DEFAULT_PLAYBACK_SESSION_STATE, SharedPlaybackEngine } from "@repo/ui";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { installDesktopBridge } from "#/desktop/testing";
 import { createPlaybackEngine } from "./create-playback-engine";
-import { DesktopPlaybackEngine } from "./DesktopPlaybackEngine";
 
 describe("createPlaybackEngine", () => {
 	afterEach(() => {
@@ -18,7 +17,8 @@ describe("createPlaybackEngine", () => {
 
 		const engine = createPlaybackEngine();
 
-		expect(engine).toBeInstanceOf(DesktopPlaybackEngine);
+		expect(engine).toBeInstanceOf(SharedPlaybackEngine);
+		expect(engine.reportsSharedPlaybackState).toBeUndefined();
 		expect(audioConstructor).not.toHaveBeenCalled();
 		engine.destroy();
 	});

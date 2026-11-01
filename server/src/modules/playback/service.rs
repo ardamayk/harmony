@@ -1,7 +1,8 @@
 //! Queue rules: the item limit, Track existence, item sources, and
 //! resolving stored Track IDs into library Tracks.
 
-use super::repository::{MAX_QUEUE_ITEMS, QueueError, Repository};
+use super::playback_state::{Command, Playback, PlaybackState};
+use super::repository::{MAX_QUEUE_ITEMS, QueueError, Repository, StateError};
 use super::sources::{self, QueueItemSource};
 use crate::app::AppState;
 use crate::modules::library::{LibraryError, LibraryService, Track};
@@ -41,6 +42,13 @@ pub struct Queue {
 pub struct Service {
     repo: Repository,
     tracks: LibraryService,
+}
+
+/// The snapshot a command answers with, and whether it changed anything
+/// (and so belongs on the event stream).
+pub struct CommandOutcome {
+    pub state: PlaybackState,
+    pub changed: bool,
 }
 
 impl Service {
@@ -151,6 +159,93 @@ impl Service {
 
     pub async fn track_file_path(&self, track_id: &str) -> Result<String, LibraryError> {
         self.tracks.get_track_file_path(track_id).await
+    }
+
+    /// The Shared Playback State as a client sees it at `now_ms`: the empty
+    /// state until something claimed it, read as paused once the Active
+    /// Device goes silent.
+    pub async fn playback_state(
+        &self,
+        user_id: &str,
+        now_ms: i64,
+    ) -> Result<PlaybackState, StateError> {
+        Ok(self.repo.read_state(user_id).await?.at(now_ms))
+    }
+
+    /// Applies one command and answers the snapshot to send back.
+    pub async fn playback_command(
+        &self,
+        user_id: &str,
+        mut command: Command,
+        now_ms: i64,
+    ) -> Result<CommandOutcome, StateError> {
+        // ADR 0010: a Track deleted while playing keeps playing, and its device
+        // has to go on reporting for the others to see it.
+        if let Command::Claim { track_id, .. } | Command::Report { track_id, .. } = &mut command
+            && let Some(id) = track_id.as_deref()
+            && self.require_track(id).await.is_err()
+        {
+            *track_id = None;
+        }
+        self.repo
+            .update_state(user_id, |mut stored| {
+                let changed = match command {
+                    Command::Claim {
+                        device_id,
+                        device_name,
+                        queue_item_id,
+                        track_id,
+                        position_ms,
+                        playing,
+                    } => {
+                        stored.claim(
+                            &device_id,
+                            &device_name,
+                            Playback {
+                                queue_item_id,
+                                track_id,
+                                position_ms,
+                                playing,
+                            },
+                            now_ms,
+                        );
+                        true
+                    }
+                    Command::Report {
+                        device_id,
+                        based_on_revision,
+                        queue_item_id,
+                        track_id,
+                        position_ms,
+                        playing,
+                    } => stored.report(
+                        &device_id,
+                        based_on_revision,
+                        Playback {
+                            queue_item_id,
+                            track_id,
+                            position_ms,
+                            playing,
+                        },
+                        now_ms,
+                    )?,
+                    Command::Pause => {
+                        stored.pause(now_ms);
+                        true
+                    }
+                    Command::Seek { position_ms } => {
+                        stored.seek(position_ms, now_ms);
+                        true
+                    }
+                    Command::Skip { direction } => {
+                        stored.skip(direction);
+                        true
+                    }
+                };
+                let state = stored.at(now_ms);
+                Ok((stored, CommandOutcome { state, changed }))
+            })
+            .await
     }
 
     async fn require_track(&self, track_id: &str) -> Result<(), QueueError> {

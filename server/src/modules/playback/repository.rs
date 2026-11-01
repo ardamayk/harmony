@@ -2,6 +2,7 @@
 //! IMMEDIATE transaction that first advances the revision, so a stale
 //! expected revision fails with a conflict before anything changes.
 
+use super::playback_state::{ReportError, SkipDirection, StoredState};
 use crate::db::{self, Db, Tx};
 
 #[derive(Debug, thiserror::Error)]
@@ -25,6 +26,22 @@ pub enum QueueError {
 }
 
 pub const MAX_QUEUE_ITEMS: i64 = 1000;
+
+#[derive(Debug, thiserror::Error)]
+pub enum StateError {
+    #[error("the report came from a device that is no longer the Active Device")]
+    DeviceNotActive,
+    #[error(transparent)]
+    Database(#[from] sqlx::Error),
+}
+
+impl From<ReportError> for StateError {
+    fn from(error: ReportError) -> Self {
+        match error {
+            ReportError::NotActive => Self::DeviceNotActive,
+        }
+    }
+}
 
 pub struct ItemRow {
     pub id: String,
@@ -291,5 +308,234 @@ impl Repository {
         set_positions(&mut transaction, user_id, item_ids_in_order).await?;
         transaction.commit().await?;
         Ok(())
+    }
+
+    /// The Shared Playback State row, or the empty state when the user has
+    /// none yet.
+    pub async fn read_state(&self, user_id: &str) -> Result<StoredState, StateError> {
+        Ok(state_row(&self.pool, user_id)
+            .await?
+            .map(StoredState::from)
+            .unwrap_or_default())
+    }
+
+    /// Reads the row, applies `apply` and writes it back, all inside one
+    /// IMMEDIATE transaction, so two commands for the same user cannot
+    /// interleave their read and write. An error from `apply` writes nothing.
+    pub async fn update_state<R>(
+        &self,
+        user_id: &str,
+        apply: impl FnOnce(StoredState) -> Result<(StoredState, R), StateError>,
+    ) -> Result<R, StateError> {
+        let mut transaction = db::begin_write(&self.pool).await?;
+        let stored = state_row(&mut *transaction, user_id)
+            .await?
+            .map(StoredState::from)
+            .unwrap_or_default();
+        let (stored, result) = apply(stored)?;
+        write_state(&mut transaction, user_id, &stored).await?;
+        transaction.commit().await?;
+        Ok(result)
+    }
+}
+
+/// The row as the database holds it, before the skip direction is parsed.
+struct StateRow {
+    queue_item_id: Option<String>,
+    track_id: Option<String>,
+    playing: bool,
+    position_ms: i64,
+    position_at_ms: i64,
+    last_report_at_ms: i64,
+    active_device_id: Option<String>,
+    active_device_name: Option<String>,
+    revision: i64,
+    remote_command_revision: i64,
+    skip_revision: Option<i64>,
+    skip_direction: Option<String>,
+}
+
+impl From<StateRow> for StoredState {
+    fn from(row: StateRow) -> Self {
+        Self {
+            queue_item_id: row.queue_item_id,
+            track_id: row.track_id,
+            playing: row.playing,
+            position_ms: row.position_ms,
+            position_at_ms: row.position_at_ms,
+            last_report_at_ms: row.last_report_at_ms,
+            active_device_id: row.active_device_id,
+            active_device_name: row.active_device_name,
+            revision: row.revision,
+            remote_command_revision: row.remote_command_revision,
+            skip_revision: row.skip_revision,
+            // The CHECK constraint keeps the column to the two directions;
+            // anything else reads as no skip at all.
+            skip_direction: row.skip_direction.as_deref().and_then(SkipDirection::parse),
+        }
+    }
+}
+
+async fn state_row(
+    executor: impl sqlx::Executor<'_, Database = sqlx::Sqlite>,
+    user_id: &str,
+) -> Result<Option<StateRow>, sqlx::Error> {
+    sqlx::query_as!(
+        StateRow,
+        r#"SELECT
+            queue_item_id AS "queue_item_id?",
+            track_id AS "track_id?",
+            playing AS "playing!: bool",
+            position_ms AS "position_ms!: i64",
+            position_at_ms AS "position_at_ms!: i64",
+            last_report_at_ms AS "last_report_at_ms!: i64",
+            active_device_id AS "active_device_id?",
+            active_device_name AS "active_device_name?",
+            revision AS "revision!: i64",
+            remote_command_revision AS "remote_command_revision!: i64",
+            skip_revision AS "skip_revision?",
+            skip_direction AS "skip_direction?"
+        FROM playback_state WHERE user_id = ?"#,
+        user_id
+    )
+    .fetch_optional(executor)
+    .await
+}
+
+async fn write_state(
+    transaction: &mut Tx,
+    user_id: &str,
+    stored: &StoredState,
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        r#"INSERT INTO playback_state (
+            user_id, queue_item_id, track_id, playing, position_ms, position_at_ms,
+            last_report_at_ms, active_device_id, active_device_name, revision,
+            remote_command_revision, skip_revision, skip_direction
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT (user_id) DO UPDATE SET
+            queue_item_id = excluded.queue_item_id,
+            track_id = excluded.track_id,
+            playing = excluded.playing,
+            position_ms = excluded.position_ms,
+            position_at_ms = excluded.position_at_ms,
+            last_report_at_ms = excluded.last_report_at_ms,
+            active_device_id = excluded.active_device_id,
+            active_device_name = excluded.active_device_name,
+            revision = excluded.revision,
+            remote_command_revision = excluded.remote_command_revision,
+            skip_revision = excluded.skip_revision,
+            skip_direction = excluded.skip_direction"#,
+        user_id,
+        stored.queue_item_id,
+        stored.track_id,
+        stored.playing,
+        stored.position_ms,
+        stored.position_at_ms,
+        stored.last_report_at_ms,
+        stored.active_device_id,
+        stored.active_device_name,
+        stored.revision,
+        stored.remote_command_revision,
+        stored.skip_revision,
+        stored.skip_direction.map(|direction| direction.as_str()),
+    )
+    .execute(&mut **transaction)
+    .await?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::playback_state::Playback;
+    use super::*;
+    use std::path::Path;
+
+    async fn repository() -> (tempfile::TempDir, Repository) {
+        let dir = tempfile::tempdir().unwrap();
+        let migrations = Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations");
+        let pool =
+            crate::db::open_and_migrate(dir.path().join("app.db").to_str().unwrap(), &migrations)
+                .await
+                .unwrap();
+        for statement in [
+            "INSERT INTO artists (id, name, name_sort) VALUES ('ar', 'A', 'a')",
+            "INSERT INTO albums (id, artist_id, title, title_sort) VALUES ('al', 'ar', 'B', 'b')",
+            "INSERT INTO tracks (id, album_id, title, title_sort, artist_name, format, file_path)
+             VALUES ('t1', 'al', 'One', 'one', 'A', 'flac', '/1.flac')",
+        ] {
+            sqlx::query(statement).execute(&pool).await.unwrap();
+        }
+        (dir, Repository::new(pool))
+    }
+
+    #[tokio::test]
+    async fn a_missing_row_reads_as_the_empty_state() {
+        let (_dir, repo) = repository().await;
+        assert_eq!(repo.read_state("u").await.unwrap(), StoredState::default());
+    }
+
+    #[tokio::test]
+    async fn update_state_applies_and_persists_inside_one_transaction() {
+        let (_dir, repo) = repository().await;
+        let revision = repo
+            .update_state("u", |mut stored| {
+                stored.claim(
+                    "d1",
+                    "Desktop",
+                    Playback {
+                        queue_item_id: None,
+                        track_id: Some("t1".into()),
+                        position_ms: 5,
+                        playing: true,
+                    },
+                    1_000,
+                );
+                let revision = stored.revision;
+                Ok((stored, revision))
+            })
+            .await
+            .unwrap();
+        assert_eq!(revision, 1);
+        let stored = repo.read_state("u").await.unwrap();
+        assert_eq!(stored.active_device_id.as_deref(), Some("d1"));
+        assert_eq!((stored.position_ms, stored.playing), (5, true));
+        // A refused apply leaves the stored row untouched.
+        let refused = repo
+            .update_state("u", |_stored| {
+                Err::<(StoredState, ()), _>(StateError::DeviceNotActive)
+            })
+            .await;
+        assert!(matches!(refused, Err(StateError::DeviceNotActive)));
+        assert_eq!(repo.read_state("u").await.unwrap().revision, 1);
+    }
+
+    #[tokio::test]
+    async fn deleting_the_track_nulls_the_state_track_id() {
+        let (_dir, repo) = repository().await;
+        repo.update_state("u", |mut stored| {
+            stored.claim(
+                "d1",
+                "Desktop",
+                Playback {
+                    queue_item_id: Some("q1".into()),
+                    track_id: Some("t1".into()),
+                    position_ms: 0,
+                    playing: false,
+                },
+                1_000,
+            );
+            Ok((stored, ()))
+        })
+        .await
+        .unwrap();
+        sqlx::query("DELETE FROM tracks WHERE id = 't1'")
+            .execute(&repo.pool)
+            .await
+            .unwrap();
+        let stored = repo.read_state("u").await.unwrap();
+        assert_eq!(stored.track_id, None);
+        // The Queue item has no foreign key and outlives its item.
+        assert_eq!(stored.queue_item_id.as_deref(), Some("q1"));
     }
 }

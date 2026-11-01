@@ -804,6 +804,24 @@ describe("PlaybackProvider", () => {
 		});
 	});
 
+	it("tells a shared engine the Queue and lifts its suspension outside a Room", async () => {
+		const engine = new InMemoryPlaybackEngine();
+		const setSharedQueueSources = vi.fn();
+		const setSharedPlaybackSuspended = vi.fn();
+		Object.assign(engine, {
+			setSharedQueueSources,
+			setSharedPlaybackSuspended,
+		});
+		renderPlayback(createApi(), engine);
+		await act(async () => {});
+
+		expect(setSharedPlaybackSuspended).toHaveBeenLastCalledWith(false);
+		expect(setSharedQueueSources).toHaveBeenLastCalledWith([
+			expect.objectContaining({ queueItemId: "item-1" }),
+			expect.objectContaining({ queueItemId: "item-2" }),
+		]);
+	});
+
 	it("advances duplicate Tracks by Queue item identity", async () => {
 		const duplicateItems = [
 			{ id: "item-1", trackId: track.id, position: 0, track },

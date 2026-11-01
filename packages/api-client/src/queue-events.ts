@@ -1,6 +1,7 @@
 import type { components } from "./generated/schema";
 
 const QUEUE_EVENT_RECONNECT_DELAY_MS = 1000;
+const EVENT_SOURCE_CLOSED = 2;
 const CAPABILITY_RETRY_INITIAL_DELAY_MS = 1000;
 const CAPABILITY_RETRY_MAX_DELAY_MS = 30000;
 const QUEUE_EVENTS_PATH = "/api/v1/playback/queue/events";
@@ -15,6 +16,7 @@ export type QueueEventSource = {
 	) => void;
 	close: () => void;
 	onerror: ((event: Event) => void) | null;
+	readyState?: number;
 };
 
 type QueueEventSubscription = {
@@ -27,7 +29,108 @@ type QueueEventSubscription = {
 		onEvent: (event: QueueEvent) => void,
 		onError: (error: Error) => void,
 	) => (() => void) | Promise<() => void>;
+	/**
+	 * One EventSource per client, shared with the Shared Playback State
+	 * subscription (ADR 0040). Without it the Queue events open their own.
+	 */
+	sharedStream?: SharedQueueEventStream;
 };
+
+type SharedStreamListener = (event: MessageEvent<string>) => void;
+
+/**
+ * One EventSource per client for both event kinds the Queue event stream
+ * carries: `queue-invalidated` and, when the Shared Playback State is
+ * advertised (ADR 0040), `playback-state`. The connection opens with the
+ * first listener and closes with the last, so a client holds one stream.
+ */
+export type SharedQueueEventStream = {
+	/** Attaches one named-event listener; the returned call removes it. */
+	addListener: (
+		eventName: string,
+		listener: SharedStreamListener,
+		onError: (error: Error) => void,
+	) => () => void;
+};
+
+export function createSharedQueueEventStream(config: {
+	getBaseUrl: () => string | Promise<string>;
+	eventSourceFactory: (url: string) => QueueEventSource;
+}): SharedQueueEventStream {
+	const listeners = new Map<string, Set<SharedStreamListener>>();
+	const errorHandlers = new Set<(error: Error) => void>();
+	let source: QueueEventSource | null = null;
+	/** Event names `source` already dispatches; each once per connection. */
+	const attached = new Set<string>();
+	let opening = false;
+	let closed = false;
+
+	function dispatch(eventName: string, event: MessageEvent<string>) {
+		for (const listener of listeners.get(eventName) ?? []) listener(event);
+	}
+
+	function attach(eventName: string) {
+		if (!source || attached.has(eventName)) return;
+		attached.add(eventName);
+		source.addEventListener(eventName, (event) => dispatch(eventName, event));
+	}
+
+	function open() {
+		if (source || opening || closed) return;
+		opening = true;
+		void Promise.resolve(config.getBaseUrl())
+			.then((baseUrl) => {
+				opening = false;
+				if (closed) return;
+				source = config.eventSourceFactory(buildQueueEventsUrl(baseUrl));
+				for (const eventName of listeners.keys()) attach(eventName);
+				source.onerror = () => {
+					// EventSource reconnects on its own; say why the frames stop.
+					const error = new Error("Queue event stream disconnected");
+					for (const handler of errorHandlers) handler(error);
+					// A non-200 answer, such as a proxy's 502 during a restart, ends
+					// EventSource for good instead.
+					if (source?.readyState === EVENT_SOURCE_CLOSED) {
+						source = null;
+						attached.clear();
+						setTimeout(open, QUEUE_EVENT_RECONNECT_DELAY_MS);
+					}
+				};
+			})
+			.catch((error) => {
+				opening = false;
+				for (const handler of errorHandlers) handler(toError(error));
+			});
+	}
+
+	return {
+		addListener(eventName, listener, onError) {
+			closed = false;
+			let set = listeners.get(eventName);
+			if (!set) {
+				set = new Set();
+				listeners.set(eventName, set);
+			}
+			set.add(listener);
+			errorHandlers.add(onError);
+			attach(eventName);
+			open();
+			return () => {
+				set.delete(listener);
+				errorHandlers.delete(onError);
+				const hasListeners = [...listeners.values()].some(
+					(entries) => entries.size > 0,
+				);
+				if (!hasListeners) {
+					closed = true;
+					source?.close();
+					source = null;
+					attached.clear();
+				}
+			};
+		},
+	};
+}
 
 export function subscribeQueueEvents(
 	config: QueueEventSubscription,
@@ -111,6 +214,19 @@ function subscribeSupportedQueueEvents(
 	}
 	if (config.getToken) {
 		return subscribeWithFetch(config, onEvent, reportError);
+	}
+	if (config.sharedStream) {
+		return config.sharedStream.addListener(
+			"queue-invalidated",
+			(event) => {
+				try {
+					onEvent(parseQueueEvent(event.data));
+				} catch (error) {
+					reportError(toError(error));
+				}
+			},
+			reportError,
+		);
 	}
 	return subscribeWithEventSource(config, onEvent, reportError);
 }

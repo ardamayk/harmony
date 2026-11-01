@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO playback_state (\n            user_id, queue_item_id, track_id, playing, position_ms, position_at_ms,\n            last_report_at_ms, active_device_id, active_device_name, revision,\n            remote_command_revision, skip_revision, skip_direction\n        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)\n        ON CONFLICT (user_id) DO UPDATE SET\n            queue_item_id = excluded.queue_item_id,\n            track_id = excluded.track_id,\n            playing = excluded.playing,\n            position_ms = excluded.position_ms,\n            position_at_ms = excluded.position_at_ms,\n            last_report_at_ms = excluded.last_report_at_ms,\n            active_device_id = excluded.active_device_id,\n            active_device_name = excluded.active_device_name,\n            revision = excluded.revision,\n            remote_command_revision = excluded.remote_command_revision,\n            skip_revision = excluded.skip_revision,\n            skip_direction = excluded.skip_direction",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 13
+    },
+    "nullable": []
+  },
+  "hash": "34066805d11b1e23047ffec4bf5251163245a84259734fd66a66fd184a20ba66"
+}

@@ -290,6 +290,13 @@ mod tests {
         assert_eq!(classify("GET", "/api/v1/preferences"), Access::Session);
         assert_eq!(classify("PATCH", "/api/v1/preferences"), Access::Denied);
         assert_eq!(classify("GET", "/api/v1/playback/queue"), Access::Denied);
+        // The Shared Playback State is the Owner's; ADR 0040 keeps it from
+        // Guests on both of its routes.
+        assert_eq!(classify("GET", "/api/v1/playback/state"), Access::Denied);
+        assert_eq!(
+            classify("POST", "/api/v1/playback/state/commands"),
+            Access::Denied
+        );
         assert_eq!(
             classify("POST", "/api/v1/listen-together/room"),
             Access::Denied

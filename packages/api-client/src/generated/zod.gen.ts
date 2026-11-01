@@ -36,6 +36,88 @@ export const zListenTogetherRoom = z.object({
 });
 
 /**
+ * A skip for the Active Device to carry out, once. revision identifies it.
+ */
+export const zPlaybackSkipRequest = z.object({
+    revision: z.coerce.bigint().min(BigInt('-9223372036854775808'), { error: 'Invalid value: Expected int64 to be >= -9223372036854775808' }).max(BigInt('9223372036854775807'), { error: 'Invalid value: Expected int64 to be <= 9223372036854775807' }),
+    direction: z.enum(['next', 'previous'])
+});
+
+/**
+ * Where the user's playback is. See ADR 0040.
+ */
+export const zPlaybackState = z.object({
+    revision: z.coerce.bigint().min(BigInt('-9223372036854775808'), { error: 'Invalid value: Expected int64 to be >= -9223372036854775808' }).max(BigInt('9223372036854775807'), { error: 'Invalid value: Expected int64 to be <= 9223372036854775807' }),
+    queueItemId: z.string().nullable(),
+    trackId: z.string().nullable(),
+    playing: z.boolean(),
+    positionMs: z.coerce.bigint().gte(BigInt(0)).max(BigInt('9223372036854775807'), { error: 'Invalid value: Expected int64 to be <= 9223372036854775807' }),
+    positionAtMs: z.coerce.bigint().min(BigInt('-9223372036854775808'), { error: 'Invalid value: Expected int64 to be >= -9223372036854775808' }).max(BigInt('9223372036854775807'), { error: 'Invalid value: Expected int64 to be <= 9223372036854775807' }),
+    activeDeviceId: z.string().nullable(),
+    activeDeviceName: z.string().nullable(),
+    remoteCommandRevision: z.coerce.bigint().min(BigInt('-9223372036854775808'), { error: 'Invalid value: Expected int64 to be >= -9223372036854775808' }).max(BigInt('9223372036854775807'), { error: 'Invalid value: Expected int64 to be <= 9223372036854775807' }),
+    skipRequest: zPlaybackSkipRequest.nullable(),
+    serverTimeMs: z.coerce.bigint().min(BigInt('-9223372036854775808'), { error: 'Invalid value: Expected int64 to be >= -9223372036854775808' }).max(BigInt('9223372036854775807'), { error: 'Invalid value: Expected int64 to be <= 9223372036854775807' })
+});
+
+/**
+ * The sender becomes the Active Device. Always succeeds.
+ */
+export const zPlaybackClaimCommand = z.object({
+    type: z.enum(['claim']),
+    deviceId: z.string().min(1).max(64),
+    deviceName: z.string().min(1).max(64),
+    queueItemId: z.string().nullable(),
+    trackId: z.string().nullable(),
+    positionMs: z.coerce.bigint().gte(BigInt(0)).max(BigInt('9223372036854775807'), { error: 'Invalid value: Expected int64 to be <= 9223372036854775807' }),
+    playing: z.boolean()
+});
+
+/**
+ * The Active Device says where it is. Answers 409 from another device, and changes nothing when basedOnRevision is older than remoteCommandRevision.
+ */
+export const zPlaybackReportCommand = z.object({
+    type: z.enum(['report']),
+    deviceId: z.string().min(1).max(64),
+    basedOnRevision: z.coerce.bigint().min(BigInt('-9223372036854775808'), { error: 'Invalid value: Expected int64 to be >= -9223372036854775808' }).max(BigInt('9223372036854775807'), { error: 'Invalid value: Expected int64 to be <= 9223372036854775807' }),
+    queueItemId: z.string().nullable(),
+    trackId: z.string().nullable(),
+    positionMs: z.coerce.bigint().gte(BigInt(0)).max(BigInt('9223372036854775807'), { error: 'Invalid value: Expected int64 to be <= 9223372036854775807' }),
+    playing: z.boolean()
+});
+
+/**
+ * Remote pause; the Active Device obeys.
+ */
+export const zPlaybackPauseCommand = z.object({
+    type: z.enum(['pause'])
+});
+
+/**
+ * Remote seek; the Active Device obeys.
+ */
+export const zPlaybackSeekCommand = z.object({
+    type: z.enum(['seek']),
+    positionMs: z.coerce.bigint().gte(BigInt(0)).max(BigInt('9223372036854775807'), { error: 'Invalid value: Expected int64 to be <= 9223372036854775807' })
+});
+
+/**
+ * Sets skipRequest for the Active Device to carry out.
+ */
+export const zPlaybackSkipCommand = z.object({
+    type: z.enum(['skip']),
+    direction: z.enum(['next', 'previous'])
+});
+
+export const zPlaybackStateCommand = z.discriminatedUnion('type', [
+    zPlaybackClaimCommand.extend({ type: z.literal('claim') }),
+    zPlaybackReportCommand.extend({ type: z.literal('report') }),
+    zPlaybackPauseCommand.extend({ type: z.literal('pause') }),
+    zPlaybackSeekCommand.extend({ type: z.literal('seek') }),
+    zPlaybackSkipCommand.extend({ type: z.literal('skip') })
+]);
+
+/**
  * Replaces the Room Queue and plays from index.
  */
 export const zListenTogetherPlayTracksCommand = z.object({
@@ -206,6 +288,10 @@ export const zErrorResponse = z.object({
     field: z.string().optional(),
     reason: z.string().optional()
 });
+
+export const zPlaybackStateConflictResponse = zErrorResponse.and(z.object({
+    state: zPlaybackState
+}));
 
 export const zManagedImportJob = z.object({
     id: z.guid(),
@@ -1317,6 +1403,16 @@ export const zRemovePlaybackQueueItemResponse = zQueue;
  * Queue event stream
  */
 export const zStreamPlaybackQueueEventsResponse = zQueueEvent;
+
+/**
+ * Current Shared Playback State
+ */
+export const zGetPlaybackStateResponse = zPlaybackState;
+
+/**
+ * Shared Playback State after the command. A report based on a revision older than remoteCommandRevision changes nothing and also answers 200.
+ */
+export const zSendPlaybackStateCommandResponse = zPlaybackState;
 
 /**
  * Full audio stream

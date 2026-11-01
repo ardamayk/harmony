@@ -93,6 +93,7 @@ const ROUTE_WORDS: &[&str] = &[
     "room",
     "search",
     "session",
+    "state",
     "stations",
     "stream",
     "tags",

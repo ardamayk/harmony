@@ -13,6 +13,7 @@ use serde::Serialize;
 const SERVER_CAPABILITIES: &[&str] = &[
     "api.v1",
     "playback.queue-events.v1",
+    "playback.shared-session.v1",
     "managed-import.v1",
     "managed-import-batches.v1",
     "managed-track-deletion.v1",
@@ -131,4 +132,20 @@ pub async fn get_me() -> Json<UserResponse> {
         username: user.username,
         display_name: user.display_name,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The Shared Playback State belongs to the Owner's devices only: a
+    /// Guest's Web Client must not learn it is advertised, and the Guest
+    /// Listener's gate refuses both routes (see `listen_together::gate`).
+    #[test]
+    fn the_shared_session_capability_stays_away_from_guests() {
+        let capabilities = server_capabilities(&dependencies::Report(Vec::new()), false, false);
+        assert!(capabilities.contains(&"playback.shared-session.v1".to_owned()));
+        let guests = guest_capabilities(&dependencies::Report(Vec::new()));
+        assert!(!guests.contains(&"playback.shared-session.v1".to_owned()));
+    }
 }
