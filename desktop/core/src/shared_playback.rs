@@ -180,16 +180,29 @@ pub(crate) struct LocalProgress {
 }
 
 /// Reads the local Player state for reporting. Only Track sources carry
-/// identifiers; every other kind reports null IDs (ADR 0040).
+/// identifiers; every other kind reports null IDs. A Room's Track is never the
+/// user's, so to the reporter nothing is loaded (ADR 0040).
 pub(crate) fn local_progress(state: &PlaybackSessionState) -> LocalProgress {
-    let (queue_item_id, track_id) = reported_ids(state.source.as_ref());
+    let source = state
+        .source
+        .as_ref()
+        .filter(|source| !is_room_source(source));
+    let (queue_item_id, track_id) = reported_ids(source);
     LocalProgress {
         playing: state.status.is_active(),
         position_seconds: state.current_time,
-        source_key: source_key(state.source.as_ref()),
+        source_key: source_key(source),
         queue_item_id,
         track_id,
     }
+}
+
+/// `isRoomQueueItemId` in the Web Client; the renderer loads Room sources.
+fn is_room_source(source: &Value) -> bool {
+    source
+        .get("queueItemId")
+        .and_then(Value::as_str)
+        .is_some_and(|id| id.starts_with("room:"))
 }
 
 fn reported_ids(source: Option<&Value>) -> (Option<String>, Option<String>) {
@@ -1249,6 +1262,42 @@ mod tests {
         assert_eq!(progress.queue_item_id.as_deref(), Some("item-7"));
     }
 
+    fn room_progress(status: PlaybackStatus) -> LocalProgress {
+        let mut state = PlaybackSessionState::default();
+        state.status = status;
+        state.current_time = 42.5;
+        state.source = Some(json!({
+            "type": "track",
+            "track": { "id": "room-track" },
+            "queueItemId": "room:0:room-track",
+        }));
+        local_progress(&state)
+    }
+
+    #[test]
+    fn a_rooms_track_reads_as_nothing_loaded() {
+        let progress = room_progress(PlaybackStatus::Paused);
+
+        assert_eq!(progress.source_key, None);
+        assert_eq!(progress.queue_item_id, None);
+        assert_eq!(progress.track_id, None);
+    }
+
+    #[test]
+    fn a_stopped_rooms_track_reports_the_users_track_not_the_rooms() {
+        let mut reporter = reporter_at(&progress(true, 10.0, "track:t1:"), 1_000);
+
+        let room = room_progress(PlaybackStatus::Paused);
+        assert_eq!(
+            reporter.next_report(&room, 1_100),
+            Some(ReportReason::PlayPause)
+        );
+        assert_eq!(
+            reporter.report_of(&room),
+            progress(false, 10.0, "track:t1:")
+        );
+    }
+
     #[test]
     fn non_track_sources_report_null_ids() {
         let mut state = PlaybackSessionState::default();
@@ -1820,6 +1869,26 @@ mod tests {
         local_sender
             .send(Some(progress(false, 11.0, "track:t1:")))
             .expect("local state");
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        service.shutdown_report().await;
+
+        assert!(recorded.lock().expect("recorded").is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_rooms_track_is_not_reported_when_it_stops_after_the_room() {
+        let (origin, recorded) = serve_shared_playback(WITH_SHARED_SESSION, "200 OK").await;
+        let (service, local_sender) = test_service(origin);
+        playing_as_active_device(&service, &local_sender).await;
+        service.set_suspended(true);
+        service.set_suspended(false);
+
+        // A Player publish lands before the renderer's `adopt` stops it.
+        local_sender
+            .send(Some(room_progress(PlaybackStatus::Paused)))
+            .expect("local state");
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        local_sender.send(Some(idle())).expect("local state");
         tokio::time::sleep(Duration::from_millis(200)).await;
         service.shutdown_report().await;
 

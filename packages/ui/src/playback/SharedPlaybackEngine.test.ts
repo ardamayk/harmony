@@ -10,6 +10,7 @@ import {
 import type { PlaybackSessionState, PlaybackSource } from "./PlaybackEngine";
 import { SharedPlaybackEngine } from "./SharedPlaybackEngine";
 import type { SharedPlaybackTransport } from "./SharedPlaybackEngine";
+import { roomQueueItemId } from "../listen-together/roomSync";
 import { InMemoryPlaybackEngine } from "./testing/InMemoryPlaybackEngine";
 
 type TrackSource = Extract<PlaybackSource, { type: "track" }>;
@@ -36,6 +37,11 @@ const nextTrackSource: TrackSource = {
 	track: { ...trackSource.track, id: "track-2", title: "Track 2" },
 	playbackUrl: "/stream/track-2",
 	queueItemId: "item-2",
+};
+
+const roomSource: TrackSource = {
+	...trackSource,
+	queueItemId: roomQueueItemId(0, "track-1"),
 };
 
 function sharedState(overrides: Partial<PlaybackState> = {}): PlaybackState {
@@ -782,6 +788,98 @@ describe("SharedPlaybackEngine suspended", () => {
 
 		expect(local.getState().source).toBeNull();
 		expect(state().sharedPlayback).toEqual({ followingDeviceName: "Phone" });
+		engine.destroy();
+	});
+});
+
+describe("SharedPlaybackEngine after a Room", () => {
+	const empty = sharedState({ queueItemId: null, trackId: null });
+
+	/** A Room that ends with its Track paused in the local Player. */
+	async function endRoom({ engine, local }: Harness) {
+		await settle();
+		engine.setSharedPlaybackSuspended(true);
+		await local.play(roomSource);
+		local.pause();
+		engine.setSharedPlaybackSuspended(false);
+		await settle();
+	}
+
+	it("does not claim an empty state with the Room's Track", async () => {
+		const harness = createHarness({ initialStates: [empty] });
+		await endRoom(harness);
+
+		expect(harness.transport.commands).toEqual([]);
+		expect(harness.local.getState().source).toBeNull();
+		expect(harness.state().source).toBeNull();
+		harness.engine.destroy();
+	});
+
+	it("does not claim over the state with a blind start's Room Track", async () => {
+		const harness = createHarness({ failHandshake: true });
+		harness.engine.setSharedPlaybackSuspended(true);
+		await harness.local.play(roomSource);
+		harness.engine.setSharedPlaybackSuspended(false);
+		await harness.engine.play(roomSource);
+		harness.transport.failHandshake = false;
+		vi.advanceTimersByTime(1000);
+		await settle();
+
+		expect(harness.transport.commands).toEqual([]);
+		harness.engine.destroy();
+	});
+
+	it("never claims or reports a Room's Track from any path", async () => {
+		const { engine, transport } = createHarness();
+		await engine.play(trackSource);
+		await settle();
+		transport.commands = [];
+
+		await engine.play(roomSource);
+		vi.advanceTimersByTime(5000);
+		await settle();
+		engine.stop();
+		await settle();
+
+		expect(transport.commands).toEqual([]);
+		engine.destroy();
+	});
+
+	it("leaves the state to the Desktop that was Active, while its core still stops", async () => {
+		const harness = createHarness({
+			localReports: true,
+			initialStates: [
+				sharedState({
+					positionMs: 7000,
+					activeDeviceId: "device-1",
+					activeDeviceName: "Harmony on desktop",
+				}),
+			],
+		});
+		const { engine, local, transport, state } = harness;
+		const stop = vi.spyOn(local, "stop").mockImplementation(() => undefined);
+		await endRoom(harness);
+
+		// A tick from the core, which has not stopped the Room's Track yet.
+		local.seek(3);
+		await settle();
+
+		expect(stop).toHaveBeenCalledOnce();
+		expect(state().source).toEqual(trackSource);
+		expect(state().status).toBe("paused");
+		expect(state().currentTime).toBe(7);
+
+		engine.togglePlay();
+		await settle();
+
+		expect(transport.commands).toEqual([
+			expect.objectContaining({
+				type: "claim",
+				queueItemId: "item-1",
+				trackId: "track-1",
+				positionMs: 7000,
+			}),
+		]);
 		engine.destroy();
 	});
 });

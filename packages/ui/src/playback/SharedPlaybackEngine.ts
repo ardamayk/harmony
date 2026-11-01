@@ -1,4 +1,5 @@
 import type { PlaybackState, PlaybackStateCommand } from "@repo/api-client";
+import { isRoomQueueItemId } from "../listen-together/roomSync";
 import type {
 	PlaybackEngine,
 	PlaybackSessionListener,
@@ -378,10 +379,12 @@ export class SharedPlaybackEngine implements PlaybackEngine {
 	 * empty state is claimed, so the server holds this playback again.
 	 */
 	private adopt(state: PlaybackState) {
-		const source = this.localState.source;
+		const source = sharedSource(this.localState.source);
 		const blindStart = this.playedWhileDormant;
 		this.playedWhileDormant = false;
 		if (!source) {
+			// A Room's Track ends with the Room.
+			if (this.localState.source) this.local.stop();
 			this.applySnapshot(state);
 			return;
 		}
@@ -451,7 +454,8 @@ export class SharedPlaybackEngine implements PlaybackEngine {
 		this.remember(state);
 		const isActiveHere =
 			state.activeDeviceId === this.device?.id &&
-			(this.localState.source !== null || this.pendingTakeover !== null);
+			(sharedSource(this.localState.source) !== null ||
+				this.pendingTakeover !== null);
 		if (!isActiveHere) {
 			this.enterFollowing();
 			return;
@@ -570,7 +574,7 @@ export class SharedPlaybackEngine implements PlaybackEngine {
 		playing: boolean,
 		positionMs: number,
 	) {
-		if (!this.device) return;
+		if (!this.device || source !== sharedSource(source)) return;
 		const command: PlaybackStateCommand = {
 			type: "claim",
 			deviceId: this.device.id,
@@ -764,8 +768,10 @@ export class SharedPlaybackEngine implements PlaybackEngine {
 	}
 
 	private sendReport(playing = isAudible(this.localState.status)) {
+		const source = this.localState.source ?? this.pendingTakeover;
 		if (
 			!this.device ||
+			source !== sharedSource(source) ||
 			this.mode !== "active" ||
 			this.claimsInFlight > 0 ||
 			this.detached ||
@@ -773,7 +779,6 @@ export class SharedPlaybackEngine implements PlaybackEngine {
 		) {
 			return;
 		}
-		const source = this.localState.source ?? this.pendingTakeover;
 		const positionMs = Math.max(0, Math.round(this.localSeconds() * 1000));
 		this.noteReported(positionMs, playing);
 		// The answer can carry a remote command this device has not seen (a
@@ -811,7 +816,7 @@ export class SharedPlaybackEngine implements PlaybackEngine {
 		const snapshot = this.snapshot;
 		if (
 			this.isFollowing() &&
-			state.source &&
+			sharedSource(state.source) &&
 			snapshot?.activeDeviceId === this.device?.id
 		) {
 			if (snapshot) this.becomeActive(snapshot);
@@ -907,6 +912,15 @@ export class SharedPlaybackEngine implements PlaybackEngine {
 
 function isAudible(status: PlaybackStatus) {
 	return status === "playing" || status === "reconnecting";
+}
+
+/**
+ * The source as the Shared Playback State may know it: a Room's Track is
+ * never the user's, so to the state nothing is loaded (ADR 0040).
+ */
+function sharedSource(source: PlaybackSource | null) {
+	const itemId = sharedQueueItemId(source);
+	return itemId && isRoomQueueItemId(itemId) ? null : source;
 }
 
 /** The Queue item a Track source plays, or null for any other source. */
