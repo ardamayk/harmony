@@ -19,6 +19,7 @@ pub mod storage;
 pub mod types;
 
 pub use handlers::routes;
+pub(crate) use identity::normalize_identity;
 
 use crate::config::Config;
 use std::sync::Arc;

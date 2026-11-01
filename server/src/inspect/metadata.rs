@@ -2,6 +2,7 @@
 //! normalizeMediaMetadata, metadata.go ReplayGain, genres.go).
 
 use super::errors::{Code, Failure, Result, error};
+use crate::modules::managed_import::normalize_identity;
 use serde::Serialize;
 use std::collections::HashMap;
 use unicode_normalization::UnicodeNormalization;
@@ -216,10 +217,17 @@ fn optional_lyrics(tags: &Tags) -> String {
 
 fn required_artist_credits(tags: &Tags, key: &str) -> Result<Vec<String>> {
     let plural = format!("{key}S");
-    if tags.contains_key(&plural) {
-        return required_tags(tags, &plural);
-    }
-    required_tags(tags, key)
+    let credits = if tags.contains_key(&plural) {
+        required_tags(tags, &plural)?
+    } else {
+        required_tags(tags, key)?
+    };
+    // Two spellings resolve to one Artist, who can hold only one credit.
+    let mut seen = std::collections::HashSet::new();
+    Ok(credits
+        .into_iter()
+        .filter(|credit| seen.insert(normalize_identity(credit)))
+        .collect())
 }
 
 fn required_single_tag(tags: &Tags, key: &str) -> Result<String> {
@@ -526,6 +534,25 @@ mod tests {
         pairs.pop();
         let metadata = normalize(&tags(&pairs), ReplayGain::default()).unwrap();
         assert_eq!(metadata.artists, ["One", "Two"]);
+    }
+
+    #[test]
+    fn spellings_of_one_artist_are_one_credit() {
+        let mut pairs: Vec<_> = complete()
+            .into_iter()
+            .filter(|(key, _)| *key != "ARTIST" && *key != "ALBUMARTIST")
+            .collect();
+        pairs.extend([
+            ("ARTIST", "Charli XCX"),
+            ("ARTIST", "Charli Xcx"),
+            ("ARTIST", "Rina Sawayama"),
+            ("ARTIST", "charli  xcx"),
+            ("ALBUMARTIST", "Charli XCX"),
+            ("ALBUMARTIST", "Charli xcx"),
+        ]);
+        let metadata = normalize(&tags(&pairs), ReplayGain::default()).unwrap();
+        assert_eq!(metadata.artists, ["Charli XCX", "Rina Sawayama"]);
+        assert_eq!(metadata.album_artists, ["Charli XCX"]);
     }
 
     #[test]

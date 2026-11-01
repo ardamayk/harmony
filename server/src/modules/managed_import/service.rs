@@ -157,6 +157,11 @@ pub fn failure_details(error: &Error) -> (String, String) {
         )
     } else if error.is(Sentinel::Cancelled) {
         ("validation_cancelled", "file validation was canceled")
+    } else if error.is(Sentinel::CommitFailed) {
+        (
+            "commit_failed",
+            "the Track could not be saved to the library",
+        )
     } else {
         ("inspection_failed", "file validation failed")
     };
@@ -1840,6 +1845,9 @@ impl Service {
             committed = hook("");
         }
         if let Err(error) = committed {
+            tracing::error!(error = %error, job = job.id(), "Managed Import commit failed");
+            let error =
+                Error::join([Some(error), Some(Error::sentinel(Sentinel::CommitFailed))]).unwrap();
             let persisted = match self.repo.get_commit_journal(&journal.id).await {
                 Ok(persisted) => persisted,
                 Err(read) => return Err(Error::join([Some(error), Some(read)]).unwrap()),
@@ -1974,5 +1982,9 @@ mod tests {
         let storage = Error::wrap(Sentinel::InsufficientStorage, "x");
         assert_eq!(failure_details(&storage).0, "insufficient_storage");
         assert_eq!(failure_details(&Error::new("x")).0, "inspection_failed");
+        assert_eq!(
+            failure_details(&Error::sentinel(Sentinel::CommitFailed)).0,
+            "commit_failed"
+        );
     }
 }

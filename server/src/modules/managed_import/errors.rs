@@ -44,6 +44,7 @@ pub enum Sentinel {
     ReplacementConflict,
     NotReplacementJob,
     ReplacementRequired,
+    CommitFailed,
     /// context.Canceled / DeadlineExceeded.
     Cancelled,
 }
@@ -70,6 +71,7 @@ impl Sentinel {
             Sentinel::ReplacementRequired => {
                 "managed import job requires track replacement confirmation"
             }
+            Sentinel::CommitFailed => "managed import could not write the Track to the database",
             Sentinel::Cancelled => "context canceled",
         }
     }
