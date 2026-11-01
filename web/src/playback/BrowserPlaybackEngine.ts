@@ -164,10 +164,11 @@ export class BrowserPlaybackEngine implements PlaybackEngine {
 			this.cancelLiveReconnect();
 			this.sourceRevision += 1;
 			this.hasStartedLivePlayback = false;
+			const startSeconds = trackStartSeconds(source);
 			this.update({
 				source,
 				status: "paused",
-				currentTime: 0,
+				currentTime: startSeconds,
 				bufferedEnd: null,
 				duration: sourceDurationSeconds(source),
 				error: null,
@@ -178,6 +179,9 @@ export class BrowserPlaybackEngine implements PlaybackEngine {
 		try {
 			const startedAt = performance.now();
 			if (source) await this.setMediaSource(source);
+			// Taking over the shared playhead starts here, not at 0 (ADR 0040).
+			const startSeconds = source ? trackStartSeconds(source) : 0;
+			if (startSeconds > 0) this.media.currentTime = startSeconds;
 			await this.media.play();
 			this.update({ status: "playing", error: null });
 			if (source) {
@@ -187,6 +191,13 @@ export class BrowserPlaybackEngine implements PlaybackEngine {
 				);
 			}
 		} catch (error) {
+			// A blocked start is not a broken Track: the browser refused to
+			// play without a user gesture, so stay paused without an error
+			// and let the next click start it.
+			if (hasErrorName(error, "NotAllowedError")) {
+				this.update({ status: "paused", error: null });
+				return;
+			}
 			// load() or pause() cut this start short, and whatever called them
 			// owns the state now: the Track did not fail.
 			if (hasErrorName(error, "AbortError")) return;
@@ -709,6 +720,12 @@ function isLiveSource(
 	{ type: "radio-station" | "catalog-preview" }
 > {
 	return source?.type === "radio-station" || source?.type === "catalog-preview";
+}
+
+/** Where a Track source starts, when it takes over a playhead. */
+function trackStartSeconds(source: PlaybackSource): number {
+	if (source.type !== "track") return 0;
+	return source.startPositionSeconds ?? 0;
 }
 
 /** play() rejects with a named DOMException, which is not always an Error. */

@@ -88,6 +88,7 @@ function createBridge() {
 			enableAdaptiveSystemRate: vi.fn(async () => state),
 			toggleShuffle: vi.fn(async () => state),
 			cycleRepeatMode: vi.fn(async () => state),
+			setSharedPlaybackSuspended: vi.fn(async () => undefined),
 			listen: vi.fn(async (nextListener: PlaybackSessionListener) => {
 				listener = nextListener;
 				return () => {
@@ -290,6 +291,34 @@ describe("DesktopPlaybackEngine", () => {
 				message: "Pinned mpv could not decode this Track.",
 			},
 		});
+		engine.destroy();
+	});
+
+	it("leaves Shared Playback State reporting and obeying to the Rust core", async () => {
+		const native = createBridge();
+		const engine = new DesktopPlaybackEngine(native.bridge);
+
+		await vi.waitFor(() =>
+			expect(native.bridge.rendererReady).toHaveBeenCalledOnce(),
+		);
+
+		// The wrapper in the renderer must not report or obey on top of the
+		// core, and must not claim on its own: only a play in a window claims.
+		expect(engine.reportsSharedPlaybackState).toBe(true);
+		expect(engine.getState().status).toBe("idle");
+		engine.destroy();
+	});
+
+	it("tells the core when a Room suspends the Shared Playback State", async () => {
+		const native = createBridge();
+		const engine = new DesktopPlaybackEngine(native.bridge);
+		await vi.waitFor(() =>
+			expect(native.bridge.rendererReady).toHaveBeenCalledOnce(),
+		);
+
+		engine.setSharedPlaybackSuspended(true);
+
+		expect(native.bridge.setSharedPlaybackSuspended).toHaveBeenCalledWith(true);
 		engine.destroy();
 	});
 });

@@ -632,6 +632,47 @@ describe("BrowserPlaybackEngine", () => {
 		engine.destroy();
 	});
 
+	it("starts a Track source at its start position, before play", async () => {
+		const engine = new BrowserPlaybackEngine({
+			createMedia: () => media,
+			mediaSession: null,
+		});
+		// The playhead the element already had when play() was asked for.
+		let currentTimeAtPlay: number | null = null;
+		const originalPlay = media.play.getMockImplementation();
+		media.play.mockImplementationOnce(async () => {
+			currentTimeAtPlay = media.currentTime;
+			return originalPlay?.();
+		});
+
+		await engine.play({ ...trackSource, startPositionSeconds: 42 });
+
+		expect(currentTimeAtPlay).toBe(42);
+		expect(media.currentTime).toBe(42);
+		expect(engine.getState().currentTime).toBe(42);
+		expect(engine.getState().status).toBe("playing");
+		engine.destroy();
+	});
+
+	it("reports a blocked start as paused without an error", async () => {
+		const engine = new BrowserPlaybackEngine({
+			createMedia: () => media,
+			mediaSession: null,
+		});
+		media.play.mockRejectedValueOnce(
+			new DOMException("The play() request was interrupted", "NotAllowedError"),
+		);
+
+		await expect(engine.play(trackSource)).resolves.toBeUndefined();
+
+		expect(engine.getState()).toMatchObject({
+			status: "paused",
+			error: null,
+			source: trackSource,
+		});
+		engine.destroy();
+	});
+
 	it("shows no error when a newer source interrupts a pending start", async () => {
 		const engine = new BrowserPlaybackEngine({
 			createMedia: () => media,

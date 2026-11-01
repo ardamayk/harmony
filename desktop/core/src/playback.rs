@@ -266,6 +266,17 @@ pub(crate) trait MpvProcessAdapter: Send + Sync {
         self.load(url)?;
         self.seek(seconds)
     }
+    /// [`Self::load_at`] within the same event boundary as a plain load, so a
+    /// taken-over or restored playhead never plays from 0.
+    fn load_at_with_event_boundary(
+        &self,
+        url: &str,
+        seconds: f64,
+        load_revision: u64,
+    ) -> Result<(), String> {
+        let _ = load_revision;
+        self.load_at(url, seconds)
+    }
     /// Queues `url` after the current file so mpv continues into it without
     /// closing the audio output; any later load or stop discards it.
     fn append(&self, _url: &str) -> Result<(), String> {
@@ -739,6 +750,26 @@ impl MpvProcessAdapter for RealMpvProcess {
         self.clear_appended();
         self.command_with_event_boundary(json!(["loadfile", url, "replace"]), Some(load_revision))
             .map(|_| ())
+    }
+
+    fn load_at_with_event_boundary(
+        &self,
+        url: &str,
+        seconds: f64,
+        load_revision: u64,
+    ) -> Result<(), String> {
+        self.clear_appended();
+        self.command_with_event_boundary(
+            json!([
+                "loadfile",
+                url,
+                "replace",
+                -1,
+                { "start": seconds.to_string() }
+            ]),
+            Some(load_revision),
+        )
+        .map(|_| ())
     }
 
     fn configure_output(
@@ -1600,9 +1631,14 @@ impl PlaybackController {
         self.advance_command_revision();
         let current = self.state()?;
         let next_source = source.clone().or(current.source.clone());
-        let Some(next_source) = next_source else {
+        let Some(mut next_source) = next_source else {
             return Ok(current);
         };
+        let start_seconds = playback_start_seconds(&next_source)?;
+        // It applies to this start alone: the session's source replays from 0.
+        if let Some(source) = next_source.as_object_mut() {
+            source.remove("startPositionSeconds");
+        }
         // mpv goes idle when the last Track ends, so playing again reloads it.
         let is_new_source = source.is_some() || current.status == PlaybackStatus::Ended;
         let should_fade_in = !is_new_source
@@ -1615,15 +1651,19 @@ impl PlaybackController {
             self.reset_adaptive_after_failure("source rate setup");
             return self.fail_native(error);
         }
-        let load_revision = match self.start_playback(&next_source, is_new_source) {
+        let load_revision = match self.start_playback(&next_source, is_new_source, start_seconds) {
             Ok(load_revision) => load_revision,
             Err(error) => {
                 self.reset_adaptive_after_failure("mpv playback setup");
                 return self.fail_native(error);
             }
         };
-        let state =
-            self.update(|state| update_playing_state(state, next_source.clone(), is_new_source))?;
+        let state = self.update(|state| {
+            update_playing_state(state, next_source.clone(), is_new_source);
+            if let Some(seconds) = start_seconds {
+                state.current_time = seconds;
+            }
+        })?;
         if let Some(load_revision) = load_revision {
             self.published_load_revision
                 .store(load_revision, Ordering::Release);
@@ -1636,7 +1676,12 @@ impl PlaybackController {
         Ok(state)
     }
 
-    fn start_playback(&self, source: &Value, should_load: bool) -> Result<Option<u64>, String> {
+    fn start_playback(
+        &self,
+        source: &Value,
+        should_load: bool,
+        start_seconds: Option<f64>,
+    ) -> Result<Option<u64>, String> {
         if !should_load {
             return self
                 .with_process(|process| process.set_paused(false))
@@ -1650,7 +1695,11 @@ impl PlaybackController {
             LoadTrigger::Play,
         ));
         self.with_process(|process| {
-            process.load_with_event_boundary(&url, load_revision)?;
+            if let Some(seconds) = start_seconds {
+                process.load_at_with_event_boundary(&url, seconds, load_revision)?;
+            } else {
+                process.load_with_event_boundary(&url, load_revision)?;
+            }
             process.set_paused(false)
         })
         .map(|_| Some(load_revision))
@@ -4122,6 +4171,20 @@ fn playback_url(source: &Value) -> Result<String, PlaybackCommandError> {
         .playback_url()
         .map_err(PlaybackCommandError::new)?
         .to_owned())
+}
+
+/// `startPositionSeconds` on a Track source: where a taken-over shared
+/// playhead resumes, so mpv never starts at 0. Absent means 0.
+pub(crate) fn playback_start_seconds(source: &Value) -> Result<Option<f64>, PlaybackCommandError> {
+    let Some(value) = source.get("startPositionSeconds") else {
+        return Ok(None);
+    };
+    match value.as_f64() {
+        Some(seconds) if seconds.is_finite() && seconds >= 0.0 => Ok(Some(seconds)),
+        _ => Err(PlaybackCommandError::new(
+            "Playback Source start position must be a non-negative number of seconds.",
+        )),
+    }
 }
 
 fn track_duration(source: &Value) -> f64 {
@@ -7051,6 +7114,80 @@ mod tests {
             .expect_err("reject an out-of-range speed");
         assert!(error.message.contains("between"));
         assert_eq!(controller.state().expect("state").playback_rate, 1.5);
+    }
+
+    #[test]
+    fn a_track_source_with_a_start_position_loads_at_it_instead_of_zero() {
+        let (controller, actions) = start_recording_controller();
+        let source = json!({
+            "type": "track",
+            "track": { "id": "track-1" },
+            "playbackUrl": "http://127.0.0.1:43129/token/api/v1/tracks/track-1/stream",
+            "startPositionSeconds": 81.25,
+        });
+
+        let state = controller
+            .play(Some(source))
+            .expect("play from a start position");
+
+        let actions = actions.lock().expect("actions");
+        assert!(
+            actions.contains(&"seek:81.25".to_owned()),
+            "the playhead must resume at the start position: {actions:?}"
+        );
+        assert_eq!(state.current_time, 81.25);
+        // The session's source must not replay from there.
+        let source = state.source.expect("source");
+        assert_eq!(source.get("startPositionSeconds"), None);
+    }
+
+    #[test]
+    fn a_track_source_without_a_start_position_loads_from_zero() {
+        let (controller, actions) = start_recording_controller();
+        let source = json!({
+            "type": "track",
+            "track": { "id": "track-1" },
+            "playbackUrl": "http://127.0.0.1:43129/token/api/v1/tracks/track-1/stream",
+        });
+
+        controller.play(Some(source)).expect("play");
+
+        assert!(
+            !actions
+                .lock()
+                .expect("actions")
+                .iter()
+                .any(|action| action.starts_with("seek:")),
+            "an ordinary start must not seek: {actions:?}"
+        );
+    }
+
+    #[test]
+    fn a_broken_start_position_is_rejected_before_mpv_is_touched() {
+        let (controller, actions) = start_recording_controller();
+        let source = json!({
+            "type": "track",
+            "track": { "id": "track-1" },
+            "playbackUrl": "http://127.0.0.1:43129/token/api/v1/tracks/track-1/stream",
+            "startPositionSeconds": -5,
+        });
+
+        let error = controller
+            .play(Some(source))
+            .expect_err("reject a negative start position");
+        assert!(
+            error
+                .message
+                .contains("start position must be a non-negative number")
+        );
+        assert!(
+            !actions
+                .lock()
+                .expect("actions")
+                .iter()
+                .any(|action| action.starts_with("load:")),
+            "a broken source must not reach mpv: {actions:?}"
+        );
     }
 
     #[test]

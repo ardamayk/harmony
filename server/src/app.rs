@@ -61,6 +61,8 @@ pub struct AppState {
     pub lyrics: Arc<modules::lyrics::Lyrics>,
     /// Shared with Managed Import, whose writes change queues too.
     pub queue_events: Arc<modules::playback::QueueEventBroker>,
+    /// The latest Shared Playback State snapshot per user (ADR 0040).
+    pub playback_state: Arc<modules::playback::PlaybackStateBroker>,
     pub managed_import: Arc<modules::managed_import::ManagedImport>,
     pub external_source: Arc<modules::external_source::ExternalSource>,
     pub listen_together: Arc<modules::listen_together::ListenTogether>,
@@ -89,6 +91,7 @@ impl AppState {
             &config.version,
         );
         let queue_events: Arc<modules::playback::QueueEventBroker> = Arc::default();
+        let playback_state: Arc<modules::playback::PlaybackStateBroker> = Arc::default();
         let managed_import =
             modules::managed_import::ManagedImport::new(db.clone(), &config, queue_events.clone());
         let external_source =
@@ -111,6 +114,7 @@ impl AppState {
             artist_info: Arc::new(artist_info),
             lyrics: Arc::new(lyrics),
             queue_events,
+            playback_state,
             managed_import: Arc::new(managed_import),
             external_source: Arc::new(external_source),
             listen_together: Arc::new(listen_together),

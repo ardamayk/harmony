@@ -3,6 +3,8 @@ status: accepted
 ---
 
 > [ADR 0038](0038-owner-access-through-a-signing-proxy.md) adds a public Owner address behind a proxy that signs each request. Everything here about the Guest Listener stands.
+>
+> [ADR 0040](0040-shared-playback-state-with-one-active-device.md) gives one user a Shared Playback State outside a Room, so "outside a Room, Playback Sessions stay independent" no longer holds. A Room suspends it; everything else here stands.
 
 # Listen Together through Rooms on the Owner's Music Server
 
