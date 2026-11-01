@@ -223,6 +223,7 @@ export function PlayerBar({
 		processingState,
 		playbackTelemetry,
 		playbackSource,
+		followingDeviceName,
 		getAlbumCoverUrl,
 		getExternalTrackArtworkUrl,
 		getTrackLyrics,
@@ -452,11 +453,13 @@ export function PlayerBar({
 				: null) ??
 			"Select a track");
 	// An External Track is marked in the caption line an Album title uses.
-	const nowPlayingCaption = currentExternalTrack
-		? externalSourceName
-			? `External – ${externalSourceName}`
-			: "External"
-		: (currentTrack?.albumTitle ?? null);
+	const nowPlayingCaption = followingDeviceName
+		? `Playing on ${followingDeviceName}`
+		: currentExternalTrack
+			? externalSourceName
+				? `External – ${externalSourceName}`
+				: "External"
+			: (currentTrack?.albumTitle ?? null);
 	// The bar shows a 56–64px cover; the full-screen views get a large one.
 	// An External Track has one size, about 300px.
 	const artworkUrl = currentTrack

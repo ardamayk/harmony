@@ -1,8 +1,9 @@
 //! HTTP for playback: parse the request, call the service, respond.
 
-use super::repository::QueueError;
+use super::playback_state::{Command, PlaybackState};
+use super::repository::{QueueError, StateError};
 use super::serve_file;
-use super::service::Service;
+use super::service::{CommandOutcome, Service};
 use super::sources;
 use crate::app::AppState;
 use crate::auth;
@@ -20,9 +21,11 @@ use axum::{Json, Router};
 use futures_util::StreamExt;
 use serde::Deserialize;
 use serde_json::value::RawValue;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 const MAX_REQUEST_BYTES: usize = 1024 * 1024;
+/// Comfortably more than any single command.
+const MAX_COMMAND_BYTES: usize = 64 * 1024;
 const KEEP_ALIVE: Duration = Duration::from_secs(15);
 
 pub fn routes() -> Router<AppState> {
@@ -40,10 +43,25 @@ pub fn routes() -> Router<AppState> {
             delete(remove_item),
         )
         .route("/api/v1/playback/queue/events", get(stream_queue_events))
+        .route("/api/v1/playback/state", get(get_playback_state))
+        .route(
+            "/api/v1/playback/state/commands",
+            post(post_playback_state_command),
+        )
         .route(
             "/api/v1/tracks/{track_id}/stream",
             get(stream_track).head(stream_track),
         )
+}
+
+/// The server time a command or snapshot is judged at; the state rules
+/// themselves take it as a parameter and stay testable without a clock.
+fn now_ms() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |elapsed| {
+            i64::try_from(elapsed.as_millis()).unwrap_or(i64::MAX)
+        })
 }
 
 /// The body as Go's decodeQueueRequest reads it: at most 1 MiB, then one
@@ -263,35 +281,117 @@ fn queue_event(revision: &str, sequence: &str) -> Bytes {
     ))
 }
 
-/// The current revision first, then every later invalidation, with a
-/// keep-alive comment every 15s.
+/// A full snapshot for every device on the stream. No `id:` line: the
+/// snapshot's own revision is what clients obey by, and a reconnect reads
+/// the state first anyway.
+fn playback_event(snapshot: &PlaybackState) -> Bytes {
+    let data = gojson::to_string(snapshot);
+    Bytes::from(format!("event: playback-state\ndata: {data}\n\n"))
+}
+
+async fn get_playback_state(State(state): State<AppState>) -> Response {
+    match Service::new(&state)
+        .playback_state(auth::current_user().id, now_ms())
+        .await
+    {
+        Ok(snapshot) => Json(snapshot).into_response(),
+        Err(error) => internal(error),
+    }
+}
+
+/// One strict `json.Unmarshal`, like the queue requests; the contract marks
+/// the body required.
+async fn decode_command(body: Body) -> Result<Command, ApiError> {
+    let bytes: Bytes = axum::body::to_bytes(body, MAX_COMMAND_BYTES)
+        .await
+        .map_err(|_| ApiError::bad_request("command body is too large"))?;
+    serde_json::from_slice(&bytes).map_err(|_| ApiError::bad_request("invalid JSON body"))
+}
+
+async fn post_playback_state_command(State(state): State<AppState>, body: Body) -> Response {
+    let user_id = auth::current_user().id;
+    let command = match decode_command(body).await {
+        Ok(command) => command,
+        Err(error) => return error.into_response(),
+    };
+    if let Err(message) = command.validate() {
+        return ApiError::bad_request(message).into_response();
+    }
+    let service = Service::new(&state);
+    match service.playback_command(user_id, command, now_ms()).await {
+        Ok(CommandOutcome {
+            state: snapshot,
+            changed,
+        }) => {
+            if changed {
+                state.playback_state.publish(user_id, &snapshot);
+            }
+            Json(snapshot).into_response()
+        }
+        Err(StateError::DeviceNotActive) => {
+            // Nothing was written, so the current state is the answer's body.
+            match service.playback_state(user_id, now_ms()).await {
+                Ok(snapshot) => (
+                    StatusCode::CONFLICT,
+                    Json(serde_json::json!({
+                        "error": "playback_device_not_active",
+                        "code": "playback_device_not_active",
+                        "message": "the report came from a device that is no longer the Active Device",
+                        "state": snapshot,
+                    })),
+                )
+                    .into_response(),
+                Err(error) => internal(error),
+            }
+        }
+        Err(error) => internal(error),
+    }
+}
+
+/// The current revision first, then the current Shared Playback State, then
+/// every later change of either, with a keep-alive comment every 15s.
 async fn stream_queue_events(State(state): State<AppState>) -> Response {
     let user_id = auth::current_user().id;
     let subscription = state.queue_events.subscribe(user_id);
-    let queue = match Service::new(&state).get_queue(user_id).await {
+    let playback = state.playback_state.subscribe(user_id);
+    let service = Service::new(&state);
+    let queue = match service.get_queue(user_id).await {
         Ok(queue) => queue,
         Err(error) => return internal(error),
     };
     let first = queue_event(&queue.revision, &queue.event_sequence);
+    let first_playback = match service.playback_state(user_id, now_ms()).await {
+        Ok(snapshot) => playback_event(&snapshot),
+        Err(error) => return internal(error),
+    };
     let keep_alive = tokio::time::interval_at(tokio::time::Instant::now() + KEEP_ALIVE, KEEP_ALIVE);
     let later = futures_util::stream::unfold(
-        (subscription, keep_alive),
-        |(mut subscription, mut keep_alive)| async move {
+        (subscription, playback, keep_alive),
+        |(mut subscription, mut playback, mut keep_alive)| async move {
             let chunk = tokio::select! {
                 changed = subscription.events.changed() => {
                     changed.ok()?;
                     let event = subscription.events.borrow_and_update().clone()?;
                     queue_event(&event.revision, &event.sequence)
                 }
+                changed = playback.events.changed() => {
+                    changed.ok()?;
+                    let snapshot = playback.events.borrow_and_update().clone()?;
+                    playback_event(&snapshot)
+                }
                 _ = keep_alive.tick() => Bytes::from_static(b": keep-alive\n\n"),
             };
             Some((
                 Ok::<_, std::convert::Infallible>(chunk),
-                (subscription, keep_alive),
+                (subscription, playback, keep_alive),
             ))
         },
     );
-    let stream = futures_util::stream::once(async move { Ok(first) }).chain(later);
+    let stream = futures_util::stream::once(async move { Ok(first) })
+        .chain(futures_util::stream::once(
+            async move { Ok(first_playback) },
+        ))
+        .chain(later);
     let mut headers = HeaderMap::new();
     headers.insert(
         header::CONTENT_TYPE,
@@ -337,6 +437,7 @@ async fn stream_track(
 
 #[cfg(test)]
 mod tests {
+    use super::super::playback_state::{Playback, StoredState};
     use super::*;
 
     #[test]
@@ -344,6 +445,28 @@ mod tests {
         assert_eq!(
             queue_event("12", "40"),
             Bytes::from_static(b"id: 40\nevent: queue-invalidated\ndata: {\"invalidates\":[\"queue\"],\"revision\":\"12\",\"sequence\":\"40\"}\n\n")
+        );
+    }
+
+    #[test]
+    fn playback_state_frames_carry_the_snapshot_without_an_id() {
+        let mut stored = StoredState::default();
+        stored.claim(
+            "d1",
+            "Desktop",
+            Playback {
+                queue_item_id: None,
+                track_id: None,
+                position_ms: 0,
+                playing: false,
+            },
+            1_000,
+        );
+        assert_eq!(
+            playback_event(&stored.at(1_000)),
+            Bytes::from_static(
+                b"event: playback-state\ndata: {\"revision\":1,\"queueItemId\":null,\"trackId\":null,\"playing\":false,\"positionMs\":0,\"positionAtMs\":1000,\"activeDeviceId\":\"d1\",\"activeDeviceName\":\"Desktop\",\"remoteCommandRevision\":0,\"skipRequest\":null,\"serverTimeMs\":1000}\n\n"
+            )
         );
     }
 }

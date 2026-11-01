@@ -693,6 +693,56 @@ describe("BrowserPlaybackEngine", () => {
 		engine.destroy();
 	});
 
+	it("starts a Track source at its start position, before play", async () => {
+		const engine = new BrowserPlaybackEngine({
+			createMedia: () => media,
+			mediaSession: null,
+		});
+		// The playhead the element already had when play() was asked for.
+		let currentTimeAtPlay: number | null = null;
+		const originalPlay = media.play.getMockImplementation();
+		media.play.mockImplementationOnce(async () => {
+			currentTimeAtPlay = media.currentTime;
+			return originalPlay?.();
+		});
+
+		await engine.play({ ...trackSource, startPositionSeconds: 42 });
+
+		expect(currentTimeAtPlay).toBe(42);
+		expect(media.currentTime).toBe(42);
+		expect(engine.getState().currentTime).toBe(42);
+		expect(engine.getState().status).toBe("playing");
+		engine.destroy();
+	});
+
+	it("fails a blocked start, naming the block, and a click starts it", async () => {
+		const engine = new BrowserPlaybackEngine({
+			createMedia: () => media,
+			mediaSession: null,
+		});
+		media.play.mockRejectedValueOnce(
+			new DOMException("Needs a gesture", "NotAllowedError"),
+		);
+
+		await expect(engine.play(trackSource)).rejects.toThrow("Needs a gesture");
+
+		expect(engine.getState()).toMatchObject({
+			status: "error",
+			error: { code: "playback-blocked" },
+			source: trackSource,
+		});
+
+		engine.togglePlay();
+
+		await vi.waitFor(() =>
+			expect(engine.getState()).toMatchObject({
+				status: "playing",
+				error: null,
+			}),
+		);
+		engine.destroy();
+	});
+
 	it("shows no error when a newer source interrupts a pending start", async () => {
 		const engine = new BrowserPlaybackEngine({
 			createMedia: () => media,

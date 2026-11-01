@@ -32,6 +32,7 @@ pub mod processing;
 mod queue_events;
 mod rpc;
 pub mod runtime;
+mod shared_playback;
 pub mod telemetry;
 #[cfg(windows)]
 mod wasapi;
@@ -66,10 +67,13 @@ use processing::{
     EqualizerPreset, FileProcessingSettingsStorage, OutputMode, ProcessingController,
     ProcessingProfile, ReplayGainMode, mpv_configuration_for,
 };
-use queue_events::QueueEventService;
+use queue_events::{QueueEventService, ServerEvent};
 use rpc::{Output, Reply, Request, param, reply};
 use serde::Serialize;
 use serde_json::{Value, json};
+use shared_playback::{
+    LocalProgress, SharedPlaybackDeviceStore, SharedPlaybackService, local_progress,
+};
 use std::collections::BTreeMap;
 use std::io::BufRead;
 use std::path::{Path, PathBuf};
@@ -77,6 +81,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, RwLock, Weak, mpsc};
 use std::time::Duration;
 use telemetry::PlatformPathObserver;
+use tokio::sync::watch;
 
 const CONNECTION_FILE_NAME: &str = "server-connection.json";
 const PLAYBACK_SNAPSHOT_FILE_NAME: &str = "playback-session.json";
@@ -96,11 +101,14 @@ const SHELL_EXIT: &str = "shell:exit";
 const SHELL_READY: &str = "shell:ready";
 
 struct AppState {
-    playback: PlaybackController,
+    /// Shared with the Shared Playback service, which obeys remote commands
+    /// on it and lets go before teardown.
+    playback: Arc<PlaybackController>,
     processing: Mutex<ProcessingController>,
     active_output_resolver: Arc<dyn ActiveOutputResolver>,
     playback_lifecycle: Arc<Mutex<PlaybackLifecycle>>,
     playback_snapshot_store: PlaybackSnapshotStore,
+    shared_playback: SharedPlaybackService,
     bridge: Arc<HttpBridge>,
     store: ConnectionStore,
     origin: Arc<RwLock<Option<ServerOrigin>>>,
@@ -191,6 +199,7 @@ async fn save_server_connection(
         .map_err(|_| state_error())?
         .replace(origin.clone());
     if previous.as_ref() != Some(&origin) {
+        state.shared_playback.forget_server();
         if let Err(error) = playback_restore::forget_saved_source(&state.playback_snapshot_store) {
             eprintln!("Saved playback could not be cleared for the new server: {error}");
         }
@@ -1037,7 +1046,7 @@ fn validate_playback_source(
             "Native playback is restricted to the private Desktop media proxy.",
         ));
     }
-    Ok(())
+    playback::playback_start_seconds(source).map(|_| ())
 }
 
 fn state_error() -> ConnectionError {
@@ -1215,6 +1224,18 @@ async fn dispatch(state: Arc<AppState>, method: &str, params: Value) -> Reply {
         "desktop_playback_cycle_repeat_mode" => {
             blocking(&state, |state| state.playback.cycle_repeat_mode()).await
         }
+        "get_shared_playback_device" => reply::<_, ()>(Ok(state.shared_playback.device().clone())),
+        "get_shared_playback_state" => reply(state.shared_playback.current_state().await),
+        "send_shared_playback_command" => {
+            let command = param(&params, "command")?;
+            reply(state.shared_playback.send_command(command).await)
+        }
+        "set_shared_playback_suspended" => {
+            state
+                .shared_playback
+                .set_suspended(param(&params, "suspended")?);
+            Ok(Value::Null)
+        }
         "desktop_playback_quit" => {
             blocking(&state, |state| {
                 dispatch_application_action(state, DesktopPlaybackAction::Quit)
@@ -1266,6 +1287,16 @@ fn dispatch_application_action(
     state: &AppState,
     action: DesktopPlaybackAction,
 ) -> Result<(), PlaybackCommandError> {
+    if matches!(
+        action,
+        DesktopPlaybackAction::TogglePlay
+            | DesktopPlaybackAction::Play
+            | DesktopPlaybackAction::Previous
+            | DesktopPlaybackAction::Next
+    ) && state.shared_playback.is_following()
+    {
+        return Ok(());
+    }
     dispatch_desktop_playback_action(
         action,
         &state.playback,
@@ -1429,12 +1460,18 @@ impl AppState {
         {
             output.emit(SHELL_TRAY, update);
         }
-        let playback = PlaybackController::start_default_with_lifecycle(
+        // Local Player states feed the Shared Playback service's reporting;
+        // its loop ends when the sender here is dropped with the state.
+        let (shared_local_states, shared_local_states_rx) = watch::channel(None::<LocalProgress>);
+        let playback = Arc::new(PlaybackController::start_default_with_lifecycle(
             playback_lifecycle.clone(),
             Arc::new(PlatformPathObserver::new()),
             adaptive_system_rate,
-            move |state| publisher.publish(state),
-        )?;
+            move |state| {
+                publisher.publish(state.clone());
+                let _ = shared_local_states.send(Some(local_progress(&state)));
+            },
+        )?);
         playback.refresh_output_devices().unwrap_or_else(|error| {
             eprintln!(
                 "Raw ALSA hardware startup enumeration failed: {}",
@@ -1459,10 +1496,29 @@ impl AppState {
             .map_err(|error| error.message)?;
         let queue_event_output = output.clone();
         let queue_error_output = output.clone();
+        let device = SharedPlaybackDeviceStore::new(
+            config_directory.join(shared_playback::DEVICE_FILE_NAME),
+        )
+        .load_or_create();
+        let shared_playback_service =
+            SharedPlaybackService::start(shared_playback::SharedPlaybackServiceParts {
+                bridge: bridge.clone(),
+                origin: origin.clone(),
+                output: output.clone(),
+                playback: Arc::downgrade(&playback),
+                device,
+                local_states: shared_local_states_rx,
+            });
+        let shared_snapshots = shared_playback_service.clone();
         let queue_events = QueueEventService::start(
             bridge.clone(),
             origin.clone(),
-            move |event| queue_event_output.emit(QUEUE_INVALIDATED_EVENT, event),
+            move |event| match event {
+                ServerEvent::Queue(event) => {
+                    queue_event_output.emit(QUEUE_INVALIDATED_EVENT, event)
+                }
+                ServerEvent::PlaybackState(state) => shared_snapshots.on_server_snapshot(state),
+            },
             move |message| queue_error_output.emit(QUEUE_EVENTS_ERROR_EVENT, message),
         );
         let state = Arc::new(AppState {
@@ -1471,6 +1527,7 @@ impl AppState {
             active_output_resolver,
             playback_lifecycle,
             playback_snapshot_store,
+            shared_playback: shared_playback_service,
             bridge,
             store,
             origin,
@@ -1544,6 +1601,9 @@ pub fn run(config_directory: &Path) -> Result<(), String> {
             error.message
         );
     }
+    // Best-effort final Shared Playback report: the last playhead, paused.
+    // Bounded, so a silent server cannot hold the exit.
+    runtime::block_on(state.shared_playback.shutdown_report());
     release(state);
     Ok(())
 }
@@ -1664,6 +1724,23 @@ mod tests {
         });
 
         assert!(validate_playback_source(&source, "http://127.0.0.1:43129/private-token").is_err());
+    }
+
+    #[test]
+    fn native_playback_rejects_broken_start_positions() {
+        let media_proxy = "http://127.0.0.1:43129/private-token";
+        let source_with = |start: serde_json::Value| {
+            json!({
+                "type": "track",
+                "playbackUrl": "http://127.0.0.1:43129/private-token/api/v1/tracks/track-1/stream",
+                "startPositionSeconds": start,
+            })
+        };
+
+        assert!(validate_playback_source(&source_with(json!(81.25)), media_proxy).is_ok());
+        assert!(validate_playback_source(&source_with(json!(0)), media_proxy).is_ok());
+        assert!(validate_playback_source(&source_with(json!(-1)), media_proxy).is_err());
+        assert!(validate_playback_source(&source_with(json!("81.25")), media_proxy).is_err());
     }
 
     #[test]

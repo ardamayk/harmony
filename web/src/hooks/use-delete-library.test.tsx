@@ -1,7 +1,16 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vite-plus/test";
+import { toast } from "@repo/ui";
 import { useDeleteAlbum, useDeleteTrack } from "./use-delete-library";
+
+const playback = vi.hoisted(() => ({
+	currentTrack: null as { id: string } | null,
+	refreshQueue: async (): Promise<void> => {
+		throw new Error("offline");
+	},
+	clearQueue: async () => {},
+}));
 
 vi.mock("#/lib/api", () => ({
 	apiClient: {
@@ -14,11 +23,7 @@ vi.mock("#/lib/api", () => ({
 }));
 vi.mock("@repo/ui", () => ({
 	toast: { success: vi.fn(), error: vi.fn() },
-	usePlayback: () => ({
-		refreshQueue: async () => {
-			throw new Error("offline");
-		},
-	}),
+	usePlayback: () => playback,
 }));
 vi.mock("@tanstack/react-router", () => ({
 	useLocation: () => ({ pathname: "/library" }),
@@ -51,3 +56,30 @@ it.each([useDeleteTrack, useDeleteAlbum])(
 		expect(client.getQueryState(key)?.isInvalidated).toBe(true);
 	},
 );
+
+it("reports a deleted Album when its Queue item is already gone", async () => {
+	playback.currentTrack = { id: "deleted" };
+	playback.refreshQueue = async () => {};
+	playback.clearQueue = async () => {
+		throw new Error("queue item not found");
+	};
+	const client = new QueryClient();
+	const { result } = renderHook(() => useDeleteAlbum(), {
+		wrapper: ({ children }) => (
+			<QueryClientProvider client={client}>{children}</QueryClientProvider>
+		),
+	});
+
+	await act(async () => {
+		await result.current.mutateAsync({
+			albumId: "album",
+			confirmationToken: "confirmed",
+		});
+	});
+
+	expect(toast.success).toHaveBeenCalledWith(
+		"All tracks deleted",
+		expect.anything(),
+	);
+	expect(toast.error).not.toHaveBeenCalled();
+});

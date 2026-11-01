@@ -1214,6 +1214,9 @@ paths:
         event sequence, while data carries that sequence and the latest Queue
         Revision so reconnecting clients can detect stale state and refetch the
         Queue.
+        When playback.shared-session.v1 is advertised, the same stream also
+        emits playback-state events without an ID, whose data is a full
+        PlaybackState: one on connecting and one after every change.
       security:
         - bearerAuth: []
       responses:
@@ -1225,6 +1228,51 @@ paths:
                 $ref: "#/components/schemas/QueueEvent"
         "401":
           $ref: "#/components/responses/Unauthorized"
+  /api/v1/playback/state:
+    get:
+      tags: [playback]
+      operationId: getPlaybackState
+      summary: Get the Shared Playback State
+      description: >-
+        The Track, playhead and Active Device of the user. Read as paused when
+        the Active Device has not reported for 20 seconds. Advertised as
+        playback.shared-session.v1.
+      responses:
+        "200":
+          description: Current Shared Playback State
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlaybackState"
+  /api/v1/playback/state/commands:
+    post:
+      tags: [playback]
+      operationId: sendPlaybackStateCommand
+      summary: Change the Shared Playback State
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PlaybackStateCommand"
+      responses:
+        "200":
+          description: >-
+            Shared Playback State after the command. A report based on a
+            revision older than remoteCommandRevision changes nothing and also
+            answers 200.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlaybackState"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          description: A report came from a device that is no longer the Active Device
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlaybackStateConflictResponse"
   /api/v1/tracks/{trackId}/stream:
     head:
       tags: [playback]
@@ -2475,6 +2523,181 @@ components:
           type: string
           format: uri
           description: The Invite Link, only in the Owner's responses.
+    PlaybackState:
+      type: object
+      description: Where the user's playback is. See ADR 0040.
+      required:
+        - revision
+        - queueItemId
+        - trackId
+        - playing
+        - positionMs
+        - positionAtMs
+        - activeDeviceId
+        - activeDeviceName
+        - remoteCommandRevision
+        - skipRequest
+        - serverTimeMs
+      properties:
+        revision:
+          type: integer
+          format: int64
+        queueItemId:
+          type: string
+          nullable: true
+          description: May name an item since removed from the Queue. Null with a non-library source.
+        trackId:
+          type: string
+          nullable: true
+        playing:
+          type: boolean
+        positionMs:
+          type: integer
+          format: int64
+          minimum: 0
+        positionAtMs:
+          type: integer
+          format: int64
+          description: Server time at which positionMs held. While playing the playhead advances from it.
+        activeDeviceId:
+          type: string
+          nullable: true
+        activeDeviceName:
+          type: string
+          nullable: true
+        remoteCommandRevision:
+          type: integer
+          format: int64
+          description: Revision of the latest pause, seek or skip command.
+        skipRequest:
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/PlaybackSkipRequest"
+        serverTimeMs:
+          type: integer
+          format: int64
+    PlaybackSkipRequest:
+      type: object
+      description: A skip for the Active Device to carry out, once. revision identifies it.
+      required: [revision, direction]
+      properties:
+        revision:
+          type: integer
+          format: int64
+        direction:
+          type: string
+          enum: [next, previous]
+    PlaybackStateCommand:
+      oneOf:
+        - $ref: "#/components/schemas/PlaybackClaimCommand"
+        - $ref: "#/components/schemas/PlaybackReportCommand"
+        - $ref: "#/components/schemas/PlaybackPauseCommand"
+        - $ref: "#/components/schemas/PlaybackSeekCommand"
+        - $ref: "#/components/schemas/PlaybackSkipCommand"
+      discriminator:
+        propertyName: type
+        mapping:
+          claim: "#/components/schemas/PlaybackClaimCommand"
+          report: "#/components/schemas/PlaybackReportCommand"
+          pause: "#/components/schemas/PlaybackPauseCommand"
+          seek: "#/components/schemas/PlaybackSeekCommand"
+          skip: "#/components/schemas/PlaybackSkipCommand"
+    PlaybackClaimCommand:
+      type: object
+      description: The sender becomes the Active Device. Always succeeds.
+      required: [type, deviceId, deviceName, queueItemId, trackId, positionMs, playing]
+      properties:
+        type:
+          type: string
+          enum: [claim]
+        deviceId:
+          type: string
+          minLength: 1
+          maxLength: 64
+        deviceName:
+          type: string
+          minLength: 1
+          maxLength: 64
+        queueItemId:
+          type: string
+          nullable: true
+        trackId:
+          type: string
+          nullable: true
+        positionMs:
+          type: integer
+          format: int64
+          minimum: 0
+        playing:
+          type: boolean
+    PlaybackReportCommand:
+      type: object
+      description: >-
+        The Active Device says where it is. Answers 409 from another device, and
+        changes nothing when basedOnRevision is older than remoteCommandRevision.
+      required: [type, deviceId, basedOnRevision, queueItemId, trackId, positionMs, playing]
+      properties:
+        type:
+          type: string
+          enum: [report]
+        deviceId:
+          type: string
+          minLength: 1
+          maxLength: 64
+        basedOnRevision:
+          type: integer
+          format: int64
+        queueItemId:
+          type: string
+          nullable: true
+        trackId:
+          type: string
+          nullable: true
+        positionMs:
+          type: integer
+          format: int64
+          minimum: 0
+        playing:
+          type: boolean
+    PlaybackPauseCommand:
+      type: object
+      description: Remote pause; the Active Device obeys.
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [pause]
+    PlaybackSeekCommand:
+      type: object
+      description: Remote seek; the Active Device obeys.
+      required: [type, positionMs]
+      properties:
+        type:
+          type: string
+          enum: [seek]
+        positionMs:
+          type: integer
+          format: int64
+          minimum: 0
+    PlaybackSkipCommand:
+      type: object
+      description: Sets skipRequest for the Active Device to carry out.
+      required: [type, direction]
+      properties:
+        type:
+          type: string
+          enum: [skip]
+        direction:
+          type: string
+          enum: [next, previous]
+    PlaybackStateConflictResponse:
+      allOf:
+        - $ref: "#/components/schemas/ErrorResponse"
+        - type: object
+          required: [state]
+          properties:
+            state:
+              $ref: "#/components/schemas/PlaybackState"
     ListenTogetherCommand:
       oneOf:
         - $ref: "#/components/schemas/ListenTogetherPlayTracksCommand"
@@ -2579,7 +2802,8 @@ components:
             type: string
           description: >-
             Named server behaviors supported by this release. The versioned
-            /api/v1 surface itself is advertised as api.v1. Queue event streaming
+            /api/v1 surface itself is advertised as api.v1. The Shared Playback
+            State is advertised as playback.shared-session.v1. Queue event streaming
             is advertised as playback.queue-events.v1 and the first strict FLAC
             Managed Import tracer bullet as managed-import.v1. Multi-file Managed
             Import Batches are advertised as managed-import-batches.v1, Permanent

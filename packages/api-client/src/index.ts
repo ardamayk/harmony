@@ -2,8 +2,15 @@ import type { components, operations } from "./generated/schema";
 import {
 	type QueueEvent,
 	type QueueEventSource,
+	createSharedQueueEventStream,
 	subscribeQueueEvents,
 } from "./queue-events";
+import {
+	type PlaybackState,
+	type PlaybackStateCommand,
+	playbackConflictState,
+	subscribePlaybackState,
+} from "./playback-state";
 import {
 	type ApiOperation,
 	isDevelopmentBuild,
@@ -24,6 +31,15 @@ export type CoverSize = 64 | 128 | 256 | 512 | 1024;
 export * from "./capabilities";
 export type { QueueEvent, QueueEventSource } from "./queue-events";
 export { QUEUE_EVENTS_CAPABILITY } from "./queue-events";
+export { createSharedQueueEventStream } from "./queue-events";
+export type { SharedQueueEventStream } from "./queue-events";
+export type {
+	PlaybackState,
+	PlaybackStateCommand,
+	PlaybackStateConflictResponse,
+	PlaybackSkipRequest,
+} from "./playback-state";
+export { SHARED_SESSION_CAPABILITY } from "./playback-state";
 export {
 	type ApiOperation,
 	ApiResponseValidationError,
@@ -305,6 +321,17 @@ export function createApiClient(config: ApiClientConfig) {
 		typeof queueEventsBaseUrl === "function"
 			? queueEventsBaseUrl()
 			: queueEventsBaseUrl;
+	// Queue invalidations and Shared Playback State frames share one endpoint,
+	// so a browser client holds one EventSource for both (ADR 0040). Clients
+	// that read the stream themselves (a custom subscriber or a token) have
+	// none: the Desktop core delivers their snapshots.
+	const sharedQueueEventStream =
+		getToken || queueEventSubscriber
+			? undefined
+			: createSharedQueueEventStream({
+					getBaseUrl: getQueueEventsBaseUrl,
+					eventSourceFactory,
+				});
 
 	function uploadManagedImportFile(
 		importId: string,
@@ -429,10 +456,21 @@ export function createApiClient(config: ApiClientConfig) {
 				transport,
 				eventSourceFactory,
 				subscriber: queueEventSubscriber,
+				sharedStream: sharedQueueEventStream,
 			},
 			onEvent,
 			onError,
 		);
+	}
+
+	function subscribeSharedPlaybackState(
+		onState: (state: PlaybackState) => void,
+		onError?: (error: Error) => void,
+	): () => void {
+		if (!sharedQueueEventStream) {
+			throw new Error("This client reads the Queue events itself.");
+		}
+		return subscribePlaybackState(sharedQueueEventStream, onState, onError);
 	}
 
 	function subscribeListenTogetherRoomEvents(
@@ -741,6 +779,26 @@ export function createApiClient(config: ApiClientConfig) {
 				normalizeQueue,
 			),
 		subscribePlaybackQueueEvents,
+		/** The Shared Playback State of the user (ADR 0040). */
+		getPlaybackState: () =>
+			request<PlaybackState>("getPlaybackState", "/api/v1/playback/state"),
+		/**
+		 * Sends one Shared Playback State command. A report from a device that
+		 * lost Active resolves with the state inside the 409 answer, so the
+		 * sender adopts the current truth instead of its own.
+		 */
+		sendPlaybackStateCommand: (command: PlaybackStateCommand) =>
+			request<PlaybackState>(
+				"sendPlaybackStateCommand",
+				"/api/v1/playback/state/commands",
+				{ method: "POST", body: JSON.stringify(command) },
+			).catch((error: unknown) => {
+				const conflict = playbackConflictState(error);
+				if (conflict) return conflict;
+				throw error;
+			}),
+		subscribePlaybackState: subscribeSharedPlaybackState,
+
 		replacePlaybackQueue: (
 			trackIds: string[],
 			revision: string,

@@ -161,7 +161,7 @@ An app instance on a user device that browses the Music Server and plays audio o
 _Avoid_: Music Server, UI, frontend
 
 **Web Client**:
-A Playback Client used through a web browser, or installed from one to a phone's Home Screen. Its playback remains local to that device.
+A Playback Client used through a web browser, or installed from one to a phone's Home Screen. It produces sound only on the browser's device, and only as the Active Device.
 _Avoid_: Desktop Client, server player
 
 **Desktop Client**:
@@ -169,7 +169,7 @@ An installed Playback Client with native playback capability. It connects to a s
 _Avoid_: Music Server, standalone server, web wrapper
 
 **Player**:
-The audio engine local to a Playback Client. Each Playback Client owns its Player and playback position independently.
+The audio engine local to a Playback Client. Only the Active Device's Player produces sound.
 _Avoid_: Music Server, Playback Client, queue
 
 **Native Playback**:
@@ -225,23 +225,35 @@ The promise that Web and Desktop Clients can play the same Playback Sources even
 _Avoid_: Identical audio engine, shared Playback Session
 
 **Playback Session**:
-The transient, device-local state of one Player, including the current item, playhead, play/pause state, volume, shuffle, and repeat mode.
-_Avoid_: Queue, playlist, shared playback state
+The device-local state of one Player: what it has loaded, volume, shuffle, and repeat mode. Where the Track and playhead are belongs to the Shared Playback State.
+_Avoid_: Queue, playlist, Shared Playback State
+
+**Shared Playback State**:
+The user's current Queue item and Track, playhead, play or pause, and Active Device, held by the Music Server and followed by every Playback Client of that user. It survives a client closing and a server restart.
+_Avoid_: Room State, Playback Session
+
+**Active Device**:
+The one Playback Client whose Player produces sound for a user. A client becomes it by starting playback.
+_Avoid_: Output Device, Owner
+
+**Following**:
+A Playback Client that is not the Active Device: it shows the Shared Playback State in silence, and its pause, seek and skip control the Active Device.
+_Avoid_: Muted Player, Guest
 
 **Playback Session Snapshot**:
-The device-local record used to restore the last item and playhead in a paused state after the Desktop Client relaunches or to recover once from a Player crash.
-_Avoid_: Shared playback state, automatic playback
+The device-local record used to restore the last item and playhead in a paused state when the Desktop Client relaunches and cannot reach the Music Server, or to recover once from a Player crash.
+_Avoid_: Shared Playback State, automatic playback
 
 **Background Playback**:
 Continuation of the Desktop Client's Playback Session after its main window closes. An explicit application quit ends the session.
 _Avoid_: Server playback, remote playback
 
 **Queue**:
-A user-owned ordered list of library Tracks shared across that user's Playback Clients. Each Player consumes the shared Queue through its own independent Playback Session.
+A user-owned ordered list of library Tracks shared across that user's Playback Clients. The Active Device plays through it.
 _Avoid_: Playlist, Playback Session, play history
 
 **Queue Synchronization**:
-Propagation of Queue changes to every active Playback Client without synchronizing their independent Playback Sessions.
+Propagation of Queue changes to every active Playback Client. The playhead is synchronized separately, by the Shared Playback State.
 _Avoid_: Playback synchronization, shared playhead
 
 **Queue Revision**:

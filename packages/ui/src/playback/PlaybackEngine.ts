@@ -25,6 +25,8 @@ export type PlaybackSource =
 			queueItemId?: string;
 			/** Cover URL for OS media controls; optional for older hosts. */
 			artworkUrl?: string;
+			/** Starts here instead of 0, when taking over the shared playhead. */
+			startPositionSeconds?: number;
 	  }
 	| {
 			type: "radio-station";
@@ -63,6 +65,8 @@ export type PlaybackStatus =
 export type PlaybackError = {
 	code:
 		| "playback-failed"
+		/** The browser refused to start without a user gesture. */
+		| "playback-blocked"
 		| "mpv-crash-loop"
 		| "mpv-restart-failed"
 		| "mpv-restart-unavailable"
@@ -100,6 +104,11 @@ export type PlaybackSessionState = {
 	error: PlaybackError | null;
 	processing?: ProcessingState;
 	telemetry?: PlaybackTelemetry;
+	/**
+	 * Shared Playback State (ADR 0040): present while this device follows
+	 * another one's Player, for the "Playing on …" indicator.
+	 */
+	sharedPlayback?: { followingDeviceName: string | null } | undefined;
 };
 
 export type PlaybackSessionListener = (state: PlaybackSessionState) => void;
@@ -144,6 +153,22 @@ export interface PlaybackEngine {
 	selectExclusiveOutput?(): void;
 	fallbackToSystemOutput?(): void;
 	enableAdaptiveSystemRate?(): void;
+	/**
+	 * The engine reports to and obeys the Shared Playback State by itself, as
+	 * the Desktop core does so that it keeps working with the window closed.
+	 */
+	readonly reportsSharedPlaybackState?: boolean;
+	/**
+	 * Suspends Shared Playback State reporting and following, as a Room or a
+	 * Guest session does (ADR 0040): everything passes through to the local
+	 * Player untouched until it is lifted.
+	 */
+	setSharedPlaybackSuspended?(suspended: boolean): void;
+	/**
+	 * The Queue as sources, for taking over its neighbouring item. Apart from
+	 * `syncQueueContext`, whose presence means the engine advances the Queue.
+	 */
+	setSharedQueueSources?(sources: PlaybackSource[]): void;
 	toggleShuffle(): void;
 	cycleRepeatMode(): void;
 	destroy(): void;

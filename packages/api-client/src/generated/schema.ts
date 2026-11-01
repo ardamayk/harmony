@@ -701,11 +701,48 @@ export interface paths {
         };
         /**
          * Stream Queue invalidation events
-         * @description Emits queue-invalidated server-sent events. Event IDs carry the persisted event sequence, while data carries that sequence and the latest Queue Revision so reconnecting clients can detect stale state and refetch the Queue.
+         * @description Emits queue-invalidated server-sent events. Event IDs carry the persisted event sequence, while data carries that sequence and the latest Queue Revision so reconnecting clients can detect stale state and refetch the Queue. When playback.shared-session.v1 is advertised, the same stream also emits playback-state events without an ID, whose data is a full PlaybackState: one on connecting and one after every change.
          */
         get: operations["streamPlaybackQueueEvents"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/playback/state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get the Shared Playback State
+         * @description The Track, playhead and Active Device of the user. Read as paused when the Active Device has not reported for 20 seconds. Advertised as playback.shared-session.v1.
+         */
+        get: operations["getPlaybackState"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/playback/state/commands": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Change the Shared Playback State */
+        post: operations["sendPlaybackStateCommand"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1280,6 +1317,102 @@ export interface components {
              */
             inviteUrl?: string;
         };
+        /** @description Where the user's playback is. See ADR 0040. */
+        PlaybackState: {
+            /** Format: int64 */
+            revision: number;
+            /** @description May name an item since removed from the Queue. Null with a non-library source. */
+            queueItemId: string | null;
+            trackId: string | null;
+            playing: boolean;
+            /** Format: int64 */
+            positionMs: number;
+            /**
+             * Format: int64
+             * @description Server time at which positionMs held. While playing the playhead advances from it.
+             */
+            positionAtMs: number;
+            activeDeviceId: string | null;
+            activeDeviceName: string | null;
+            /**
+             * Format: int64
+             * @description Revision of the latest pause, seek or skip command.
+             */
+            remoteCommandRevision: number;
+            skipRequest: components["schemas"]["PlaybackSkipRequest"] | null;
+            /** Format: int64 */
+            serverTimeMs: number;
+        };
+        /** @description A skip for the Active Device to carry out, once. revision identifies it. */
+        PlaybackSkipRequest: {
+            /** Format: int64 */
+            revision: number;
+            /** @enum {string} */
+            direction: "next" | "previous";
+        };
+        PlaybackStateCommand: components["schemas"]["PlaybackClaimCommand"] | components["schemas"]["PlaybackReportCommand"] | components["schemas"]["PlaybackPauseCommand"] | components["schemas"]["PlaybackSeekCommand"] | components["schemas"]["PlaybackSkipCommand"];
+        /** @description The sender becomes the Active Device. Always succeeds. */
+        PlaybackClaimCommand: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "claim";
+            deviceId: string;
+            deviceName: string;
+            queueItemId: string | null;
+            trackId: string | null;
+            /** Format: int64 */
+            positionMs: number;
+            playing: boolean;
+        };
+        /** @description The Active Device says where it is. Answers 409 from another device, and changes nothing when basedOnRevision is older than remoteCommandRevision. */
+        PlaybackReportCommand: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "report";
+            deviceId: string;
+            /** Format: int64 */
+            basedOnRevision: number;
+            queueItemId: string | null;
+            trackId: string | null;
+            /** Format: int64 */
+            positionMs: number;
+            playing: boolean;
+        };
+        /** @description Remote pause; the Active Device obeys. */
+        PlaybackPauseCommand: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "pause";
+        };
+        /** @description Remote seek; the Active Device obeys. */
+        PlaybackSeekCommand: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "seek";
+            /** Format: int64 */
+            positionMs: number;
+        };
+        /** @description Sets skipRequest for the Active Device to carry out. */
+        PlaybackSkipCommand: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "skip";
+            /** @enum {string} */
+            direction: "next" | "previous";
+        };
+        PlaybackStateConflictResponse: components["schemas"]["ErrorResponse"] & {
+            state: components["schemas"]["PlaybackState"];
+        };
         ListenTogetherCommand: components["schemas"]["ListenTogetherPlayTracksCommand"] | components["schemas"]["ListenTogetherResumeCommand"] | components["schemas"]["ListenTogetherPauseCommand"] | components["schemas"]["ListenTogetherSeekCommand"] | components["schemas"]["ListenTogetherSkipCommand"] | components["schemas"]["ListenTogetherSetLyricsOpenCommand"];
         /** @description Replaces the Room Queue and plays from index. */
         ListenTogetherPlayTracksCommand: {
@@ -1342,7 +1475,7 @@ export interface components {
             /** @enum {string} */
             status: "ok";
             version: string;
-            /** @description Named server behaviors supported by this release. The versioned /api/v1 surface itself is advertised as api.v1. Queue event streaming is advertised as playback.queue-events.v1 and the first strict FLAC Managed Import tracer bullet as managed-import.v1. Multi-file Managed Import Batches are advertised as managed-import-batches.v1, Permanent Track Deletion as managed-track-deletion.v1, explicit Track Replacement as managed-track-replacement.v1, Album deletion (one Permanent Track Deletion per Track, previewed once) as managed-album-deletion.v1, lazily generated waveform peaks as track-waveform.v1 (only when ffmpeg is installed), and External Source search and playback through yt-dlp as external-source.v1 (only when EXTERNAL_SOURCE_SEARCH is configured; a missing yt-dlp shows in dependencies and answers 503), and Rooms as listen-together.v1 (only when GUEST_ADDR and PUBLIC_URL are configured). On the Guest Listener, health lists only api.v1, listen-together.v1 and track-waveform.v1, with empty dependencies and no externalSource. Clients gate optional behavior on the exact capability name and must ignore unknown entries so newer servers stay compatible with older clients. */
+            /** @description Named server behaviors supported by this release. The versioned /api/v1 surface itself is advertised as api.v1. The Shared Playback State is advertised as playback.shared-session.v1. Queue event streaming is advertised as playback.queue-events.v1 and the first strict FLAC Managed Import tracer bullet as managed-import.v1. Multi-file Managed Import Batches are advertised as managed-import-batches.v1, Permanent Track Deletion as managed-track-deletion.v1, explicit Track Replacement as managed-track-replacement.v1, Album deletion (one Permanent Track Deletion per Track, previewed once) as managed-album-deletion.v1, lazily generated waveform peaks as track-waveform.v1 (only when ffmpeg is installed), and External Source search and playback through yt-dlp as external-source.v1 (only when EXTERNAL_SOURCE_SEARCH is configured; a missing yt-dlp shows in dependencies and answers 503), and Rooms as listen-together.v1 (only when GUEST_ADDR and PUBLIC_URL are configured). On the Guest Listener, health lists only api.v1, listen-together.v1 and track-waveform.v1, with empty dependencies and no externalSource. Clients gate optional behavior on the exact capability name and must ignore unknown entries so newer servers stay compatible with older clients. */
             capabilities: string[];
             /** @description Server Dependencies probed once at startup, in a stable order (ffmpeg, ffprobe, then the optional yt-dlp only when EXTERNAL_SOURCE_SEARCH is configured). They describe the deployment environment so an operator can see what the installation supports. */
             dependencies: components["schemas"]["ServerDependency"][];
@@ -3770,6 +3903,60 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+        };
+    };
+    getPlaybackState: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current Shared Playback State */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaybackState"];
+                };
+            };
+        };
+    };
+    sendPlaybackStateCommand: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlaybackStateCommand"];
+            };
+        };
+        responses: {
+            /** @description Shared Playback State after the command. A report based on a revision older than remoteCommandRevision changes nothing and also answers 200. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaybackState"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description A report came from a device that is no longer the Active Device */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaybackStateConflictResponse"];
+                };
+            };
         };
     };
     streamTrack: {

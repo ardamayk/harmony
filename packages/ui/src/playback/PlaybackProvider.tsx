@@ -143,6 +143,8 @@ type PlaybackContextValue = {
 	processingState: ProcessingState | null;
 	playbackTelemetry: PlaybackTelemetry | null;
 	queueConflict: string | null;
+	/** Set while this device follows another one's Player (ADR 0040). */
+	followingDeviceName: string | null;
 	playTrack: (
 		trackId: string,
 		queueTrackIds?: string[],
@@ -300,6 +302,12 @@ export function PlaybackProvider({
 	const session = useSyncExternalStore(subscribeToEngine, () =>
 		engine.getState(),
 	);
+	// A Room plays for everyone alike, and a Guest has no Shared Playback
+	// State of their own: the engine neither reports nor follows meanwhile
+	// (ADR 0040).
+	useEffect(() => {
+		engine.setSharedPlaybackSuspended?.(isInRoom || !canPlayAlone);
+	}, [engine, isInRoom, canPlayAlone]);
 	const currentQueueItemIdRef = useRef<string | null>(null);
 	const currentQueueIndexRef = useRef<number | null>(null);
 	const repeatCancellationRequestedModeRef = useRef<RepeatMode | null>(null);
@@ -411,15 +419,15 @@ export function PlaybackProvider({
 
 	useEffect(() => {
 		// During a Room the sync layer gives the engine its Queue context.
-		if (isInRoom || !engine.syncQueueContext) return;
+		if (isInRoom) return;
+		const sources = queuePlaybackSources(queue, apiRef.current);
+		engine.setSharedQueueSources?.(sources);
+		if (!engine.syncQueueContext) return;
 		const currentIndex = queue.findIndex(
 			(item) => item.id === currentQueueItemIdRef.current,
 		);
 		void engine
-			.syncQueueContext(
-				queuePlaybackSources(queue, apiRef.current),
-				currentIndex >= 0 ? currentIndex : null,
-			)
+			.syncQueueContext(sources, currentIndex >= 0 ? currentIndex : null)
 			.catch((error) => {
 				console.warn("Failed to sync native playback Queue context", { error });
 			});
@@ -894,6 +902,7 @@ export function PlaybackProvider({
 			processingState: session.processing ?? null,
 			playbackTelemetry: session.telemetry ?? null,
 			queueConflict,
+			followingDeviceName: session.sharedPlayback?.followingDeviceName ?? null,
 			playTrack,
 			playRadioStation,
 			playRadioCatalogPreview,

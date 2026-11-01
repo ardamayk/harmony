@@ -25,6 +25,8 @@ export type {
 	RepeatMode,
 } from "./playback/PlaybackEngine";
 export { DEFAULT_PLAYBACK_SESSION_STATE } from "./playback/PlaybackEngine";
+export type { SharedPlaybackTransport } from "./playback/SharedPlaybackEngine";
+export { SharedPlaybackEngine } from "./playback/SharedPlaybackEngine";
 export type {
 	ExternalSourcePlaybackApi,
 	PlaybackApi,

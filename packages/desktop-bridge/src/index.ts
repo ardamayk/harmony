@@ -70,6 +70,13 @@ export const CORE_COMMANDS = [
 	"desktop_playback_enable_adaptive_system_rate",
 	"desktop_playback_toggle_shuffle",
 	"desktop_playback_cycle_repeat_mode",
+	// Shared Playback State: the device identity, the server's state, the
+	// commands the renderer sends through the core, and suspending the core's
+	// reporting and obeying during a Room.
+	"get_shared_playback_device",
+	"get_shared_playback_state",
+	"send_shared_playback_command",
+	"set_shared_playback_suspended",
 ] as const;
 
 /** Commands the main process answers itself: pickers, links. */
@@ -94,6 +101,7 @@ export const DESKTOP_EVENTS = {
 	queueInvalidated: "desktop-queue-invalidated",
 	queueEventsError: "desktop-queue-events-error",
 	importProgress: "desktop-import-progress",
+	sharedPlaybackState: "desktop-shared-playback-state",
 } as const;
 
 export type DesktopEvent = (typeof DESKTOP_EVENTS)[keyof typeof DESKTOP_EVENTS];

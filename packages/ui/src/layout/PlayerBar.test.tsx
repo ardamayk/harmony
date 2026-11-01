@@ -457,6 +457,17 @@ describe("PlayerBar", () => {
 		expect(screen.getByLabelText("Quality High Quality")).toBeTruthy();
 	});
 
+	it("says where the sound is while following another device", () => {
+		renderPlayerBar(
+			undefined,
+			new InMemoryPlaybackEngine({
+				sharedPlayback: { followingDeviceName: "Harmony on desktop" },
+			}),
+		);
+
+		expect(screen.getByText("Playing on Harmony on desktop")).toBeTruthy();
+	});
+
 	it("names the External Source next to the External label", async () => {
 		const { engine } = renderPlayerBar(undefined, undefined, {
 			externalSourceName: "SoundCloud",

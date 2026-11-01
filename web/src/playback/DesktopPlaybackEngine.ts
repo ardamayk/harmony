@@ -44,6 +44,7 @@ type DesktopPlaybackBridge = {
 	enableAdaptiveSystemRate(): Promise<PlaybackSessionState>;
 	toggleShuffle(): Promise<PlaybackSessionState>;
 	cycleRepeatMode(): Promise<PlaybackSessionState>;
+	setSharedPlaybackSuspended(suspended: boolean): Promise<unknown>;
 	listen(listener: PlaybackSessionListener): Promise<Unlisten>;
 };
 
@@ -85,11 +86,20 @@ const desktopPlaybackBridge: DesktopPlaybackBridge = {
 		invoke("desktop_playback_enable_adaptive_system_rate"),
 	toggleShuffle: () => invoke("desktop_playback_toggle_shuffle"),
 	cycleRepeatMode: () => invoke("desktop_playback_cycle_repeat_mode"),
+	setSharedPlaybackSuspended: (suspended) =>
+		invoke("set_shared_playback_suspended", { suspended }),
 	listen: async (listener) =>
 		listen<PlaybackSessionState>(DESKTOP_EVENTS.playbackState, listener),
 };
 
 export class DesktopPlaybackEngine implements PlaybackEngine {
+	/**
+	 * The Rust core reports to and obeys the Shared Playback State itself, so
+	 * Background Playback keeps working with the window closed (ADR 0009).
+	 * This renderer only claims (through its transport) and follows.
+	 */
+	readonly reportsSharedPlaybackState = true;
+
 	private state: PlaybackSessionState = { ...DEFAULT_PLAYBACK_SESSION_STATE };
 	private readonly listeners = new Set<PlaybackSessionListener>();
 	private unlisten: Unlisten | null = null;
@@ -228,6 +238,13 @@ export class DesktopPlaybackEngine implements PlaybackEngine {
 
 	cycleRepeatMode() {
 		this.runCommand(() => this.bridge.cycleRepeatMode());
+	}
+
+	/** A Room suspends the core's reporting and obeying (ADR 0040). */
+	setSharedPlaybackSuspended(suspended: boolean) {
+		void this.bridge.setSharedPlaybackSuspended(suspended).catch((error) => {
+			console.warn("Failed to suspend Shared Playback", { error });
+		});
 	}
 
 	destroy() {

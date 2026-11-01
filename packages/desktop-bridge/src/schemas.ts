@@ -26,6 +26,37 @@ const playbackSource = z.looseObject({
 });
 
 /**
+ * A Shared Playback State command, per the `/api/v1/playback/state/commands`
+ * contract. The core passes it on unchecked, so this is where it is refused.
+ */
+const playbackStateCommand = z.discriminatedUnion("type", [
+	z.strictObject({
+		type: z.literal("claim"),
+		deviceId: z.string().min(1).max(64),
+		deviceName: z.string().min(1).max(64),
+		queueItemId: id.nullable(),
+		trackId: id.nullable(),
+		positionMs: nonNegativeInteger,
+		playing: z.boolean(),
+	}),
+	z.strictObject({
+		type: z.literal("report"),
+		deviceId: z.string().min(1).max(64),
+		basedOnRevision: nonNegativeInteger,
+		queueItemId: id.nullable(),
+		trackId: id.nullable(),
+		positionMs: nonNegativeInteger,
+		playing: z.boolean(),
+	}),
+	z.strictObject({ type: z.literal("pause") }),
+	z.strictObject({ type: z.literal("seek"), positionMs: nonNegativeInteger }),
+	z.strictObject({
+		type: z.literal("skip"),
+		direction: z.enum(["next", "previous"]),
+	}),
+]);
+
+/**
  * A request body as bytes. One check over the array instead of a schema per
  * element: an artwork upload is millions of them.
  */
@@ -123,6 +154,12 @@ export const DESKTOP_COMMAND_ARGS = {
 	desktop_playback_enable_adaptive_system_rate: noArgs,
 	desktop_playback_toggle_shuffle: noArgs,
 	desktop_playback_cycle_repeat_mode: noArgs,
+	get_shared_playback_device: noArgs,
+	get_shared_playback_state: noArgs,
+	send_shared_playback_command: z.strictObject({
+		command: playbackStateCommand,
+	}),
+	set_shared_playback_suspended: z.strictObject({ suspended: z.boolean() }),
 	desktop_select_import_files: noArgs,
 	desktop_select_import_folder: noArgs,
 	// The URL itself is checked by the shell (web schemes only).
