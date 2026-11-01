@@ -59,7 +59,7 @@ export function SettingsPage() {
 
 			<section className="mb-8 flex flex-col gap-4">
 				<h2 className="font-medium text-sm">Theme preset</h2>
-				<div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+				<div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 phone:grid-cols-2">
 					{themePresetOptions.map((preset) => {
 						const isActive = preferences.theme.preset === preset.id;
 

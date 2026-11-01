@@ -65,8 +65,10 @@ export function ServerDependenciesSection({ health, desktopMpv }: Props) {
 					<thead className="bg-muted/40 text-left text-muted-foreground">
 						<tr>
 							<th className="px-3 py-2 font-medium">Program</th>
-							<th className="px-3 py-2 font-medium">Used by</th>
-							<th className="px-3 py-2 font-medium">Requirement</th>
+							<th className="px-3 py-2 font-medium phone:hidden">Used by</th>
+							<th className="px-3 py-2 font-medium phone:hidden">
+								Requirement
+							</th>
 							<th className="px-3 py-2 font-medium">Status</th>
 							<th className="px-3 py-2 font-medium">Version</th>
 						</tr>
@@ -75,8 +77,8 @@ export function ServerDependenciesSection({ health, desktopMpv }: Props) {
 						{rows.map((row) => (
 							<tr key={row.name} className="border-border border-t">
 								<td className="px-3 py-2 font-mono">{row.name}</td>
-								<td className="px-3 py-2">{row.scope}</td>
-								<td className="px-3 py-2">{row.requirement}</td>
+								<td className="px-3 py-2 phone:hidden">{row.scope}</td>
+								<td className="px-3 py-2 phone:hidden">{row.requirement}</td>
 								<td className="px-3 py-2">
 									{row.available ? "Installed" : "Missing"}
 									{row.detail ? ` · ${row.detail}` : null}
