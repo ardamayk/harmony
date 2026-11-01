@@ -54,6 +54,9 @@ export class UpdateController {
 		updater.autoInstallOnAppQuit = false;
 		updater.on("download-progress", ({ percent }) => {
 			if (this.state.status !== "downloading") return;
+			// A differential download reports 100 whenever a stream ends, early
+			// ones included; `downloaded` says when it really is complete.
+			if (percent >= 100) return;
 			// Whole percents, so the tray menu is not rebuilt per chunk.
 			const whole = Math.floor(percent);
 			if (whole === this.state.percent) return;

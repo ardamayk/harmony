@@ -162,6 +162,30 @@ describe("UpdateController", () => {
 		expect(updater.quitAndInstall).not.toHaveBeenCalled();
 	});
 
+	it("never shows a differential download's early 100", async () => {
+		const context = setup();
+		const { updater, changes, controller } = context;
+		controller.start();
+		await reachAvailable(context);
+		const finished = Promise.withResolvers<string[]>();
+		updater.downloadUpdate.mockReturnValue(finished.promise);
+
+		const download = controller.download();
+		updater.emit("download-progress", { percent: 100 });
+		updater.emit("download-progress", { percent: 19 });
+		updater.emit("download-progress", { percent: 100 });
+		finished.resolve([]);
+		await download;
+
+		expect(changes.slice(-3).map((change) => change.status)).toEqual([
+			"downloading",
+			"downloading",
+			"downloaded",
+		]);
+		expect(controller.status()).not.toHaveProperty("percent");
+		expect(changes.at(-2)).toMatchObject({ percent: 19 });
+	});
+
 	it("downloads nothing until an update is on offer", async () => {
 		const { updater, controller } = setup();
 
