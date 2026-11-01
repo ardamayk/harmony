@@ -79,11 +79,15 @@ export const CORE_COMMANDS = [
 	"set_shared_playback_suspended",
 ] as const;
 
-/** Commands the main process answers itself: pickers, links. */
+/** Commands the main process answers itself: pickers, links, updates. */
 export const SHELL_COMMANDS = [
 	"desktop_select_import_files",
 	"desktop_select_import_folder",
 	"desktop_open_external_url",
+	"desktop_get_update_status",
+	"desktop_check_for_updates",
+	"desktop_download_update",
+	"desktop_install_update",
 ] as const;
 
 export type CoreCommand = (typeof CORE_COMMANDS)[number];
@@ -94,7 +98,10 @@ export type DesktopCommand = CoreCommand | ShellCommand;
 export type DesktopCommandArgs<C extends DesktopCommand = DesktopCommand> =
 	DesktopCommandArgsMap[C];
 
-/** Core events the main process forwards to every renderer window. */
+/**
+ * Events every renderer window receives: the core's, forwarded by the main
+ * process, and `updateStatus`, which the main process sends itself.
+ */
 export const DESKTOP_EVENTS = {
 	playbackState: "desktop-playback-state",
 	connectionChanged: "server-connection-changed",
@@ -102,6 +109,7 @@ export const DESKTOP_EVENTS = {
 	queueEventsError: "desktop-queue-events-error",
 	importProgress: "desktop-import-progress",
 	sharedPlaybackState: "desktop-shared-playback-state",
+	updateStatus: "desktop-update-status",
 } as const;
 
 export type DesktopEvent = (typeof DESKTOP_EVENTS)[keyof typeof DESKTOP_EVENTS];
@@ -110,6 +118,24 @@ export type ImportProgressEvent = {
 	uploadId: string;
 	sentBytes: number;
 	totalBytes: number;
+};
+
+/** Where a Desktop Client update stands; each step past `available` needs a click. */
+export type DesktopUpdateState =
+	/** Nothing can update here: a client not packaged for release. */
+	| { status: "unavailable" }
+	| { status: "idle" }
+	| { status: "checking" }
+	| { status: "up-to-date" }
+	| { status: "available"; version: string }
+	| { status: "downloading"; version: string; percent: number }
+	| { status: "downloaded"; version: string }
+	| { status: "installing"; version: string }
+	| { status: "failed"; action: "check" }
+	| { status: "failed"; action: "download"; version: string };
+
+export type DesktopUpdateStatus = DesktopUpdateState & {
+	currentVersion: string;
 };
 
 /**

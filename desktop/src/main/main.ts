@@ -16,6 +16,7 @@ import {
 	protocol,
 	shell,
 } from "electron";
+import { autoUpdater } from "electron-updater";
 import { join } from "node:path";
 import { handleInvoke, IMPORT_EXTENSIONS, runWindowAction } from "./commands";
 import { CoreProcess } from "./core-process";
@@ -28,7 +29,7 @@ import {
 	RENDERER_SCHEME,
 } from "./security";
 import { PlaybackTray, type TrayAction, type TrayUpdate } from "./tray";
-import { startUpdateChecks } from "./updates";
+import { UpdateController, updateTrayItem } from "./updates";
 import { WindowManager } from "./windows";
 
 /** Settings directory shared with the core (and the former Tauri client). */
@@ -63,7 +64,6 @@ async function start() {
 	const configDirectory = join(app.getPath("appData"), CONFIG_DIRECTORY_NAME);
 
 	await app.whenReady();
-	if (app.isPackaged) startUpdateChecks();
 
 	const core = new CoreProcess({
 		executable: paths.core,
@@ -102,20 +102,51 @@ async function start() {
 	// the tray has its menu (Open, Quit) even if no playback update follows.
 	let pendingTrayUpdate: TrayUpdate | null = null;
 
-	const quit = () => {
-		if (quitting) return;
+	const stopForQuit = () => {
 		quitting = true;
 		windows.releaseForQuit();
-		void core.stop().finally(() => {
+		return core.stop().finally(() => {
 			tray?.destroy();
-			app.exit(0);
+			tray = null;
 		});
 	};
+
+	const quit = () => {
+		if (quitting) return;
+		void stopForQuit().finally(() => app.exit(0));
+	};
+
+	const updates = new UpdateController({
+		currentVersion: app.getVersion(),
+		updater: app.isPackaged ? autoUpdater : null,
+		onChange: (status) => {
+			tray?.setUpdateItem(updateTrayItem(status));
+			windows.forwardEvent(DESKTOP_EVENTS.updateStatus, status);
+		},
+		stopForInstall: stopForQuit,
+		onInstallFailed: () => {
+			dialog.showErrorBox(
+				"Harmony could not update",
+				"The update did not install. Harmony will start again on the current version.",
+			);
+			app.relaunch();
+			app.exit(0);
+		},
+	});
+	const runUpdateAction = (action: "download" | "install") => {
+		void (action === "download" ? updates.download() : updates.install());
+	};
+	updates.start();
 
 	core.on("event", (name, payload) => {
 		switch (name) {
 			case "shell:ready":
-				tray = new PlaybackTray(paths.trayIcon, sendShellAction);
+				tray = new PlaybackTray(
+					paths.trayIcon,
+					sendShellAction,
+					runUpdateAction,
+				);
+				tray.setUpdateItem(updateTrayItem(updates.status()));
 				if (pendingTrayUpdate) tray.update(pendingTrayUpdate);
 				void sendSavedHeaders().finally(() => windows.createMainWindow());
 				return;
@@ -191,6 +222,7 @@ async function start() {
 				},
 				openExternal: (url) => shell.openExternal(url),
 				serverHeaders,
+				updates,
 			},
 			command,
 			args,
