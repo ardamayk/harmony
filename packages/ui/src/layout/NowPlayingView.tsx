@@ -1,6 +1,19 @@
 import type { Track } from "@repo/api-client";
-import { ChevronDown, Heart, ListMusic, MicVocal } from "lucide-react";
-import { type CSSProperties, useEffect, useRef, useState } from "react";
+import {
+	ChevronDown,
+	Heart,
+	ListMusic,
+	MicVocal,
+	MoreVertical,
+} from "lucide-react";
+import {
+	type CSSProperties,
+	type ReactNode,
+	type Ref,
+	useEffect,
+	useRef,
+	useState,
+} from "react";
 import { createPortal, flushSync } from "react-dom";
 import { useFocusTrap } from "../lib/use-focus-trap";
 import { cn } from "../lib/utils";
@@ -15,7 +28,8 @@ const VIEW_ACTION_CLASS =
  * Full-screen "Now Playing" view: pointer-responsive artwork, the
  * transport and the Queue. Sibling of the Lyrics view and opened from the
  * cover in the Player Bar. On a phone the Queue takes the whole view instead
- * of an aside, and the view adds favorite and Queue buttons beside Lyrics.
+ * of an aside, and the view adds favorite, Queue and Track actions buttons
+ * beside Lyrics; the Player Bar owns that menu and passes it in.
  */
 export function NowPlayingView({
 	track,
@@ -24,6 +38,10 @@ export function NowPlayingView({
 	onOpenLyrics,
 	isFavorite = false,
 	onToggleFavorite,
+	actionsButtonRef,
+	actionsOpen = false,
+	onToggleActions,
+	actionsMenu,
 	onClose,
 }: {
 	track: Track;
@@ -34,6 +52,10 @@ export function NowPlayingView({
 	isFavorite?: boolean;
 	/** The phone's favorite button; the bar has its own elsewhere. */
 	onToggleFavorite?: () => void;
+	actionsButtonRef?: Ref<HTMLButtonElement>;
+	actionsOpen?: boolean;
+	onToggleActions?: () => void;
+	actionsMenu?: ReactNode;
 	onClose: () => void;
 }) {
 	const isPhone = usePhoneShell();
@@ -53,13 +75,14 @@ export function NowPlayingView({
 
 	useEffect(() => {
 		const closeOnEscape = (event: KeyboardEvent) => {
-			if (event.key !== "Escape") return;
+			// The Player Bar closes the menu on the same key.
+			if (event.key !== "Escape" || actionsOpen) return;
 			if (queueOpen) closeQueue();
 			else onClose();
 		};
 		document.addEventListener("keydown", closeOnEscape);
 		return () => document.removeEventListener("keydown", closeOnEscape);
-	}, [onClose, queueOpen]);
+	}, [actionsOpen, onClose, queueOpen]);
 
 	if (typeof document === "undefined") return null;
 
@@ -161,6 +184,19 @@ export function NowPlayingView({
 										<ListMusic className="size-4" aria-hidden />
 										Queue
 									</button>
+									{onToggleActions ? (
+										<button
+											ref={actionsButtonRef}
+											type="button"
+											aria-label="Track actions"
+											title="Track actions"
+											aria-expanded={actionsOpen}
+											className="inline-flex size-11 items-center justify-center rounded-full border border-border hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+											onClick={onToggleActions}
+										>
+											<MoreVertical className="size-4" />
+										</button>
+									) : null}
 								</div>
 							) : (
 								lyricsButton
@@ -172,6 +208,7 @@ export function NowPlayingView({
 							</aside>
 						)}
 					</div>
+					{isPhone ? actionsMenu : null}
 				</>
 			)}
 		</div>,

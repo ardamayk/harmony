@@ -271,6 +271,17 @@ body::after {
 	--player-foreground: #e5e5e5;
 	--player-control-primary: #f5f5f5 !important;
 	--player-control-primary-foreground: #171717 !important;
+	/* Only the phone shows the Queue and the Track actions menu on it this way:
+	   whole-view and in place, so they need its dark tones whatever the theme. */
+	@variant phone {
+		--popover: #171717;
+		--popover-foreground: #e5e5e5;
+		--player-pill: #171717;
+		--sidebar-border: #262626;
+		--neutral-active: #262626;
+		--neutral-active-foreground: #f5f5f5;
+		--shell-active-foreground: #f5f5f5;
+	}
 }
 
 /* Desktop Client main window: no system frame (desktop/src/main/windows.ts), so the page

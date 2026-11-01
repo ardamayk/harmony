@@ -909,6 +909,35 @@ describe("PlayerBar", () => {
 		},
 	);
 
+	it("offers the Track actions menu inside Now Playing on a phone", async () => {
+		vi.stubGlobal("matchMedia", () => ({
+			matches: true,
+			addEventListener: () => {},
+			removeEventListener: () => {},
+		}));
+		try {
+			renderPlayerBar();
+			await act(async () => {
+				screen.getByRole("button", { name: "Start track" }).click();
+			});
+			fireEvent.click(screen.getByRole("button", { name: /Open now playing/ }));
+			const view = screen.getByRole("dialog", { name: "Now playing" });
+
+			fireEvent.click(
+				within(view).getByRole("button", { name: "Track actions" }),
+			);
+			const menu = within(view).getByRole("menu");
+			expect(within(menu).getByText("Sleep timer")).toBeTruthy();
+
+			fireEvent.click(
+				within(menu).getByRole("menuitem", { name: "Go to album" }),
+			);
+			expect(screen.queryByRole("dialog", { name: "Now playing" })).toBeNull();
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
+
 	it("opens the Now Playing view from the cover and closes it with Escape", async () => {
 		renderPlayerBar();
 		expect(
