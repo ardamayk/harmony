@@ -18,6 +18,12 @@ function deps(overrides: Partial<CommandDeps> = {}): CommandDeps {
 			.mockResolvedValue([]),
 		openExternal: vi.fn<CommandDeps["openExternal"]>().mockResolvedValue(),
 		serverHeaders: { assertAvailable: vi.fn(), sync: vi.fn() },
+		updates: {
+			status: vi.fn(),
+			check: vi.fn(),
+			download: vi.fn(),
+			install: vi.fn(),
+		},
 		...overrides,
 	};
 }
@@ -37,6 +43,34 @@ describe("handleInvoke", () => {
 			seconds: 42,
 		});
 		expect(result).toEqual({ ok: true, value: { status: "playing" } });
+	});
+
+	it("runs the update commands in the shell, not the core", async () => {
+		const requestCore = vi.fn<CommandDeps["requestCore"]>();
+		const updates = {
+			status: vi.fn(() => ({
+				currentVersion: "0.1.17",
+				status: "idle" as const,
+			})),
+			check: vi.fn(async () => {}),
+			download: vi.fn(async () => {}),
+			install: vi.fn(async () => {}),
+		};
+		const send = (command: string) =>
+			handleInvoke(deps({ requestCore, updates }), command, undefined);
+
+		expect(await send("desktop_get_update_status")).toEqual({
+			ok: true,
+			value: { currentVersion: "0.1.17", status: "idle" },
+		});
+		await send("desktop_check_for_updates");
+		await send("desktop_download_update");
+		await send("desktop_install_update");
+
+		expect(updates.check).toHaveBeenCalledOnce();
+		expect(updates.download).toHaveBeenCalledOnce();
+		expect(updates.install).toHaveBeenCalledOnce();
+		expect(requestCore).not.toHaveBeenCalled();
 	});
 
 	it("keeps custom headers once the core has saved the connection", async () => {

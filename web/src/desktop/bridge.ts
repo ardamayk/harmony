@@ -1,5 +1,9 @@
 import type { QueueEvent } from "@repo/api-client";
-import { DESKTOP_EVENTS, type ImportProgressEvent } from "@repo/desktop-bridge";
+import {
+	DESKTOP_EVENTS,
+	type DesktopUpdateStatus,
+	type ImportProgressEvent,
+} from "@repo/desktop-bridge";
 import { hasDesktopBridge, invoke, listen, type Unlisten } from "./desktop-api";
 
 let mediaProxyBaseUrl: string | null = null;
@@ -55,6 +59,29 @@ export function getDesktopMpvStatus(): Promise<DesktopMpvStatus> {
 /** Open a web URL in the system browser; Desktop Client only. */
 export function openExternalUrl(url: string): Promise<void> {
 	return invoke("desktop_open_external_url", { url });
+}
+
+export function getDesktopUpdateStatus(): Promise<DesktopUpdateStatus> {
+	return invoke("desktop_get_update_status");
+}
+
+export function checkForDesktopUpdates(): Promise<void> {
+	return invoke("desktop_check_for_updates");
+}
+
+export function downloadDesktopUpdate(): Promise<void> {
+	return invoke("desktop_download_update");
+}
+
+/** Restarts the Desktop Client into the downloaded update. */
+export function installDesktopUpdate(): Promise<void> {
+	return invoke("desktop_install_update");
+}
+
+export function listenForDesktopUpdateStatus(
+	callback: (status: DesktopUpdateStatus) => void,
+): Unlisten {
+	return listen<DesktopUpdateStatus>(DESKTOP_EVENTS.updateStatus, callback);
 }
 
 export async function getServerConnection(): Promise<SavedServerConnection | null> {

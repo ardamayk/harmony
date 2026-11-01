@@ -9,7 +9,7 @@ core/          Rust core, started as a child process: mpv playback, media proxy,
                Music Server HTTP bridge, Managed Import, MPRIS, output modes
 ```
 
-The shell and the core speak line-delimited JSON-RPC over the core's stdin and stdout (`core/src/rpc.rs`, `src/main/core-process.ts`). The renderer sends the same commands it always has; the main process forwards those on the allowlist in `packages/desktop-bridge` to the core and answers window, picker and link commands itself. Closing the core's stdin makes it save the Playback Session and stop mpv, so quitting the shell (tray, Ctrl+C, session end) always goes through it.
+The shell and the core speak line-delimited JSON-RPC over the core's stdin and stdout (`core/src/rpc.rs`, `src/main/core-process.ts`). The renderer sends the same commands it always has; the main process forwards those on the allowlist in `packages/desktop-bridge` to the core and answers window, picker, link and update commands itself. Closing the core's stdin makes it save the Playback Session and stop mpv, so quitting the shell (tray, Ctrl+C, session end) always goes through it.
 
 Run the Music Server and Desktop Client together (Vite HMR, debug core); `mise run desktop:dev` runs the client alone against a Music Server that is already running:
 

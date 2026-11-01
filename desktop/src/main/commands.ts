@@ -11,6 +11,7 @@ import {
 import { CoreCommandError } from "./core-process";
 import { validateExternalUrl } from "./security";
 import type { ServerHeadersStore } from "./server-headers";
+import type { UpdateController } from "./updates";
 
 /** Audio files the native picker offers; the core re-checks each one. */
 export const IMPORT_EXTENSIONS = ["flac", "mp3", "m4a", "ogg", "opus", "wav"];
@@ -25,6 +26,7 @@ export type CommandDeps = {
 	pickImportFolder(): Promise<string[]>;
 	openExternal(url: string): Promise<void>;
 	serverHeaders: Pick<ServerHeadersStore, "assertAvailable" | "sync">;
+	updates: Pick<UpdateController, "status" | "check" | "download" | "install">;
 };
 
 /**
@@ -87,6 +89,14 @@ async function runShellCommand(
 			return registerImportPaths(deps, await deps.pickImportFolder());
 		case "desktop_open_external_url":
 			return deps.openExternal(validateExternalUrl(invoke.args.url));
+		case "desktop_get_update_status":
+			return deps.updates.status();
+		case "desktop_check_for_updates":
+			return deps.updates.check();
+		case "desktop_download_update":
+			return deps.updates.download();
+		case "desktop_install_update":
+			return deps.updates.install();
 	}
 }
 

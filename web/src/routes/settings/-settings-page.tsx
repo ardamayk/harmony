@@ -9,6 +9,7 @@ import { apiClient } from "#/lib/api";
 import { cn } from "#/lib/utils";
 import { themePresetOptions } from "#/themes/presets";
 import { DesktopConnectionSection } from "./-desktop-connection-settings";
+import { DesktopUpdateSection } from "./-desktop-update-settings";
 import { ImportSettingsSection } from "./-import-settings";
 import { PlaybackSettingsSection } from "./-playback-settings";
 import { ServerDependenciesSection } from "./-server-dependencies";
@@ -115,6 +116,7 @@ export function SettingsPage() {
 			<PlaybackSettingsSection />
 
 			{isDesktop ? <DesktopConnectionSection /> : null}
+			{isDesktop ? <DesktopUpdateSection /> : null}
 
 			{hideImport ? null : <ImportSettingsSection />}
 
