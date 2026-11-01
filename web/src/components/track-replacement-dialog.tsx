@@ -172,7 +172,7 @@ function ReplacementReview({ preview }: { preview: TrackReplacementPreview }) {
 			<DiffSection title="Canonical path" diffs={[preview.canonicalPath]} />
 			<div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm">
 				<p className="font-medium text-heading">Old file deletion</p>
-				<p className="mt-1 break-all text-caption">
+				<p className="mt-1 break-all text-caption phone:break-normal phone:wrap-anywhere">
 					{preview.oldFile.path} (
 					{formatReplacementBytes(preview.oldFile.sizeBytes)}) will be deleted
 					permanently after the replacement is verified.
@@ -224,7 +224,7 @@ function DiffRow({ diff }: { diff: TrackReplacementFieldDiff }) {
 	return (
 		<>
 			<dt className="text-caption">{diff.field}</dt>
-			<dd className="break-all">
+			<dd className="break-all phone:break-normal phone:wrap-anywhere">
 				<span className="line-through opacity-70">{diff.current || "—"}</span>
 				{" → "}
 				<span className="font-medium text-foreground">

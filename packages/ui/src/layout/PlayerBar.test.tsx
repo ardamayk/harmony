@@ -38,6 +38,7 @@ const navigate = vi.fn();
 
 vi.mock("@tanstack/react-router", () => ({
 	useNavigate: () => navigate,
+	useRouter: () => null,
 }));
 
 const track = {
@@ -919,6 +920,58 @@ describe("PlayerBar", () => {
 			expect(toggle.className).toContain("shadow-lit");
 		},
 	);
+
+	it("says where the sound is in the phone's mini player", async () => {
+		vi.stubGlobal("matchMedia", () => ({
+			matches: true,
+			addEventListener: () => {},
+			removeEventListener: () => {},
+		}));
+		try {
+			renderPlayerBar(
+				undefined,
+				new InMemoryPlaybackEngine({
+					sharedPlayback: { followingDeviceName: "Harmony on desktop" },
+				}),
+			);
+			await act(async () => {
+				screen.getByRole("button", { name: "Start track" }).click();
+			});
+
+			expect(screen.getByText("Playing on Harmony on desktop")).toBeTruthy();
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
+
+	it("offers the Track actions menu inside Now Playing on a phone", async () => {
+		vi.stubGlobal("matchMedia", () => ({
+			matches: true,
+			addEventListener: () => {},
+			removeEventListener: () => {},
+		}));
+		try {
+			renderPlayerBar();
+			await act(async () => {
+				screen.getByRole("button", { name: "Start track" }).click();
+			});
+			fireEvent.click(screen.getByRole("button", { name: /Open now playing/ }));
+			const view = screen.getByRole("dialog", { name: "Now playing" });
+
+			fireEvent.click(
+				within(view).getByRole("button", { name: "Track actions" }),
+			);
+			const menu = within(view).getByRole("menu");
+			expect(within(menu).getByText("Sleep timer")).toBeTruthy();
+
+			fireEvent.click(
+				within(menu).getByRole("menuitem", { name: "Go to album" }),
+			);
+			expect(screen.queryByRole("dialog", { name: "Now playing" })).toBeNull();
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
 
 	it("opens the Now Playing view from the cover and closes it with Escape", async () => {
 		renderPlayerBar();

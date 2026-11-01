@@ -652,7 +652,9 @@ export function PlaybackProvider({
 				toast.error(GUEST_NEEDS_ROOM_MESSAGE);
 				return;
 			}
-			// The Queue writes below can take a while; the choice counts from now.
+			// The Queue writes below can take a while. The choice counts from now,
+			// and they can outlast the tap that lets iOS make sound.
+			engine.unlockAudio?.();
 			beginPlaybackIntent();
 			let nextQueue = queueRef.current;
 			if (queueTrackIds) {
@@ -670,6 +672,7 @@ export function PlaybackProvider({
 			await playTrackInternal(trackId, nextQueue);
 		},
 		[
+			engine,
 			queueRef,
 			appendQueueItem,
 			playTrackInternal,

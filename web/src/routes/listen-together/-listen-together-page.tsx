@@ -126,7 +126,7 @@ function GuestListenerRequired() {
 				target="_blank"
 				rel="noreferrer"
 				onClick={openDesktopDocs}
-				className="self-start text-foreground text-sm underline underline-offset-4 hover:text-heading focus-visible:text-heading"
+				className="self-start text-foreground text-sm underline underline-offset-4 hover:text-heading focus-visible:text-heading phone:inline-flex phone:min-h-11 phone:items-center"
 			>
 				Read how to set up Listen Together
 			</a>

@@ -91,7 +91,7 @@ export function RadioStationDetailContent({
 			<div className="p-6">
 				<Link
 					to="/radio"
-					className="mb-6 inline-block text-foreground text-sm hover:text-heading"
+					className="mb-6 inline-block text-foreground text-sm hover:text-heading phone:inline-flex phone:min-h-11 phone:items-center"
 				>
 					Back to radio
 				</Link>
@@ -109,7 +109,10 @@ export function RadioStationDetailContent({
 			testId="radio-station-detail-content"
 			className="flex flex-col gap-6"
 		>
-			<Link to="/radio" className="text-foreground text-sm hover:text-heading">
+			<Link
+				to="/radio"
+				className="text-foreground text-sm hover:text-heading phone:inline-flex phone:min-h-11 phone:items-center"
+			>
 				Back to radio
 			</Link>
 

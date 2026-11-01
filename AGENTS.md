@@ -13,6 +13,7 @@ server/migrations                 ← goose-format SQL migrations; also the sqlx
 desktop/                          ← Electron shell (main + preload, `vp pack`) around web/
 desktop/core                      ← Rust core sidecar: mpv playback, media proxy, Managed Import
 packages/desktop-bridge           ← renderer ↔ shell contract (window.earthlyDesktop, command allowlist)
+mobile/                           ← parked plan for a native iPhone client; phones use web/ as a PWA (ADR 0041)
 ```
 
 Run everything through `mise run <task>` (`mise tasks` lists them). TypeScript tooling is Node + pnpm + Vite+ (`vp`: Oxlint, Oxfmt, Vitest); run it as `vp check`, `vp test` inside mise, which puts `node_modules/.bin` on `PATH`. Bun is not used; see ADR 0026.

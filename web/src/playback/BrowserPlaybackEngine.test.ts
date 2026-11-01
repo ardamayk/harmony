@@ -16,6 +16,7 @@ class MemoryMedia extends EventTarget implements BrowserPlaybackMedia {
 	buffered?: BrowserPlaybackMedia["buffered"];
 	currentTime = 0;
 	duration = 0;
+	loop = false;
 	paused = true;
 	src = "";
 	volume = 1;
@@ -70,11 +71,62 @@ function createRadioStationSource(id: string, sourceUrl?: string) {
 	};
 }
 
+const externalTrackSource = {
+	type: "external-track" as const,
+	externalTrack: {
+		id: "external-1",
+		title: "External Song",
+		artistName: null,
+		durationMs: 30000,
+		webpageUrl: "https://soundcloud.com/uploader/external-song",
+		extractor: "Soundcloud",
+		hasArtwork: false,
+	},
+	playbackUrl: "/api/v1/external/tracks/external-1/stream",
+	sourceUrl: "/api/v1/external/tracks/external-1/stream",
+};
+
+function reachTime(seconds: number) {
+	media.currentTime = seconds;
+	media.dispatchEvent(new Event("timeupdate"));
+}
+
+/** What a looping element does at the end of a Track: wrap, and keep playing. */
+function wrapLoop(duration = 120) {
+	reachTime(duration - 0.1);
+	reachTime(0.1);
+}
+
+function createIosEngine() {
+	return new BrowserPlaybackEngine({
+		createMedia: () => media,
+		isIos: true,
+		mediaSession: null,
+	});
+}
+
+function createMediaSessionRecorder() {
+	const handlers = new Map<string, MediaSessionActionHandler | null>();
+	return {
+		handlers,
+		session: {
+			metadata: null as MediaMetadata | null,
+			playbackState: "none" as MediaSessionPlaybackState,
+			setActionHandler: vi.fn(
+				(action: string, handler: MediaSessionActionHandler | null) => {
+					handlers.set(action, handler);
+				},
+			),
+		},
+	};
+}
+
 beforeEach(() => {
 	media = new MemoryMedia();
 });
 
 afterEach(() => {
+	vi.unstubAllGlobals();
 	vi.useRealTimers();
 	vi.restoreAllMocks();
 });
@@ -114,6 +166,15 @@ playbackEngineContract("browser", () => {
 		engine,
 		finish: () => media.dispatchEvent(new Event("ended")),
 	};
+});
+
+playbackEngineContract("browser on iOS", () => {
+	const engine = new BrowserPlaybackEngine({
+		createMedia: () => media,
+		isIos: true,
+		mediaSession: null,
+	});
+	return { engine, finish: wrapLoop };
 });
 
 describe("BrowserPlaybackEngine", () => {
@@ -726,5 +787,623 @@ describe("BrowserPlaybackEngine", () => {
 		finishSecondStart();
 		await secondStart;
 		engine.destroy();
+	});
+});
+
+describe("BrowserPlaybackEngine on other browsers", () => {
+	it("keeps all eight Media Session actions without re-registering them", async () => {
+		const { handlers, session } = createMediaSessionRecorder();
+		const engine = new BrowserPlaybackEngine({
+			createMedia: () => media,
+			isIos: false,
+			mediaSession: session,
+		});
+
+		await engine.play(trackSource);
+
+		expect(session.setActionHandler).toHaveBeenCalledTimes(8);
+		expect([...handlers.values()].every(Boolean)).toBe(true);
+		engine.destroy();
+	});
+
+	it("tears the source down between Tracks and never loops", async () => {
+		const engine = new BrowserPlaybackEngine({
+			createMedia: () => media,
+			isIos: false,
+			mediaSession: null,
+		});
+
+		await engine.play(trackSource);
+		wrapLoop();
+
+		expect(media.removeAttribute).toHaveBeenCalledWith("src");
+		expect(media.load).toHaveBeenCalledOnce();
+		expect(media.loop).toBe(false);
+		expect(engine.getState()).toMatchObject({
+			status: "playing",
+			currentTime: 0.1,
+		});
+		engine.destroy();
+	});
+
+	it("still prefers hls.js when native HLS is available too", async () => {
+		media.canPlayType.mockReturnValue("maybe");
+		const hls = {
+			attachMedia: vi.fn(),
+			destroy: vi.fn(),
+			loadSource: vi.fn(),
+		};
+		const engine = new BrowserPlaybackEngine({
+			createMedia: () => media,
+			hls: { isSupported: () => true, create: () => hls },
+			isIos: false,
+		});
+
+		await engine.play(
+			createRadioStationSource(
+				"station-hls-js",
+				"https://example.com/live/index.m3u8",
+			),
+		);
+
+		expect(hls.attachMedia).toHaveBeenCalledWith(media);
+		engine.destroy();
+	});
+});
+
+describe("BrowserPlaybackEngine on iOS", () => {
+	describe("audio session", () => {
+		it.each([
+			["iPhone", "playback", { platform: "iPhone", maxTouchPoints: 5 }],
+			["iPadOS", "playback", { platform: "MacIntel", maxTouchPoints: 5 }],
+			["a Mac", "auto", { platform: "MacIntel", maxTouchPoints: 0 }],
+			["Linux", "auto", { platform: "Linux x86_64", maxTouchPoints: 0 }],
+		])("detection gives %s the audio session type %s", (_, type, device) => {
+			const audioSession = { type: "auto" };
+			vi.stubGlobal("navigator", { ...device, audioSession });
+
+			new BrowserPlaybackEngine({
+				createMedia: () => media,
+				mediaSession: null,
+			}).destroy();
+
+			expect(audioSession.type).toBe(type);
+		});
+
+		it("survives a browser whose audio session throws", () => {
+			vi.stubGlobal("navigator", {
+				audioSession: {
+					set type(_value: string) {
+						throw new Error("not allowed");
+					},
+				},
+			});
+
+			expect(() => createIosEngine().destroy()).not.toThrow();
+		});
+
+		it("survives a browser without one", () => {
+			vi.stubGlobal("navigator", {});
+
+			expect(() => createIosEngine().destroy()).not.toThrow();
+		});
+	});
+
+	describe("lock-screen buttons", () => {
+		function createEngineWithSession() {
+			const recorder = createMediaSessionRecorder();
+			const engine = new BrowserPlaybackEngine({
+				createMedia: () => media,
+				isIos: true,
+				mediaSession: recorder.session,
+			});
+			return { ...recorder, engine };
+		}
+
+		it("clears the seek skips and keeps seekto", () => {
+			const { engine, handlers } = createEngineWithSession();
+
+			expect(handlers.get("seekbackward")).toBeNull();
+			expect(handlers.get("seekforward")).toBeNull();
+			handlers.get("seekto")?.({ action: "seekto", seekTime: 42 });
+			expect(engine.getState().currentTime).toBe(42);
+			engine.destroy();
+		});
+
+		it("re-registers the buttons on every playing event", async () => {
+			const { engine, handlers, session } = createEngineWithSession();
+			const registeredActions = () =>
+				session.setActionHandler.mock.calls
+					.filter(([, handler]) => handler)
+					.map(([action]) => action);
+			await engine.play(trackSource);
+			session.setActionHandler.mockClear();
+
+			media.dispatchEvent(new Event("playing"));
+			media.dispatchEvent(new Event("playing"));
+
+			for (const action of ["previoustrack", "nexttrack", "play", "pause"]) {
+				expect(
+					registeredActions().filter((name) => name === action),
+				).toHaveLength(2);
+			}
+			expect(handlers.get("seekbackward")).toBeNull();
+			expect(handlers.get("seekforward")).toBeNull();
+			engine.destroy();
+		});
+
+		it("drives Next through a re-registered handler", async () => {
+			const { engine, handlers } = createEngineWithSession();
+			const navigation = vi.fn();
+			engine.subscribeNavigation(navigation);
+			await engine.play(trackSource);
+
+			handlers.get("nexttrack")?.({ action: "nexttrack" });
+
+			expect(navigation).toHaveBeenCalledExactlyOnceWith("next");
+			engine.destroy();
+		});
+
+		it("still cleans up, and stays clean after destroy", async () => {
+			const { engine, handlers } = createEngineWithSession();
+			await engine.play(trackSource);
+
+			engine.destroy();
+			media.dispatchEvent(new Event("playing"));
+
+			expect(handlers.size).toBe(8);
+			expect([...handlers.values()].some(Boolean)).toBe(false);
+		});
+	});
+
+	describe("track change while locked", () => {
+		it("loops only Tracks", async () => {
+			const engine = createIosEngine();
+
+			await engine.play(trackSource);
+			expect(media.loop).toBe(true);
+			await engine.play(createRadioStationSource("station-loop"));
+			expect(media.loop).toBe(false);
+			await engine.play(externalTrackSource);
+			expect(media.loop).toBe(false);
+			await engine.play(createCatalogPreviewSource("catalog-loop"));
+			expect(media.loop).toBe(false);
+			engine.destroy();
+		});
+
+		it("does not loop a Track without a known duration", async () => {
+			const engine = createIosEngine();
+
+			await engine.play({
+				...trackSource,
+				track: { ...trackSource.track, durationMs: 0 },
+			});
+
+			expect(media.loop).toBe(false);
+			engine.destroy();
+		});
+
+		it("ends once on a wrap and keeps the element playing for the next Track", async () => {
+			const engine = createIosEngine();
+			await engine.play(trackSource);
+			reachTime(119.9);
+			const statuses: string[] = [];
+			engine.subscribe((state) => statuses.push(state.status));
+
+			reachTime(0.1);
+			reachTime(0.35);
+			reachTime(0.6);
+
+			expect(statuses).toEqual(["ended"]);
+			expect(media.pause).not.toHaveBeenCalled();
+			engine.destroy();
+		});
+
+		it("leaves the wrapped element playing into the next Track", async () => {
+			const engine = createIosEngine();
+			const nextSource = { ...trackSource, playbackUrl: "/stream/track-2" };
+			await engine.play(trackSource);
+			wrapLoop();
+			media.removeAttribute.mockClear();
+
+			await engine.play(nextSource);
+			reachTime(0.2);
+
+			expect(media.src).toBe("/stream/track-2");
+			expect(media.pause).not.toHaveBeenCalled();
+			expect(engine.getState()).toMatchObject({
+				source: nextSource,
+				status: "playing",
+				currentTime: 0.2,
+			});
+			engine.destroy();
+		});
+
+		it("does not take a skip near the end for a wrap", async () => {
+			const engine = createIosEngine();
+			await engine.play(trackSource);
+			reachTime(119.5);
+
+			await engine.play({ ...trackSource, playbackUrl: "/stream/track-2" });
+			reachTime(0.2);
+
+			expect(engine.getState()).toMatchObject({
+				status: "playing",
+				currentTime: 0.2,
+			});
+			engine.destroy();
+		});
+
+		it("stops a replaying element when nothing follows the end", async () => {
+			const engine = createIosEngine();
+			await engine.play(trackSource);
+			wrapLoop();
+
+			reachTime(1);
+
+			expect(media.paused).toBe(true);
+			expect(engine.getState().status).toBe("ended");
+			engine.destroy();
+		});
+
+		it("does not read rebuffering after a wrap as a resumed Track", async () => {
+			const engine = createIosEngine();
+			await engine.play(trackSource);
+			wrapLoop();
+
+			media.dispatchEvent(new Event("playing"));
+
+			expect(engine.getState().status).toBe("ended");
+			engine.destroy();
+		});
+
+		it("stops at the end of the Queue when the Provider stops", async () => {
+			const engine = createIosEngine();
+			engine.subscribe((state) => {
+				if (state.status === "ended") engine.stop();
+			});
+			await engine.play(trackSource);
+
+			wrapLoop();
+			media.currentTime = 0;
+			media.dispatchEvent(new Event("timeupdate"));
+
+			expect(media.paused).toBe(true);
+			expect(media.removeAttribute).toHaveBeenCalledWith("src");
+			expect(engine.getState()).toMatchObject({
+				source: null,
+				status: "idle",
+			});
+			engine.destroy();
+		});
+
+		it("does not take the position reset of stop() for a wrap", async () => {
+			const engine = createIosEngine();
+			await engine.play(trackSource);
+			reachTime(119.9);
+
+			engine.stop();
+			reachTime(0);
+
+			expect(engine.getState().status).toBe("idle");
+			engine.destroy();
+		});
+
+		it("repeats once, then ends on the next wrap", async () => {
+			const engine = createIosEngine();
+			await engine.play(trackSource);
+			engine.cycleRepeatMode();
+
+			wrapLoop();
+
+			expect(engine.getState()).toMatchObject({
+				status: "playing",
+				currentTime: 0,
+				repeatMode: "off",
+			});
+			expect(media.currentTime).toBe(0);
+
+			wrapLoop();
+
+			expect(engine.getState().status).toBe("ended");
+			engine.destroy();
+		});
+
+		it("repeats on every wrap in repeat loop", async () => {
+			const engine = createIosEngine();
+			await engine.play(trackSource);
+			engine.cycleRepeatMode();
+			engine.cycleRepeatMode();
+
+			wrapLoop();
+			wrapLoop();
+
+			expect(engine.getState()).toMatchObject({
+				status: "playing",
+				repeatMode: "loop",
+			});
+			expect(media.paused).toBe(false);
+			engine.destroy();
+		});
+
+		it.each(["off", "once", "loop"] as const)(
+			"pauses for stop-after-current without repeating in %s repeat mode",
+			async (repeatMode) => {
+				const engine = createIosEngine();
+				await engine.play(trackSource);
+				while (engine.getState().repeatMode !== repeatMode) {
+					engine.cycleRepeatMode();
+				}
+				engine.setStopAfterCurrent(true);
+
+				wrapLoop();
+
+				expect(media.paused).toBe(true);
+				expect(media.play).toHaveBeenCalledOnce();
+				expect(engine.getState()).toMatchObject({
+					status: "paused",
+					stopAfterCurrent: false,
+					source: trackSource,
+					repeatMode,
+				});
+				engine.destroy();
+			},
+		);
+
+		it("resumes after stop-after-current without taking the restart for a wrap", async () => {
+			const engine = createIosEngine();
+			await engine.play(trackSource);
+			engine.setStopAfterCurrent(true);
+			wrapLoop();
+
+			await engine.play();
+			reachTime(0.4);
+
+			expect(engine.getState()).toMatchObject({
+				status: "playing",
+				currentTime: 0.4,
+			});
+			engine.destroy();
+		});
+
+		it("resumes after an ended pause without ending again", async () => {
+			const engine = createIosEngine();
+			await engine.play(trackSource);
+			wrapLoop();
+			reachTime(1);
+
+			await engine.play();
+			reachTime(1.25);
+
+			expect(engine.getState()).toMatchObject({
+				status: "playing",
+				currentTime: 1.25,
+			});
+			engine.destroy();
+		});
+
+		it("lets an External Track end by itself, since nothing follows it", async () => {
+			const engine = createIosEngine();
+			await engine.play(externalTrackSource);
+
+			media.dispatchEvent(new Event("ended"));
+
+			expect(engine.getState().status).toBe("ended");
+			engine.destroy();
+		});
+
+		it("takes a wrap that comes well before the reported duration", async () => {
+			const engine = createIosEngine();
+			await engine.play(trackSource);
+			expect(engine.getState().duration).toBe(120);
+
+			wrapLoop(20);
+
+			expect(engine.getState().status).toBe("ended");
+			engine.destroy();
+		});
+
+		it("keeps Repeat once on a Track shorter than the wrap edge", async () => {
+			const engine = createIosEngine();
+			await engine.play(trackSource);
+			engine.cycleRepeatMode();
+
+			wrapLoop(4);
+			reachTime(0.05);
+
+			expect(engine.getState()).toMatchObject({
+				status: "playing",
+				repeatMode: "off",
+			});
+			engine.destroy();
+		});
+
+		it("does not treat a seek back to the start as a wrap", async () => {
+			const engine = createIosEngine();
+			await engine.play(trackSource);
+			reachTime(119.5);
+
+			engine.seek(0);
+			reachTime(0.2);
+
+			expect(engine.getState()).toMatchObject({
+				status: "playing",
+				currentTime: 0.2,
+			});
+			engine.destroy();
+		});
+
+		it("does not treat a lock-screen scrub to the start as a wrap", async () => {
+			const { handlers, session } = createMediaSessionRecorder();
+			const engine = new BrowserPlaybackEngine({
+				createMedia: () => media,
+				isIos: true,
+				mediaSession: session,
+			});
+			await engine.play(trackSource);
+			reachTime(119.5);
+
+			handlers.get("seekto")?.({ action: "seekto", seekTime: 0 });
+			reachTime(0.2);
+
+			expect(engine.getState().status).toBe("playing");
+			engine.destroy();
+		});
+
+		it("still takes a wrap after a seek to the end for one", async () => {
+			const engine = createIosEngine();
+			await engine.play(trackSource);
+
+			engine.seek(119.9);
+			reachTime(0.1);
+
+			expect(engine.getState().status).toBe("ended");
+			engine.destroy();
+		});
+
+		it("leaves a small jump backward near the start alone", async () => {
+			const engine = createIosEngine();
+			await engine.play(trackSource);
+			reachTime(3);
+
+			reachTime(2.5);
+
+			expect(engine.getState().status).toBe("playing");
+			engine.destroy();
+		});
+
+		it("still honours a natural ended if one fires", async () => {
+			const engine = createIosEngine();
+			await engine.play(trackSource);
+			reachTime(120);
+			media.paused = true;
+
+			media.dispatchEvent(new Event("ended"));
+
+			expect(engine.getState().status).toBe("ended");
+			engine.destroy();
+		});
+
+		it("does not take the restart after a natural ended for a wrap", async () => {
+			const engine = createIosEngine();
+			await engine.play(trackSource);
+			engine.setStopAfterCurrent(true);
+			reachTime(120);
+			media.paused = true;
+			media.dispatchEvent(new Event("ended"));
+
+			await engine.play();
+			reachTime(0.2);
+
+			expect(engine.getState()).toMatchObject({
+				status: "playing",
+				currentTime: 0.2,
+			});
+			engine.destroy();
+		});
+	});
+
+	describe("source swap", () => {
+		it("assigns src directly between Tracks", async () => {
+			const engine = createIosEngine();
+			await engine.play(trackSource);
+			await engine.play({ ...trackSource, playbackUrl: "/stream/track-2" });
+
+			expect(media.src).toBe("/stream/track-2");
+			expect(media.removeAttribute).not.toHaveBeenCalled();
+			expect(media.load).not.toHaveBeenCalled();
+			engine.destroy();
+		});
+
+		it("restores the speed after assigning src, which resets it", async () => {
+			let src = "";
+			const rateMedia = Object.assign(media, { playbackRate: 1 });
+			Object.defineProperty(rateMedia, "src", {
+				get: () => src,
+				set: (value: string) => {
+					src = value;
+					rateMedia.playbackRate = 1;
+				},
+			});
+			const engine = createIosEngine();
+			engine.setPlaybackRate(1.5);
+
+			await engine.play(trackSource);
+
+			expect(rateMedia.playbackRate).toBe(1.5);
+			engine.destroy();
+		});
+
+		it.each(["stop", "destroy"] as const)(
+			"%s() still clears it",
+			async (method) => {
+				const engine = createIosEngine();
+				await engine.play(trackSource);
+
+				engine[method]();
+
+				expect(media.removeAttribute).toHaveBeenCalledWith("src");
+				expect(media.load).toHaveBeenCalledOnce();
+				engine.destroy();
+			},
+		);
+	});
+
+	describe("radio", () => {
+		const hlsSource = () =>
+			createRadioStationSource(
+				"station-native-hls",
+				"https://example.com/live/index.m3u8",
+			);
+
+		it("prefers native HLS over hls.js", async () => {
+			media.canPlayType.mockReturnValue("maybe");
+			const loadHls = vi.fn();
+			const engine = new BrowserPlaybackEngine({
+				createMedia: () => media,
+				isIos: true,
+				loadHls,
+			});
+
+			await engine.play(hlsSource());
+
+			expect(media.src).toBe(hlsSource().playbackUrl);
+			expect(loadHls).not.toHaveBeenCalled();
+			expect(media.loop).toBe(false);
+			engine.destroy();
+		});
+
+		it("falls back to hls.js without native HLS", async () => {
+			const hls = {
+				attachMedia: vi.fn(),
+				destroy: vi.fn(),
+				loadSource: vi.fn(),
+			};
+			const engine = new BrowserPlaybackEngine({
+				createMedia: () => media,
+				hls: { isSupported: () => true, create: () => hls },
+				isIos: true,
+			});
+
+			await engine.play(hlsSource());
+
+			expect(hls.attachMedia).toHaveBeenCalledWith(media);
+			engine.destroy();
+		});
+
+		it("reconnects a dropped station without looping", async () => {
+			vi.useFakeTimers();
+			const engine = createIosEngine();
+			await engine.play(createRadioStationSource("station-ios-reconnect"));
+
+			media.paused = true;
+			media.dispatchEvent(new Event("ended"));
+			await vi.advanceTimersByTimeAsync(1000);
+
+			expect(media.play).toHaveBeenCalledTimes(2);
+			expect(media.loop).toBe(false);
+			expect(engine.getState().status).toBe("playing");
+			engine.destroy();
+		});
 	});
 });

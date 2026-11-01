@@ -28,11 +28,11 @@ const SKELETON_CARD_KEYS = [
 export const COLLECTION_PAGE_CONTAINER_CLASS = PAGE_CONTENT_WIDTH_CLASS;
 // Cards are at least 250px wide and stretch to fill their row, so the last
 // card meets the page's edge (ADR 0036); when the column narrows they wrap to
-// the next row. `min(…,100%)` lets one column fit narrow phones. Below `lg`
+// the next row. On a phone, two columns. Below `lg`
 // an open Queue Drawer takes more of the window (see use-queue-drawer-width)
 // and the grid stretches two columns into what is left.
 export const COLLECTION_GRID_CLASS =
-	"grid grid-cols-cards gap-3 max-lg:in-data-[queue-open]:grid-cols-2";
+	"grid grid-cols-cards gap-3 max-lg:in-data-[queue-open]:grid-cols-2 phone:grid-cols-2";
 
 // Hover and keyboard focus for every collection and station card
 // (docs/design-rules.md, Interaction states): lift, neutral heading-tone border, soft shadow;

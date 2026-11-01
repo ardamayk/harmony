@@ -386,6 +386,24 @@ describe("PlaybackProvider", () => {
 		}
 	});
 
+	it("unlocks audio on the tap, before the Queue write can outlast it", async () => {
+		const api = createApi();
+		const engine = new InMemoryPlaybackEngine();
+		const unlockAudio = vi.fn();
+		Object.assign(engine, { unlockAudio });
+		const replaceQueue = vi.mocked(api.replaceQueue);
+		replaceQueue.mockImplementationOnce(() => {
+			expect(unlockAudio).toHaveBeenCalledOnce();
+			return new Promise(() => {});
+		});
+		renderPlayback(api, engine);
+		await act(async () => {});
+		await act(async () =>
+			screen.getByRole("button", { name: "Track" }).click(),
+		);
+		expect(unlockAudio).toHaveBeenCalledOnce();
+	});
+
 	it("skips immediately from the recovery controls and asks a native engine to advance", async () => {
 		const api = createApi();
 		const engine = new InMemoryPlaybackEngine();

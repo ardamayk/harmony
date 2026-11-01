@@ -183,6 +183,8 @@ export class SharedPlaybackEngine implements PlaybackEngine {
 			this.pause();
 			return;
 		}
+		// Resolving the Track can outlast the tap that lets iOS make sound.
+		this.unlockAudio();
 		void this.play().catch(() => undefined);
 	}
 

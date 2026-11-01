@@ -1225,6 +1225,20 @@ describe("SharedPlaybackEngine concurrency", () => {
 		engine.destroy();
 	});
 
+	it("unlocks audio in the tap that takes over, before the Track resolves", async () => {
+		const { engine, local } = createHarness({
+			initialStates: [sharedState({ ...otherDevice })],
+		});
+		await settle();
+		const unlockAudio = vi.fn();
+		Object.assign(local, { unlockAudio });
+
+		engine.togglePlay();
+
+		expect(unlockAudio).toHaveBeenCalledOnce();
+		engine.destroy();
+	});
+
 	it("follows its own Track after a reload, with nothing loaded here", async () => {
 		const { engine, local, state } = createHarness({
 			initialStates: [

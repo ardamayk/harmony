@@ -51,6 +51,7 @@ import { useHiddenFromGuest } from "./guest-access";
 import { useLayout } from "./LayoutProvider";
 import { LyricsOverlay } from "./LyricsOverlay";
 import { NowPlayingView } from "./NowPlayingView";
+import { PhoneMiniPlayer } from "./PhoneMiniPlayer";
 import type { WindowControls } from "./TopNav";
 import { PlaybackErrorBanner } from "./PlaybackErrorBanner";
 import { PlaybackSignal } from "./PlaybackSignal";
@@ -63,6 +64,7 @@ import { buildQualityDetailRows } from "./QualityDetailsCard";
 import { findCurrentQueueIndex } from "./queue-groups";
 import { ShortcutHelpOverlay } from "./ShortcutHelpOverlay";
 import { UpNextPeek } from "./UpNextPeek";
+import { usePhoneShell } from "./use-phone-shell";
 
 const PLAYBACK_RATES = [0.75, 1, 1.25, 1.5, 2] as const;
 const SLEEP_TIMER_MINUTES = [15, 30, 60] as const;
@@ -146,6 +148,7 @@ export function PlayerBar({
 	externalSourceName?: string;
 } = {}) {
 	const navigate = useNavigate();
+	const isPhone = usePhoneShell();
 	const actionsButtonRef = useRef<HTMLButtonElement>(null);
 	const playlistSubmenuCloseTimerRef = useRef<number | null>(null);
 	const [actionsOpen, setActionsOpen] = useState(false);
@@ -234,7 +237,7 @@ export function PlayerBar({
 	const upcomingCount = queue.length - currentQueueIndex - 1;
 	const waveform = useTrackWaveform({
 		trackId: currentTrack ? currentTrack.id : null,
-		enabled: canShowWaveform && playbackPreferences.showWaveform,
+		enabled: canShowWaveform && playbackPreferences.showWaveform && !isPhone,
 		load: getTrackWaveform,
 	});
 	const { toggleMute } = useMute(volume, setVolume);
@@ -277,10 +280,11 @@ export function PlayerBar({
 		if (!currentTrack) return;
 		setLyricsOpen(!lyricsOpen);
 	}, [currentTrack, lyricsOpen, setLyricsOpen]);
-	const toggleQueue = useCallback(
-		() => togglePanel(queuePanelSide),
-		[togglePanel, queuePanelSide],
-	);
+	// The phone shell has no Queue Drawer, and this would write a Layout
+	// Preference the desktop reads.
+	const toggleQueue = useCallback(() => {
+		if (!isPhone) togglePanel(queuePanelSide);
+	}, [isPhone, togglePanel, queuePanelSide]);
 	const toggleHelp = useCallback(() => setHelpOpen((open) => !open), []);
 	usePlaybackKeyboardShortcuts(
 		{
@@ -334,12 +338,13 @@ export function PlayerBar({
 				setActionsOpen(false);
 			}
 		};
-		document.addEventListener("mousedown", handlePointerDown);
+		// iOS often sends no mousedown for a tap on plain content.
+		document.addEventListener("pointerdown", handlePointerDown);
 		document.addEventListener("keydown", handleKeyDown);
 		window.addEventListener("resize", updateMenuPosition);
 		window.addEventListener("scroll", updateMenuPosition, true);
 		return () => {
-			document.removeEventListener("mousedown", handlePointerDown);
+			document.removeEventListener("pointerdown", handlePointerDown);
 			document.removeEventListener("keydown", handleKeyDown);
 			window.removeEventListener("resize", updateMenuPosition);
 			window.removeEventListener("scroll", updateMenuPosition, true);
@@ -448,13 +453,16 @@ export function PlayerBar({
 				: null) ??
 			"Select a track");
 	// An External Track is marked in the caption line an Album title uses.
-	const nowPlayingCaption = followingDeviceName
+	const followingCaption = followingDeviceName
 		? `Playing on ${followingDeviceName}`
-		: currentExternalTrack
+		: null;
+	const nowPlayingCaption =
+		followingCaption ??
+		(currentExternalTrack
 			? externalSourceName
 				? `External – ${externalSourceName}`
 				: "External"
-			: (currentTrack?.albumTitle ?? null);
+			: (currentTrack?.albumTitle ?? null));
 	// The bar shows a 56–64px cover; the full-screen views get a large one.
 	// An External Track has one size, about 300px.
 	const artworkUrl = currentTrack
@@ -623,6 +631,14 @@ export function PlayerBar({
 		}, 200);
 	};
 
+	const toggleActionsMenu = () => {
+		setActionsOpen((open) => {
+			const next = !open;
+			if (next) updateMenuPosition();
+			return next;
+		});
+	};
+
 	const openInfoModal = () => {
 		closeActionsMenu();
 		setInfoOpen(true);
@@ -631,6 +647,7 @@ export function PlayerBar({
 	const handleGoToAlbum = () => {
 		if (!currentTrack) return;
 		closeActionsMenu();
+		setNowPlayingOpen(false);
 		void navigate({
 			to: "/library/$albumId",
 			params: { albumId: currentTrack.albumId },
@@ -640,6 +657,7 @@ export function PlayerBar({
 	const artists = getTrackArtistCredits(currentTrack ?? { artists: [] });
 	const handleGoToArtist = (artistId: string) => {
 		closeActionsMenu();
+		setNowPlayingOpen(false);
 		void goToArtistCreditsSearch(navigate, artistId);
 	};
 
@@ -704,33 +722,268 @@ export function PlayerBar({
 		await refreshPlaylists();
 	};
 
+	const accentStyle = {
+		"--player-accent": accent["--player-accent"],
+		"--player-accent-foreground": accent["--player-accent-foreground"],
+		"--player-control-primary": accent["--player-control-primary"],
+		"--player-control-primary-foreground":
+			accent["--player-control-primary-foreground"],
+		"--player-live-progress": accent["--player-live-progress"],
+		"--player-control-shadow": accent["--player-control-shadow"],
+	} as CSSProperties;
+
+	const alert = playbackError ? (
+		<PlaybackErrorBanner error={playbackError} recovery={errorRecovery} />
+	) : outputAlert ? (
+		<p
+			role="alert"
+			className="absolute bottom-full left-1/2 mb-2 -translate-x-1/2 rounded-md border border-destructive/40 bg-popover px-3 py-2 text-destructive text-sm shadow-lg phone:inset-x-2 phone:translate-x-0"
+		>
+			{outputAlert}
+		</p>
+	) : null;
+
+	// Above the page from the Player Bar; inside Now Playing on a phone, where it
+	// sits at the bottom and "Add to playlist" opens in place.
+	const actionsMenu =
+		actionsOpen && currentTrack && menuPosition ? (
+			<div
+				id="player-track-actions-menu"
+				className="fixed top-(--menu-top) left-(--menu-left) z-50 min-w-44 -translate-y-full rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg phone:top-auto phone:right-2 phone:bottom-safe-bottom phone:left-2 phone:max-h-dialog-height phone:translate-y-0 phone:overflow-y-auto"
+				style={
+					{
+						"--menu-top": `${menuPosition.top}px`,
+						"--menu-left": `${menuPosition.left}px`,
+					} as CSSProperties
+				}
+				role="menu"
+			>
+				{hidePlaylists ? null : (
+					<AddToPlaylistMenuItem
+						open={playlistSubmenuOpen}
+						onOpen={openPlaylistSubmenu}
+						// Hover and blur mean nothing on touch, and would close it under the finger.
+						onClose={isPhone ? () => {} : schedulePlaylistSubmenuClose}
+						query={playlistQuery}
+						onQueryChange={setPlaylistQuery}
+						createOpen={createPlaylistOpen}
+						onCreateOpen={() => setCreatePlaylistOpen(true)}
+						newPlaylistName={newPlaylistName}
+						onNewPlaylistNameChange={setNewPlaylistName}
+						playlists={visiblePlaylists}
+						memberPlaylistIds={memberPlaylistIds}
+						isSearching={Boolean(playlistSearchQuery)}
+						onToggle={(playlistId) => void handleTogglePlaylist(playlistId)}
+						onCreate={() => void handleCreatePlaylist()}
+					/>
+				)}
+				{isInRoom ? null : (
+					<>
+						<MenuButton onClick={handlePlayNext}>
+							<ListEnd className="size-3.5" />
+							Play next
+						</MenuButton>
+						<MenuButton onClick={handleAddToQueue}>
+							<ListPlus className="size-3.5" />
+							Add to queue
+						</MenuButton>
+					</>
+				)}
+				<MenuButton onClick={handleGoToAlbum}>Go to album</MenuButton>
+				{artists.length > 1 ? (
+					<MenuSection icon={null} label="Go to artist" value="">
+						{artists.map((artist) => (
+							<MenuChoice
+								key={artist.id}
+								label={artist.name}
+								onClick={() => handleGoToArtist(artist.id)}
+							/>
+						))}
+					</MenuSection>
+				) : (
+					<MenuButton
+						disabled={!artists.length}
+						onClick={() => handleGoToArtist(artists[0].id)}
+					>
+						Go to artist
+					</MenuButton>
+				)}
+				{isInRoom ? null : (
+					<>
+						<MenuSection
+							icon={<Gauge className="size-3.5" />}
+							label="Speed"
+							value={`${playbackRate}×`}
+						>
+							{PLAYBACK_RATES.map((rate) => (
+								<MenuChoice
+									key={rate}
+									checked={playbackRate === rate}
+									label={`${rate}×`}
+									onClick={() => setPlaybackRate(rate)}
+								/>
+							))}
+						</MenuSection>
+						<MenuSection
+							icon={<Repeat1 className="size-3.5" />}
+							label="A-B repeat"
+							value={
+								abRepeat.isActive
+									? `${formatMenuTime(abRepeat.a)}–${formatMenuTime(abRepeat.b)}`
+									: abRepeat.a !== null
+										? `A ${formatMenuTime(abRepeat.a)}`
+										: "Off"
+							}
+						>
+							<MenuChoice
+								label="Set A"
+								onClick={() => abRepeat.setPoint("a")}
+							/>
+							<MenuChoice
+								label="Set B"
+								disabled={abRepeat.a === null}
+								onClick={() => abRepeat.setPoint("b")}
+							/>
+							<MenuChoice
+								label="Clear"
+								disabled={abRepeat.a === null && abRepeat.b === null}
+								onClick={abRepeat.clear}
+							/>
+						</MenuSection>
+						<MenuSection
+							icon={<MoonStar className="size-3.5" />}
+							label="Sleep timer"
+							value={sleepTimerLabel}
+						>
+							<MenuChoice
+								checked={sleepTimer.mode.kind === "off"}
+								label="Off"
+								onClick={() => sleepTimer.setSleepTimer({ kind: "off" })}
+							/>
+							<MenuChoice
+								checked={sleepTimer.mode.kind === "after-track"}
+								label="After track"
+								onClick={() =>
+									sleepTimer.setSleepTimer({ kind: "after-track" })
+								}
+							/>
+							{SLEEP_TIMER_MINUTES.map((minutes) => (
+								<MenuChoice
+									key={minutes}
+									checked={
+										sleepTimer.mode.kind === "minutes" &&
+										sleepTimer.mode.minutes === minutes
+									}
+									label={`${minutes} min`}
+									onClick={() =>
+										sleepTimer.setSleepTimer({
+											kind: "minutes",
+											minutes,
+										})
+									}
+								/>
+							))}
+						</MenuSection>
+					</>
+				)}
+				<MenuButton disabled>
+					<Download className="size-3.5" />
+					Download
+				</MenuButton>
+				<MenuButton onClick={openInfoModal}>
+					<Info className="size-3.5" />
+					Details
+				</MenuButton>
+			</div>
+		) : null;
+
+	const overlays = (
+		<>
+			<NowPlayingAnnouncer />
+			{lyricsOpen && currentTrack ? (
+				<LyricsOverlay
+					track={currentTrack}
+					coverUrl={largeArtworkUrl}
+					accent={accent}
+					windowControls={windowControls}
+					loadLyrics={getTrackLyrics}
+					onClose={() => setLyricsOpen(false)}
+				/>
+			) : null}
+			{helpOpen ? (
+				<ShortcutHelpOverlay
+					options={{
+						seekStepSeconds: playbackPreferences.seekStepSeconds,
+						seekStepLargeSeconds: playbackPreferences.seekStepLargeSeconds,
+					}}
+					onClose={() => setHelpOpen(false)}
+				/>
+			) : null}
+			{infoOpen && currentTrack ? (
+				<TrackInfoDialog
+					track={currentTrack}
+					onClose={() => setInfoOpen(false)}
+				/>
+			) : null}
+			{nowPlayingOpen && currentTrack ? (
+				<NowPlayingView
+					track={currentTrack}
+					coverUrl={largeArtworkUrl}
+					accent={accent}
+					onOpenLyrics={() => {
+						setNowPlayingOpen(false);
+						setLyricsOpen(true);
+					}}
+					isFavorite={isCurrentTrackFavorite}
+					onToggleFavorite={onToggleFavorite ? handleToggleFavorite : undefined}
+					actionsButtonRef={actionsButtonRef}
+					actionsOpen={actionsOpen}
+					onToggleActions={toggleActionsMenu}
+					actionsMenu={actionsMenu}
+					onClose={() => setNowPlayingOpen(false)}
+				/>
+			) : null}
+		</>
+	);
+
+	if (isPhone) {
+		return (
+			<footer
+				data-testid="player-bar"
+				data-shell-surface
+				style={accentStyle}
+				className="relative bg-player-bar text-player-foreground"
+			>
+				{alert}
+				{hasPlayableSource ? (
+					<PhoneMiniPlayer
+						coverUrl={artworkUrl}
+						title={nowPlayingTitle}
+						subtitle={followingCaption ?? nowPlayingSubtitle}
+						isReconnecting={isReconnecting}
+						isPlaying={isPlaying}
+						progress={
+							effectiveDuration > 0
+								? Math.min(1, currentTime / effectiveDuration)
+								: null
+						}
+						onOpen={currentTrack ? () => setNowPlayingOpen(true) : undefined}
+						onTogglePlay={togglePlay}
+					/>
+				) : null}
+				{overlays}
+			</footer>
+		);
+	}
+
 	return (
 		<footer
 			data-testid="player-bar"
 			data-shell-surface
-			style={
-				{
-					"--player-accent": accent["--player-accent"],
-					"--player-accent-foreground": accent["--player-accent-foreground"],
-					"--player-control-primary": accent["--player-control-primary"],
-					"--player-control-primary-foreground":
-						accent["--player-control-primary-foreground"],
-					"--player-live-progress": accent["--player-live-progress"],
-					"--player-control-shadow": accent["--player-control-shadow"],
-				} as CSSProperties
-			}
+			style={accentStyle}
 			className="relative h-21.5 border-player-border border-t bg-player-bar px-6 text-player-foreground"
 		>
-			{playbackError ? (
-				<PlaybackErrorBanner error={playbackError} recovery={errorRecovery} />
-			) : outputAlert ? (
-				<p
-					role="alert"
-					className="absolute bottom-full left-1/2 mb-2 -translate-x-1/2 rounded-md border border-destructive/40 bg-popover px-3 py-2 text-destructive text-sm shadow-lg"
-				>
-					{outputAlert}
-				</p>
-			) : null}
+			{alert}
 			<div className="@container/player-bar flex h-full w-full min-w-0 items-center justify-between gap-6">
 				<section
 					aria-label="Now playing"
@@ -809,13 +1062,7 @@ export function PlayerBar({
 									aria-label="Track actions"
 									aria-expanded={actionsOpen}
 									disabled={!currentTrack}
-									onClick={() => {
-										setActionsOpen((open) => {
-											const next = !open;
-											if (next) updateMenuPosition();
-											return next;
-										});
-									}}
+									onClick={toggleActionsMenu}
 								>
 									<MoreVertical className="size-3.5" />
 								</button>
@@ -837,161 +1084,7 @@ export function PlayerBar({
 								{nowPlayingCaption}
 							</p>
 						) : null}
-						{actionsOpen && currentTrack && menuPosition ? (
-							<Portal>
-								<div
-									id="player-track-actions-menu"
-									className="fixed top-(--menu-top) left-(--menu-left) z-50 min-w-44 -translate-y-full rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg"
-									style={
-										{
-											"--menu-top": `${menuPosition.top}px`,
-											"--menu-left": `${menuPosition.left}px`,
-										} as CSSProperties
-									}
-									role="menu"
-								>
-									{hidePlaylists ? null : (
-										<AddToPlaylistMenuItem
-											open={playlistSubmenuOpen}
-											onOpen={openPlaylistSubmenu}
-											onClose={schedulePlaylistSubmenuClose}
-											query={playlistQuery}
-											onQueryChange={setPlaylistQuery}
-											createOpen={createPlaylistOpen}
-											onCreateOpen={() => setCreatePlaylistOpen(true)}
-											newPlaylistName={newPlaylistName}
-											onNewPlaylistNameChange={setNewPlaylistName}
-											playlists={visiblePlaylists}
-											memberPlaylistIds={memberPlaylistIds}
-											isSearching={Boolean(playlistSearchQuery)}
-											onToggle={(playlistId) =>
-												void handleTogglePlaylist(playlistId)
-											}
-											onCreate={() => void handleCreatePlaylist()}
-										/>
-									)}
-									{isInRoom ? null : (
-										<>
-											<MenuButton onClick={handlePlayNext}>
-												<ListEnd className="size-3.5" />
-												Play next
-											</MenuButton>
-											<MenuButton onClick={handleAddToQueue}>
-												<ListPlus className="size-3.5" />
-												Add to queue
-											</MenuButton>
-										</>
-									)}
-									<MenuButton onClick={handleGoToAlbum}>Go to album</MenuButton>
-									{artists.length > 1 ? (
-										<MenuSection icon={null} label="Go to artist" value="">
-											{artists.map((artist) => (
-												<MenuChoice
-													key={artist.id}
-													label={artist.name}
-													onClick={() => handleGoToArtist(artist.id)}
-												/>
-											))}
-										</MenuSection>
-									) : (
-										<MenuButton
-											disabled={!artists.length}
-											onClick={() => handleGoToArtist(artists[0].id)}
-										>
-											Go to artist
-										</MenuButton>
-									)}
-									{isInRoom ? null : (
-										<>
-											<MenuSection
-												icon={<Gauge className="size-3.5" />}
-												label="Speed"
-												value={`${playbackRate}×`}
-											>
-												{PLAYBACK_RATES.map((rate) => (
-													<MenuChoice
-														key={rate}
-														checked={playbackRate === rate}
-														label={`${rate}×`}
-														onClick={() => setPlaybackRate(rate)}
-													/>
-												))}
-											</MenuSection>
-											<MenuSection
-												icon={<Repeat1 className="size-3.5" />}
-												label="A-B repeat"
-												value={
-													abRepeat.isActive
-														? `${formatMenuTime(abRepeat.a)}–${formatMenuTime(abRepeat.b)}`
-														: abRepeat.a !== null
-															? `A ${formatMenuTime(abRepeat.a)}`
-															: "Off"
-												}
-											>
-												<MenuChoice
-													label="Set A"
-													onClick={() => abRepeat.setPoint("a")}
-												/>
-												<MenuChoice
-													label="Set B"
-													disabled={abRepeat.a === null}
-													onClick={() => abRepeat.setPoint("b")}
-												/>
-												<MenuChoice
-													label="Clear"
-													disabled={abRepeat.a === null && abRepeat.b === null}
-													onClick={abRepeat.clear}
-												/>
-											</MenuSection>
-											<MenuSection
-												icon={<MoonStar className="size-3.5" />}
-												label="Sleep timer"
-												value={sleepTimerLabel}
-											>
-												<MenuChoice
-													checked={sleepTimer.mode.kind === "off"}
-													label="Off"
-													onClick={() =>
-														sleepTimer.setSleepTimer({ kind: "off" })
-													}
-												/>
-												<MenuChoice
-													checked={sleepTimer.mode.kind === "after-track"}
-													label="After track"
-													onClick={() =>
-														sleepTimer.setSleepTimer({ kind: "after-track" })
-													}
-												/>
-												{SLEEP_TIMER_MINUTES.map((minutes) => (
-													<MenuChoice
-														key={minutes}
-														checked={
-															sleepTimer.mode.kind === "minutes" &&
-															sleepTimer.mode.minutes === minutes
-														}
-														label={`${minutes} min`}
-														onClick={() =>
-															sleepTimer.setSleepTimer({
-																kind: "minutes",
-																minutes,
-															})
-														}
-													/>
-												))}
-											</MenuSection>
-										</>
-									)}
-									<MenuButton disabled>
-										<Download className="size-3.5" />
-										Download
-									</MenuButton>
-									<MenuButton onClick={openInfoModal}>
-										<Info className="size-3.5" />
-										Details
-									</MenuButton>
-								</div>
-							</Portal>
-						) : null}
+						{actionsMenu ? <Portal>{actionsMenu}</Portal> : null}
 					</div>
 					{playbackPreferences.showUpNext ? <UpNextPeek /> : null}
 				</section>
@@ -1056,44 +1149,7 @@ export function PlayerBar({
 					onVolumeChange={setVolume}
 				/>
 			</div>
-			<NowPlayingAnnouncer />
-			{lyricsOpen && currentTrack ? (
-				<LyricsOverlay
-					track={currentTrack}
-					coverUrl={largeArtworkUrl}
-					accent={accent}
-					windowControls={windowControls}
-					loadLyrics={getTrackLyrics}
-					onClose={() => setLyricsOpen(false)}
-				/>
-			) : null}
-			{helpOpen ? (
-				<ShortcutHelpOverlay
-					options={{
-						seekStepSeconds: playbackPreferences.seekStepSeconds,
-						seekStepLargeSeconds: playbackPreferences.seekStepLargeSeconds,
-					}}
-					onClose={() => setHelpOpen(false)}
-				/>
-			) : null}
-			{infoOpen && currentTrack ? (
-				<TrackInfoDialog
-					track={currentTrack}
-					onClose={() => setInfoOpen(false)}
-				/>
-			) : null}
-			{nowPlayingOpen && currentTrack ? (
-				<NowPlayingView
-					track={currentTrack}
-					coverUrl={largeArtworkUrl}
-					accent={accent}
-					onOpenLyrics={() => {
-						setNowPlayingOpen(false);
-						setLyricsOpen(true);
-					}}
-					onClose={() => setNowPlayingOpen(false)}
-				/>
-			) : null}
+			{overlays}
 		</footer>
 	);
 }
@@ -1146,7 +1202,8 @@ function AddToPlaylistMenuItem({
 			onMouseLeave={onClose}
 			role="none"
 		>
-			<div
+			<button
+				type="button"
 				className={cn(
 					"flex w-full items-center justify-between gap-2 rounded-sm px-2 py-2 text-left text-xs",
 					open && "bg-muted text-heading",
@@ -1154,16 +1211,16 @@ function AddToPlaylistMenuItem({
 				role="menuitem"
 				aria-haspopup="menu"
 				aria-expanded={open}
-				tabIndex={0}
+				onClick={onOpen}
 				onFocus={onOpen}
 				onBlur={onClose}
 			>
 				<span className="flex items-center gap-2">Add to playlist</span>
 				<ChevronRight className="size-3.5 text-caption" />
-			</div>
+			</button>
 			{open ? (
 				<div
-					className="absolute top-0 left-full z-50 ml-1 w-56 rounded-md border border-border bg-popover p-2 text-popover-foreground shadow-lg"
+					className="absolute top-0 left-full z-50 ml-1 w-56 rounded-md border border-border bg-popover p-2 text-popover-foreground shadow-lg phone:static phone:ml-0 phone:w-full phone:border-0 phone:shadow-none"
 					role="menu"
 					tabIndex={-1}
 					aria-label="Add to playlist"
@@ -1175,7 +1232,7 @@ function AddToPlaylistMenuItem({
 						placeholder="Search playlists"
 						value={query}
 						onChange={(event) => onQueryChange(event.target.value)}
-						className="mb-2 h-8 w-full rounded-sm border border-border bg-background px-3 text-xs outline-none focus:ring-2 focus:ring-primary/40"
+						className="mb-2 h-8 w-full rounded-sm border border-border bg-background px-3 text-xs outline-none focus:ring-2 focus:ring-primary/40 phone:h-11"
 						onClick={(event) => event.stopPropagation()}
 					/>
 					{createOpen ? (
@@ -1189,7 +1246,7 @@ function AddToPlaylistMenuItem({
 								onChange={(event) =>
 									onNewPlaylistNameChange(event.target.value)
 								}
-								className="h-8 min-w-0 flex-1 rounded-sm border border-border bg-background px-3 text-xs outline-none focus:ring-2 focus:ring-primary/40"
+								className="h-8 min-w-0 flex-1 rounded-sm border border-border bg-background px-3 text-xs outline-none focus:ring-2 focus:ring-primary/40 phone:h-11"
 								placeholder="Playlist name"
 							/>
 							<button
@@ -1290,7 +1347,7 @@ function TrackInfoDialog({
 
 	return (
 		<Portal>
-			<div className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 p-4">
+			<div className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 p-4 phone:z-above-fullscreen">
 				<div
 					ref={dialogRef}
 					role="dialog"

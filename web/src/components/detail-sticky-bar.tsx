@@ -57,19 +57,21 @@ export function DetailStickyBar({
 		<div className="sticky -top-6 z-40 h-0">
 			<div
 				data-testid="detail-sticky-bar"
-				className="-ml-(--shell-inset) -mr-(--page-edge-right) flex items-center gap-4 border-border border-b bg-background/30 py-3 pr-(--page-edge-right) pl-(--shell-inset) backdrop-blur-xl backdrop-saturate-150 duration-150 motion-safe:animate-in motion-safe:fade-in"
+				className="-ml-(--shell-inset) -mr-(--page-edge-right) flex items-center gap-4 border-border border-b bg-background/30 py-3 phone:gap-2 phone:py-1 pr-(--page-edge-right) pl-(--shell-inset) backdrop-blur-xl backdrop-saturate-150 duration-150 motion-safe:animate-in motion-safe:fade-in"
 			>
-				{cover}
+				<div className="contents phone:hidden">{cover}</div>
 				<div className="min-w-0 flex-1">
 					<p
 						title={title}
-						className="truncate font-semibold text-heading text-xl"
+						className="truncate font-semibold text-heading text-xl phone:text-base"
 					>
 						{title}
 					</p>
 					<p className="truncate text-caption text-sm">{subtitle}</p>
 				</div>
-				<div className="flex shrink-0 items-center gap-6">{children}</div>
+				<div className="flex shrink-0 items-center gap-6 phone:gap-0">
+					{children}
+				</div>
 			</div>
 		</div>
 	);
@@ -101,10 +103,10 @@ export function DetailStickyAction({
 			title={hint}
 			disabled={disabled}
 			onClick={onClick}
-			className="flex w-16 shrink-0 flex-col items-center gap-1 rounded-md py-1 font-medium text-heading text-xs transition enabled:hover:bg-muted focus-visible:bg-muted focus-visible:outline-none disabled:text-caption"
+			className="flex w-16 shrink-0 flex-col items-center gap-1 rounded-md py-1 font-medium text-heading text-xs transition enabled:hover:bg-muted focus-visible:bg-muted focus-visible:outline-none disabled:text-caption phone:w-11 phone:justify-center"
 		>
 			<Icon className={cn("size-6", filled && "fill-current")} />
-			{label}
+			<span className="phone:hidden">{label}</span>
 		</button>
 	);
 }

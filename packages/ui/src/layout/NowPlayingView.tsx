@@ -1,22 +1,48 @@
 import type { Track } from "@repo/api-client";
-import { ChevronDown, MicVocal } from "lucide-react";
-import { type CSSProperties, useEffect, useRef } from "react";
-import { createPortal } from "react-dom";
+import {
+	ChevronDown,
+	Heart,
+	ListMusic,
+	MicVocal,
+	MoreVertical,
+} from "lucide-react";
+import {
+	type CSSProperties,
+	type ReactNode,
+	type Ref,
+	useEffect,
+	useRef,
+	useState,
+} from "react";
+import { createPortal, flushSync } from "react-dom";
 import { useFocusTrap } from "../lib/use-focus-trap";
 import { cn } from "../lib/utils";
 import { CurrentTrackPanel } from "./CurrentTrackPanel";
 import { QueuePanel } from "./QueuePanel";
+import { useCloseOnNavigate } from "./use-close-on-navigate";
+import { usePhoneShell } from "./use-phone-shell";
+
+const VIEW_ACTION_CLASS =
+	"inline-flex items-center gap-2 rounded-full border border-border px-4 py-2 text-sm hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40";
 
 /**
  * Full-screen "Now Playing" view: pointer-responsive artwork, the
  * transport and the Queue. Sibling of the Lyrics view and opened from the
- * cover in the Player Bar.
+ * cover in the Player Bar. On a phone the Queue takes the whole view instead
+ * of an aside, and the view adds favorite, Queue and Track actions buttons
+ * beside Lyrics; the Player Bar owns that menu and passes it in.
  */
 export function NowPlayingView({
 	track,
 	coverUrl,
 	accent = {},
 	onOpenLyrics,
+	isFavorite = false,
+	onToggleFavorite,
+	actionsButtonRef,
+	actionsOpen = false,
+	onToggleActions,
+	actionsMenu,
 	onClose,
 }: {
 	track: Track;
@@ -24,20 +50,50 @@ export function NowPlayingView({
 	/** Cover-derived custom properties, forwarded so the view matches the bar. */
 	accent?: Record<string, string>;
 	onOpenLyrics?: () => void;
+	isFavorite?: boolean;
+	/** The phone's favorite button; the bar has its own elsewhere. */
+	onToggleFavorite?: () => void;
+	actionsButtonRef?: Ref<HTMLButtonElement>;
+	actionsOpen?: boolean;
+	onToggleActions?: () => void;
+	actionsMenu?: ReactNode;
 	onClose: () => void;
 }) {
+	const isPhone = usePhoneShell();
+	const [queueOpen, setQueueOpen] = useState(false);
+	const queueButtonRef = useRef<HTMLButtonElement>(null);
 	const rootRef = useRef<HTMLDivElement>(null);
 	useFocusTrap(rootRef);
+	useCloseOnNavigate(onClose);
+
+	const openQueue = () => {
+		flushSync(() => setQueueOpen(true));
+		rootRef.current?.focus();
+	};
+	const closeQueue = () => {
+		flushSync(() => setQueueOpen(false));
+		queueButtonRef.current?.focus();
+	};
 
 	useEffect(() => {
 		const closeOnEscape = (event: KeyboardEvent) => {
-			if (event.key === "Escape") onClose();
+			// The Player Bar closes the menu on the same key.
+			if (event.key !== "Escape" || actionsOpen) return;
+			if (queueOpen) closeQueue();
+			else onClose();
 		};
 		document.addEventListener("keydown", closeOnEscape);
 		return () => document.removeEventListener("keydown", closeOnEscape);
-	}, [onClose]);
+	}, [actionsOpen, onClose, queueOpen]);
 
 	if (typeof document === "undefined") return null;
+
+	const lyricsButton = onOpenLyrics ? (
+		<button type="button" className={VIEW_ACTION_CLASS} onClick={onOpenLyrics}>
+			<MicVocal className="size-4" aria-hidden />
+			Lyrics
+		</button>
+	) : null;
 
 	return createPortal(
 		<div
@@ -58,45 +114,105 @@ export function NowPlayingView({
 					"--player-control-shadow": accent["--player-control-shadow"],
 				} as CSSProperties
 			}
-			className="motion-safe:animate-lyrics-view fixed inset-0 z-fullscreen flex flex-col overflow-hidden bg-background text-foreground outline-none"
+			className={cn(
+				"motion-safe:animate-lyrics-view fixed inset-0 z-fullscreen flex flex-col overflow-hidden bg-background text-foreground outline-none",
+				isPhone && "pt-safe-top pb-safe-bottom",
+			)}
 		>
-			<header className="relative flex shrink-0 items-center justify-between gap-4 px-6 py-3">
-				<p className="text-caption text-xs uppercase tracking-widest">
-					Now playing
-				</p>
-				<button
-					type="button"
-					className="inline-flex size-9 items-center justify-center rounded-full text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-					aria-label="Close now playing"
-					onClick={onClose}
-				>
-					<ChevronDown className="size-5" />
-				</button>
-			</header>
-			<div className="relative flex min-h-0 flex-1">
-				<div className="flex min-h-0 min-w-0 flex-1 flex-col items-center overflow-y-auto pb-4">
-					<CurrentTrackPanel
-						track={track}
-						coverUrl={coverUrl}
-						isArtworkFocused
-					/>
-					{onOpenLyrics ? (
+			{queueOpen ? (
+				<div className="min-h-0 flex-1 text-queue-foreground">
+					<QueuePanel embedded onClose={closeQueue} />
+				</div>
+			) : (
+				<>
+					<header className="relative flex shrink-0 items-center justify-between gap-4 px-6 py-3">
+						<p className="text-caption text-xs uppercase tracking-widest">
+							Now playing
+						</p>
 						<button
 							type="button"
-							className={cn(
-								"inline-flex items-center gap-2 rounded-full border border-border px-4 py-2 text-sm hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
-							)}
-							onClick={onOpenLyrics}
+							className="inline-flex size-9 items-center justify-center rounded-full text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+							aria-label="Close now playing"
+							onClick={onClose}
 						>
-							<MicVocal className="size-4" aria-hidden />
-							Lyrics
+							<ChevronDown className="size-5" />
 						</button>
-					) : null}
-				</div>
-				<aside className="hidden w-88 shrink-0 border-border border-l bg-background text-queue-foreground md:block">
-					<QueuePanel embedded />
-				</aside>
-			</div>
+					</header>
+					<div className="relative flex min-h-0 flex-1">
+						<div className="flex min-h-0 min-w-0 flex-1 flex-col items-center overflow-y-auto pb-4">
+							<CurrentTrackPanel
+								track={track}
+								coverUrl={coverUrl}
+								isArtworkFocused
+								// Full width, and scrolls instead of squeezing on short screens.
+								className={
+									isPhone ? "w-full shrink-0 basis-auto gap-4" : undefined
+								}
+							/>
+							{isPhone ? (
+								<div className="flex items-center gap-2">
+									{onToggleFavorite ? (
+										<button
+											type="button"
+											aria-label={
+												isFavorite
+													? "Remove from favorites"
+													: "Add to favorites"
+											}
+											title={
+												isFavorite
+													? "Remove from favorites"
+													: "Add to favorites"
+											}
+											aria-pressed={isFavorite}
+											className={cn(
+												"inline-flex size-11 items-center justify-center rounded-full border border-border hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+												isFavorite && "text-player-control-primary",
+											)}
+											onClick={onToggleFavorite}
+										>
+											<Heart
+												className={cn("size-4", isFavorite && "fill-current")}
+											/>
+										</button>
+									) : null}
+									{lyricsButton}
+									<button
+										ref={queueButtonRef}
+										type="button"
+										className={VIEW_ACTION_CLASS}
+										onClick={openQueue}
+									>
+										<ListMusic className="size-4" aria-hidden />
+										Queue
+									</button>
+									{onToggleActions ? (
+										<button
+											ref={actionsButtonRef}
+											type="button"
+											aria-label="Track actions"
+											title="Track actions"
+											aria-expanded={actionsOpen}
+											className="inline-flex size-11 items-center justify-center rounded-full border border-border hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+											onClick={onToggleActions}
+										>
+											<MoreVertical className="size-4" />
+										</button>
+									) : null}
+								</div>
+							) : (
+								lyricsButton
+							)}
+						</div>
+						{isPhone ? null : (
+							<aside className="hidden w-88 shrink-0 border-border border-l bg-background text-queue-foreground md:block">
+								<QueuePanel embedded />
+							</aside>
+						)}
+					</div>
+					{isPhone ? actionsMenu : null}
+				</>
+			)}
 		</div>,
 		document.body,
 	);

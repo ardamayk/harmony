@@ -45,7 +45,7 @@ export function ExternalLinkButton({
 			title={name}
 			// The logo alone, no ring around it; hover and focus show the
 			// neutral step behind it.
-			className="flex size-10 items-center justify-center rounded-md text-caption transition hover:bg-muted hover:text-foreground focus-visible:bg-muted"
+			className="flex size-10 items-center justify-center rounded-md text-caption transition hover:bg-muted hover:text-foreground focus-visible:bg-muted phone:size-11"
 			onClick={openExternalLink(href)}
 		>
 			{showIcon ? (

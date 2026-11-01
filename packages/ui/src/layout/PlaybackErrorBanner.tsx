@@ -31,7 +31,7 @@ export function PlaybackErrorBanner({
 		<div
 			role="alert"
 			data-testid="playback-error-banner"
-			className="absolute bottom-full left-1/2 mb-2 flex max-w-lg -translate-x-1/2 flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-destructive/40 bg-popover px-3 py-2 text-sm shadow-lg"
+			className="absolute bottom-full left-1/2 mb-2 flex max-w-lg -translate-x-1/2 flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-destructive/40 bg-popover px-3 py-2 text-sm shadow-lg phone:inset-x-2 phone:translate-x-0"
 		>
 			<div className="min-w-0 flex-1">
 				<p className="text-destructive">{error.message}</p>

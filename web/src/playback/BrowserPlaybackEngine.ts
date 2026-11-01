@@ -22,6 +22,8 @@ export interface BrowserPlaybackMedia extends EventTarget {
 	};
 	/** Optional: speed multiplier; browsers preserve pitch by default. */
 	playbackRate?: number;
+	/** Optional: only iOS playback sets this; see handleLoopWrap. */
+	loop?: boolean;
 	canPlayType(type: string): string;
 	play(): Promise<void>;
 	pause(): void;
@@ -60,6 +62,8 @@ type BrowserPlaybackEngineOptions = {
 	loadHls?: BrowserHlsFactoryLoader;
 	/** Pass null to opt out; defaults to navigator.mediaSession when present. */
 	mediaSession?: BrowserMediaSession | null;
+	/** Defaults to detecting iPhone and iPadOS. */
+	isIos?: boolean;
 };
 
 const MEDIA_SESSION_ACTIONS: MediaSessionAction[] = [
@@ -73,6 +77,13 @@ const MEDIA_SESSION_ACTIONS: MediaSessionAction[] = [
 	"seekforward",
 ];
 const MEDIA_SESSION_SEEK_OFFSET_SECONDS = 10;
+
+// Wide, because timeupdate can be sparse in the background and at double speed.
+const LOOP_WRAP_EDGE_SECONDS = 5;
+// Every seek goes through seek(), so only a wrap moves playback back this far.
+const LOOP_WRAP_MIN_JUMP_SECONDS = 1;
+// How far an ended Track may replay while it waits for the next source.
+const ENDED_REPLAY_LIMIT_SECONDS = 1;
 
 const LIVE_RECONNECT_DELAYS_MS = [1000, 2000, 4000, 8000, 15000] as const;
 const LIVE_STALL_TIMEOUT_MS = 10000;
@@ -120,16 +131,21 @@ export class BrowserPlaybackEngine implements PlaybackEngine {
 	private hasStartedLivePlayback = false;
 	private isReconnectAttemptRunning = false;
 	private readonly mediaSession: BrowserMediaSession | null;
+	private readonly isIos: boolean;
+	/** The element's position at the last timeupdate or seek, to spot a wrap. */
+	private lastMediaTime = 0;
 
 	constructor(options: BrowserPlaybackEngineOptions = {}) {
 		this.media = options.createMedia?.() ?? new Audio();
 		this.hlsFactory = options.hls ?? null;
 		this.loadHlsFactory = options.loadHls ?? loadDefaultHlsFactory;
+		this.isIos = options.isIos ?? detectIos();
 		this.mediaSession =
 			options.mediaSession === undefined
 				? defaultMediaSession()
 				: options.mediaSession;
 		this.media.volume = this.state.volume;
+		if (this.isIos) declareAudioPlayback();
 		this.addMediaListeners();
 		this.registerMediaSessionHandlers();
 	}
@@ -253,6 +269,7 @@ export class BrowserPlaybackEngine implements PlaybackEngine {
 	}
 
 	seek(seconds: number) {
+		this.lastMediaTime = seconds;
 		this.media.currentTime = seconds;
 		this.update({ currentTime: seconds });
 	}
@@ -304,7 +321,7 @@ export class BrowserPlaybackEngine implements PlaybackEngine {
 		const session = this.mediaSession;
 		if (!session) return;
 		const handlers: Partial<
-			Record<MediaSessionAction, MediaSessionActionHandler>
+			Record<MediaSessionAction, MediaSessionActionHandler | null>
 		> = {
 			play: () => void this.play().catch(() => undefined),
 			pause: () => this.pause(),
@@ -328,9 +345,14 @@ export class BrowserPlaybackEngine implements PlaybackEngine {
 						(details.seekOffset ?? MEDIA_SESSION_SEEK_OFFSET_SECONDS),
 				),
 		};
+		if (this.isIos) {
+			// iOS shows these as 10-second skips in place of previous and next.
+			handlers.seekbackward = null;
+			handlers.seekforward = null;
+		}
 		for (const action of MEDIA_SESSION_ACTIONS) {
 			const handler = handlers[action];
-			if (!handler) continue;
+			if (handler === undefined) continue;
 			try {
 				session.setActionHandler(action, handler);
 			} catch {
@@ -395,7 +417,21 @@ export class BrowserPlaybackEngine implements PlaybackEngine {
 
 	private readonly handleTimeUpdate = () => {
 		if (isLiveSource(this.state.source)) this.clearStallTimer();
-		this.update({ currentTime: this.media.currentTime });
+		const previousTime = this.lastMediaTime;
+		const currentTime = this.media.currentTime;
+		this.lastMediaTime = currentTime;
+		if (this.media.loop && this.state.source) {
+			if (this.state.status === "ended") {
+				// Publishing here would repeat "ended" and advance the Queue again.
+				if (currentTime >= ENDED_REPLAY_LIMIT_SECONDS) this.media.pause();
+				return;
+			}
+			if (this.isLoopWrap(previousTime, currentTime)) {
+				this.handleLoopWrap();
+				return;
+			}
+		}
+		this.update({ currentTime });
 	};
 
 	private readonly handleProgress = () => {
@@ -417,7 +453,12 @@ export class BrowserPlaybackEngine implements PlaybackEngine {
 	private readonly handlePlaying = () => {
 		this.clearStallTimer();
 		if (isLiveSource(this.state.source)) this.hasStartedLivePlayback = true;
-		this.update({ status: "playing" });
+		// iOS ignores handlers registered before the element is Now Playing.
+		if (this.isIos) this.registerMediaSessionHandlers();
+		// A wrap can rebuffer, and the replaying element is not a resumed Track.
+		if (!(this.media.loop && this.state.status === "ended")) {
+			this.update({ status: "playing" });
+		}
 		if (this.reconnectAttempt > 0) {
 			this.clearStabilityTimer();
 			this.stabilityTimer = setTimeout(() => {
@@ -431,6 +472,31 @@ export class BrowserPlaybackEngine implements PlaybackEngine {
 	};
 
 	private readonly handleEnded = () => {
+		this.lastMediaTime = 0;
+		this.finishSource();
+	};
+
+	// The duration plays no part: an estimate can overstate the real end, and
+	// with `loop` on a missed wrap has no `ended` to fall back on.
+	private isLoopWrap(previousTime: number, currentTime: number) {
+		return (
+			currentTime < LOOP_WRAP_EDGE_SECONDS &&
+			previousTime - currentTime > LOOP_WRAP_MIN_JUMP_SECONDS
+		);
+	}
+
+	// WebKit bug 261858: iOS closes the audio session at a natural end in the
+	// background and will not reopen it until foregrounded, so the next Track
+	// stays paused. Looping keeps the session open; this wrap replaces `ended`.
+	// Do not pause for a Track that ended: its next source needs the live session.
+	private handleLoopWrap() {
+		const { stopAfterCurrent } = this.state;
+		this.finishSource();
+		// Nothing follows it, so nothing else would stop the replay.
+		if (stopAfterCurrent) this.media.pause();
+	}
+
+	private finishSource() {
 		if (isLiveSource(this.state.source) && this.hasStartedLivePlayback) {
 			this.scheduleLiveReconnect();
 			return;
@@ -449,12 +515,14 @@ export class BrowserPlaybackEngine implements PlaybackEngine {
 			const repeatMode =
 				this.state.repeatMode === "once" ? "off" : this.state.repeatMode;
 			this.media.currentTime = 0;
+			this.lastMediaTime = 0;
 			this.update({ currentTime: 0, status: "playing", repeatMode });
 			void this.play().catch(() => undefined);
 			return;
 		}
 		this.update({ status: "ended" });
-	};
+	}
+
 	private readonly handleMediaError = () => {
 		if (this.isReconnectAttemptRunning) return;
 		if (isLiveSource(this.state.source) && this.hasStartedLivePlayback) {
@@ -513,30 +581,40 @@ export class BrowserPlaybackEngine implements PlaybackEngine {
 
 	private async setMediaSource(source: PlaybackSource) {
 		this.destroyHls();
-		this.media.removeAttribute("src");
-		this.media.load();
-		// load() resets the element's rate in some browsers; keep the setting.
-		if ("playbackRate" in this.media && this.state.playbackRate) {
-			this.media.playbackRate = this.state.playbackRate;
+		this.lastMediaTime = 0;
+		if (this.isIos) {
+			// Tearing the source down between Tracks can end the audio session.
+			this.media.loop =
+				source.type === "track" && sourceDurationSeconds(source) > 0;
+		} else {
+			this.media.removeAttribute("src");
+			this.media.load();
 		}
+		this.restorePlaybackRate();
 		const sourceUrl =
 			source.type === "track" ? source.playbackUrl : source.sourceUrl;
-		const isHlsSource = isHlsStream(sourceUrl);
-		if (isHlsSource) {
+		const useHlsJs =
+			isHlsStream(sourceUrl) && !(this.isIos && canPlayNativeHls(this.media));
+		if (useHlsJs) {
 			this.hlsFactory ??= await this.loadHlsFactory();
 		}
-		if (isHlsSource && this.hlsFactory?.isSupported()) {
+		if (useHlsJs && this.hlsFactory?.isSupported()) {
 			this.hls = this.hlsFactory.create();
 			this.hls.onFatalError?.(this.handleMediaError);
 			this.hls.loadSource(source.playbackUrl);
 			this.hls.attachMedia(this.media);
 			return;
 		}
-		if (isHlsSource && canPlayNativeHls(this.media)) {
-			this.media.src = source.playbackUrl;
-			return;
-		}
 		this.media.src = source.playbackUrl;
+		// Assigning src is a load too, and here no later step restores the rate.
+		if (this.isIos) this.restorePlaybackRate();
+	}
+
+	// load() resets the element's rate in some browsers; keep the setting.
+	private restorePlaybackRate() {
+		if ("playbackRate" in this.media && this.state.playbackRate) {
+			this.media.playbackRate = this.state.playbackRate;
+		}
 	}
 
 	private destroyHls() {
@@ -638,6 +716,28 @@ export class BrowserPlaybackEngine implements PlaybackEngine {
 		) {
 			this.syncMediaSession();
 		}
+	}
+}
+
+function detectIos() {
+	if (typeof navigator === "undefined") return false;
+	return (
+		/^(iPhone|iPad|iPod)/.test(navigator.platform) ||
+		// iPadOS presents itself as a Mac; only the touch points give it away.
+		(navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
+	);
+}
+
+/** Declares this page a media player, which iOS uses to route and keep audio. */
+function declareAudioPlayback() {
+	if (typeof navigator === "undefined") return;
+	try {
+		const { audioSession } = navigator as Navigator & {
+			audioSession?: { type: string };
+		};
+		if (audioSession) audioSession.type = "playback";
+	} catch {
+		// Playback works without it, so it must not break construction.
 	}
 }
 

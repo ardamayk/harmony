@@ -10,6 +10,15 @@
 @import "./themes/semantic.css";
 
 @custom-variant dark (&:is(.dark *));
+/* Block form: the shorthand would split the query at its comma. Mirrors
+   PHONE_SHELL_QUERY in packages/ui/src/layout/use-phone-shell.ts. */
+@custom-variant phone {
+	:where(html:not([data-desktop-client])) & {
+		@media (max-width: 767px), (pointer: coarse) and (max-height: 500px) {
+			@slot;
+		}
+	}
+}
 
 :root {
 	/* Horizontal inset of page content beside the 15rem Sidebar. Content
@@ -46,6 +55,8 @@ html[data-theme-preset] {
 	/* The cover leaves the window room for the title and transport under it
      (about 24rem with the view header), so short windows shrink the cover. */
 	--spacing-artwork-stage: min(100%, 65vh, max(10rem, 100dvh - 24rem));
+	--spacing-safe-top: env(safe-area-inset-top);
+	--spacing-safe-bottom: env(safe-area-inset-bottom);
 	--spacing-queue-preview: clamp(18rem, 22vw, 26rem);
 	--spacing-queue-drawer-max: calc(100% - 2 * var(--shell-inset, 2rem));
 	/* Artist page photo banner: tall enough for a face, never the whole screen. */
@@ -182,6 +193,28 @@ body {
 	-moz-osx-font-smoothing: grayscale;
 }
 
+/* Same query as the phone variant; html, body and #root already take 100dvh above. */
+@media (max-width: 767px), (pointer: coarse) and (max-height: 500px) {
+	html {
+		-webkit-text-size-adjust: 100%;
+		-webkit-tap-highlight-color: transparent;
+		overscroll-behavior: none;
+	}
+
+	/* On every element, because a scroller stops it inheriting the effect in
+	   WebKit; in a layer so that touch-none still wins. */
+	@layer base {
+		* {
+			touch-action: manipulation;
+		}
+	}
+
+	/* Unlayered to beat md:text-sm: iOS zooms the page on focusing smaller text. */
+	html:not([data-desktop-client]) :is(input, textarea, select) {
+		font-size: 16px;
+	}
+}
+
 body::before {
 	content: "";
 	position: fixed;
@@ -238,6 +271,17 @@ body::after {
 	--player-foreground: #e5e5e5;
 	--player-control-primary: #f5f5f5 !important;
 	--player-control-primary-foreground: #171717 !important;
+	/* Only the phone shows the Queue and the Track actions menu on it this way:
+	   whole-view and in place, so they need its dark tones whatever the theme. */
+	@variant phone {
+		--popover: #171717;
+		--popover-foreground: #e5e5e5;
+		--player-pill: #171717;
+		--sidebar-border: #262626;
+		--neutral-active: #262626;
+		--neutral-active-foreground: #f5f5f5;
+		--shell-active-foreground: #f5f5f5;
+	}
 }
 
 /* Desktop Client main window: no system frame (desktop/src/main/windows.ts), so the page
@@ -262,6 +306,46 @@ html[data-desktop-window] #root {
 html[data-desktop-window] body::before,
 html[data-desktop-window] body::after {
 	border-radius: var(--radius-md);
+}
+
+/* The phone shell's bars stack in flow, so nothing covers the page; this
+   clearance places what floats above them: toasts and the search card. Tab bar
+   (h-14), plus the mini player (h-14) while it shows. */
+[data-phone-shell] {
+	--player-dock-clearance: calc(3.5rem + env(safe-area-inset-bottom));
+	&:has([data-mini-player]) {
+		--player-dock-clearance: calc(7rem + env(safe-area-inset-bottom));
+	}
+}
+
+/* A landscape phone's notch sits on the left or right edge. */
+:is([data-phone-shell], [data-now-playing-surface]) {
+	@variant phone {
+		padding-inline: env(safe-area-inset-left) env(safe-area-inset-right);
+	}
+}
+
+/* 44px touch targets everywhere; the desktop keeps its sizes. A Switch has its
+   own hit area, and its height is its look. */
+:is(
+	[data-player-control],
+	button:not([role="switch"], [role="checkbox"], [role="radio"]),
+	[role="button"],
+	[role^="menuitem"],
+	[data-slot="input"],
+	[data-now-playing-surface] [data-testid="seek-bar"]
+) {
+	@variant phone {
+		min-width: 2.75rem;
+		min-height: 2.75rem;
+	}
+}
+
+/* A long placeholder ends in an ellipsis instead of a cut. */
+[data-slot="input"] {
+	@variant phone {
+		text-overflow: ellipsis;
+	}
 }
 
 /* Full-screen views portal to body, outside #root's clip, so they draw the

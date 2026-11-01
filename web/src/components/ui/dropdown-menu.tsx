@@ -7,7 +7,7 @@ import { cn } from "#/lib/utils.ts";
 // Shared by the dropdown and context menus: Base UI's ContextMenu reuses the
 // Menu parts below its root and trigger.
 export const menuContentClass =
-	"z-50 max-h-(--available-height) min-w-40 origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg outline-none";
+	"z-50 max-h-(--available-height) min-w-40 phone:max-w-(--available-width) origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg outline-none";
 export const menuItemClass =
 	"relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-2 text-sm outline-hidden focus:bg-accent focus:text-accent-foreground data-disabled:pointer-events-none data-disabled:opacity-50 data-inset:pl-8 data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-destructive/10 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4";
 
@@ -38,7 +38,7 @@ function DropdownMenuContent({
 	return (
 		<MenuPrimitive.Portal>
 			<MenuPrimitive.Positioner
-				className="isolate z-50 outline-none"
+				className="isolate z-50 outline-none phone:z-above-fullscreen"
 				align={align}
 				alignOffset={alignOffset}
 				side={side}

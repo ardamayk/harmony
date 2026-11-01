@@ -1,5 +1,6 @@
 // Draws the Harmony mark and writes every icon file from it: the Web Client's
-// favicon and logos, and the Desktop Client's window, tray and executable icons.
+// favicon, logos and Home Screen icon, and the Desktop Client's window, tray and
+// executable icons.
 // The mark is the 3:2 Lissajous curve, the shape of a perfect fifth. Small sizes
 // get a heavier line so the curve stays open. Run with `mise run brand:icons`.
 
@@ -14,7 +15,7 @@ const desktopResources = join(repoRoot, "desktop/resources");
 
 type Color = [number, number, number];
 type Point = [number, number];
-type Style = { tile: boolean; scale: number; stroke: number };
+type Style = { tile: boolean; scale: number; stroke: number; opaque?: boolean };
 
 const TILE: Color = [0x0b, 0x0b, 0x12];
 const GRADIENT: Color[] = [
@@ -33,6 +34,8 @@ const CURVE_POINTS = 180;
 const LARGE: Style = { tile: true, scale: 0.8, stroke: 5.5 };
 const SMALL: Style = { tile: true, scale: 0.94, stroke: 7 };
 const MARK: Style = { tile: false, scale: 1.1, stroke: 7.5 };
+// iOS rounds the corners itself and fills any transparency with black.
+const HOME_SCREEN: Style = { ...LARGE, opaque: true };
 
 function curve(): Point[] {
 	const points: Point[] = [];
@@ -103,7 +106,7 @@ function render(size: number, style: Style): Uint8Array {
 			const line = coverage((nearest - style.stroke / 2) * style.scale);
 			const tile = style.tile ? coverage(distanceToTile(point)) : 0;
 			const color = gradientAt(onCurve);
-			const alpha = style.tile ? tile : line;
+			const alpha = style.opaque ? 1 : style.tile ? tile : line;
 			const offset = (row * size + column) * 4;
 			for (let channel = 0; channel < 3; channel += 1) {
 				pixels[offset + channel] = Math.round(
@@ -207,6 +210,7 @@ writeFileSync(
 );
 writeFileSync(join(webPublic, "logo192.png"), png(192, LARGE));
 writeFileSync(join(webPublic, "logo512.png"), png(512, LARGE));
+writeFileSync(join(webPublic, "apple-touch-icon.png"), png(180, HOME_SCREEN));
 writeFileSync(join(desktopResources, "icon.png"), png(512, LARGE));
 writeFileSync(
 	join(desktopResources, "icon.ico"),

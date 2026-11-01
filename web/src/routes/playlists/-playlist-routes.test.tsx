@@ -73,6 +73,8 @@ vi.mock("#/lib/api", () => ({
 }));
 
 vi.mock("@repo/ui", () => ({
+	RowMenuButton: () => null,
+	usePhoneShell: () => false,
 	toast: { error: mocks.toastError },
 	AlbumArt: ({
 		coverUrl,

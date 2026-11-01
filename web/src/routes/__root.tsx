@@ -10,6 +10,7 @@ import {
 	QueueRowMenuProvider,
 	useListenTogether,
 	usePlayback,
+	usePhoneShell,
 } from "@repo/ui";
 import { useHiddenFromGuest } from "@repo/ui/guest-access";
 import type { QueryClient } from "@tanstack/react-query";
@@ -44,6 +45,7 @@ import {
 	writeGuestPreferences,
 } from "#/lib/guest-preferences";
 import { createPlaybackApi } from "#/lib/playback-api";
+import { preferencesPatch } from "#/lib/preferences-patch";
 import { invalidatePlaylistCache } from "#/lib/playlist-query-cache";
 import { getSharedPlaybackEngine } from "#/playback/shared-playback-engine";
 
@@ -112,6 +114,7 @@ function AppLayout() {
 	const api = useMemo(() => createPlaybackApi(queryClient), [queryClient]);
 	const playbackEngine = getSharedPlaybackEngine();
 	const { role } = useListenTogether();
+	const isPhone = usePhoneShell();
 	// Only the Owner has Preferences on the Music Server. A Guest's, or those of
 	// a visitor about to join, stay on their device (ADR 0037).
 	const hasServerPreferences = role === "owner";
@@ -140,8 +143,9 @@ function AppLayout() {
 		<LayoutProvider
 			initialPreferences={initial}
 			onPreferencesChange={(prefs) => {
-				if (hasServerPreferences) patchPreferences.mutate(prefs);
-				else writeGuestPreferences(prefs);
+				if (hasServerPreferences) {
+					patchPreferences.mutate(preferencesPatch(prefs, isPhone));
+				} else writeGuestPreferences(prefs);
 			}}
 		>
 			<div className="flex h-full min-h-0 flex-1 flex-col overflow-x-auto overflow-y-hidden">

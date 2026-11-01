@@ -390,6 +390,21 @@ describe("TrackList", () => {
 		expect(playTrack).toHaveBeenCalledWith("t2", ["t2", "t1"]);
 	});
 
+	it("plays on a tap on the phone shell, where a touch has no double click", () => {
+		vi.stubGlobal("matchMedia", () => ({
+			matches: true,
+			addEventListener: () => {},
+			removeEventListener: () => {},
+		}));
+		try {
+			render(<TrackList tracks={[sampleTrack]} playMode="double" />);
+			fireEvent.click(screen.getByText(sampleTrack.title));
+			expect(playTrack).toHaveBeenCalledWith("t1", ["t1"]);
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
+
 	it("starts the Queue at the selected Track so no earlier Track counts as played", () => {
 		const second = { ...sampleTrack, id: "t2", title: "Style" };
 		const third = { ...sampleTrack, id: "t3", title: "Blank Space" };

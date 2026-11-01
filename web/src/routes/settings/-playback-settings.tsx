@@ -2,6 +2,7 @@ import type { PlaybackPreferences } from "@repo/api-client";
 import { usePlaybackPreferences } from "@repo/ui";
 import { Label } from "#/components/ui/label";
 import { Switch } from "#/components/ui/switch";
+import { cn } from "#/lib/utils";
 
 const SEEK_STEP_OPTIONS = [5, 10, 15, 30, 60] as const;
 const SEEK_STEP_LARGE_OPTIONS = [15, 30, 60, 120] as const;
@@ -14,6 +15,16 @@ type ToggleKey = {
 		? K
 		: never;
 }[keyof PlaybackPreferences];
+
+/** Hidden on the phone shell: it has no keyboard, seek waveform or Up next peek, and the browser engine neither fades nor plays gaplessly. */
+const NOT_ON_PHONE = new Set<string>([
+	"showWaveform",
+	"showUpNext",
+	"gaplessPlayback",
+	"seekStepSeconds",
+	"seekStepLargeSeconds",
+	"transitionFadeMs",
+]);
 
 const TOGGLES: Array<{ key: ToggleKey; label: string; description: string }> = [
 	{
@@ -116,7 +127,10 @@ export function PlaybackSettingsSection() {
 				{choices.map((choice) => (
 					<fieldset
 						key={choice.key}
-						className="m-0 rounded-lg border border-border bg-card/40 p-3"
+						className={cn(
+							"m-0 rounded-lg border border-border bg-card/40 p-3",
+							NOT_ON_PHONE.has(choice.key) && "phone:hidden",
+						)}
 					>
 						<legend className="px-1 font-medium text-heading text-sm">
 							{choice.label}
@@ -151,7 +165,10 @@ export function PlaybackSettingsSection() {
 				{TOGGLES.map((toggle) => (
 					<li
 						key={toggle.key}
-						className="flex items-start justify-between gap-4 rounded-lg border border-border bg-card/40 p-3"
+						className={cn(
+							"flex items-start justify-between gap-4 rounded-lg border border-border bg-card/40 p-3",
+							NOT_ON_PHONE.has(toggle.key) && "phone:hidden",
+						)}
 					>
 						<div className="min-w-0">
 							<Label htmlFor={`playback-${toggle.key}`}>{toggle.label}</Label>
