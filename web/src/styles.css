@@ -308,16 +308,26 @@ html[data-desktop-window] body::after {
 	}
 }
 
-/* 44px touch targets in shared controls; the desktop keeps its sizes. */
+/* 44px touch targets everywhere; the desktop keeps its sizes. A Switch has its
+   own hit area, and its height is its look. */
 :is(
 	[data-player-control],
-	[data-now-playing-surface] button,
-	[data-now-playing-surface] [role="button"],
+	button:not([role="switch"], [role="checkbox"], [role="radio"]),
+	[role="button"],
+	[role^="menuitem"],
+	[data-slot="input"],
 	[data-now-playing-surface] [data-testid="seek-bar"]
 ) {
 	@variant phone {
 		min-width: 2.75rem;
 		min-height: 2.75rem;
+	}
+}
+
+/* A long placeholder ends in an ellipsis instead of a cut. */
+[data-slot="input"] {
+	@variant phone {
+		text-overflow: ellipsis;
 	}
 }
 
