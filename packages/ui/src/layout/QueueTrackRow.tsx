@@ -13,6 +13,7 @@ import {
 	useQueueRowMenu,
 } from "./QueueRowMenuProvider";
 import { formatQueueDuration } from "./queue-groups";
+import { RowMenuButton } from "./RowMenuButton";
 
 type QueueTrackRowProps = {
 	ref?: Ref<HTMLLIElement>;
@@ -147,6 +148,12 @@ export function QueueTrackRow({
 			>
 				{formatQueueDuration(item.track.durationMs)}
 			</span>
+			{renderMenu ? (
+				<RowMenuButton
+					label={`Actions for ${item.track.title}`}
+					className="-mr-2 -ml-2"
+				/>
+			) : null}
 		</li>
 	);
 	return renderMenu ? renderMenu({ item, children: row }) : row;

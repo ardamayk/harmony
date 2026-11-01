@@ -1,5 +1,5 @@
 import type { RadioCatalogOption, RadioSearchResult } from "@repo/api-client";
-import { usePlayback } from "@repo/ui";
+import { RowMenuButton, usePlayback } from "@repo/ui";
 import {
 	useInfiniteQuery,
 	useMutation,
@@ -962,61 +962,68 @@ function CatalogCard({
 	const tags = visibleTags(entry);
 
 	return (
-		<ContextMenu>
-			<ContextMenuTrigger
-				render={
-					// oxlint-disable-next-line jsx-a11y/control-has-associated-label -- ContextMenuTrigger passes the card content as children
-					<button
-						type="button"
-						ref={ref}
-						data-testid={`radio-catalog-card-${entry.stationUuid}`}
-						onClick={onPreview}
-						className={cn(
-							"group relative flex min-w-0 cursor-pointer items-start gap-4 rounded-md border border-border bg-card/45 p-4 text-left hover:bg-card/65",
-							CARD_INTERACTION_CLASS,
-						)}
-					/>
-				}
-			>
-				<CatalogArtwork faviconUrl={entry.faviconUrl} name={entry.name} />
-				<CardHealthStatus status={entry.healthStatus} />
-				<div className="flex min-w-0 flex-1 flex-col gap-3 pr-12">
-					<div className="min-w-0 space-y-2">
-						<h2
-							className="truncate font-semibold text-base text-heading"
-							title={entry.name}
-						>
-							{entry.name}
-						</h2>
-						<div className="flex min-w-0 flex-col gap-1 text-foreground text-xs">
-							<p className="inline-flex min-w-0 items-center gap-2">
-								<MapPin className="size-3.5 shrink-0 text-caption" />
-								<span className="truncate">{formatCardLocation(entry)}</span>
-							</p>
-							<p className="inline-flex min-w-0 items-center gap-2">
-								<AudioLines className="size-3.5 shrink-0 text-caption" />
-								<span className="truncate">{formatQuality(entry)}</span>
-							</p>
+		<div className="contents phone:relative phone:block phone:min-w-0">
+			<ContextMenu>
+				<ContextMenuTrigger
+					render={
+						// oxlint-disable-next-line jsx-a11y/control-has-associated-label -- ContextMenuTrigger passes the card content as children
+						<button
+							type="button"
+							ref={ref}
+							data-testid={`radio-catalog-card-${entry.stationUuid}`}
+							onClick={onPreview}
+							className={cn(
+								"group relative flex min-w-0 cursor-pointer items-start gap-4 rounded-md border border-border bg-card/45 p-4 text-left hover:bg-card/65 phone:w-full",
+								CARD_INTERACTION_CLASS,
+							)}
+						/>
+					}
+				>
+					<CatalogArtwork faviconUrl={entry.faviconUrl} name={entry.name} />
+					<CardHealthStatus status={entry.healthStatus} />
+					<div className="flex min-w-0 flex-1 flex-col gap-3 pr-12">
+						<div className="min-w-0 space-y-2">
+							<h2
+								className="truncate font-semibold text-base text-heading"
+								title={entry.name}
+							>
+								{entry.name}
+							</h2>
+							<div className="flex min-w-0 flex-col gap-1 text-foreground text-xs">
+								<p className="inline-flex min-w-0 items-center gap-2">
+									<MapPin className="size-3.5 shrink-0 text-caption" />
+									<span className="truncate">{formatCardLocation(entry)}</span>
+								</p>
+								<p className="inline-flex min-w-0 items-center gap-2">
+									<AudioLines className="size-3.5 shrink-0 text-caption" />
+									<span className="truncate">{formatQuality(entry)}</span>
+								</p>
+							</div>
 						</div>
+						<div className="flex flex-wrap gap-2">
+							{tags.map((tag) => (
+								<MetaChip key={tag}>{tag}</MetaChip>
+							))}
+						</div>
+						{hasPreviewError ? (
+							<p className="mt-auto text-destructive text-xs">
+								Live playback unavailable.
+							</p>
+						) : null}
 					</div>
-					<div className="flex flex-wrap gap-2">
-						{tags.map((tag) => (
-							<MetaChip key={tag}>{tag}</MetaChip>
-						))}
-					</div>
-					{hasPreviewError ? (
-						<p className="mt-auto text-destructive text-xs">
-							Live playback unavailable.
-						</p>
-					) : null}
-				</div>
-			</ContextMenuTrigger>
-			<CatalogContextMenu
-				isImporting={isImporting}
-				onImport={onImport}
-				onDetails={onDetails}
+				</ContextMenuTrigger>
+				<CatalogContextMenu
+					isImporting={isImporting}
+					onImport={onImport}
+					onDetails={onDetails}
+				/>
+			</ContextMenu>
+			<RowMenuButton
+				label={`Actions for ${entry.name}`}
+				afterTrigger
+				className="absolute right-1 bottom-1"
 			/>
-		</ContextMenu>
+		</div>
 	);
 }
 
@@ -1033,51 +1040,62 @@ function CatalogRow({
 	const tags = visibleTags(entry);
 
 	return (
-		<ContextMenu>
-			<ContextMenuTrigger
-				render={
-					// oxlint-disable-next-line jsx-a11y/control-has-associated-label -- ContextMenuTrigger passes the card content as children
-					<button
-						type="button"
-						ref={ref}
-						data-testid={`radio-catalog-card-${entry.stationUuid}`}
-						onClick={onPreview}
-						className="group grid min-w-0 cursor-pointer grid-cols-media gap-3 rounded-lg border border-border bg-card/45 p-3 text-left shadow-sm outline-none transition duration-300 ease-out hover:-translate-y-1 hover:border-heading/35 hover:bg-card/65 hover:shadow-lg focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:grid-cols-media-actions"
+		<div className="contents phone:relative phone:block phone:min-w-0">
+			<ContextMenu>
+				<ContextMenuTrigger
+					render={
+						// oxlint-disable-next-line jsx-a11y/control-has-associated-label -- ContextMenuTrigger passes the card content as children
+						<button
+							type="button"
+							ref={ref}
+							data-testid={`radio-catalog-card-${entry.stationUuid}`}
+							onClick={onPreview}
+							className="group grid min-w-0 cursor-pointer grid-cols-media gap-3 rounded-lg border phone:w-full border-border bg-card/45 p-3 text-left shadow-sm outline-none transition duration-300 ease-out hover:-translate-y-1 hover:border-heading/35 hover:bg-card/65 hover:shadow-lg focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:grid-cols-media-actions"
+						/>
+					}
+				>
+					<CatalogArtwork
+						faviconUrl={entry.faviconUrl}
+						name={entry.name}
+						small
 					/>
-				}
-			>
-				<CatalogArtwork faviconUrl={entry.faviconUrl} name={entry.name} small />
-				<div className="min-w-0">
-					<h2 className="truncate font-semibold text-heading text-sm">
-						{entry.name}
-					</h2>
-					<p className="mt-1 flex min-w-0 items-center gap-1 truncate text-foreground text-xs">
-						<MapPin className="size-3.5 shrink-0 text-caption" />
-						<span className="truncate">{formatLocation(entry)}</span>
-					</p>
-					{hasPreviewError ? (
-						<p className="mt-1 text-destructive text-xs">
-							Live playback unavailable.
+					<div className="min-w-0">
+						<h2 className="truncate font-semibold text-heading text-sm">
+							{entry.name}
+						</h2>
+						<p className="mt-1 flex min-w-0 items-center gap-1 truncate text-foreground text-xs">
+							<MapPin className="size-3.5 shrink-0 text-caption" />
+							<span className="truncate">{formatLocation(entry)}</span>
 						</p>
-					) : null}
-				</div>
-				<div className="col-span-2 flex flex-wrap items-center gap-2 md:col-span-1 md:justify-end">
-					<MetaChip>{formatQuality(entry)}</MetaChip>
-					<HealthChip status={entry.healthStatus} />
-					{tags.map((tag) => (
-						<MetaChip key={tag}>{tag}</MetaChip>
-					))}
-					{extraTagCount(entry) > 0 ? (
-						<MetaChip>+{extraTagCount(entry)}</MetaChip>
-					) : null}
-				</div>
-			</ContextMenuTrigger>
-			<CatalogContextMenu
-				isImporting={isImporting}
-				onImport={onImport}
-				onDetails={onDetails}
+						{hasPreviewError ? (
+							<p className="mt-1 text-destructive text-xs">
+								Live playback unavailable.
+							</p>
+						) : null}
+					</div>
+					<div className="col-span-2 flex flex-wrap items-center gap-2 md:col-span-1 md:justify-end">
+						<MetaChip>{formatQuality(entry)}</MetaChip>
+						<HealthChip status={entry.healthStatus} />
+						{tags.map((tag) => (
+							<MetaChip key={tag}>{tag}</MetaChip>
+						))}
+						{extraTagCount(entry) > 0 ? (
+							<MetaChip>+{extraTagCount(entry)}</MetaChip>
+						) : null}
+					</div>
+				</ContextMenuTrigger>
+				<CatalogContextMenu
+					isImporting={isImporting}
+					onImport={onImport}
+					onDetails={onDetails}
+				/>
+			</ContextMenu>
+			<RowMenuButton
+				label={`Actions for ${entry.name}`}
+				afterTrigger
+				className="absolute right-1 bottom-1"
 			/>
-		</ContextMenu>
+		</div>
 	);
 }
 

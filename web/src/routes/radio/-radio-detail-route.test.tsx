@@ -58,6 +58,8 @@ vi.mock("#/lib/api", () => ({
 }));
 
 vi.mock("@repo/ui", () => ({
+	RowMenuButton: () => null,
+	usePhoneShell: () => false,
 	usePlayback: () => ({
 		playRadioStation: mocks.playRadioStation,
 		currentRadioStation: null,

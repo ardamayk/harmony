@@ -35,7 +35,7 @@ function ContextMenuContent({
 	return (
 		<ContextMenuPrimitive.Portal>
 			<ContextMenuPrimitive.Positioner
-				className="isolate z-50 outline-none"
+				className="isolate z-50 outline-none phone:z-above-fullscreen"
 				align={align}
 				alignOffset={alignOffset}
 				side={side}

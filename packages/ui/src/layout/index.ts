@@ -23,6 +23,7 @@ export { PlayerBar } from "./PlayerBar";
 export { QueueDrawer } from "./QueueDrawer";
 export { QueuePanel } from "./QueuePanel";
 export { QueueEqualizer } from "./QueueTrackRow";
+export { RowMenuButton } from "./RowMenuButton";
 export {
 	type QueueRowMenuProps,
 	QueueRowMenuProvider,

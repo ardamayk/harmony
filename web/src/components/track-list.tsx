@@ -3,7 +3,9 @@ import {
 	buildTrackDetailRows,
 	ExplicitBadge,
 	QueueEqualizer,
+	RowMenuButton,
 	toast,
+	usePhoneShell,
 	usePlayback,
 } from "@repo/ui";
 import { useHiddenFromGuest } from "@repo/ui/guest-access";
@@ -108,6 +110,9 @@ export function TrackList({
 	const hideQueueEditing = useHiddenFromGuest("queue-editing");
 	const hideFavorites = useHiddenFromGuest("favorites");
 	const canFavorite = showFavorite && !hideFavorites;
+	const isPhone = usePhoneShell();
+	// A touch has no double click, so a tap always plays.
+	const tapPlays = playMode === "single" || isPhone;
 	const [detailsTrack, setDetailsTrack] = useState<Track | null>(null);
 	// Context menu items unmount with the menu, so dialogs opened from them
 	// return focus to the originating row (or the table once a row is gone).
@@ -149,35 +154,66 @@ export function TrackList({
 	const shouldShowAlbumCover = !albumId;
 	const hasMultipleDiscs = tracks.some((track) => track.discNo > 1);
 	const showPlays = (playCounts?.size ?? 0) > 0;
+	// The phone keeps the cover or the number, title and artist, duration, menu.
+	const numberPhoneClass = shouldShowAlbumCover
+		? "phone:hidden"
+		: "phone:w-8 phone:pr-0 phone:pl-1";
+	const titlePhoneClass = shouldShowAlbumCover
+		? "phone:pr-2 phone:pl-0"
+		: "phone:px-2";
+	const durationPhoneClass = "phone:w-12 phone:px-0";
 
 	return (
 		<>
 			<table
 				ref={tableRef}
 				tabIndex={-1}
-				className="w-full text-sm outline-none"
+				className="w-full text-sm outline-none phone:table-fixed"
 			>
 				<thead>
 					<tr className="border-border border-b text-left text-caption text-xs">
-						<th className={cn("w-10 font-medium", rowPadding)}>#</th>
-						<th className={cn("font-medium", rowPadding)}>Title</th>
+						<th
+							className={cn("w-10 font-medium", rowPadding, numberPhoneClass)}
+						>
+							#
+						</th>
+						<th className={cn("font-medium", rowPadding, titlePhoneClass)}>
+							Title
+						</th>
 						{showPlays ? (
-							<th className={cn("w-32 text-right font-medium", rowPadding)}>
+							<th
+								className={cn(
+									"w-32 text-right font-medium phone:hidden",
+									rowPadding,
+								)}
+							>
 								Plays
 							</th>
 						) : null}
-						<th className={cn("w-16 text-right font-medium", rowPadding)}>
+						<th
+							className={cn(
+								"w-16 text-right font-medium",
+								rowPadding,
+								durationPhoneClass,
+							)}
+						>
 							<span className="sr-only">Duration</span>
 							<Clock className="ml-auto size-3.5" />
 						</th>
 						{canFavorite ? (
 							<th
-								className={cn("w-10 text-center font-medium", favoritePadding)}
+								className={cn(
+									"w-10 text-center font-medium phone:hidden",
+									favoritePadding,
+								)}
 							>
 								<span className="sr-only">Favorite</span>
 								<Heart className="mx-auto size-3.5" />
 							</th>
 						) : null}
+						<th className="hidden w-11 p-0 phone:table-cell">
+							<span className="sr-only">Actions</span>
+						</th>
 					</tr>
 				</thead>
 				<tbody>
@@ -210,10 +246,10 @@ export function TrackList({
 											)}
 											tabIndex={0}
 											onClick={() => {
-												if (playMode === "single") handlePlay(track);
+												if (tapPlays) handlePlay(track);
 											}}
 											onDoubleClick={() => {
-												if (playMode === "double") handlePlay(track);
+												if (!tapPlays) handlePlay(track);
 											}}
 											onKeyDown={(event) => {
 												if (event.key === "Enter") handlePlay(track);
@@ -227,6 +263,7 @@ export function TrackList({
 											// Caption loses 4.5:1 on the active step.
 											isPlaying ? "text-foreground" : "text-caption",
 											rowPadding,
+											numberPhoneClass,
 										)}
 									>
 										{isPlaying ? (
@@ -238,7 +275,7 @@ export function TrackList({
 											visibleNumber
 										)}
 									</td>
-									<td className={rowPadding}>
+									<td className={cn(rowPadding, titlePhoneClass)}>
 										<div className="flex min-w-0 items-center gap-2">
 											{shouldShowAlbumCover ? (
 												<img
@@ -278,7 +315,7 @@ export function TrackList({
 									{showPlays ? (
 										<td
 											className={cn(
-												"text-right tabular-nums",
+												"text-right tabular-nums phone:hidden",
 												isPlaying ? "text-foreground" : "text-caption",
 												rowPadding,
 											)}
@@ -291,12 +328,18 @@ export function TrackList({
 											"text-right tabular-nums",
 											isPlaying ? "text-foreground" : "text-caption",
 											rowPadding,
+											durationPhoneClass,
 										)}
 									>
 										{formatDuration(track.durationMs)}
 									</td>
 									{canFavorite ? (
-										<td className={cn("text-center", favoritePadding)}>
+										<td
+											className={cn(
+												"text-center phone:hidden",
+												favoritePadding,
+											)}
+										>
 											<Button
 												type="button"
 												variant="ghost"
@@ -322,8 +365,20 @@ export function TrackList({
 											</Button>
 										</td>
 									) : null}
+									<td className="hidden p-0 text-right phone:table-cell">
+										<RowMenuButton label={`Actions for ${track.title}`} />
+									</td>
 								</ContextMenuTrigger>
 								<ContextMenuContent>
+									{canFavorite && isPhone ? (
+										<ContextMenuItem onClick={() => toggleFavorite(track.id)}>
+											<Heart
+												className="size-4"
+												fill={favorited ? "currentColor" : "none"}
+											/>
+											{favorited ? "Remove from favorites" : "Add to favorites"}
+										</ContextMenuItem>
+									) : null}
 									{hideQueueEditing ? null : (
 										<>
 											<ContextMenuItem
