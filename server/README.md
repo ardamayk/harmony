@@ -95,13 +95,39 @@ Put `~/.local/bin` on the server's `PATH`, or set `YT_DLP=$HOME/.local/bin/yt-dl
 
 `.github/workflows/server-image.yml` publishes it to `ghcr.io/ardamayk/harmony-server`: `main` and `sha-<commit>` after CI passes on main, `<version>` and `latest` from a `v*` tag.
 
-The published image has no yt-dlp, and neither does a local build by default. The `WITH_YT_DLP` build argument installs it from PyPI into your own image:
+The published image has no yt-dlp, and neither does a local build by default. A yt-dlp installed inside a container is lost when the image changes, so keep yours in the data volume, where `docker compose pull` leaves it. The entrypoint uses `/data/yt-dlp/yt-dlp` when it exists and `YT_DLP` is unset.
+
+Install yt-dlp's standalone build from its own releases, once, from the folder with `docker-compose.yml`. On Arm, use `yt-dlp_musllinux_aarch64`:
+
+```bash
+docker compose run --rm --no-deps --entrypoint sh server -c 'mkdir -p /data/yt-dlp && wget -O /data/yt-dlp/yt-dlp https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_musllinux && chmod +x /data/yt-dlp/yt-dlp'
+```
+
+Then set the source in the `.env` file next to `docker-compose.yml`, and start the server:
+
+```bash
+EXTERNAL_SOURCE_SEARCH=scsearch
+```
+
+```bash
+docker compose up -d server
+```
+
+Updating the server keeps both. Updating yt-dlp stays yours, because the server never does it:
+
+```bash
+docker compose exec -u harmony server /data/yt-dlp/yt-dlp -U
+```
+
+Some sites need a JavaScript runtime that the image does not have, and yt-dlp then reports it in the server's log.
+
+Or build yt-dlp into your own image with the `WITH_YT_DLP` build argument, which installs it from PyPI:
 
 ```bash
 docker build -f server/Dockerfile --build-arg WITH_YT_DLP=true -t earthly-music-server .
 ```
 
-Then set `EXTERNAL_SOURCE_SEARCH` at run time. To update yt-dlp, rebuild with `--no-cache`, or run `/opt/yt-dlp/bin/pip install -U yt-dlp` in the container.
+Such an image is replaced by `docker compose pull`, and yt-dlp with it. To update yt-dlp there, rebuild with `--no-cache`, or run `/opt/yt-dlp/bin/pip install -U yt-dlp` in the container.
 
 ### Publishing an image
 
@@ -123,7 +149,7 @@ RUN apk add --no-cache python3 \
 ENV EXTERNAL_SOURCE_SEARCH=scsearch
 ```
 
-Or they install yt-dlp into a mounted volume and point `YT_DLP` at it.
+Or they install yt-dlp into the data volume, as under [Docker](#docker), or into another mounted volume and point `YT_DLP` at it.
 
 ## Sentry (optional)
 

@@ -26,6 +26,12 @@ services:
       SENTRY_DSN: ${SENTRY_DSN:-}
       SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-}
       SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-}
+      # The External Source stays off unless the first is set, and you install
+      # yt-dlp yourself; see server/README.md.
+      EXTERNAL_SOURCE_SEARCH: ${EXTERNAL_SOURCE_SEARCH:-}
+      EXTERNAL_SOURCE_EXTRACTOR_ARGS: ${EXTERNAL_SOURCE_EXTRACTOR_ARGS:-}
+      EXTERNAL_SOURCE_NAME: ${EXTERNAL_SOURCE_NAME:-}
+      YT_DLP: ${YT_DLP:-}
     volumes:
       - app-data:/data
       - ${MUSIC_PATH:-./music}:/music:ro

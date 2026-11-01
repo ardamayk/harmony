@@ -32,7 +32,7 @@ The install is always the operator's explicit choice, from yt-dlp's own channels
 
 - **On a host**, the operator installs yt-dlp the way yt-dlp documents. A future server install script may offer it only behind an explicit opt-in flag, never by default, and only from those channels; it never vendors or pins a copy.
 - **In Docker**, the image is built locally from the repository. `WITH_YT_DLP` is a build argument, `false` by default; `docker build -f server/Dockerfile --build-arg WITH_YT_DLP=true .` installs yt-dlp from PyPI into the operator's own image. Updating it means rebuilding with `--no-cache` or running the venv's `pip install -U yt-dlp`.
-- **Published images** (any registry) are built with the default and never contain yt-dlp, and there is no `with-yt-dlp` variant. An operator who uses a published image derives their own image from it, or installs yt-dlp into a mounted volume and points `YT_DLP` at it. Publishing a yt-dlp image would be the project distributing it, which the bullet above rules out.
+- **Published images** (any registry) are built with the default and never contain yt-dlp, and there is no `with-yt-dlp` variant. An operator who uses a published image derives their own image from it, or installs yt-dlp into a mounted volume and points `YT_DLP` at it. The entrypoint finds `/data/yt-dlp/yt-dlp` in the data volume by itself, so an update of the image keeps the operator's install; the command that puts it there is theirs to run. Publishing a yt-dlp image would be the project distributing it, which the bullet above rules out.
 
 ## Considered Options
 
