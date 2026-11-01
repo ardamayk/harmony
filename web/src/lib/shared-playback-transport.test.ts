@@ -1,7 +1,15 @@
 import { ApiError, type CoverSize, type PlaybackState } from "@repo/api-client";
-import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import {
+	afterEach,
+	beforeEach,
+	describe,
+	expect,
+	it,
+	vi,
+} from "vite-plus/test";
 import {
 	browserDeviceName,
+	claimBrowserDeviceId,
 	createBrowserSharedPlaybackTransport,
 	resolveSharedPlaybackSource,
 } from "./shared-playback-transport";
@@ -18,18 +26,99 @@ const api = {
 		`/cover/${albumId}/${size}`,
 };
 
+const openChannels: BroadcastChannel[] = [];
+
+/** Closing a page closes its channels; a page that is gone answers nobody. */
+class PageChannel extends BroadcastChannel {
+	constructor(name: string) {
+		super(name);
+		openChannels.push(this);
+	}
+}
+
+function closePages() {
+	for (const channel of openChannels.splice(0)) channel.close();
+}
+
+/** A tab's `sessionStorage`; a browser copies it when it duplicates a tab. */
+function tabStorage(copied: Iterable<[string, string]> = []) {
+	const values = new Map(copied);
+	return {
+		getItem: (key: string) => values.get(key) ?? null,
+		setItem: (key: string, value: string) => void values.set(key, value),
+		[Symbol.iterator]: () => values[Symbol.iterator](),
+	};
+}
+
+beforeEach(() => {
+	vi.stubGlobal("BroadcastChannel", PageChannel);
+});
+
 afterEach(() => {
+	closePages();
 	sessionStorage.clear();
 	vi.unstubAllGlobals();
 });
 
 describe("browser shared playback transport", () => {
-	it("keeps one device ID per tab across reloads", async () => {
-		const first = await createBrowserSharedPlaybackTransport().getDevice();
-		const second = await createBrowserSharedPlaybackTransport().getDevice();
+	it("keeps a tab's device ID across a reload", async () => {
+		const tab = tabStorage();
+		const id = await claimBrowserDeviceId(tab);
+		closePages();
+
+		await expect(claimBrowserDeviceId(tab)).resolves.toBe(id);
+	});
+
+	it("gives a duplicated tab its own device ID, which a reload keeps", async () => {
+		const original = tabStorage();
+		const originalId = await claimBrowserDeviceId(original);
+		const duplicate = tabStorage(original);
+
+		const duplicateId = await claimBrowserDeviceId(duplicate);
+
+		expect(duplicateId).not.toBe(originalId);
+		closePages();
+		await expect(claimBrowserDeviceId(original)).resolves.toBe(originalId);
+		await expect(claimBrowserDeviceId(duplicate)).resolves.toBe(duplicateId);
+	});
+
+	it("keeps the original's ID when it reloads beside its duplicate", async () => {
+		const original = tabStorage();
+		const originalId = await claimBrowserDeviceId(original);
+		const duplicateId = await claimBrowserDeviceId(tabStorage(original));
+		const [firstChannel] = openChannels;
+		firstChannel?.close();
+
+		await expect(claimBrowserDeviceId(original)).resolves.toBe(originalId);
+		expect(originalId).not.toBe(duplicateId);
+	});
+
+	it("moves exactly one of two tabs opening with the same ID", async () => {
+		const stored = tabStorage();
+		const id = await claimBrowserDeviceId(stored);
+		closePages();
+
+		for (let round = 0; round < 5; round += 1) {
+			const ids = await Promise.all([
+				claimBrowserDeviceId(tabStorage(stored)),
+				claimBrowserDeviceId(tabStorage(stored)),
+			]);
+			closePages();
+
+			expect(ids.filter((claimed) => claimed === id)).toHaveLength(1);
+		}
+	});
+
+	it("claims once per page, however often the device is asked for", async () => {
+		const transport = createBrowserSharedPlaybackTransport();
+
+		const first = await transport.getDevice();
+		const second = await transport.getDevice();
+		const third = await createBrowserSharedPlaybackTransport().getDevice();
 
 		expect(first.id).not.toBe("");
 		expect(second.id).toBe(first.id);
+		expect(third.id).toBe(first.id);
 	});
 
 	it("makes a device ID on plain HTTP, where randomUUID does not exist", async () => {
@@ -37,9 +126,9 @@ describe("browser shared playback transport", () => {
 			getRandomValues: (bytes: Uint8Array) => bytes.fill(171),
 		});
 
-		const { id } = await createBrowserSharedPlaybackTransport().getDevice();
-
-		expect(id).toBe("ab".repeat(16));
+		await expect(claimBrowserDeviceId(tabStorage())).resolves.toBe(
+			"ab".repeat(16),
+		);
 	});
 
 	it.each([

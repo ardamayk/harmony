@@ -8,6 +8,13 @@ import type { PlaybackSource, SharedPlaybackTransport } from "@repo/ui";
 import { apiClient } from "#/lib/api";
 
 const DEVICE_ID_KEY = "harmony.shared-playback-device-id";
+const DEVICE_ID_CHANNEL = "harmony.shared-playback-device-id";
+const DEVICE_ID_ANSWER_MS = 250;
+
+type DeviceIdMessage = { id: string } & (
+	| { claim: string }
+	| { refused: string }
+);
 
 /** What `resolveSharedPlaybackSource` needs from the Music Server API. */
 export type SharedPlaybackSourceApi = {
@@ -43,13 +50,57 @@ export async function resolveSharedPlaybackSource(
 	};
 }
 
-/** Two tabs are two Players, and a reload keeps its ID (ADR 0040). */
-function browserDeviceId() {
-	const stored = sessionStorage.getItem(DEVICE_ID_KEY);
-	if (stored) return stored;
-	const id = randomId();
-	sessionStorage.setItem(DEVICE_ID_KEY, id);
-	return id;
+let pageDeviceId: Promise<string> | null = null;
+
+/**
+ * Two tabs are two Players, and a reload keeps its ID (ADR 0040). Duplicating
+ * a tab copies `sessionStorage`, so a stored ID counts only once the open tabs
+ * have been asked: a tab holding it refuses, while a reloaded page's old self
+ * is gone. Of two tabs opening with one ID, the lower random claim keeps it.
+ * A tab only ever moves to a new ID, so tabs cannot swap theirs.
+ *
+ * shortcut: a tab too busy or frozen to answer in time shares its ID until the
+ * duplicate reloads; an ID that can change after the handshake would fix that.
+ */
+export function claimBrowserDeviceId(
+	storage: Pick<Storage, "getItem" | "setItem"> = sessionStorage,
+) {
+	const takeNewId = () => {
+		const id = randomId();
+		storage.setItem(DEVICE_ID_KEY, id);
+		return id;
+	};
+	const stored = storage.getItem(DEVICE_ID_KEY);
+	let deviceId = stored ?? takeNewId();
+	const claim = randomId();
+	const channel = new BroadcastChannel(DEVICE_ID_CHANNEL);
+	return new Promise<string>((resolve) => {
+		let waiting = stored !== null;
+		const settle = () => {
+			waiting = false;
+			resolve(deviceId);
+		};
+		const moveAside = () => {
+			deviceId = takeNewId();
+			settle();
+		};
+		channel.onmessage = ({ data }: MessageEvent<DeviceIdMessage>) => {
+			if (data.id !== deviceId) return;
+			if ("refused" in data) {
+				if (waiting && data.refused === claim) moveAside();
+			} else if (waiting && data.claim < claim) {
+				moveAside();
+			} else {
+				channel.postMessage({ id: deviceId, refused: data.claim });
+			}
+		};
+		if (!waiting) {
+			settle();
+			return;
+		}
+		channel.postMessage({ id: deviceId, claim });
+		setTimeout(settle, DEVICE_ID_ANSWER_MS);
+	});
 }
 
 /** `randomUUID` exists only on HTTPS, and a Music Server is often plain HTTP. */
@@ -85,7 +136,7 @@ export function browserDeviceName(userAgent: string) {
 export function createBrowserSharedPlaybackTransport(): SharedPlaybackTransport {
 	return {
 		getDevice: async () => ({
-			id: browserDeviceId(),
+			id: await (pageDeviceId ??= claimBrowserDeviceId()),
 			name: browserDeviceName(navigator.userAgent),
 		}),
 		getState: () => apiClient.getPlaybackState(),
