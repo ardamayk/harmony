@@ -38,22 +38,39 @@ type LayoutContextValue = {
 
 const LayoutContext = createContext<LayoutContextValue | null>(null);
 
+function completePreferences(preferences: UserPreferences): UserPreferences {
+	return {
+		...preferences,
+		layout: normalizeLayout(preferences.layout),
+		// Older servers answer without a playback section; fill it in so the
+		// Player Bar never reads an undefined preference.
+		playback: { ...defaultPlayback, ...preferences.playback },
+	};
+}
+
 export function LayoutProvider({
 	children,
 	initialPreferences = defaultPreferences,
+	loadedPreferences,
 	onPreferencesChange,
 }: {
 	children: ReactNode;
 	initialPreferences?: UserPreferences;
+	/**
+	 * The saved preferences, once known. If they come after the provider opened
+	 * on `initialPreferences`, they replace those once, without being saved.
+	 */
+	loadedPreferences?: UserPreferences;
 	onPreferencesChange?: (prefs: UserPreferences) => void;
 }) {
-	const [preferences, setPreferencesState] = useState<UserPreferences>({
-		...initialPreferences,
-		layout: normalizeLayout(initialPreferences.layout),
-		// Older servers answer without a playback section; fill it in so the
-		// Player Bar never reads an undefined preference.
-		playback: { ...defaultPlayback, ...initialPreferences.playback },
-	});
+	const [preferences, setPreferencesState] = useState(() =>
+		completePreferences(initialPreferences),
+	);
+	const [hasLoaded, setHasLoaded] = useState(loadedPreferences !== undefined);
+	if (loadedPreferences && !hasLoaded) {
+		setHasLoaded(true);
+		setPreferencesState(completePreferences(loadedPreferences));
+	}
 	const expandedSizesRef = useRef({ left: 22, right: 28 });
 
 	const commit = useCallback(

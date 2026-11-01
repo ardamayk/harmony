@@ -130,7 +130,7 @@ function AppLayout() {
 		queryFn: () => apiClient.getPreferences(),
 		enabled: hasServerPreferences,
 		// The window waits on this, so a Music Server that is down must not hold
-		// it through retries. A later answer opens the layout again.
+		// it through retries. A later answer reaches the layout as it stands.
 		retry: isDesktopClient() ? false : undefined,
 	});
 
@@ -153,10 +153,8 @@ function AppLayout() {
 
 	return (
 		<LayoutProvider
-			// It reads `initialPreferences` once, so preferences arriving after the
-			// defaults need a new one.
-			key={preferences.data ? "saved" : "defaults"}
 			initialPreferences={initial}
+			loadedPreferences={hasServerPreferences ? preferences.data : undefined}
 			onPreferencesChange={(prefs) => {
 				if (!hasServerPreferences) writeGuestPreferences(prefs);
 				// Saving the stand-in defaults would replace the Owner's real ones.
