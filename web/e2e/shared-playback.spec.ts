@@ -122,4 +122,12 @@ test("one Active Device plays and the other client follows and controls it", asy
 	const resumed = await (await request.get("/api/v1/playback/state")).json();
 	expect(resumed.positionMs).toBeGreaterThanOrEqual(left.positionMs - 500);
 	expect(resumed.playing).toBe(true);
+
+	// Reloading the playing tab leaves nobody to obey: one press starts it.
+	await first.reload();
+	await expect(first.getByText(TITLE).first()).toBeVisible();
+	await expect(control(first, "Play")).toBeVisible();
+	await expect(first.getByText(/^Playing on /)).toBeHidden();
+	await control(first, "Play").click();
+	await expect.poll(() => isAudioPlaying(first)).toBe(true);
 });

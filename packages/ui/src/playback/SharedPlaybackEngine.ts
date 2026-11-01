@@ -321,9 +321,20 @@ export class SharedPlaybackEngine implements PlaybackEngine {
 		return this.isShared() && this.mode === "following";
 	}
 
+	/**
+	 * The state names this device, but following means no Player here holds
+	 * it: a reloaded tab. Nobody obeys, so it reads as paused at its playhead.
+	 */
+	private isOrphaned() {
+		return (
+			this.isFollowing() && this.snapshot?.activeDeviceId === this.device?.id
+		);
+	}
+
 	private isLive() {
 		return (
 			this.snapshot !== null &&
+			!this.isOrphaned() &&
 			isSnapshotLive(this.snapshot, this.clockOffsetMs, Date.now())
 		);
 	}
@@ -680,6 +691,7 @@ export class SharedPlaybackEngine implements PlaybackEngine {
 
 	private expectedSeconds() {
 		if (!this.snapshot) return 0;
+		if (this.isOrphaned()) return this.snapshot.positionMs / 1000;
 		return expectedPlayheadSeconds(
 			this.snapshot,
 			this.clockOffsetMs,
@@ -847,10 +859,7 @@ export class SharedPlaybackEngine implements PlaybackEngine {
 			status: source ? (isLive ? "playing" : "paused") : "idle",
 			currentTime: this.expectedSeconds(),
 			sharedPlayback: {
-				followingDeviceName:
-					isLive && this.snapshot.activeDeviceId !== this.device?.id
-						? this.snapshot.activeDeviceName
-						: null,
+				followingDeviceName: isLive ? this.snapshot.activeDeviceName : null,
 			},
 		};
 		// A paused playhead stands still: keep the session identity, so the UI

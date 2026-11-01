@@ -1064,6 +1064,75 @@ describe("SharedPlaybackEngine concurrency", () => {
 		engine.destroy();
 	});
 
+	describe("after a reload of the tab that was playing", () => {
+		const reloaded = () =>
+			createHarness({
+				initialStates: [
+					sharedState({
+						playing: true,
+						positionMs: 7000,
+						positionAtMs: Date.now(),
+						serverTimeMs: Date.now(),
+						activeDeviceId: "device-1",
+						activeDeviceName: "Firefox on Linux",
+					}),
+				],
+			});
+
+		it("reads as paused at the shared playhead, since nobody can obey", async () => {
+			const { engine, state } = reloaded();
+			await settle();
+			vi.advanceTimersByTime(3000);
+
+			expect(state().source).toEqual(trackSource);
+			expect(state().status).toBe("paused");
+			expect(state().currentTime).toBe(7);
+			expect(state().sharedPlayback).toEqual({ followingDeviceName: null });
+			engine.destroy();
+		});
+
+		it("takes the sound over with the first press of the main button", async () => {
+			const { engine, local, transport } = reloaded();
+			await settle();
+			vi.advanceTimersByTime(3000);
+
+			engine.togglePlay();
+			await settle();
+
+			expect(transport.commands).toEqual([
+				expect.objectContaining({
+					type: "claim",
+					positionMs: 7000,
+					playing: true,
+				}),
+			]);
+			expect(local.getState().status).toBe("playing");
+			engine.destroy();
+		});
+
+		it("moves to the next Track paused instead of sending a lost skip", async () => {
+			const { engine, local, transport, state } = reloaded();
+			await settle();
+			engine.setSharedQueueSources([trackSource, nextTrackSource]);
+
+			engine.next();
+			await settle();
+
+			expect(transport.commands).toEqual([
+				expect.objectContaining({
+					type: "claim",
+					queueItemId: "item-2",
+					positionMs: 0,
+					playing: false,
+				}),
+			]);
+			expect(state().source).toEqual(nextTrackSource);
+			expect(state().status).toBe("paused");
+			expect(local.getState().source).toBeNull();
+			engine.destroy();
+		});
+	});
+
 	it("names the other device only while it really plays", async () => {
 		const { engine, transport, state } = createHarness();
 		await settle();
