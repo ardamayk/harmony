@@ -69,6 +69,15 @@ describe("browser shared playback transport", () => {
 		await expect(claimBrowserDeviceId(tab)).resolves.toBe(id);
 	});
 
+	it("answers a reload at once, without waiting for other tabs", async () => {
+		const tab = tabStorage();
+		const id = await claimBrowserDeviceId(tab);
+
+		vi.useFakeTimers();
+		await expect(claimBrowserDeviceId(tab, true)).resolves.toBe(id);
+		vi.useRealTimers();
+	});
+
 	it("gives a duplicated tab its own device ID, which a reload keeps", async () => {
 		const original = tabStorage();
 		const originalId = await claimBrowserDeviceId(original);

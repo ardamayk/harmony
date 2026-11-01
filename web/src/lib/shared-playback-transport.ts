@@ -55,15 +55,17 @@ let pageDeviceId: Promise<string> | null = null;
 /**
  * Two tabs are two Players, and a reload keeps its ID (ADR 0040). Duplicating
  * a tab copies `sessionStorage`, so a stored ID counts only once the open tabs
- * have been asked: a tab holding it refuses, while a reloaded page's old self
- * is gone. Of two tabs opening with one ID, the lower random claim keeps it.
- * A tab only ever moves to a new ID, so tabs cannot swap theirs.
+ * have been asked: a tab holding it refuses. A reload asks nobody, since its old
+ * self is gone and a wait here would hold up the Play button. Of two tabs
+ * opening with one ID, the lower random claim keeps it. A tab only ever moves to
+ * a new ID, so tabs cannot swap theirs.
  *
- * shortcut: a tab too busy or frozen to answer in time shares its ID until the
- * duplicate reloads; an ID that can change after the handshake would fix that.
+ * shortcut: a tab too busy or frozen to answer in time shares its ID until one
+ * closes; an ID that can change after the handshake would fix that.
  */
 export function claimBrowserDeviceId(
 	storage: Pick<Storage, "getItem" | "setItem"> = sessionStorage,
+	isReload = isPageReload(),
 ) {
 	const takeNewId = () => {
 		const id = randomId();
@@ -75,7 +77,7 @@ export function claimBrowserDeviceId(
 	const claim = randomId();
 	const channel = new BroadcastChannel(DEVICE_ID_CHANNEL);
 	return new Promise<string>((resolve) => {
-		let waiting = stored !== null;
+		let waiting = stored !== null && !isReload;
 		const settle = () => {
 			waiting = false;
 			resolve(deviceId);
@@ -101,6 +103,13 @@ export function claimBrowserDeviceId(
 		channel.postMessage({ id: deviceId, claim });
 		setTimeout(settle, DEVICE_ID_ANSWER_MS);
 	});
+}
+
+function isPageReload() {
+	const [navigation] = performance.getEntriesByType("navigation");
+	return (
+		(navigation as PerformanceNavigationTiming | undefined)?.type === "reload"
+	);
 }
 
 /** `randomUUID` exists only on HTTPS, and a Music Server is often plain HTTP. */

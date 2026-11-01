@@ -119,9 +119,15 @@ test("one Active Device plays and the other client follows and controls it", asy
 	await expect(first.getByText(TITLE).first()).toBeVisible();
 	await control(first, "Play").click();
 	await expect.poll(() => isAudioPlaying(first)).toBe(true);
+	// The claim can land after the first audio frames.
+	await expect
+		.poll(
+			async () =>
+				(await (await request.get("/api/v1/playback/state")).json()).playing,
+		)
+		.toBe(true);
 	const resumed = await (await request.get("/api/v1/playback/state")).json();
 	expect(resumed.positionMs).toBeGreaterThanOrEqual(left.positionMs - 500);
-	expect(resumed.playing).toBe(true);
 
 	// Reloading the playing tab leaves nobody to obey: one press starts it.
 	await first.reload();
