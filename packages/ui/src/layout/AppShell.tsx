@@ -2,6 +2,7 @@ import { type CSSProperties, type ReactNode, useRef } from "react";
 import { getQueuePanel } from "../widgets/layout-utils";
 import { useLayout } from "./LayoutProvider";
 import { QueueDrawer } from "./QueueDrawer";
+import { PhoneShell } from "./PhoneShell";
 import { QueuePinProvider, useQueuePin } from "./QueuePinProvider";
 import { Sidebar } from "./Sidebar";
 import {
@@ -11,6 +12,7 @@ import {
 import { Toaster } from "./Toaster";
 import { TopNav, type WindowControls } from "./TopNav";
 import { TopNavActionsProvider } from "./TopNavActions";
+import { usePhoneShell } from "./use-phone-shell";
 import { useQueueDrawerWidth } from "./use-queue-drawer-width";
 import { WidgetDndProvider } from "./WidgetDock";
 
@@ -25,9 +27,18 @@ const PLAYER_DOCK_CLEARANCE = `${PLAYER_BAR_HEIGHT_PX}px`;
  * the library sections on the left, the page beside it, the Player Bar
  * docked along the bottom and the Queue Drawer on the right. While the
  * drawer is open and pinned the page gives way to it; unpinned it floats
- * over the page.
+ * over the page. Phones get the Phone Shell instead (ADR 0041); with no
+ * QueuePinProvider there, the Queue shows no Pin.
  */
 export function AppShell(props: AppShellProps) {
+	const isPhone = usePhoneShell();
+	if (isPhone) {
+		return (
+			<TopNavActionsProvider>
+				<PhoneShell {...props} />
+			</TopNavActionsProvider>
+		);
+	}
 	return (
 		<QueuePinProvider>
 			<TopNavActionsProvider>

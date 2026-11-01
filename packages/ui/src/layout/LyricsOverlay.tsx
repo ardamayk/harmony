@@ -21,6 +21,7 @@ import { usePlayback } from "../playback/PlaybackProvider";
 import { CurrentTrackPanel } from "./CurrentTrackPanel";
 import { QueuePreview } from "./QueuePreview";
 import { WindowControlButtons, type WindowControls } from "./TopNav";
+import { usePhoneShell } from "./use-phone-shell";
 
 /** Matches --animate-lyrics-view-exit in web/src/styles.css. */
 const EXIT_MS = 250;
@@ -52,6 +53,7 @@ export function LyricsOverlay({
 	loadLyrics?: (trackId: string) => Promise<{ lyrics: string } | null>;
 	onClose: () => void;
 }) {
+	const isPhone = usePhoneShell();
 	const [loaded, setLoaded] = useState<{
 		trackId: string;
 		state: LyricsState;
@@ -168,6 +170,7 @@ export function LyricsOverlay({
 					? "motion-safe:animate-lyrics-view-exit"
 					: "motion-safe:animate-lyrics-view",
 				"fixed inset-0 z-fullscreen flex flex-col bg-background bg-linear-to-b from-(--cover-tint)/40 to-background to-70% text-foreground outline-none",
+				isPhone && "pt-safe-top pb-safe-bottom",
 			)}
 		>
 			<header
@@ -178,7 +181,10 @@ export function LyricsOverlay({
 				<div className="flex items-center gap-1 pr-2">
 					<button
 						type="button"
-						className="inline-flex size-9 items-center justify-center rounded-full text-foreground hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
+						className={cn(
+							"inline-flex size-9 items-center justify-center rounded-full text-foreground hover:bg-muted focus-visible:bg-muted focus-visible:outline-none",
+							isPhone && "size-11",
+						)}
 						aria-label="Close lyrics"
 						title="Close lyrics"
 						onClick={() => closeRef.current()}

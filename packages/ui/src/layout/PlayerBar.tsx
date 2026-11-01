@@ -51,6 +51,7 @@ import { useHiddenFromGuest } from "./guest-access";
 import { useLayout } from "./LayoutProvider";
 import { LyricsOverlay } from "./LyricsOverlay";
 import { NowPlayingView } from "./NowPlayingView";
+import { PhoneMiniPlayer } from "./PhoneMiniPlayer";
 import type { WindowControls } from "./TopNav";
 import { PlaybackErrorBanner } from "./PlaybackErrorBanner";
 import { PlaybackSignal } from "./PlaybackSignal";
@@ -63,6 +64,7 @@ import { buildQualityDetailRows } from "./QualityDetailsCard";
 import { findCurrentQueueIndex } from "./queue-groups";
 import { ShortcutHelpOverlay } from "./ShortcutHelpOverlay";
 import { UpNextPeek } from "./UpNextPeek";
+import { usePhoneShell } from "./use-phone-shell";
 
 const PLAYBACK_RATES = [0.75, 1, 1.25, 1.5, 2] as const;
 const SLEEP_TIMER_MINUTES = [15, 30, 60] as const;
@@ -146,6 +148,7 @@ export function PlayerBar({
 	externalSourceName?: string;
 } = {}) {
 	const navigate = useNavigate();
+	const isPhone = usePhoneShell();
 	const actionsButtonRef = useRef<HTMLButtonElement>(null);
 	const playlistSubmenuCloseTimerRef = useRef<number | null>(null);
 	const [actionsOpen, setActionsOpen] = useState(false);
@@ -233,7 +236,7 @@ export function PlayerBar({
 	const upcomingCount = queue.length - currentQueueIndex - 1;
 	const waveform = useTrackWaveform({
 		trackId: currentTrack ? currentTrack.id : null,
-		enabled: canShowWaveform && playbackPreferences.showWaveform,
+		enabled: canShowWaveform && playbackPreferences.showWaveform && !isPhone,
 		load: getTrackWaveform,
 	});
 	const { toggleMute } = useMute(volume, setVolume);
@@ -276,10 +279,11 @@ export function PlayerBar({
 		if (!currentTrack) return;
 		setLyricsOpen(!lyricsOpen);
 	}, [currentTrack, lyricsOpen, setLyricsOpen]);
-	const toggleQueue = useCallback(
-		() => togglePanel(queuePanelSide),
-		[togglePanel, queuePanelSide],
-	);
+	// The phone shell has no Queue Drawer, and this would write a Layout
+	// Preference the desktop reads.
+	const toggleQueue = useCallback(() => {
+		if (!isPhone) togglePanel(queuePanelSide);
+	}, [isPhone, togglePanel, queuePanelSide]);
 	const toggleHelp = useCallback(() => setHelpOpen((open) => !open), []);
 	usePlaybackKeyboardShortcuts(
 		{
@@ -701,33 +705,109 @@ export function PlayerBar({
 		await refreshPlaylists();
 	};
 
+	const accentStyle = {
+		"--player-accent": accent["--player-accent"],
+		"--player-accent-foreground": accent["--player-accent-foreground"],
+		"--player-control-primary": accent["--player-control-primary"],
+		"--player-control-primary-foreground":
+			accent["--player-control-primary-foreground"],
+		"--player-live-progress": accent["--player-live-progress"],
+		"--player-control-shadow": accent["--player-control-shadow"],
+	} as CSSProperties;
+
+	const alert = playbackError ? (
+		<PlaybackErrorBanner error={playbackError} recovery={errorRecovery} />
+	) : outputAlert ? (
+		<p
+			role="alert"
+			className="absolute bottom-full left-1/2 mb-2 -translate-x-1/2 rounded-md border border-destructive/40 bg-popover px-3 py-2 text-destructive text-sm shadow-lg"
+		>
+			{outputAlert}
+		</p>
+	) : null;
+
+	const overlays = (
+		<>
+			<NowPlayingAnnouncer />
+			{lyricsOpen && currentTrack ? (
+				<LyricsOverlay
+					track={currentTrack}
+					coverUrl={largeArtworkUrl}
+					accent={accent}
+					windowControls={windowControls}
+					loadLyrics={getTrackLyrics}
+					onClose={() => setLyricsOpen(false)}
+				/>
+			) : null}
+			{helpOpen ? (
+				<ShortcutHelpOverlay
+					options={{
+						seekStepSeconds: playbackPreferences.seekStepSeconds,
+						seekStepLargeSeconds: playbackPreferences.seekStepLargeSeconds,
+					}}
+					onClose={() => setHelpOpen(false)}
+				/>
+			) : null}
+			{infoOpen && currentTrack ? (
+				<TrackInfoDialog
+					track={currentTrack}
+					onClose={() => setInfoOpen(false)}
+				/>
+			) : null}
+			{nowPlayingOpen && currentTrack ? (
+				<NowPlayingView
+					track={currentTrack}
+					coverUrl={largeArtworkUrl}
+					accent={accent}
+					onOpenLyrics={() => {
+						setNowPlayingOpen(false);
+						setLyricsOpen(true);
+					}}
+					isFavorite={isCurrentTrackFavorite}
+					onToggleFavorite={onToggleFavorite ? handleToggleFavorite : undefined}
+					onClose={() => setNowPlayingOpen(false)}
+				/>
+			) : null}
+		</>
+	);
+
+	if (isPhone) {
+		return (
+			<footer
+				data-testid="player-bar"
+				data-shell-surface
+				style={accentStyle}
+				className="relative bg-player-bar text-player-foreground"
+			>
+				{alert}
+				{hasPlayableSource ? (
+					<PhoneMiniPlayer
+						coverUrl={artworkUrl}
+						title={nowPlayingTitle}
+						subtitle={nowPlayingSubtitle}
+						isPlaying={isPlaying}
+						progress={
+							effectiveDuration > 0
+								? Math.min(1, currentTime / effectiveDuration)
+								: null
+						}
+						onOpen={currentTrack ? () => setNowPlayingOpen(true) : undefined}
+						onTogglePlay={togglePlay}
+					/>
+				) : null}
+				{overlays}
+			</footer>
+		);
+	}
+
 	return (
 		<footer
 			data-testid="player-bar"
 			data-shell-surface
-			style={
-				{
-					"--player-accent": accent["--player-accent"],
-					"--player-accent-foreground": accent["--player-accent-foreground"],
-					"--player-control-primary": accent["--player-control-primary"],
-					"--player-control-primary-foreground":
-						accent["--player-control-primary-foreground"],
-					"--player-live-progress": accent["--player-live-progress"],
-					"--player-control-shadow": accent["--player-control-shadow"],
-				} as CSSProperties
-			}
+			style={accentStyle}
 			className="relative h-21.5 border-player-border border-t bg-player-bar px-6 text-player-foreground"
 		>
-			{playbackError ? (
-				<PlaybackErrorBanner error={playbackError} recovery={errorRecovery} />
-			) : outputAlert ? (
-				<p
-					role="alert"
-					className="absolute bottom-full left-1/2 mb-2 -translate-x-1/2 rounded-md border border-destructive/40 bg-popover px-3 py-2 text-destructive text-sm shadow-lg"
-				>
-					{outputAlert}
-				</p>
-			) : null}
+			{alert}
 			<div className="@container/player-bar flex h-full w-full min-w-0 items-center justify-between gap-6">
 				<section
 					aria-label="Now playing"
@@ -1053,44 +1133,7 @@ export function PlayerBar({
 					onVolumeChange={setVolume}
 				/>
 			</div>
-			<NowPlayingAnnouncer />
-			{lyricsOpen && currentTrack ? (
-				<LyricsOverlay
-					track={currentTrack}
-					coverUrl={largeArtworkUrl}
-					accent={accent}
-					windowControls={windowControls}
-					loadLyrics={getTrackLyrics}
-					onClose={() => setLyricsOpen(false)}
-				/>
-			) : null}
-			{helpOpen ? (
-				<ShortcutHelpOverlay
-					options={{
-						seekStepSeconds: playbackPreferences.seekStepSeconds,
-						seekStepLargeSeconds: playbackPreferences.seekStepLargeSeconds,
-					}}
-					onClose={() => setHelpOpen(false)}
-				/>
-			) : null}
-			{infoOpen && currentTrack ? (
-				<TrackInfoDialog
-					track={currentTrack}
-					onClose={() => setInfoOpen(false)}
-				/>
-			) : null}
-			{nowPlayingOpen && currentTrack ? (
-				<NowPlayingView
-					track={currentTrack}
-					coverUrl={largeArtworkUrl}
-					accent={accent}
-					onOpenLyrics={() => {
-						setNowPlayingOpen(false);
-						setLyricsOpen(true);
-					}}
-					onClose={() => setNowPlayingOpen(false)}
-				/>
-			) : null}
+			{overlays}
 		</footer>
 	);
 }
