@@ -1,6 +1,12 @@
 import { PLAYER_BAR_HEIGHT_PX } from "@repo/ui";
 import { useQueryClient } from "@tanstack/react-query";
-import { type ReactNode, useCallback, useEffect, useState } from "react";
+import {
+	Fragment,
+	type ReactNode,
+	useCallback,
+	useEffect,
+	useState,
+} from "react";
 import {
 	getServerConnection,
 	initializeMediaProxy,
@@ -30,6 +36,7 @@ export function DesktopConnectionGate({
 	// The saved server did not answer: the app opens on its saved lists.
 	const [offlineOrigin, setOfflineOrigin] = useState<string | null>(null);
 	const [isRetrying, setIsRetrying] = useState(false);
+	const [reconnections, setReconnections] = useState(0);
 	const queryClient = useQueryClient();
 
 	useEffect(() => {
@@ -71,7 +78,9 @@ export function DesktopConnectionGate({
 		try {
 			await testServerConnection(offlineOrigin);
 			setOfflineOrigin(null);
-			// Everything shown so far came from the saved lists.
+			// Everything shown so far came from the saved lists, and the role
+			// was a guess: mounting again asks the Music Server for both.
+			setReconnections((count) => count + 1);
 			void queryClient.invalidateQueries();
 		} catch {
 			// Still unreachable; the notice stays.
@@ -89,7 +98,7 @@ export function DesktopConnectionGate({
 	if (!isDesktop || isConnected) {
 		return (
 			<>
-				{children}
+				<Fragment key={reconnections}>{children}</Fragment>
 				{offlineOrigin ? (
 					<OfflineNotice
 						origin={offlineOrigin}

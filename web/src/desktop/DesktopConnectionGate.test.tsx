@@ -6,6 +6,7 @@ import {
 	screen,
 	waitFor,
 } from "@testing-library/react";
+import { useEffect } from "react";
 import {
 	afterEach,
 	beforeEach,
@@ -127,6 +128,40 @@ describe("DesktopConnectionGate", () => {
 		await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
 		expect(invalidate).toHaveBeenCalled();
 		expect(screen.getByText("application")).toBeTruthy();
+	});
+
+	it("mounts the application again when the saved server comes back", async () => {
+		bridge.getServerConnection.mockResolvedValue({
+			origin: "http://192.168.1.5:8090",
+		});
+		bridge.testServerConnection.mockRejectedValueOnce({
+			code: "unreachable",
+			message: "Music Server is unreachable.",
+		});
+		const onMount = vi.fn();
+		function Application() {
+			useEffect(onMount, []);
+			return "application";
+		}
+
+		render(
+			<QueryClientProvider client={new QueryClient()}>
+				<DesktopConnectionGate>
+					<Application />
+				</DesktopConnectionGate>
+			</QueryClientProvider>,
+		);
+		await screen.findByRole("status");
+		expect(onMount).toHaveBeenCalledOnce();
+
+		bridge.testServerConnection.mockResolvedValueOnce({
+			origin: "http://192.168.1.5:8090",
+			version: "0.1.0",
+			capabilities: ["api.v1"],
+		});
+		fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+
+		await waitFor(() => expect(onMount).toHaveBeenCalledTimes(2));
 	});
 
 	it("keeps the connection form for a server that answers but does not fit", async () => {

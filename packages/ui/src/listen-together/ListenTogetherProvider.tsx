@@ -148,10 +148,16 @@ export function ListenTogetherProvider({
 	children,
 	api,
 	engine,
+	fallbackRole,
 }: {
 	children: ReactNode;
 	api: ListenTogetherApi;
 	engine: PlaybackEngine;
+	/**
+	 * The role when the Music Server names none, for a shell that can never be
+	 * on a Guest Listener: only a Guest Listener answers that a client has none.
+	 */
+	fallbackRole?: "owner";
 }) {
 	const [role, setRole] = useState<ListenTogetherRole>("loading");
 	const [isAvailable, setIsAvailable] = useState(false);
@@ -210,7 +216,9 @@ export function ListenTogetherProvider({
 			// answers the unknown session route with the Web Client's page. No
 			// answer at all proves nothing, so it shows a visitor nothing.
 			const nextRole =
-				sessionRole ?? (health && !hasCapability ? "owner" : "none");
+				sessionRole ??
+				fallbackRole ??
+				(health && !hasCapability ? "owner" : "none");
 			const openRoom =
 				nextRole === "guest" || (nextRole === "owner" && hasCapability)
 					? await fetchRoom(apiRef.current)
@@ -224,7 +232,7 @@ export function ListenTogetherProvider({
 		return () => {
 			cancelled = true;
 		};
-	}, [adoptRoom]);
+	}, [adoptRoom, fallbackRole]);
 
 	// The page tells the Owner to restart the Music Server and come back.
 	useEffect(() => {
