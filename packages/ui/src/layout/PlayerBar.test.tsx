@@ -921,6 +921,29 @@ describe("PlayerBar", () => {
 		},
 	);
 
+	it("says where the sound is in the phone's mini player", async () => {
+		vi.stubGlobal("matchMedia", () => ({
+			matches: true,
+			addEventListener: () => {},
+			removeEventListener: () => {},
+		}));
+		try {
+			renderPlayerBar(
+				undefined,
+				new InMemoryPlaybackEngine({
+					sharedPlayback: { followingDeviceName: "Harmony on desktop" },
+				}),
+			);
+			await act(async () => {
+				screen.getByRole("button", { name: "Start track" }).click();
+			});
+
+			expect(screen.getByText("Playing on Harmony on desktop")).toBeTruthy();
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
+
 	it("offers the Track actions menu inside Now Playing on a phone", async () => {
 		vi.stubGlobal("matchMedia", () => ({
 			matches: true,

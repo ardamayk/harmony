@@ -453,13 +453,16 @@ export function PlayerBar({
 				: null) ??
 			"Select a track");
 	// An External Track is marked in the caption line an Album title uses.
-	const nowPlayingCaption = followingDeviceName
+	const followingCaption = followingDeviceName
 		? `Playing on ${followingDeviceName}`
-		: currentExternalTrack
+		: null;
+	const nowPlayingCaption =
+		followingCaption ??
+		(currentExternalTrack
 			? externalSourceName
 				? `External – ${externalSourceName}`
 				: "External"
-			: (currentTrack?.albumTitle ?? null);
+			: (currentTrack?.albumTitle ?? null));
 	// The bar shows a 56–64px cover; the full-screen views get a large one.
 	// An External Track has one size, about 300px.
 	const artworkUrl = currentTrack
@@ -956,7 +959,7 @@ export function PlayerBar({
 					<PhoneMiniPlayer
 						coverUrl={artworkUrl}
 						title={nowPlayingTitle}
-						subtitle={nowPlayingSubtitle}
+						subtitle={followingCaption ?? nowPlayingSubtitle}
 						isReconnecting={isReconnecting}
 						isPlaying={isPlaying}
 						progress={
