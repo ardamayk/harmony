@@ -353,7 +353,7 @@ export class DesktopPlaybackEngine implements PlaybackEngine {
 			this.pendingVolume === null
 				? state
 				: { ...state, volume: this.pendingVolume };
-		for (const listener of this.listeners) listener(state);
+		for (const listener of this.listeners) listener(this.state);
 	}
 
 	private updateError(error: unknown) {
