@@ -345,6 +345,21 @@ impl HttpBridge {
                 "The server or a proxy in front of it refused this client. Check the custom headers and whether they have expired.",
             ));
         }
+        if matches!(
+            status,
+            reqwest::StatusCode::BAD_GATEWAY
+                | reqwest::StatusCode::SERVICE_UNAVAILABLE
+                | reqwest::StatusCode::GATEWAY_TIMEOUT
+        ) {
+            // A proxy answered for a server that is down, say mid deploy.
+            return Err(ConnectionError::new(
+                ConnectionErrorCode::Unreachable,
+                format!(
+                    "Could not reach Music Server: its proxy returned HTTP {}.",
+                    status.as_u16()
+                ),
+            ));
+        }
         if !response.status().is_success() {
             return Err(ConnectionError::new(
                 ConnectionErrorCode::InvalidResponse,
@@ -1079,6 +1094,24 @@ mod tests {
                 .await
                 .expect_err("refused");
             assert_eq!(error.code, ConnectionErrorCode::AccessDenied, "{status}");
+        }
+    }
+
+    #[tokio::test]
+    async fn a_proxy_without_its_server_is_an_unreachable_server() {
+        for status in [
+            "502 Bad Gateway",
+            "503 Service Unavailable",
+            "504 Gateway Timeout",
+        ] {
+            let (origin, _) = recording_server(status).await;
+            let origin = ServerOrigin::parse(&origin).expect("origin");
+            let error = HttpBridge::new()
+                .expect("bridge")
+                .test_server(&origin)
+                .await
+                .expect_err("no server");
+            assert_eq!(error.code, ConnectionErrorCode::Unreachable, "{status}");
         }
     }
 
