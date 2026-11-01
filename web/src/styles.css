@@ -182,6 +182,30 @@ body {
 	-moz-osx-font-smoothing: grayscale;
 }
 
+/* Same query as the phone variant; html, body and #root already take 100dvh above. */
+@media (max-width: 767px), (pointer: coarse) and (max-height: 500px) {
+	html {
+		-webkit-text-size-adjust: 100%;
+		-webkit-tap-highlight-color: transparent;
+		overscroll-behavior: none;
+	}
+
+	/* On every element, because a scroller stops it inheriting the effect in
+	   WebKit; in a layer so that touch-none still wins. */
+	@layer base {
+		* {
+			touch-action: manipulation;
+		}
+	}
+
+	/* Unlayered to beat md:text-sm: iOS zooms the page on focusing smaller text. */
+	input,
+	textarea,
+	select {
+		font-size: 16px;
+	}
+}
+
 body::before {
 	content: "";
 	position: fixed;
