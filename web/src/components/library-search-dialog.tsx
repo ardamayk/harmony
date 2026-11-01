@@ -5,7 +5,13 @@ import {
 	type LibrarySearchResponse,
 	type LibrarySearchResult,
 } from "@repo/api-client";
-import { AlbumArt, startTiming, toast, usePlayback } from "@repo/ui";
+import {
+	AlbumArt,
+	startTiming,
+	toast,
+	usePhoneShell,
+	usePlayback,
+} from "@repo/ui";
 import { useHiddenFromGuest } from "@repo/ui/guest-access";
 import {
 	keepPreviousData,
@@ -50,6 +56,7 @@ import {
 	useServerCapability,
 } from "#/hooks/use-server-capability";
 import { apiClient } from "#/lib/api";
+import { fitToVisibleViewport } from "#/lib/visible-viewport";
 import {
 	EXTERNAL_PLAYBACK_STALE_MS,
 	externalPlaybackQueryOptions,
@@ -198,31 +205,36 @@ export function LibrarySearchDialog({
 	const prefetchingExternalId = useRef<string | null>(null);
 	const hoverPrefetchTimer = useRef<number | undefined>(undefined);
 	const listboxId = useId();
-	const measureResults = useCallback((content: HTMLDivElement | null) => {
-		if (!content) return;
-		const card = content.closest<HTMLElement>(".library-search-card");
-		const header = inputRef.current?.parentElement;
-		if (!card || !header) return;
-		const measure = () => {
-			const style = getComputedStyle(card);
-			const border =
-				Number.parseFloat(style.borderTopWidth) +
-				Number.parseFloat(style.borderBottomWidth);
-			card.style.height = `${Math.min(content.offsetHeight + header.offsetHeight + (footerRef.current?.offsetHeight ?? 0) + border, Number.parseFloat(style.maxHeight))}px`;
-		};
-		measure();
-		// ponytail: measure natural content for WebKit; use CSS auto-size transitions once supported there.
-		if (typeof ResizeObserver === "undefined") return;
-		const observer = new ResizeObserver(measure);
-		observer.observe(content);
-		observer.observe(header);
-		if (footerRef.current) observer.observe(footerRef.current);
-		window.addEventListener("resize", measure);
-		return () => {
-			observer.disconnect();
-			window.removeEventListener("resize", measure);
-		};
-	}, []);
+	const isPhone = usePhoneShell();
+	const measureResults = useCallback(
+		(content: HTMLDivElement | null) => {
+			if (!content) return;
+			const card = content.closest<HTMLElement>(".library-search-card");
+			const header = inputRef.current?.parentElement;
+			if (!card || !header) return;
+			if (isPhone) return fitToVisibleViewport(card);
+			const measure = () => {
+				const style = getComputedStyle(card);
+				const border =
+					Number.parseFloat(style.borderTopWidth) +
+					Number.parseFloat(style.borderBottomWidth);
+				card.style.height = `${Math.min(content.offsetHeight + header.offsetHeight + (footerRef.current?.offsetHeight ?? 0) + border, Number.parseFloat(style.maxHeight))}px`;
+			};
+			measure();
+			// ponytail: measure natural content for WebKit; use CSS auto-size transitions once supported there.
+			if (typeof ResizeObserver === "undefined") return;
+			const observer = new ResizeObserver(measure);
+			observer.observe(content);
+			observer.observe(header);
+			if (footerRef.current) observer.observe(footerRef.current);
+			window.addEventListener("resize", measure);
+			return () => {
+				observer.disconnect();
+				window.removeEventListener("resize", measure);
+			};
+		},
+		[isPhone],
+	);
 
 	useLibrarySearchShortcut(open, onOpenChange);
 
@@ -658,7 +670,7 @@ export function LibrarySearchDialog({
 					return inputRef.current;
 				}}
 				finalFocus={() => returnFocus.restore()}
-				className="library-search-card top-[var(--library-search-top)] left-[var(--library-search-center,50%)] flex max-w-(--library-search-width,36rem) translate-y-0 flex-col overflow-hidden p-0"
+				className="library-search-card top-[var(--library-search-top)] left-[var(--library-search-center,50%)] flex max-w-(--library-search-width,36rem) translate-y-0 flex-col overflow-hidden p-0 phone:left-0 phone:max-h-none phone:w-full phone:max-w-none phone:translate-x-0 phone:overflow-hidden phone:rounded-none phone:border-0 phone:pt-safe-top"
 			>
 				<DialogTitle className="sr-only">{searchLabel}</DialogTitle>
 				{/* Covers the top bar's search field it opens over; its bottom
@@ -719,7 +731,8 @@ export function LibrarySearchDialog({
 						aria-label="Close search"
 						className="flex h-8 shrink-0 items-center rounded-sm border border-border px-3 text-caption text-xs outline-none hover:bg-muted/50 focus-visible:bg-muted/50"
 					>
-						Esc
+						<span className="phone:hidden">Esc</span>
+						<span className="hidden phone:inline">Close</span>
 					</DialogClose>
 				</div>
 				<div
@@ -830,9 +843,12 @@ export function LibrarySearchDialog({
 				</div>
 				<div
 					ref={footerRef}
-					className="flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-3 border-border border-t px-4 py-3 text-caption text-xs sm:px-6"
+					className={cn(
+						"flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-3 border-border border-t px-4 py-3 text-caption text-xs sm:px-6",
+						!hasQuery && "phone:hidden",
+					)}
 				>
-					<div className="flex flex-wrap items-center gap-3">
+					<div className="flex flex-wrap items-center gap-3 phone:hidden">
 						<span className="inline-flex items-center gap-2">
 							<kbd className="rounded-sm border border-border p-1">
 								<ArrowUp className="size-3" />
