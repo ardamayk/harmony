@@ -129,8 +129,8 @@ function AppLayout() {
 		queryKey: ["preferences"],
 		queryFn: () => apiClient.getPreferences(),
 		enabled: hasServerPreferences,
-		// The window waits on this, and DesktopConnectionGate does the retrying:
-		// reconnecting mounts this again and asks once more.
+		// The window waits on this, so a Music Server that is down must not hold
+		// it through retries. A later answer opens the layout again.
 		retry: isDesktopClient() ? false : undefined,
 	});
 
@@ -153,11 +153,16 @@ function AppLayout() {
 
 	return (
 		<LayoutProvider
+			// It reads `initialPreferences` once, so preferences arriving after the
+			// defaults need a new one.
+			key={preferences.data ? "saved" : "defaults"}
 			initialPreferences={initial}
 			onPreferencesChange={(prefs) => {
-				if (hasServerPreferences) {
+				if (!hasServerPreferences) writeGuestPreferences(prefs);
+				// Saving the stand-in defaults would replace the Owner's real ones.
+				else if (preferences.data) {
 					patchPreferences.mutate(preferencesPatch(prefs, isPhone));
-				} else writeGuestPreferences(prefs);
+				}
 			}}
 		>
 			<div className="flex h-full min-h-0 flex-1 flex-col overflow-x-auto overflow-y-hidden">
