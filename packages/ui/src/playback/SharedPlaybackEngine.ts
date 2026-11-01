@@ -175,11 +175,13 @@ export class SharedPlaybackEngine implements PlaybackEngine {
 	}
 
 	pause() {
+		this.takeover = null;
 		if (this.isFollowing()) this.sendCommand({ type: "pause" });
 		else this.local.pause();
 	}
 
 	stop() {
+		this.takeover = null;
 		// The server keeps the Track and playhead ready for the next device:
 		// report the pause while the Player still names them, then clear it.
 		if (this.isShared() && this.mode === "active") this.sendReport(false);
@@ -188,6 +190,7 @@ export class SharedPlaybackEngine implements PlaybackEngine {
 
 	togglePlay() {
 		if (!this.isShared() || (this.mode === "active" && !this.pendingTakeover)) {
+			this.takeover = null;
 			this.local.togglePlay();
 			return;
 		}
@@ -641,10 +644,9 @@ export class SharedPlaybackEngine implements PlaybackEngine {
 	private startHere(source: PlaybackSource, requestedAtMs = Date.now()) {
 		const activeDeviceId = this.snapshot?.activeDeviceId ?? null;
 		const movesHere =
-			this.pendingTakeover !== null ||
-			(this.isFollowing() &&
-				activeDeviceId !== null &&
-				activeDeviceId !== this.device?.id);
+			this.isFollowing() &&
+			activeDeviceId !== null &&
+			activeDeviceId !== this.device?.id;
 		this.takeover =
 			movesHere && source.type === "track" ? { source, requestedAtMs } : null;
 		this.pendingTakeover = null;
@@ -840,13 +842,18 @@ export class SharedPlaybackEngine implements PlaybackEngine {
 	// Local engine events ---------------------------------------------------
 
 	/** Sound has moved here once the playhead leaves where it started. */
-	private noteTakeover(state: PlaybackSessionState) {
+	private noteTakeover(
+		previous: PlaybackSessionState,
+		state: PlaybackSessionState,
+	) {
 		const takeover = this.takeover;
 		if (!takeover) return;
 		const isOtherItem =
 			state.source !== null &&
 			sharedQueueItemId(state.source) !== sharedQueueItemId(takeover.source);
-		if (state.status === "error" || isOtherItem) {
+		// A remote pause, which never passes through `pause` here.
+		const wentQuiet = isAudible(previous.status) && !isAudible(state.status);
+		if (state.status === "error" || isOtherItem || wentQuiet) {
 			this.takeover = null;
 			return;
 		}
@@ -865,7 +872,7 @@ export class SharedPlaybackEngine implements PlaybackEngine {
 		if (this.destroyed) return;
 		const previous = this.localState;
 		this.localState = state;
-		this.noteTakeover(state);
+		this.noteTakeover(previous, state);
 		if (state.source) this.pendingTakeover = null;
 		else this.detached = false;
 		// The Desktop's Player can load after the snapshot naming this device.

@@ -451,6 +451,81 @@ describe("SharedPlaybackEngine following", () => {
 		engine.destroy();
 	});
 
+	it("does not time a takeover paused before it sounded", async () => {
+		const onTakeover = vi.fn();
+		const { engine, local, transport } = createHarness({ onTakeover });
+		await settle();
+		transport.emit(
+			sharedState({
+				revision: 2,
+				positionMs: 8000,
+				activeDeviceId: "device-2",
+				activeDeviceName: "Other",
+			}),
+		);
+		await settle();
+
+		await engine.play();
+		await settle();
+		engine.pause();
+		vi.advanceTimersByTime(60_000);
+		await engine.play();
+		await settle();
+		local.seek(8.2);
+
+		expect(onTakeover).not.toHaveBeenCalled();
+		engine.destroy();
+	});
+
+	it("does not time a takeover the Player stopped by itself", async () => {
+		const onTakeover = vi.fn();
+		const { engine, local, transport } = createHarness({ onTakeover });
+		await settle();
+		transport.emit(
+			sharedState({
+				revision: 2,
+				positionMs: 8000,
+				activeDeviceId: "device-2",
+				activeDeviceName: "Other",
+			}),
+		);
+		await settle();
+
+		await engine.play();
+		await settle();
+		local.pause();
+		await local.play();
+		local.seek(8.2);
+
+		expect(onTakeover).not.toHaveBeenCalled();
+		engine.destroy();
+	});
+
+	it("does not time Play after moving here with Next", async () => {
+		const onTakeover = vi.fn();
+		const { engine, local, transport } = createHarness({ onTakeover });
+		await settle();
+		engine.setSharedQueueSources([trackSource, nextTrackSource]);
+		transport.emit(
+			sharedState({
+				revision: 2,
+				activeDeviceId: "device-2",
+				activeDeviceName: "Other",
+			}),
+		);
+		await settle();
+
+		engine.next();
+		await settle();
+		await engine.play();
+		await settle();
+		local.seek(1);
+
+		expect(local.getState().source).toEqual(nextTrackSource);
+		expect(onTakeover).not.toHaveBeenCalled();
+		engine.destroy();
+	});
+
 	it("does not time a takeover that failed", async () => {
 		const onTakeover = vi.fn();
 		const { engine, local, transport } = createHarness({ onTakeover });
