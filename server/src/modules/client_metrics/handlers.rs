@@ -21,6 +21,7 @@ const KNOWN_METRICS: &[(&str, bool)] = &[
     ("client.page.cls", false),
     ("client.interaction.inp", true),
     ("client.playback.start", true),
+    ("client.playback.takeover", true),
 ];
 
 #[derive(Deserialize)]

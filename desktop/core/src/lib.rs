@@ -417,6 +417,35 @@ fn desktop_playback_set_replay_gain(
     })
 }
 
+fn output_mode_name(mode: OutputMode) -> &'static str {
+    match mode {
+        OutputMode::System => "system",
+        OutputMode::DirectAlsa => "direct",
+        OutputMode::AdaptiveSystemRate => "adaptive-system-rate",
+    }
+}
+
+/// Times one Output Mode command as the user waits for it, rollback included.
+fn timed_output_change(
+    state: &AppState,
+    to: OutputMode,
+    change: impl FnOnce(&AppState) -> Result<PlaybackSessionState, PlaybackCommandError>,
+) -> Result<PlaybackSessionState, PlaybackCommandError> {
+    let before = state.playback.state();
+    let started = std::time::Instant::now();
+    let result = change(state);
+    if let Ok(before) = before {
+        observability::output_mode_change(&observability::OutputModeReport {
+            from: output_mode_name(before.output_mode),
+            to: output_mode_name(to),
+            playing: before.status.is_active(),
+            changed: result.as_ref().is_ok_and(|after| after.output_mode == to),
+            elapsed: started.elapsed(),
+        });
+    }
+    result
+}
+
 fn desktop_playback_select_direct_alsa_output(
     state: &AppState,
     device_id: String,
@@ -1205,18 +1234,37 @@ async fn dispatch(state: Arc<AppState>, method: &str, params: Value) -> Reply {
         "desktop_playback_select_direct_alsa_output" => {
             let device_id = param(&params, "deviceId")?;
             blocking(&state, move |state| {
-                desktop_playback_select_direct_alsa_output(state, device_id)
+                timed_output_change(state, OutputMode::DirectAlsa, |state| {
+                    desktop_playback_select_direct_alsa_output(state, device_id)
+                })
             })
             .await
         }
         "desktop_playback_select_exclusive_output" => {
-            blocking(&state, desktop_playback_select_exclusive_output).await
+            blocking(&state, |state| {
+                timed_output_change(
+                    state,
+                    OutputMode::DirectAlsa,
+                    desktop_playback_select_exclusive_output,
+                )
+            })
+            .await
         }
         "desktop_playback_fallback_to_system_output" => {
-            blocking(&state, select_normal_output).await
+            blocking(&state, |state| {
+                timed_output_change(state, OutputMode::System, select_normal_output)
+            })
+            .await
         }
         "desktop_playback_enable_adaptive_system_rate" => {
-            blocking(&state, desktop_playback_enable_adaptive_system_rate).await
+            blocking(&state, |state| {
+                timed_output_change(
+                    state,
+                    OutputMode::AdaptiveSystemRate,
+                    desktop_playback_enable_adaptive_system_rate,
+                )
+            })
+            .await
         }
         "desktop_playback_toggle_shuffle" => {
             blocking(&state, |state| state.playback.toggle_shuffle()).await

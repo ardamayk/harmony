@@ -146,6 +146,7 @@ function createHarness(options?: {
 	failHandshake?: boolean;
 	/** Snapshots the handshake reads: pushed before construction. */
 	initialStates?: PlaybackState[];
+	onTakeover?: (milliseconds: number) => void;
 }): Harness {
 	const local = new InMemoryPlaybackEngine();
 	if (options?.localReports) {
@@ -157,7 +158,12 @@ function createHarness(options?: {
 	if (options?.device) transport.device = options.device;
 	transport.failHandshake = options?.failHandshake ?? false;
 	transport.states.push(...(options?.initialStates ?? []));
-	const engine = new SharedPlaybackEngine(local, transport);
+	const engine = new SharedPlaybackEngine(
+		local,
+		transport,
+		undefined,
+		options?.onTakeover,
+	);
 	// PlaybackProvider lifts this on mounting, outside a Room.
 	engine.setSharedPlaybackSuspended(false);
 	return { engine, local, transport, state: () => engine.getState() };
@@ -401,6 +407,69 @@ describe("SharedPlaybackEngine following", () => {
 		});
 		// The silent local Player stays unloaded until this device plays.
 		expect(local.getState().source).toBeNull();
+		engine.destroy();
+	});
+
+	it("times a takeover until the playhead moves, not until it says playing", async () => {
+		const onTakeover = vi.fn();
+		const { engine, local, transport } = createHarness({ onTakeover });
+		await settle();
+		transport.emit(
+			sharedState({
+				revision: 2,
+				positionMs: 8000,
+				activeDeviceId: "device-2",
+				activeDeviceName: "Other",
+			}),
+		);
+		await settle();
+
+		await engine.play();
+		await settle();
+		expect(local.getState().status).toBe("playing");
+		expect(onTakeover).not.toHaveBeenCalled();
+
+		vi.advanceTimersByTime(300);
+		local.seek(8.2);
+		expect(onTakeover).toHaveBeenCalledWith(300);
+
+		local.seek(9);
+		expect(onTakeover).toHaveBeenCalledOnce();
+		engine.destroy();
+	});
+
+	it("does not time a start with no other device", async () => {
+		const onTakeover = vi.fn();
+		const { engine, local } = createHarness({ onTakeover });
+		await settle();
+
+		await engine.play(trackSource);
+		await settle();
+		local.seek(5);
+
+		expect(onTakeover).not.toHaveBeenCalled();
+		engine.destroy();
+	});
+
+	it("does not time a takeover that failed", async () => {
+		const onTakeover = vi.fn();
+		const { engine, local, transport } = createHarness({ onTakeover });
+		await settle();
+		transport.emit(
+			sharedState({
+				revision: 2,
+				activeDeviceId: "device-2",
+				activeDeviceName: "Other",
+			}),
+		);
+		await settle();
+
+		await engine.play();
+		await settle();
+		local.fail({ code: "playback-failed", message: "Playback failed" });
+		local.seek(5);
+
+		expect(onTakeover).not.toHaveBeenCalled();
 		engine.destroy();
 	});
 
