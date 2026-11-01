@@ -17,6 +17,14 @@ async function syncPlaybackAfterDelete(
 	}
 }
 
+/**
+ * The Tracks are gone whatever the Queue does next: `clearQueue` answers 404 for
+ * a Queue item deleted with them, which must not read as a failed deletion.
+ */
+function warnQueueSyncFailed(error: unknown) {
+	console.warn("Failed to sync the Queue after a deletion", { error });
+}
+
 export function useDeleteTrack() {
 	const queryClient = useQueryClient();
 	const playback = usePlayback();
@@ -34,7 +42,7 @@ export function useDeleteTrack() {
 			await invalidateLibraryCache(queryClient, { trackId });
 			await Promise.all([
 				invalidatePlaylistCache(queryClient),
-				syncPlaybackAfterDelete(playback, trackId),
+				syncPlaybackAfterDelete(playback, trackId).catch(warnQueueSyncFailed),
 			]);
 		},
 	});
@@ -90,11 +98,11 @@ export function useDeleteAlbum() {
 						: {},
 			);
 			await invalidatePlaylistCache(queryClient);
-			if (playback.currentTrack && deletedIds.has(playback.currentTrack.id)) {
-				await playback.clearQueue();
-			} else {
-				await playback.refreshQueue();
-			}
+			const isCurrentDeleted =
+				playback.currentTrack && deletedIds.has(playback.currentTrack.id);
+			await (
+				isCurrentDeleted ? playback.clearQueue() : playback.refreshQueue()
+			).catch(warnQueueSyncFailed);
 			if (albumGone) {
 				toast.success("All tracks deleted", {
 					description: describeAlbumDeletion(result),
