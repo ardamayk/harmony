@@ -337,12 +337,13 @@ export function PlayerBar({
 				setActionsOpen(false);
 			}
 		};
-		document.addEventListener("mousedown", handlePointerDown);
+		// iOS often sends no mousedown for a tap on plain content.
+		document.addEventListener("pointerdown", handlePointerDown);
 		document.addEventListener("keydown", handleKeyDown);
 		window.addEventListener("resize", updateMenuPosition);
 		window.addEventListener("scroll", updateMenuPosition, true);
 		return () => {
-			document.removeEventListener("mousedown", handlePointerDown);
+			document.removeEventListener("pointerdown", handlePointerDown);
 			document.removeEventListener("keydown", handleKeyDown);
 			window.removeEventListener("resize", updateMenuPosition);
 			window.removeEventListener("scroll", updateMenuPosition, true);
@@ -953,6 +954,7 @@ export function PlayerBar({
 						coverUrl={artworkUrl}
 						title={nowPlayingTitle}
 						subtitle={nowPlayingSubtitle}
+						isReconnecting={isReconnecting}
 						isPlaying={isPlaying}
 						progress={
 							effectiveDuration > 0

@@ -13,6 +13,7 @@ Install the deployed Web Client, play an Album, lock the phone, and check:
 3. The Desktop Client keeps showing the iPhone as the Active Device with a moving playhead. ADR 0040 reads a report older than 20 seconds as paused, so throttled timers would show here.
 4. Playback survives a phone call, and a Wi-Fi to cellular handover mid-Track.
 5. A Track plays after a cold relaunch, through the signing proxy.
+6. The first tap on a Track starts sound, on a slow connection too: iOS can drop a tap's permission while the Queue write waits.
 
 If 1 or 2 still fails after the workarounds below, the rung has failed: climb to Capacitor. If 3 fails alone, fix it here, since it is a Harmony behavior.
 

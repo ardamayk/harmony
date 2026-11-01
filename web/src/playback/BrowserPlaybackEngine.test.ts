@@ -907,7 +907,7 @@ describe("BrowserPlaybackEngine on iOS", () => {
 	});
 
 	describe("track change while locked", () => {
-		it("loops Tracks and External Tracks, and never live sources", async () => {
+		it("loops only Tracks", async () => {
 			const engine = createIosEngine();
 
 			await engine.play(trackSource);
@@ -915,7 +915,7 @@ describe("BrowserPlaybackEngine on iOS", () => {
 			await engine.play(createRadioStationSource("station-loop"));
 			expect(media.loop).toBe(false);
 			await engine.play(externalTrackSource);
-			expect(media.loop).toBe(true);
+			expect(media.loop).toBe(false);
 			await engine.play(createCatalogPreviewSource("catalog-loop"));
 			expect(media.loop).toBe(false);
 			engine.destroy();
@@ -1132,14 +1132,39 @@ describe("BrowserPlaybackEngine on iOS", () => {
 			engine.destroy();
 		});
 
-		it("pauses an External Track at once, since nothing follows it", async () => {
+		it("lets an External Track end by itself, since nothing follows it", async () => {
 			const engine = createIosEngine();
 			await engine.play(externalTrackSource);
 
-			wrapLoop(30);
+			media.dispatchEvent(new Event("ended"));
 
-			expect(media.paused).toBe(true);
 			expect(engine.getState().status).toBe("ended");
+			engine.destroy();
+		});
+
+		it("takes a wrap that comes well before the reported duration", async () => {
+			const engine = createIosEngine();
+			await engine.play(trackSource);
+			expect(engine.getState().duration).toBe(120);
+
+			wrapLoop(20);
+
+			expect(engine.getState().status).toBe("ended");
+			engine.destroy();
+		});
+
+		it("keeps Repeat once on a Track shorter than the wrap edge", async () => {
+			const engine = createIosEngine();
+			await engine.play(trackSource);
+			engine.cycleRepeatMode();
+
+			wrapLoop(4);
+			reachTime(0.05);
+
+			expect(engine.getState()).toMatchObject({
+				status: "playing",
+				repeatMode: "off",
+			});
 			engine.destroy();
 		});
 
@@ -1186,12 +1211,12 @@ describe("BrowserPlaybackEngine on iOS", () => {
 			engine.destroy();
 		});
 
-		it("leaves a jump backward from mid-Track alone", async () => {
+		it("leaves a small jump backward near the start alone", async () => {
 			const engine = createIosEngine();
 			await engine.play(trackSource);
-			reachTime(60);
+			reachTime(3);
 
-			reachTime(0.1);
+			reachTime(2.5);
 
 			expect(engine.getState().status).toBe("playing");
 			engine.destroy();

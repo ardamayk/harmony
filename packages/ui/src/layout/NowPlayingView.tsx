@@ -19,6 +19,7 @@ import { useFocusTrap } from "../lib/use-focus-trap";
 import { cn } from "../lib/utils";
 import { CurrentTrackPanel } from "./CurrentTrackPanel";
 import { QueuePanel } from "./QueuePanel";
+import { useCloseOnNavigate } from "./use-close-on-navigate";
 import { usePhoneShell } from "./use-phone-shell";
 
 const VIEW_ACTION_CLASS =
@@ -63,6 +64,7 @@ export function NowPlayingView({
 	const queueButtonRef = useRef<HTMLButtonElement>(null);
 	const rootRef = useRef<HTMLDivElement>(null);
 	useFocusTrap(rootRef);
+	useCloseOnNavigate(onClose);
 
 	const openQueue = () => {
 		flushSync(() => setQueueOpen(true));

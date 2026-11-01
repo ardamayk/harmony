@@ -1,6 +1,13 @@
 import { Link, useLocation } from "@tanstack/react-router";
-import { Ellipsis, Search, X } from "lucide-react";
-import { type ReactNode, useContext, useEffect, useRef, useState } from "react";
+import { Ellipsis, ListMusic, Search, X } from "lucide-react";
+import {
+	type ReactNode,
+	useCallback,
+	useContext,
+	useEffect,
+	useRef,
+	useState,
+} from "react";
 import { createPortal } from "react-dom";
 import { useFocusTrap } from "../lib/use-focus-trap";
 import { cn } from "../lib/utils";
@@ -16,9 +23,11 @@ import {
 	RoomOpenMark,
 	settingsNav,
 } from "./Sidebar";
+import { QueuePanel } from "./QueuePanel";
 import { Toaster } from "./Toaster";
 import { NAV_LINK_CLASS, TOP_NAV_ICON_BUTTON_CLASS } from "./TopNav";
 import { TopNavActionsSlot } from "./TopNavActions";
+import { useCloseOnNavigate } from "./use-close-on-navigate";
 
 const TAB_ROUTES = [
 	"/library/albums",
@@ -67,6 +76,12 @@ export function PhoneShell({
 	bottom?: ReactNode;
 	onSearch?: () => void;
 }) {
+	const queueButtonRef = useRef<HTMLButtonElement>(null);
+	const [queueOpen, setQueueOpen] = useState(false);
+	const closeQueue = useCallback(() => {
+		setQueueOpen(false);
+		queueButtonRef.current?.focus();
+	}, []);
 	return (
 		<div
 			data-app-shell
@@ -87,6 +102,18 @@ export function PhoneShell({
 				</Link>
 				<div className="-mr-3 flex min-w-0 items-center gap-1">
 					<TopNavActionsSlot />
+					<button
+						ref={queueButtonRef}
+						type="button"
+						aria-label="Open queue"
+						title="Open queue"
+						aria-haspopup="dialog"
+						aria-expanded={queueOpen}
+						className={ICON_BUTTON_CLASS}
+						onClick={() => setQueueOpen(true)}
+					>
+						<ListMusic className="size-5" />
+					</button>
 					{onSearch ? (
 						<button
 							type="button"
@@ -106,7 +133,36 @@ export function PhoneShell({
 			<div className="shrink-0">{bottom}</div>
 			<PhoneTabBar />
 			<Toaster />
+			{queueOpen ? <PhoneQueueView onClose={closeQueue} /> : null}
 		</div>
+	);
+}
+
+/** The Queue, reachable with nothing loaded, where Now Playing has no Track. */
+function PhoneQueueView({ onClose }: { onClose: () => void }) {
+	const rootRef = useRef<HTMLDivElement>(null);
+	useFocusTrap(rootRef);
+	useCloseOnNavigate(onClose);
+	useEffect(() => {
+		const closeOnEscape = (event: KeyboardEvent) => {
+			if (event.key === "Escape") onClose();
+		};
+		document.addEventListener("keydown", closeOnEscape);
+		return () => document.removeEventListener("keydown", closeOnEscape);
+	}, [onClose]);
+	return createPortal(
+		<div
+			ref={rootRef}
+			role="dialog"
+			aria-modal="true"
+			aria-label="Queue"
+			tabIndex={-1}
+			data-now-playing-surface
+			className="motion-safe:animate-lyrics-view fixed inset-0 z-fullscreen flex flex-col overflow-hidden bg-background pt-safe-top pb-safe-bottom text-queue-foreground outline-none"
+		>
+			<QueuePanel embedded onClose={onClose} />
+		</div>,
+		document.body,
 	);
 }
 
@@ -117,6 +173,11 @@ export function PhoneTabBar() {
 	const { pathname } = useLocation();
 	const moreButtonRef = useRef<HTMLButtonElement>(null);
 	const [moreOpen, setMoreOpen] = useState(false);
+	const closeMore = useCallback(() => {
+		setMoreOpen(false);
+		// iOS does not focus a tapped button, so the trap has nothing to restore.
+		moreButtonRef.current?.focus();
+	}, []);
 	const { tabs, more } = phoneNav(role);
 	const isOnMoreRoute = more.some(
 		({ to }) => pathname === to || pathname.startsWith(`${to}/`),
@@ -145,11 +206,7 @@ export function PhoneTabBar() {
 				More
 			</button>
 			{moreOpen ? (
-				<MoreSheet
-					links={more}
-					isRoomOpen={isRoomOpen}
-					onClose={() => setMoreOpen(false)}
-				/>
+				<MoreSheet links={more} isRoomOpen={isRoomOpen} onClose={closeMore} />
 			) : null}
 		</nav>
 	);

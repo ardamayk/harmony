@@ -78,9 +78,10 @@ const MEDIA_SESSION_ACTIONS: MediaSessionAction[] = [
 ];
 const MEDIA_SESSION_SEEK_OFFSET_SECONDS = 10;
 
-// Wide, because only a wrap moves playback backward unprompted, and timeupdate
-// can be sparse in the background and at double speed.
+// Wide, because timeupdate can be sparse in the background and at double speed.
 const LOOP_WRAP_EDGE_SECONDS = 5;
+// Every seek goes through seek(), so only a wrap moves playback back this far.
+const LOOP_WRAP_MIN_JUMP_SECONDS = 1;
 // How far an ended Track may replay while it waits for the next source.
 const ENDED_REPLAY_LIMIT_SECONDS = 1;
 
@@ -469,11 +470,12 @@ export class BrowserPlaybackEngine implements PlaybackEngine {
 		this.finishSource();
 	};
 
+	// The duration plays no part: an estimate can overstate the real end, and
+	// with `loop` on a missed wrap has no `ended` to fall back on.
 	private isLoopWrap(previousTime: number, currentTime: number) {
 		return (
-			currentTime < previousTime &&
 			currentTime < LOOP_WRAP_EDGE_SECONDS &&
-			previousTime > this.state.duration - LOOP_WRAP_EDGE_SECONDS
+			previousTime - currentTime > LOOP_WRAP_MIN_JUMP_SECONDS
 		);
 	}
 
@@ -482,12 +484,10 @@ export class BrowserPlaybackEngine implements PlaybackEngine {
 	// stays paused. Looping keeps the session open; this wrap replaces `ended`.
 	// Do not pause for a Track that ended: its next source needs the live session.
 	private handleLoopWrap() {
-		const { source, stopAfterCurrent } = this.state;
+		const { stopAfterCurrent } = this.state;
 		this.finishSource();
-		// Nothing follows these, so nothing else would stop the replay.
-		if (stopAfterCurrent || source?.type === "external-track") {
-			this.media.pause();
-		}
+		// Nothing follows it, so nothing else would stop the replay.
+		if (stopAfterCurrent) this.media.pause();
 	}
 
 	private finishSource() {
@@ -509,6 +509,7 @@ export class BrowserPlaybackEngine implements PlaybackEngine {
 			const repeatMode =
 				this.state.repeatMode === "once" ? "off" : this.state.repeatMode;
 			this.media.currentTime = 0;
+			this.lastMediaTime = 0;
 			this.update({ currentTime: 0, status: "playing", repeatMode });
 			void this.play().catch(() => undefined);
 			return;
@@ -578,7 +579,7 @@ export class BrowserPlaybackEngine implements PlaybackEngine {
 		if (this.isIos) {
 			// Tearing the source down between Tracks can end the audio session.
 			this.media.loop =
-				!isLiveSource(source) && sourceDurationSeconds(source) > 0;
+				source.type === "track" && sourceDurationSeconds(source) > 0;
 		} else {
 			this.media.removeAttribute("src");
 			this.media.load();

@@ -11,8 +11,8 @@ So the Web Client covers phones, installed to the Home Screen as a PWA.
 ## How it works
 
 - **One app, two shells.** Below 768px, or on a touch screen under 500px tall, `AppShell` renders a phone shell in place of the Top Nav, Sidebar, Player Bar and Queue Drawer. Routes, pages, queries and playback stay the same.
-- **Desktop layouts are untouched.** The desktop shell is never narrower than 768px and the Desktop Client's window has that minimum, so the phone shell only runs where the desktop shell could not.
-- **Preferences stay per shell.** The phone shell never writes layout preferences, because they live on the Music Server and the desktop reads them.
+- **Desktop layouts are untouched.** The phone shell runs only where the desktop shell could not fit. The Desktop Client never gets it, even when zoom takes it below 768px, because it has no window controls.
+- **Layout stays with the desktop.** A phone sends theme and playback preferences, never layout, because the Music Server would take the phone's copy over the desktop's.
 - **No service worker.** iOS installs from the manifest alone, and a worker would hide the signing proxy's login ([ADR 0038](0038-owner-access-through-a-signing-proxy.md)). It comes with offline playback, if that is ever wanted.
 
 ## Considered Options

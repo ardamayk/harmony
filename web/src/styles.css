@@ -13,8 +13,10 @@
 /* Block form: the shorthand would split the query at its comma. Mirrors
    PHONE_SHELL_QUERY in packages/ui/src/layout/use-phone-shell.ts. */
 @custom-variant phone {
-	@media (max-width: 767px), (pointer: coarse) and (max-height: 500px) {
-		@slot;
+	:where(html:not([data-desktop-client])) & {
+		@media (max-width: 767px), (pointer: coarse) and (max-height: 500px) {
+			@slot;
+		}
 	}
 }
 
@@ -208,9 +210,7 @@ body {
 	}
 
 	/* Unlayered to beat md:text-sm: iOS zooms the page on focusing smaller text. */
-	input,
-	textarea,
-	select {
+	html:not([data-desktop-client]) :is(input, textarea, select) {
 		font-size: 16px;
 	}
 }
@@ -312,10 +312,16 @@ html[data-desktop-window] body::after {
    clearance places what floats above them: toasts and the search card. Tab bar
    (h-14), plus the mini player (h-14) while it shows. */
 [data-phone-shell] {
-	--library-search-top: calc(env(safe-area-inset-top) + 0.5rem);
 	--player-dock-clearance: calc(3.5rem + env(safe-area-inset-bottom));
 	&:has([data-mini-player]) {
 		--player-dock-clearance: calc(7rem + env(safe-area-inset-bottom));
+	}
+}
+
+/* A landscape phone's notch sits on the left or right edge. */
+:is([data-phone-shell], [data-now-playing-surface]) {
+	@variant phone {
+		padding-inline: env(safe-area-inset-left) env(safe-area-inset-right);
 	}
 }
 

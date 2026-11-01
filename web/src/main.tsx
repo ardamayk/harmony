@@ -63,6 +63,8 @@ if (!rootElement) {
 	throw new Error("Root element not found");
 }
 
+if (hasDesktopBridge()) document.documentElement.dataset.desktopClient = "";
+
 suppressEscapeFocusRing();
 startClientMetrics();
 

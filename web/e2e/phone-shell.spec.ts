@@ -161,6 +161,16 @@ test.describe("with touch input", () => {
 	});
 });
 
+test("the Queue opens with nothing playing", async ({ page }) => {
+	await page.setViewportSize(PHONE);
+	await page.goto("/library/albums");
+	await page.getByRole("button", { name: "Open queue" }).click();
+	const queue = page.getByRole("dialog", { name: "Queue" });
+	await expect(queue).toBeVisible();
+	await page.keyboard.press("Escape");
+	await expect(queue).toBeHidden();
+});
+
 test("the desktop shell stays at 1280 wide", async ({ page }) => {
 	await page.setViewportSize({ width: 1280, height: 800 });
 	await page.goto("/library/albums");

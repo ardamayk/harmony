@@ -38,6 +38,7 @@ const navigate = vi.fn();
 
 vi.mock("@tanstack/react-router", () => ({
 	useNavigate: () => navigate,
+	useRouter: () => null,
 }));
 
 const track = {

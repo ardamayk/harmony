@@ -5,5 +5,6 @@ import { expect, it } from "vite-plus/test";
 
 it("keeps the phone variant on the phone shell's query", () => {
 	const styles = readFileSync(join(import.meta.dirname, "styles.css"), "utf8");
-	expect(styles).toContain(`@media ${PHONE_SHELL_QUERY} {`);
+	// The variant, and the global rules that cannot use it.
+	expect(styles.split(`@media ${PHONE_SHELL_QUERY} {`)).toHaveLength(3);
 });

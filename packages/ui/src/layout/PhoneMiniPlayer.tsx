@@ -13,6 +13,7 @@ export function PhoneMiniPlayer({
 	subtitle,
 	isPlaying,
 	progress,
+	isReconnecting,
 	onOpen,
 	onTogglePlay,
 }: {
@@ -22,6 +23,7 @@ export function PhoneMiniPlayer({
 	isPlaying: boolean;
 	/** 0..1; null hides the line (live radio has no length). */
 	progress: number | null;
+	isReconnecting: boolean;
 	onOpen?: () => void;
 	onTogglePlay: () => void;
 }) {
@@ -43,6 +45,8 @@ export function PhoneMiniPlayer({
 				<span
 					className="block truncate text-player-foreground text-xs"
 					title={subtitle}
+					role={isReconnecting ? "status" : undefined}
+					aria-live={isReconnecting ? "polite" : undefined}
 				>
 					{subtitle}
 				</span>

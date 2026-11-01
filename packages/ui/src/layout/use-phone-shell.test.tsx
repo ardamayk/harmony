@@ -35,6 +35,14 @@ describe("usePhoneShell", () => {
 		expect(matchMedia).toHaveBeenCalledWith(PHONE_SHELL_QUERY);
 	});
 
+	it("is false in the Desktop Client, which zoom can take below 768px", () => {
+		stubMatchMedia(true);
+		document.documentElement.dataset.desktopClient = "";
+		const { result } = renderHook(() => usePhoneShell());
+		delete document.documentElement.dataset.desktopClient;
+		expect(result.current).toBe(false);
+	});
+
 	it("follows the query and stops listening on unmount", () => {
 		const { media, listeners } = stubMatchMedia(false);
 		const { result, unmount } = renderHook(() => usePhoneShell());

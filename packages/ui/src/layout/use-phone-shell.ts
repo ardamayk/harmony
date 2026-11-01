@@ -14,6 +14,9 @@ function subscribe(onChange: () => void): () => void {
 function matchesPhoneShell(): boolean {
 	return (
 		typeof window.matchMedia === "function" &&
+		// Zoom can take the Desktop Client below 768px, and this shell has no
+		// window controls. The web host sets this before its first render.
+		!("desktopClient" in document.documentElement.dataset) &&
 		window.matchMedia(PHONE_SHELL_QUERY).matches
 	);
 }
