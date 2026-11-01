@@ -7,9 +7,10 @@
 //! Playback Source load as a transaction and metrics named by its source
 //! type and what started it, and each audio stream through the media proxy
 //! as a transaction in that load's trace, which its `sentry-trace` header
-//! carries to the Music Server. What is never sent: media URLs (the
-//! media proxy's carry a token), file paths, Track titles or the host's
-//! name; [`scrub_text`] replaces URLs and paths in free text. The scrubbing
+//! carries to the Music Server, and each Output Mode change. What is never
+//! sent: media URLs (the media proxy's carry a token), file paths, Track
+//! titles or the host's name; [`scrub_text`] replaces URLs and paths in free
+//! text. The scrubbing
 //! follows the Music Server's (server/src/observability.rs).
 
 use crate::media_stream_timing::{StreamOutcome, StreamReport};
@@ -281,6 +282,58 @@ pub(crate) fn playback_load(report: &LoadReport) {
             || sentry::capture_message("Playback Source failed to start", Level::Error),
         );
     }
+}
+
+/// One Output Mode command as the user waits for it, rollback included.
+pub(crate) struct OutputModeReport {
+    pub(crate) from: &'static str,
+    pub(crate) to: &'static str,
+    /// Whether a Player was sounding when it was asked.
+    pub(crate) playing: bool,
+    /// Whether the asked mode is the one in force afterwards.
+    pub(crate) changed: bool,
+    pub(crate) elapsed: Duration,
+}
+
+/// One Output Mode change: a transaction and a duration metric. It names the
+/// modes, never the Output Device.
+pub(crate) fn output_mode_change(report: &OutputModeReport) {
+    if !enabled() {
+        return;
+    }
+    let outcome = if report.changed { "changed" } else { "failed" };
+    let playing = if report.playing { "true" } else { "false" };
+    let start = SystemTime::now()
+        .checked_sub(report.elapsed)
+        .unwrap_or_else(SystemTime::now);
+    let transaction = sentry::start_transaction_with_timestamp(
+        TransactionContext::new(
+            &format!("playback.output_mode {}", report.to),
+            "playback.output_mode",
+        ),
+        start,
+    );
+    transaction.set_tag("from", report.from);
+    transaction.set_tag("to", report.to);
+    transaction.set_tag("playing", playing);
+    transaction.set_tag("outcome", outcome);
+    transaction.set_status(if report.changed {
+        SpanStatus::Ok
+    } else {
+        SpanStatus::InternalError
+    });
+    transaction.finish_with_timestamp(start + report.elapsed);
+
+    distribution_ms(
+        "playback.output_mode.duration",
+        report.elapsed,
+        &[
+            ("from", report.from),
+            ("to", report.to),
+            ("playing", playing),
+            ("outcome", outcome),
+        ],
+    );
 }
 
 /// One audio stream through the media proxy: a transaction in the trace of
@@ -768,6 +821,42 @@ mod tests {
             .map(|span| span.op.as_deref().unwrap_or_default())
             .collect();
         assert_eq!(ops, ["media.stream.headers", "media.stream.first_byte"]);
+    }
+
+    #[test]
+    fn an_output_mode_change_names_its_modes() {
+        let envelopes = sentry::test::with_captured_envelopes_options(
+            || {
+                output_mode_change(&OutputModeReport {
+                    from: "system",
+                    to: "adaptive-system-rate",
+                    playing: true,
+                    changed: false,
+                    elapsed: Duration::from_millis(250),
+                });
+            },
+            options(),
+        );
+        let transaction = envelopes
+            .iter()
+            .flat_map(|envelope| envelope.items().cloned().collect::<Vec<_>>())
+            .find_map(|item| match item {
+                EnvelopeItem::Transaction(transaction) => Some(transaction),
+                _ => None,
+            })
+            .expect("transaction");
+        assert_eq!(
+            transaction.name.as_deref(),
+            Some("playback.output_mode adaptive-system-rate")
+        );
+        for (tag, value) in [
+            ("from", "system"),
+            ("to", "adaptive-system-rate"),
+            ("playing", "true"),
+            ("outcome", "failed"),
+        ] {
+            assert_eq!(transaction.tags.get(tag).map(String::as_str), Some(value));
+        }
     }
 
     #[test]

@@ -46,6 +46,11 @@ const HANDSHAKE_RETRY_INITIAL_MS = 1000;
 const HANDSHAKE_RETRY_MAX_MS = 30000;
 const FOLLOW_TICK_MS = 1000;
 const RESTORED_DRIFT_SECONDS = 2;
+/**
+ * How far the playhead moves before a takeover counts as sounding: the Desktop
+ * Client says "playing" when it sends mpv the file, before any audio.
+ */
+const TAKEOVER_SOUNDING_SECONDS = 0.05;
 
 /**
  * One PlaybackEngine over the local one. While this device is the Active
@@ -88,6 +93,11 @@ export class SharedPlaybackEngine implements PlaybackEngine {
 	private carriedOutSkipRevision = 0;
 	/** A source claimed paused but not loaded into the local Player yet. */
 	private pendingTakeover: PlaybackSource | null = null;
+	/** Sound was asked to move here and has not started yet. */
+	private takeover: {
+		source: Extract<PlaybackSource, { type: "track" }>;
+		requestedAtMs: number;
+	} | null = null;
 	private queueSources: PlaybackSource[] = [];
 	private resolution: SourceResolution | null = null;
 	/** Stays until the next Track resolves, so the bar does not flash empty. */
@@ -114,6 +124,8 @@ export class SharedPlaybackEngine implements PlaybackEngine {
 		private readonly local: PlaybackEngine,
 		private readonly transport: SharedPlaybackTransport,
 		private readonly isSupported: () => Promise<boolean> = async () => true,
+		/** How long sound took to start here after moving from another device. */
+		private readonly onTakeover?: (milliseconds: number) => void,
 	) {
 		this.syncQueueContext = local.syncQueueContext?.bind(local);
 		this.subscribeNavigation = local.subscribeNavigation?.bind(local);
@@ -163,11 +175,13 @@ export class SharedPlaybackEngine implements PlaybackEngine {
 	}
 
 	pause() {
+		this.takeover = null;
 		if (this.isFollowing()) this.sendCommand({ type: "pause" });
 		else this.local.pause();
 	}
 
 	stop() {
+		this.takeover = null;
 		// The server keeps the Track and playhead ready for the next device:
 		// report the pause while the Player still names them, then clear it.
 		if (this.isShared() && this.mode === "active") this.sendReport(false);
@@ -176,6 +190,7 @@ export class SharedPlaybackEngine implements PlaybackEngine {
 
 	togglePlay() {
 		if (!this.isShared() || (this.mode === "active" && !this.pendingTakeover)) {
+			this.takeover = null;
 			this.local.togglePlay();
 			return;
 		}
@@ -280,6 +295,7 @@ export class SharedPlaybackEngine implements PlaybackEngine {
 			this.mode = "dormant";
 			this.playedWhileDormant = false;
 			this.pendingTakeover = null;
+			this.takeover = null;
 			this.heldSnapshot = null;
 			this.detached = false;
 			this.lastSeenRevision = null;
@@ -625,7 +641,14 @@ export class SharedPlaybackEngine implements PlaybackEngine {
 	 * user gesture, so the local Player starts in this same tick, and the
 	 * claim is never awaited. If it fails this device keeps playing (ADR 0040).
 	 */
-	private startHere(source: PlaybackSource) {
+	private startHere(source: PlaybackSource, requestedAtMs = Date.now()) {
+		const activeDeviceId = this.snapshot?.activeDeviceId ?? null;
+		const movesHere =
+			this.isFollowing() &&
+			activeDeviceId !== null &&
+			activeDeviceId !== this.device?.id;
+		this.takeover =
+			movesHere && source.type === "track" ? { source, requestedAtMs } : null;
 		this.pendingTakeover = null;
 		this.enterActive();
 		this.claim(
@@ -689,6 +712,7 @@ export class SharedPlaybackEngine implements PlaybackEngine {
 		if (!state || (state.queueItemId === null && state.trackId === null)) {
 			return;
 		}
+		const requestedAtMs = Date.now();
 		const resolution = this.resolve(state);
 		// Without a wait when the Track is already known, inside the gesture.
 		const source = resolution.source ?? (await resolution.done);
@@ -698,10 +722,10 @@ export class SharedPlaybackEngine implements PlaybackEngine {
 		const expected = this.expectedSeconds();
 		// A Track that played to its end starts over, or it would end at once.
 		const atEnd = expected > source.track.durationMs / 1000 - 1;
-		return this.startHere({
-			...source,
-			startPositionSeconds: atEnd ? 0 : expected,
-		});
+		return this.startHere(
+			{ ...source, startPositionSeconds: atEnd ? 0 : expected },
+			requestedAtMs,
+		);
 	}
 
 	private expectedSeconds() {
@@ -817,10 +841,38 @@ export class SharedPlaybackEngine implements PlaybackEngine {
 
 	// Local engine events ---------------------------------------------------
 
+	/** Sound has moved here once the playhead leaves where it started. */
+	private noteTakeover(
+		previous: PlaybackSessionState,
+		state: PlaybackSessionState,
+	) {
+		const takeover = this.takeover;
+		if (!takeover) return;
+		const isOtherItem =
+			state.source !== null &&
+			sharedQueueItemId(state.source) !== sharedQueueItemId(takeover.source);
+		// A remote pause, which never passes through `pause` here.
+		const wentQuiet = isAudible(previous.status) && !isAudible(state.status);
+		if (state.status === "error" || isOtherItem || wentQuiet) {
+			this.takeover = null;
+			return;
+		}
+		const startSeconds = takeover.source.startPositionSeconds ?? 0;
+		if (
+			state.status === "playing" &&
+			state.source !== null &&
+			state.currentTime >= startSeconds + TAKEOVER_SOUNDING_SECONDS
+		) {
+			this.takeover = null;
+			this.onTakeover?.(Date.now() - takeover.requestedAtMs);
+		}
+	}
+
 	private handleLocalState(state: PlaybackSessionState) {
 		if (this.destroyed) return;
 		const previous = this.localState;
 		this.localState = state;
+		this.noteTakeover(previous, state);
 		if (state.source) this.pendingTakeover = null;
 		else this.detached = false;
 		// The Desktop's Player can load after the snapshot naming this device.
