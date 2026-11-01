@@ -72,9 +72,14 @@ const persistedClientSchema = z.looseObject({
 export function parsePersistedClient(
 	value: unknown,
 ): PersistedClient | undefined {
-	return persistedClientSchema.safeParse(value).success
-		? (value as PersistedClient)
-		: undefined;
+	if (!persistedClientSchema.safeParse(value).success) return undefined;
+	const client = value as PersistedClient;
+	// Saved while the clock ran ahead, a list would look fresh and never refetch.
+	const now = Date.now();
+	for (const query of client.clientState.queries) {
+		if (query?.state?.dataUpdatedAt > now) query.state.dataUpdatedAt = 0;
+	}
+	return client;
 }
 
 function openDatabase(): Promise<IDBDatabase> {

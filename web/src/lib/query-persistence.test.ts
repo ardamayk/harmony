@@ -75,6 +75,24 @@ describe("parsePersistedClient", () => {
 		expect(parsePersistedClient(saved)).toBe(saved);
 	});
 
+	it("makes lists saved with a clock running ahead refetch", () => {
+		const past = Date.now() - 1000;
+		const restored = parsePersistedClient({
+			...saved,
+			clientState: {
+				queries: [
+					{ state: { dataUpdatedAt: Date.now() + 3 * 60 * 60_000 } },
+					{ state: { dataUpdatedAt: past } },
+					null,
+				],
+				mutations: [],
+			},
+		});
+		expect(
+			restored?.clientState.queries.map((query) => query?.state.dataUpdatedAt),
+		).toEqual([0, past, undefined]);
+	});
+
 	it("drops a missing, old or corrupt save instead of throwing", () => {
 		for (const value of [
 			undefined,
