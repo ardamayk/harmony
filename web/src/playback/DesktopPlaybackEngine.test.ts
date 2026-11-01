@@ -303,16 +303,20 @@ describe("DesktopPlaybackEngine", () => {
 		const engine = new DesktopPlaybackEngine(bridge);
 		await vi.waitFor(() => expect(bridge.rendererReady).toHaveBeenCalled());
 		const core = { ...DEFAULT_PLAYBACK_SESSION_STATE, volume: 1 };
+		const heard: number[] = [];
+		engine.subscribe((state) => heard.push(state.volume));
 
 		engine.setVolume(0.9);
 		engine.setVolume(0.8);
 		engine.setVolume(0.7);
 		expect(engine.getState().volume).toBe(0.7);
+		expect(heard).toEqual([0.9, 0.8, 0.7]);
 		expect(bridge.setVolume.mock.calls).toEqual([[0.9]]);
 
 		// A core state from meanwhile must not pull the slider back.
 		emit({ ...core, currentTime: 12 });
 		expect(engine.getState()).toMatchObject({ currentTime: 12, volume: 0.7 });
+		expect(heard.at(-1)).toBe(0.7);
 
 		answers[0]?.({ ...core, volume: 0.9 });
 		await vi.waitFor(() => expect(bridge.setVolume).toHaveBeenCalledTimes(2));
