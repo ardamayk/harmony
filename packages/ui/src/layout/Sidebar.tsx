@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import {
 	Disc3,
 	Headphones,
+	Heart,
 	ListMusic,
 	Music2,
 	Radio,
@@ -10,7 +11,10 @@ import {
 	Users,
 } from "lucide-react";
 import { type ReactNode, useContext } from "react";
-import { ListenTogetherContext } from "../listen-together/ListenTogetherContext";
+import {
+	ListenTogetherContext,
+	type ListenTogetherRole,
+} from "../listen-together/ListenTogetherContext";
 import { type GuestHiddenFeature, isHiddenFromRole } from "./guest-access";
 import { NAV_LINK_CLASS } from "./TopNav";
 
@@ -18,12 +22,14 @@ import { NAV_LINK_CLASS } from "./TopNav";
 const RAIL_LINK_CLASS = "max-lg:w-11";
 const NAV_ICON_CLASS = "size-5 shrink-0";
 
-const libraryNav: {
+type ShellNavLink = {
 	to: string;
 	label: string;
 	icon: typeof Disc3;
 	hiddenFromGuest?: GuestHiddenFeature;
-}[] = [
+};
+
+export const libraryNav: ShellNavLink[] = [
 	{ to: "/library/albums", label: "Albums", icon: Disc3 },
 	{ to: "/library/artists", label: "Artists", icon: Users },
 	{ to: "/library/genres", label: "Genres", icon: Tags },
@@ -36,6 +42,31 @@ const libraryNav: {
 		hiddenFromGuest: "listen-together-page",
 	},
 ];
+export const playlistsNav: ShellNavLink = {
+	to: "/playlists",
+	label: "Playlists",
+	icon: ListMusic,
+	hiddenFromGuest: "playlists",
+};
+/** Only the phone shell lists it; the desktop reaches Favorites from Playlists. */
+export const favoritesNav: ShellNavLink = {
+	to: "/favorites",
+	label: "Favorites",
+	icon: Heart,
+	hiddenFromGuest: "favorites",
+};
+export const settingsNav: ShellNavLink = {
+	to: "/settings",
+	label: "Settings",
+	icon: Settings,
+};
+
+export function isNavLinkVisible(
+	{ hiddenFromGuest }: ShellNavLink,
+	role: ListenTogetherRole | undefined,
+) {
+	return !hiddenFromGuest || !isHiddenFromRole(role, hiddenFromGuest);
+}
 
 /**
  * The library sections down the left edge, then Playlists with what the host
@@ -47,10 +78,7 @@ export function Sidebar({ playlists }: { playlists?: ReactNode }) {
 	const listenTogether = useContext(ListenTogetherContext);
 	const role = listenTogether?.role;
 	const isRoomOpen = role === "owner" && Boolean(listenTogether?.room);
-	const visibleNav = libraryNav.filter(
-		({ hiddenFromGuest }) =>
-			!hiddenFromGuest || !isHiddenFromRole(role, hiddenFromGuest),
-	);
+	const visibleNav = libraryNav.filter((link) => isNavLinkVisible(link, role));
 	return (
 		<aside
 			data-sidebar
@@ -75,37 +103,37 @@ export function Sidebar({ playlists }: { playlists?: ReactNode }) {
 				})}
 			</nav>
 			<div className="mt-1 flex min-h-0 flex-1 flex-col gap-1">
-				{isHiddenFromRole(role, "playlists") ? null : (
+				{isNavLinkVisible(playlistsNav, role) ? (
 					<>
 						<Link
-							to="/playlists"
+							to={playlistsNav.to}
 							activeOptions={{ exact: true }}
-							title="Playlists"
+							title={playlistsNav.label}
 							className={`${NAV_LINK_CLASS} ${RAIL_LINK_CLASS} shrink-0`}
 						>
-							<ListMusic className={NAV_ICON_CLASS} />
-							<span className="max-lg:sr-only">Playlists</span>
+							<playlistsNav.icon className={NAV_ICON_CLASS} />
+							<span className="max-lg:sr-only">{playlistsNav.label}</span>
 						</Link>
 						<div className="scrollbar-hidden min-h-0 flex-1 overflow-y-auto max-lg:hidden">
 							{playlists}
 						</div>
 					</>
-				)}
+				) : null}
 			</div>
 			<Link
-				to="/settings"
-				title="Settings"
+				to={settingsNav.to}
+				title={settingsNav.label}
 				className={`${NAV_LINK_CLASS} ${RAIL_LINK_CLASS} my-3`}
 			>
-				<Settings className={NAV_ICON_CLASS} />
-				<span className="max-lg:sr-only">Settings</span>
+				<settingsNav.icon className={NAV_ICON_CLASS} />
+				<span className="max-lg:sr-only">{settingsNav.label}</span>
 			</Link>
 		</aside>
 	);
 }
 
 /** Beside the label, or on the icon's corner in the narrow rail. */
-function RoomOpenMark() {
+export function RoomOpenMark() {
 	return (
 		<span className="ml-auto flex items-center max-lg:absolute max-lg:top-2 max-lg:right-2 max-lg:ml-0">
 			<span aria-hidden className="size-2 rounded-full bg-primary" />

@@ -35,6 +35,7 @@ vi.mock("@tanstack/react-router", () => ({
 			{children}
 		</a>
 	),
+	useLocation: () => ({ pathname: "/library/albums" }),
 }));
 
 const mockPlaybackApi = {
@@ -110,12 +111,45 @@ function renderShell(
 	);
 }
 
+function stubPhoneWindow() {
+	vi.stubGlobal("matchMedia", (query: string) => ({
+		matches: query.includes("max-width: 767px"),
+		addEventListener: vi.fn(),
+		removeEventListener: vi.fn(),
+	}));
+}
+
 describe("AppShell", () => {
 	afterEach(() => {
 		cleanup();
 		vi.restoreAllMocks();
 		vi.unstubAllGlobals();
 		window.localStorage.clear();
+	});
+
+	it("renders the desktop shell outside phone mode", () => {
+		const { container } = renderShell(<AppShell />);
+		expect(container.querySelector("[data-sidebar]")).not.toBeNull();
+		expect(container.querySelector("[data-queue-drawer]")).not.toBeNull();
+		expect(container.querySelector("[data-phone-shell]")).toBeNull();
+	});
+
+	it("renders the phone shell in phone mode, whatever the saved Queue state", () => {
+		stubPhoneWindow();
+		const { container } = renderShell(
+			<AppShell onSearch={() => {}}>
+				<div>Main content</div>
+			</AppShell>,
+			defaultPreferences,
+		);
+		expect(defaultPreferences.layout.collapsed.right).toBe(false);
+		expect(container.querySelector("[data-phone-shell] main")).not.toBeNull();
+		expect(screen.getByText("Main content")).toBeTruthy();
+		expect(screen.getByRole("button", { name: "More" })).toBeTruthy();
+		expect(container.querySelector("[data-sidebar]")).toBeNull();
+		expect(container.querySelector("[data-queue-drawer]")).toBeNull();
+		expect(container.querySelector("[data-queue-open]")).toBeNull();
+		expect(container.querySelector("[data-queue-visible]")).toBeNull();
 	});
 
 	it("pins the queue by default and floats it over the page once unpinned", () => {

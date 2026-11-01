@@ -10,6 +10,13 @@
 @import "./themes/semantic.css";
 
 @custom-variant dark (&:is(.dark *));
+/* Block form: the shorthand would split the query at its comma. Mirrors
+   PHONE_SHELL_QUERY in packages/ui/src/layout/use-phone-shell.ts. */
+@custom-variant phone {
+	@media (max-width: 767px), (pointer: coarse) and (max-height: 500px) {
+		@slot;
+	}
+}
 
 :root {
 	/* Horizontal inset of page content beside the 15rem Sidebar. Content
@@ -46,6 +53,8 @@ html[data-theme-preset] {
 	/* The cover leaves the window room for the title and transport under it
      (about 24rem with the view header), so short windows shrink the cover. */
 	--spacing-artwork-stage: min(100%, 65vh, max(10rem, 100dvh - 24rem));
+	--spacing-safe-top: env(safe-area-inset-top);
+	--spacing-safe-bottom: env(safe-area-inset-bottom);
 	--spacing-queue-preview: clamp(18rem, 22vw, 26rem);
 	--spacing-queue-drawer-max: calc(100% - 2 * var(--shell-inset, 2rem));
 	/* Artist page photo banner: tall enough for a face, never the whole screen. */
@@ -262,6 +271,30 @@ html[data-desktop-window] #root {
 html[data-desktop-window] body::before,
 html[data-desktop-window] body::after {
 	border-radius: var(--radius-md);
+}
+
+/* The phone shell's bars stack in flow, so nothing covers the page; this
+   clearance places what floats above them: toasts and the search card. Tab bar
+   (h-14), plus the mini player (h-14) while it shows. */
+[data-phone-shell] {
+	--library-search-top: calc(env(safe-area-inset-top) + 0.5rem);
+	--player-dock-clearance: calc(3.5rem + env(safe-area-inset-bottom));
+	&:has([data-mini-player]) {
+		--player-dock-clearance: calc(7rem + env(safe-area-inset-bottom));
+	}
+}
+
+/* 44px touch targets in shared controls; the desktop keeps its sizes. */
+:is(
+	[data-player-control],
+	[data-now-playing-surface] button,
+	[data-now-playing-surface] [role="button"],
+	[data-now-playing-surface] [data-testid="seek-bar"]
+) {
+	@variant phone {
+		min-width: 2.75rem;
+		min-height: 2.75rem;
+	}
 }
 
 /* Full-screen views portal to body, outside #root's clip, so they draw the

@@ -18,6 +18,7 @@ export { LyricsOverlay } from "./LyricsOverlay";
 export { NowPlayingView } from "./NowPlayingView";
 export { PlaybackErrorBanner } from "./PlaybackErrorBanner";
 export { PlaybackSignal } from "./PlaybackSignal";
+export { PhoneShell } from "./PhoneShell";
 export { PlayerBar } from "./PlayerBar";
 export { QueueDrawer } from "./QueueDrawer";
 export { QueuePanel } from "./QueuePanel";
@@ -38,4 +39,5 @@ export {
 } from "./TopNav";
 export { TopNavActions, TopNavBackdrop } from "./TopNavActions";
 export { UpNextPeek } from "./UpNextPeek";
+export { PHONE_SHELL_QUERY, usePhoneShell } from "./use-phone-shell";
 export { WidgetDndProvider, WidgetDock } from "./WidgetDock";

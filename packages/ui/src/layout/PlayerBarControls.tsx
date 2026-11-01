@@ -211,7 +211,7 @@ function ShuffleButton({
 	);
 }
 
-function PrimaryPlaybackButton({
+export function PrimaryPlaybackButton({
 	isPlaying,
 	disabled,
 	onClick,
