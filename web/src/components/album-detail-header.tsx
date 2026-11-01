@@ -2,7 +2,7 @@ import {
 	type AlbumDetail,
 	MANAGED_ALBUM_DELETION_CAPABILITY,
 } from "@repo/api-client";
-import { AlbumArt } from "@repo/ui";
+import { AlbumArt, RowMenuButton } from "@repo/ui";
 import { useHiddenFromGuest } from "@repo/ui/guest-access";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
@@ -146,17 +146,17 @@ export function AlbumDetailHeader({
 							<AlbumArt
 								coverUrl={apiClient.getAlbumCoverUrl(album.id, 1024)}
 								title={album.title}
-								className="aspect-square w-full shrink-0 rounded-md shadow-lg text-3xl @xl:size-60"
+								className="aspect-square w-full shrink-0 rounded-md shadow-lg text-3xl @xl:size-60 phone:size-56"
 							/>
 
 							<div className="flex min-w-0 flex-col">
-								<h1 className="font-semibold text-page-title tracking-tight">
+								<h1 className="break-words font-semibold text-page-title tracking-tight phone:text-2xl">
 									{album.title}
 								</h1>
 								<Link
 									to="/library/artists/$artistId"
 									params={{ artistId: album.artistId }}
-									className="mt-3 self-start font-medium text-base text-foreground hover:text-heading"
+									className="mt-3 self-start font-medium text-base text-foreground hover:text-heading phone:mt-1 phone:flex phone:min-h-11 phone:items-center"
 								>
 									{artistName}
 								</Link>
@@ -207,6 +207,9 @@ export function AlbumDetailHeader({
 									Album radio
 								</Button>
 							)}
+							{canDeleteAlbums && !hideAlbumDeletion ? (
+								<RowMenuButton label="Album actions" />
+							) : null}
 							<div className="ml-auto flex gap-2">
 								{externalLinks.map((link) => (
 									<ExternalLinkButton
