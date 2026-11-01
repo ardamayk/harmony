@@ -184,9 +184,15 @@ pub struct StoredState {
 }
 
 impl StoredState {
-    /// The playhead at `now_ms`. Paused, it stays where it was.
+    /// Whether the playhead is moving at `now_ms`: a stored `playing` only
+    /// counts while the Active Device is heard from.
+    fn playing_at(&self, now_ms: i64) -> bool {
+        self.playing && now_ms - self.last_report_at_ms <= STALE_REPORT_MS
+    }
+
+    /// The playhead at `now_ms`. Paused or dead, it stays where it was.
     fn playhead(&self, now_ms: i64) -> i64 {
-        if self.playing {
+        if self.playing_at(now_ms) {
             let elapsed = now_ms.saturating_sub(self.position_at_ms).max(0);
             self.position_ms.saturating_add(elapsed)
         } else {
@@ -205,12 +211,11 @@ impl StoredState {
     /// Device reads as paused at the stored playhead; nothing is rewritten,
     /// so a late report still lands.
     pub fn at(&self, now_ms: i64) -> PlaybackState {
-        let playing = self.playing && now_ms - self.last_report_at_ms <= STALE_REPORT_MS;
         PlaybackState {
             revision: self.revision,
             queue_item_id: self.queue_item_id.clone(),
             track_id: self.track_id.clone(),
-            playing,
+            playing: self.playing_at(now_ms),
             position_ms: self.position_ms,
             position_at_ms: self.position_at_ms,
             active_device_id: self.active_device_id.clone(),
@@ -648,6 +653,39 @@ mod tests {
         // A second pause still raises it, so the newest command always wins.
         apply(&mut state, Command::Pause, 4_000);
         assert_eq!(state.remote_command_revision, state.revision);
+    }
+
+    #[test]
+    fn pause_extrapolates_only_while_the_active_device_is_live() {
+        const REPORTED_AT: i64 = 2_000;
+        let reported = || {
+            let mut state = claimed();
+            state
+                .report("d1", 1, playback("t1", 120_000, true), REPORTED_AT)
+                .unwrap();
+            state
+        };
+
+        // The last moment the device counts as live: still extrapolated.
+        let mut live = reported();
+        live.pause(REPORTED_AT + STALE_REPORT_MS);
+        assert_eq!(live.position_ms, 120_000 + STALE_REPORT_MS);
+
+        // One millisecond later it is dead: the last report stands.
+        let mut just_dead = reported();
+        just_dead.pause(REPORTED_AT + STALE_REPORT_MS + 1);
+        assert_eq!(just_dead.position_ms, 120_000);
+
+        // A sleep timer 30 minutes after the crash, past the Track's end.
+        let mut dead = reported();
+        let now_ms = REPORTED_AT + 30 * 60 * 1_000;
+        dead.pause(now_ms);
+        assert_eq!((dead.position_ms, dead.position_at_ms), (120_000, now_ms));
+        assert!(!dead.playing);
+        assert_eq!(dead.remote_command_revision, dead.revision);
+        let snapshot = dead.at(now_ms);
+        assert_eq!(snapshot.position_ms, 120_000);
+        assert!(!snapshot.playing);
     }
 
     #[test]
