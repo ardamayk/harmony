@@ -997,6 +997,8 @@ fn configure_mpv_command(command: &mut Command, socket_path: &Path, extra_argume
         .arg("--input-terminal=no")
         .arg("--gapless-audio=weak")
         .arg("--prefetch-playlist=yes")
+        // FLAC probing seeks back past cover art; outside this buffer each seek is a new request.
+        .arg("--stream-buffer-size=2MiB")
         // Speed changes must not shift pitch; make mpv's default explicit.
         .arg("--audio-pitch-correction=yes")
         .arg(format!("--volume={}", DEFAULT_VOLUME * 100.0))
@@ -8034,6 +8036,7 @@ mod tests {
         assert!(arguments.contains(&"--no-video".to_owned()));
         assert!(arguments.contains(&"--input-terminal=no".to_owned()));
         assert!(arguments.contains(&"--gapless-audio=weak".to_owned()));
+        assert!(arguments.contains(&"--stream-buffer-size=2MiB".to_owned()));
         assert!(arguments.contains(&"--audio-pitch-correction=yes".to_owned()));
         assert!(arguments.contains(&"--input-ipc-server=/private/control.sock".to_owned()));
         assert!(!arguments.iter().any(|argument| {
