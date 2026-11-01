@@ -39,6 +39,19 @@ async function expectNoHorizontalOverflow(page: Page) {
 				document.documentElement.clientWidth,
 		),
 	).toBe(true);
+	// The page clips at <main>, so what runs off the edge has to be looked for;
+	// a shelf scrolls sideways on purpose.
+	expect(
+		await page.evaluate(() =>
+			[...document.querySelectorAll("main *")]
+				.filter(
+					(element) =>
+						element.getBoundingClientRect().right > window.innerWidth + 1 &&
+						!element.closest(".overflow-x-auto"),
+				)
+				.map((element) => element.tagName),
+		),
+	).toEqual([]);
 }
 
 test("phone shell navigates, plays and opens Now Playing and the Queue", async ({
@@ -86,6 +99,66 @@ test("phone shell navigates, plays and opens Now Playing and the Queue", async (
 	await nowPlaying.getByRole("button", { name: "Hide queue" }).click();
 	await expect(nowPlaying.getByRole("heading", { name: "Queue" })).toBeHidden();
 	await expectNoHorizontalOverflow(page);
+});
+
+test("every main route fits a phone", async ({ page }) => {
+	const albumId = await importAlbum(page);
+	const playlist = await (
+		await page.request.post("/api/v1/playlists", {
+			data: { name: `Phone routes ${Date.now()}` },
+		})
+	).json();
+	await page.setViewportSize(PHONE);
+
+	for (const route of [
+		"/home",
+		"/library/albums",
+		`/library/${albumId}`,
+		"/library/artists",
+		"/library/genres",
+		"/library/tracks",
+		"/favorites",
+		"/playlists",
+		`/playlists/${playlist.id}`,
+		"/radio",
+		"/listen-together",
+		"/settings",
+	]) {
+		await page.goto(route);
+		await expect(page.locator("[data-phone-shell]")).toBeVisible();
+		await page.waitForLoadState("networkidle");
+		await expectNoHorizontalOverflow(page);
+	}
+});
+
+test.describe("with touch input", () => {
+	test.use({ hasTouch: true });
+
+	test("a card's Play and a Track row's menu work", async ({ page }) => {
+		await page.addInitScript(() => {
+			HTMLMediaElement.prototype.play = () => Promise.resolve();
+		});
+		const albumId = await importAlbum(page);
+		const stationName = `Phone station ${Date.now()}`;
+		await page.request.post("/api/v1/radio/stations", {
+			data: {
+				name: stationName,
+				streamUrl: "https://stream.example.com/phone",
+			},
+		});
+		await page.setViewportSize(PHONE);
+
+		await page.goto("/radio");
+		await page.getByRole("button", { name: `Play ${stationName}` }).tap();
+		await expect(page.locator("[data-mini-player]")).toContainText(stationName);
+
+		await page.goto(`/library/${albumId}`);
+		await page.getByRole("button", { name: "Actions for Pocket song" }).tap();
+		await page.getByRole("menuitem", { name: "Details" }).tap();
+		await expect(
+			page.getByRole("dialog", { name: "Pocket song" }),
+		).toBeVisible();
+	});
 });
 
 test("the desktop shell stays at 1280 wide", async ({ page }) => {
