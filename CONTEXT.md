@@ -161,7 +161,7 @@ An app instance on a user device that browses the Music Server and plays audio o
 _Avoid_: Music Server, UI, frontend
 
 **Web Client**:
-A Playback Client used through a web browser. Its playback remains local to the browser's device.
+A Playback Client used through a web browser, or installed from one to a phone's Home Screen. Its playback remains local to that device.
 _Avoid_: Desktop Client, server player
 
 **Desktop Client**:
