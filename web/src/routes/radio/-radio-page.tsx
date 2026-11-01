@@ -88,7 +88,10 @@ export function RadioPage() {
 							<Link
 								to="/radio/discover"
 								aria-label="Add radio station"
-								className={buttonVariants({ size: "icon-lg" })}
+								className={cn(
+									buttonVariants({ size: "icon-lg" }),
+									"phone:size-11",
+								)}
 							>
 								<Plus className="size-5" />
 							</Link>
