@@ -65,6 +65,8 @@ export type PlaybackStatus =
 export type PlaybackError = {
 	code:
 		| "playback-failed"
+		/** The browser refused to start without a user gesture. */
+		| "playback-blocked"
 		| "mpv-crash-loop"
 		| "mpv-restart-failed"
 		| "mpv-restart-unavailable"

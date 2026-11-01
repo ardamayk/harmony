@@ -146,7 +146,7 @@ export class SharedPlaybackEngine implements PlaybackEngine {
 		}
 		const target = source ?? this.pendingTakeover;
 		if (target) return this.startHere(target);
-		if (this.mode === "active") return this.local.play();
+		if (this.mode === "active") return this.startLocal();
 		return this.takeOverAtPlayhead();
 	}
 
@@ -631,7 +631,16 @@ export class SharedPlaybackEngine implements PlaybackEngine {
 			true,
 			source.type === "track" ? (source.startPositionSeconds ?? 0) * 1000 : 0,
 		);
-		return this.local.play(source);
+		return this.startLocal(source);
+	}
+
+	/** A refused start waits for the next click: `localSession` shows it paused. */
+	private async startLocal(source?: PlaybackSource) {
+		try {
+			await this.local.play(source);
+		} catch (error) {
+			if (this.localState.error?.code !== "playback-blocked") throw error;
+		}
 	}
 
 	private navigate(direction: "next" | "previous") {
@@ -832,7 +841,17 @@ export class SharedPlaybackEngine implements PlaybackEngine {
 	// Published session state -----------------------------------------------
 
 	private localSession(): PlaybackSessionState {
-		return { ...this.localState, sharedPlayback: undefined };
+		const session = { ...this.localState, sharedPlayback: undefined };
+		if (!this.isShared() || session.error?.code !== "playback-blocked") {
+			return session;
+		}
+		// Only the shared path: a Room and an older server need the error, since
+		// nothing else tells that listener they are silent (ADR 0040).
+		return {
+			...session,
+			status: session.status === "error" ? "paused" : session.status,
+			error: null,
+		};
 	}
 
 	private publish(state: PlaybackSessionState) {

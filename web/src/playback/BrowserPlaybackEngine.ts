@@ -191,20 +191,15 @@ export class BrowserPlaybackEngine implements PlaybackEngine {
 				);
 			}
 		} catch (error) {
-			// A blocked start is not a broken Track: the browser refused to
-			// play without a user gesture, so stay paused without an error
-			// and let the next click start it.
-			if (hasErrorName(error, "NotAllowedError")) {
-				this.update({ status: "paused", error: null });
-				return;
-			}
 			// load() or pause() cut this start short, and whatever called them
 			// owns the state now: the Track did not fail.
 			if (hasErrorName(error, "AbortError")) return;
 			this.update({
 				status: "error",
 				error: {
-					code: "playback-failed",
+					code: hasErrorName(error, "NotAllowedError")
+						? "playback-blocked"
+						: "playback-failed",
 					message: getErrorMessage(error),
 				},
 			});

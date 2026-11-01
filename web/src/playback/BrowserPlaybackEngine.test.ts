@@ -654,22 +654,31 @@ describe("BrowserPlaybackEngine", () => {
 		engine.destroy();
 	});
 
-	it("reports a blocked start as paused without an error", async () => {
+	it("fails a blocked start, naming the block, and a click starts it", async () => {
 		const engine = new BrowserPlaybackEngine({
 			createMedia: () => media,
 			mediaSession: null,
 		});
 		media.play.mockRejectedValueOnce(
-			new DOMException("The play() request was interrupted", "NotAllowedError"),
+			new DOMException("Needs a gesture", "NotAllowedError"),
 		);
 
-		await expect(engine.play(trackSource)).resolves.toBeUndefined();
+		await expect(engine.play(trackSource)).rejects.toThrow("Needs a gesture");
 
 		expect(engine.getState()).toMatchObject({
-			status: "paused",
-			error: null,
+			status: "error",
+			error: { code: "playback-blocked" },
 			source: trackSource,
 		});
+
+		engine.togglePlay();
+
+		await vi.waitFor(() =>
+			expect(engine.getState()).toMatchObject({
+				status: "playing",
+				error: null,
+			}),
+		);
 		engine.destroy();
 	});
 

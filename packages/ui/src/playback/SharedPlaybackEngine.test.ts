@@ -163,6 +163,16 @@ function createHarness(options?: {
 	return { engine, local, transport, state: () => engine.getState() };
 }
 
+/** The next start fails the way a browser refuses one without a gesture. */
+function blockNextStart(local: InMemoryPlaybackEngine) {
+	const play = local.play.bind(local);
+	vi.spyOn(local, "play").mockImplementationOnce(async (source) => {
+		await play(source);
+		local.fail({ code: "playback-blocked", message: "Playback failed" });
+		throw new DOMException("Needs a gesture", "NotAllowedError");
+	});
+}
+
 /** Runs the handshake and the following resolve through the microtask queue. */
 async function settle(times = 12) {
 	for (let index = 0; index < times; index += 1) await Promise.resolve();
@@ -1090,6 +1100,79 @@ describe("SharedPlaybackEngine concurrency", () => {
 		expect(transport.commands.at(-1)).toMatchObject({
 			type: "report",
 			playing: false,
+		});
+		engine.destroy();
+	});
+
+	it("keeps a blocked shared start paused, without an error, for the next click", async () => {
+		const { engine, local, state, transport } = createHarness({
+			initialStates: [sharedState({ positionMs: 30_000, ...otherDevice })],
+		});
+		await settle();
+		blockNextStart(local);
+
+		await expect(engine.play()).resolves.toBeUndefined();
+		await settle();
+
+		expect(state()).toMatchObject({ status: "paused", error: null });
+		expect(state().source).toMatchObject({ queueItemId: "item-1" });
+		expect(transport.commands.at(-1)).toMatchObject({
+			type: "report",
+			playing: false,
+		});
+
+		engine.togglePlay();
+		await settle();
+
+		expect(state()).toMatchObject({ status: "playing", error: null });
+		engine.destroy();
+	});
+
+	it("keeps a blocked resume quiet on the Active Device", async () => {
+		const { engine, local, state } = createHarness();
+		await settle();
+		await engine.play(trackSource);
+		await settle();
+		engine.pause();
+		blockNextStart(local);
+
+		await expect(engine.play()).resolves.toBeUndefined();
+
+		expect(state()).toMatchObject({ status: "paused", error: null });
+		engine.destroy();
+	});
+
+	it("shows a blocked start in a Room, so sync stops and Retry appears", async () => {
+		const { engine, local, state } = createHarness();
+		await settle();
+		engine.setSharedPlaybackSuspended(true);
+		blockNextStart(local);
+
+		await expect(engine.play(trackSource)).rejects.toThrow("Needs a gesture");
+
+		expect(state()).toMatchObject({
+			status: "error",
+			error: { code: "playback-blocked" },
+		});
+		engine.destroy();
+	});
+
+	it("shows a blocked start against a server without Shared Playback State", async () => {
+		const local = new InMemoryPlaybackEngine();
+		const engine = new SharedPlaybackEngine(
+			local,
+			new FakeTransport(),
+			async () => false,
+		);
+		engine.setSharedPlaybackSuspended(false);
+		await settle();
+		blockNextStart(local);
+
+		await expect(engine.play(trackSource)).rejects.toThrow("Needs a gesture");
+
+		expect(engine.getState()).toMatchObject({
+			status: "error",
+			error: { code: "playback-blocked" },
 		});
 		engine.destroy();
 	});
