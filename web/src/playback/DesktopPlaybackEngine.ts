@@ -101,12 +101,17 @@ export class DesktopPlaybackEngine implements PlaybackEngine {
 	readonly reportsSharedPlaybackState = true;
 
 	private state: PlaybackSessionState = { ...DEFAULT_PLAYBACK_SESSION_STATE };
+	/** The state as the core last gave it: `state` without `pendingVolume`. */
+	private coreState = this.state;
 	private readonly listeners = new Set<PlaybackSessionListener>();
 	private unlisten: Unlisten | null = null;
 	private isDestroyed = false;
 	private commandRevision = 0;
 	private stateRevision = 0;
 	private isRefreshing = false;
+	/** The volume last asked for, until the core has applied it. */
+	private pendingVolume: number | null = null;
+	private isSendingVolume = false;
 	private readonly handleFocus = () => {
 		void this.refreshSession();
 	};
@@ -177,7 +182,10 @@ export class DesktopPlaybackEngine implements PlaybackEngine {
 	}
 
 	setVolume(value: number) {
-		this.runCommand(() => this.bridge.setVolume(value));
+		this.commandRevision += 1;
+		this.pendingVolume = Math.min(1, Math.max(0, value || 0));
+		this.update(this.coreState);
+		if (!this.isSendingVolume) void this.sendPendingVolume();
 	}
 
 	setPlaybackRate(rate: number) {
@@ -312,16 +320,45 @@ export class DesktopPlaybackEngine implements PlaybackEngine {
 		}
 	}
 
+	/**
+	 * A slider drag asks far faster than the core answers, so one request runs
+	 * at a time and it carries the latest value; the rest are never sent.
+	 */
+	private async sendPendingVolume() {
+		this.isSendingVolume = true;
+		try {
+			let sent: number | null;
+			let state: PlaybackSessionState;
+			do {
+				sent = this.pendingVolume;
+				if (sent === null) return;
+				state = await this.bridge.setVolume(sent);
+			} while (this.pendingVolume !== sent);
+			this.pendingVolume = null;
+			this.update(state);
+		} catch (error) {
+			this.pendingVolume = null;
+			this.updateError(error);
+		} finally {
+			this.isSendingVolume = false;
+		}
+	}
+
 	private update(state: PlaybackSessionState) {
 		if (this.isDestroyed) return;
 		this.stateRevision += 1;
-		this.state = state;
+		this.coreState = state;
+		// Core states sent meanwhile hold an older volume than the slider's.
+		this.state =
+			this.pendingVolume === null
+				? state
+				: { ...state, volume: this.pendingVolume };
 		for (const listener of this.listeners) listener(state);
 	}
 
 	private updateError(error: unknown) {
 		this.update({
-			...this.state,
+			...this.coreState,
 			status: "error",
 			error: {
 				code: "playback-failed",

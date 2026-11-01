@@ -294,6 +294,51 @@ describe("DesktopPlaybackEngine", () => {
 		engine.destroy();
 	});
 
+	it("shows a volume at once and sends only the latest during a drag", async () => {
+		const { bridge, emit } = createBridge();
+		const answers: Array<(state: PlaybackSessionState) => void> = [];
+		bridge.setVolume.mockImplementation(
+			() => new Promise((resolve) => answers.push(resolve)),
+		);
+		const engine = new DesktopPlaybackEngine(bridge);
+		await vi.waitFor(() => expect(bridge.rendererReady).toHaveBeenCalled());
+		const core = { ...DEFAULT_PLAYBACK_SESSION_STATE, volume: 1 };
+
+		engine.setVolume(0.9);
+		engine.setVolume(0.8);
+		engine.setVolume(0.7);
+		expect(engine.getState().volume).toBe(0.7);
+		expect(bridge.setVolume.mock.calls).toEqual([[0.9]]);
+
+		// A core state from meanwhile must not pull the slider back.
+		emit({ ...core, currentTime: 12 });
+		expect(engine.getState()).toMatchObject({ currentTime: 12, volume: 0.7 });
+
+		answers[0]?.({ ...core, volume: 0.9 });
+		await vi.waitFor(() => expect(bridge.setVolume).toHaveBeenCalledTimes(2));
+		expect(bridge.setVolume).toHaveBeenLastCalledWith(0.7);
+		expect(engine.getState().volume).toBe(0.7);
+
+		answers[1]?.({ ...core, volume: 0.69 });
+		await vi.waitFor(() => expect(engine.getState().volume).toBe(0.69));
+		expect(bridge.setVolume).toHaveBeenCalledTimes(2);
+	});
+
+	it("returns to the core's volume when setting it fails", async () => {
+		const { bridge } = createBridge();
+		bridge.setVolume.mockRejectedValueOnce(new Error("mpv stopped"));
+		const engine = new DesktopPlaybackEngine(bridge);
+		await vi.waitFor(() => expect(bridge.rendererReady).toHaveBeenCalled());
+
+		engine.setVolume(0.2);
+		await vi.waitFor(() =>
+			expect(engine.getState().error?.message).toBe("mpv stopped"),
+		);
+		expect(engine.getState().volume).toBe(
+			DEFAULT_PLAYBACK_SESSION_STATE.volume,
+		);
+	});
+
 	it("leaves Shared Playback State reporting and obeying to the Rust core", async () => {
 		const native = createBridge();
 		const engine = new DesktopPlaybackEngine(native.bridge);

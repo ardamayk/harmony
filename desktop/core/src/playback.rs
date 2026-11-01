@@ -40,6 +40,9 @@ const DEFAULT_VOLUME: f64 = 0.8;
 const GAPLESS_APPEND_LEAD_SECONDS: f64 = 10.0;
 const EVENT_POLL_INTERVAL: Duration = Duration::from_millis(50);
 const MPV_COMMAND_TIMEOUT: Duration = Duration::from_secs(5);
+/// A command's follow-up comes within this; reading mpv first would hold it
+/// for the read's whole poll interval, on every command of a sequence.
+const COMMAND_FOLLOW_UP_WAIT: Duration = Duration::from_millis(1);
 /// Linux uses the distribution's mpv, so this is the oldest it accepts: 0.38
 /// added the `loadfile` index argument `load_at` sends.
 #[cfg(not(windows))]
@@ -1093,7 +1096,7 @@ fn run_mpv_worker(
                         "Pinned mpv command response could not be delivered for request {request_id}: receiver closed."
                     );
                 }
-                request_wait = Duration::ZERO;
+                request_wait = COMMAND_FOLLOW_UP_WAIT;
             }
             Ok(MpvWorkerRequest::Shutdown) => break,
             Err(RecvTimeoutError::Timeout) => {
@@ -7583,6 +7586,58 @@ mod tests {
                 })
             })
             .collect()
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn mpv_worker_runs_a_sequence_of_commands_without_a_poll_between_them() {
+        use std::io::{BufRead, Write};
+        let (stream, mpv_side) = std::os::unix::net::UnixStream::pair().expect("socket pair");
+        stream
+            .set_read_timeout(Some(super::EVENT_POLL_INTERVAL))
+            .expect("read timeout");
+        let child = Command::new("sleep")
+            .arg("30")
+            .spawn()
+            .expect("stand-in mpv");
+        let (requests, worker, _events) = super::spawn_mpv_worker(child, stream);
+        let mut mpv_writer = mpv_side.try_clone().expect("mpv writer");
+        thread::spawn(move || {
+            for line in std::io::BufReader::new(mpv_side).lines() {
+                let request: serde_json::Value =
+                    serde_json::from_str(&line.expect("request")).expect("json");
+                let answer = json!({ "request_id": request["request_id"], "error": "success" });
+                if writeln!(mpv_writer, "{answer}").is_err() {
+                    return;
+                }
+            }
+        });
+        // Applying processing is six commands, once per step of a volume drag.
+        let started_at = Instant::now();
+        for _ in 0..6 {
+            let (response, result) = std::sync::mpsc::channel();
+            requests
+                .send(MpvWorkerRequest::Command {
+                    command: json!(["get_property", "volume"]),
+                    event_boundary: None,
+                    response,
+                })
+                .expect("send command");
+            result
+                .recv_timeout(Duration::from_secs(5))
+                .expect("command answer")
+                .expect("command result");
+        }
+        // Five polls between six commands would take 250 ms.
+        assert!(
+            started_at.elapsed() < super::EVENT_POLL_INTERVAL * 2,
+            "sequence took {:?}",
+            started_at.elapsed()
+        );
+        requests
+            .send(MpvWorkerRequest::Shutdown)
+            .expect("shutdown worker");
+        worker.join().expect("worker thread");
     }
 
     #[cfg(unix)]
