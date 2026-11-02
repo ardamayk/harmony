@@ -1,6 +1,6 @@
 import type { AlbumDetail } from "@repo/api-client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { AlbumDetailHeader } from "./album-detail-header";
 
@@ -140,5 +140,41 @@ describe("AlbumDetailHeader", () => {
 			"Metal, Rock, Pop, Jazz",
 		);
 		expect(listAlbumOnlineGenres).not.toHaveBeenCalled();
+	});
+
+	it("lays the phone header on the cover with one genre and no external links", () => {
+		vi.stubGlobal("matchMedia", () => ({
+			matches: true,
+			addEventListener: () => {},
+			removeEventListener: () => {},
+		}));
+		try {
+			cleanup();
+			const onQueueAlbum = vi.fn();
+			renderHeader(
+				{
+					...album,
+					genreItems: ["Metal", "Rock"].map((name) => ({ id: name, name })),
+				},
+				vi.fn(),
+				onQueueAlbum,
+			);
+			expect(document.querySelector("h1")?.textContent).toBe("Album 1");
+			expect(screen.getByText("Metal").title).toBe("Metal, Rock");
+			expect(screen.queryByText("Metal, Rock")).toBeNull();
+			expect(screen.queryByRole("link", { name: /Spotify/ })).toBeNull();
+			const queue = screen.getByRole("button", { name: "Queue album" });
+			expect(queue.textContent).toBe("");
+			fireEvent.click(queue);
+			expect(onQueueAlbum).toHaveBeenCalledOnce();
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
+
+	it("keeps the external links on the desktop layout", () => {
+		cleanup();
+		renderHeader(album);
+		expect(screen.getByRole("link", { name: /Spotify/ })).toBeTruthy();
 	});
 });

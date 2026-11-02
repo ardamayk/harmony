@@ -2,7 +2,7 @@ import {
 	type AlbumDetail,
 	MANAGED_ALBUM_DELETION_CAPABILITY,
 } from "@repo/api-client";
-import { AlbumArt, RowMenuButton } from "@repo/ui";
+import { AlbumArt, RowMenuButton, usePhoneShell } from "@repo/ui";
 import { useHiddenFromGuest } from "@repo/ui/guest-access";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
@@ -88,6 +88,8 @@ export function AlbumDetailHeader({
 	const hideQueueEditing = useHiddenFromGuest("queue-editing");
 	const hideAlbumRadio = useHiddenFromGuest("album-radio");
 	const [setActionRow, actionsScrolledPast] = useScrolledPast();
+	const isPhone = usePhoneShell();
+	const showAlbumMenu = canDeleteAlbums && !hideAlbumDeletion;
 	return (
 		<>
 			<DetailStickyBar
@@ -134,98 +136,183 @@ export function AlbumDetailHeader({
 					/>
 				)}
 			</DetailStickyBar>
-			{/* Same cache key and size as the Player Bar, so the cover is read once. */}
+			{/* Same cache key and size as the Player Bar, so the cover is read once.
+			    On the phone the cover itself is the header, so the band holds no
+			    backdrop and no padding of its own. */}
 			<CoverWash
 				cacheKey={album.id}
 				imageUrl={apiClient.getAlbumCoverUrl(album.id, 128)}
-				backdropUrl={apiClient.getAlbumCoverUrl(album.id, 1024)}
+				backdropUrl={
+					isPhone ? undefined : apiClient.getAlbumCoverUrl(album.id, 1024)
+				}
+				className={isPhone ? "p-0" : undefined}
 			>
 				<ContextMenu>
 					<ContextMenuTrigger render={<div className="@container" />}>
-						<div className="grid gap-8 @xl:grid-cols-media @xl:items-end">
-							<AlbumArt
-								coverUrl={apiClient.getAlbumCoverUrl(album.id, 1024)}
-								title={album.title}
-								className="aspect-square w-full shrink-0 rounded-md shadow-lg text-3xl @xl:size-60 phone:size-56"
-							/>
-
-							<div className="flex min-w-0 flex-col">
-								<h1 className="break-words font-semibold text-page-title tracking-tight phone:text-2xl">
-									{album.title}
-								</h1>
-								<Link
-									to="/library/artists/$artistId"
-									params={{ artistId: album.artistId }}
-									className="mt-3 self-start font-medium text-base text-foreground hover:text-heading phone:mt-1 phone:flex phone:min-h-11 phone:items-center"
-								>
-									{artistName}
-								</Link>
-
-								{/* Release date under the artist, genres, track count and
-								    length last; all on the caption step. */}
-								<div className="mt-6 flex flex-col gap-2 text-caption text-sm">
-									{released ? <p>{released}</p> : null}
-									{genres.length > 0 ? (
-										<p title={genres.join(", ")}>
-											{genres.slice(0, MAX_GENRES).join(", ")}
-										</p>
-									) : null}
-									{size ? <p>{size}</p> : null}
-								</div>
-							</div>
-						</div>
-
-						{/* Actions under the cover, external links at the far right. */}
-						<div
-							ref={setActionRow}
-							className="mt-6 flex flex-wrap items-center gap-2"
-						>
-							<Button type="button" size="lg" onClick={onPlayAlbum}>
-								<Play className="size-4" />
-								Play
-							</Button>
-							{hideQueueEditing ? null : (
-								<Button
-									type="button"
-									size="lg"
-									variant="outline"
-									onClick={onQueueAlbum}
-								>
-									<SkipForward className="size-4" />
-									Queue album
-								</Button>
-							)}
-							{hideAlbumRadio ? null : (
-								<Button
-									type="button"
-									size="lg"
-									variant="outline"
-									disabled
-									title={ALBUM_RADIO_HINT}
-								>
-									<Disc3 className="size-4" />
-									Album radio
-								</Button>
-							)}
-							{canDeleteAlbums && !hideAlbumDeletion ? (
-								<RowMenuButton label="Album actions" />
-							) : null}
-							<div className="ml-auto flex gap-2">
-								{externalLinks.map((link) => (
-									<ExternalLinkButton
-										key={link.id}
-										href={link.href}
-										name={link.name}
-										short={link.short}
-										iconSrc={link.iconSrc}
-										iconClassName={link.iconClassName}
+						{isPhone ? (
+							<>
+								<div className="relative">
+									<AlbumArt
+										coverUrl={apiClient.getAlbumCoverUrl(album.id, 1024)}
+										title={album.title}
+										className="aspect-square w-full text-3xl"
 									/>
-								))}
-							</div>
-						</div>
+									{/* Title, artist and one genre on the cover's foot. */}
+									<div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-background via-background/80 to-background/0 px-(--shell-inset) pt-16">
+										<h1 className="break-words font-semibold text-2xl text-heading tracking-tight">
+											{album.title}
+										</h1>
+										<div className="flex min-w-0 items-center gap-2 text-sm">
+											<Link
+												to="/library/artists/$artistId"
+												params={{ artistId: album.artistId }}
+												className="flex min-h-11 min-w-0 items-center truncate font-medium text-foreground hover:text-heading"
+											>
+												{artistName}
+											</Link>
+											{genres[0] ? (
+												<>
+													<span aria-hidden className="text-foreground">
+														·
+													</span>
+													<span
+														className="min-w-0 truncate text-foreground"
+														title={genres.join(", ")}
+													>
+														{genres[0]}
+													</span>
+												</>
+											) : null}
+										</div>
+									</div>
+								</div>
+
+								{/* Icon-only actions besides Play; no external links. */}
+								<div
+									ref={setActionRow}
+									className="flex items-center gap-2 px-(--shell-inset) pt-2 pb-4"
+								>
+									<Button type="button" size="sm" onClick={onPlayAlbum}>
+										<Play className="size-4" />
+										Play
+									</Button>
+									{hideQueueEditing ? null : (
+										<Button
+											type="button"
+											size="icon-sm"
+											variant="outline"
+											aria-label="Queue album"
+											title="Queue album"
+											onClick={onQueueAlbum}
+										>
+											<SkipForward className="size-4" />
+										</Button>
+									)}
+									{hideAlbumRadio ? null : (
+										<Button
+											type="button"
+											size="icon-sm"
+											variant="outline"
+											aria-label="Album radio"
+											disabled
+											title={ALBUM_RADIO_HINT}
+										>
+											<Disc3 className="size-4" />
+										</Button>
+									)}
+									{showAlbumMenu ? (
+										<RowMenuButton label="Album actions" />
+									) : null}
+								</div>
+							</>
+						) : (
+							<>
+								<div className="grid gap-8 @xl:grid-cols-media @xl:items-end">
+									<AlbumArt
+										coverUrl={apiClient.getAlbumCoverUrl(album.id, 1024)}
+										title={album.title}
+										className="aspect-square w-full shrink-0 rounded-md shadow-lg text-3xl @xl:size-60 phone:size-56"
+									/>
+
+									<div className="flex min-w-0 flex-col">
+										<h1 className="break-words font-semibold text-page-title tracking-tight phone:text-2xl">
+											{album.title}
+										</h1>
+										<Link
+											to="/library/artists/$artistId"
+											params={{ artistId: album.artistId }}
+											className="mt-3 self-start font-medium text-base text-foreground hover:text-heading phone:mt-1 phone:flex phone:min-h-11 phone:items-center"
+										>
+											{artistName}
+										</Link>
+
+										{/* Release date under the artist, genres, track count and
+								    length last; all on the caption step. */}
+										<div className="mt-6 flex flex-col gap-2 text-caption text-sm">
+											{released ? <p>{released}</p> : null}
+											{genres.length > 0 ? (
+												<p title={genres.join(", ")}>
+													{genres.slice(0, MAX_GENRES).join(", ")}
+												</p>
+											) : null}
+											{size ? <p>{size}</p> : null}
+										</div>
+									</div>
+								</div>
+
+								{/* Actions under the cover, external links at the far right. */}
+								<div
+									ref={setActionRow}
+									className="mt-6 flex flex-wrap items-center gap-2"
+								>
+									<Button type="button" size="lg" onClick={onPlayAlbum}>
+										<Play className="size-4" />
+										Play
+									</Button>
+									{hideQueueEditing ? null : (
+										<Button
+											type="button"
+											size="lg"
+											variant="outline"
+											onClick={onQueueAlbum}
+										>
+											<SkipForward className="size-4" />
+											Queue album
+										</Button>
+									)}
+									{hideAlbumRadio ? null : (
+										<Button
+											type="button"
+											size="lg"
+											variant="outline"
+											disabled
+											title={ALBUM_RADIO_HINT}
+										>
+											<Disc3 className="size-4" />
+											Album radio
+										</Button>
+									)}
+									{showAlbumMenu ? (
+										<RowMenuButton label="Album actions" />
+									) : null}
+									<div className="ml-auto flex gap-2">
+										{externalLinks.map((link) => (
+											<ExternalLinkButton
+												key={link.id}
+												href={link.href}
+												name={link.name}
+												short={link.short}
+												iconSrc={link.iconSrc}
+												iconClassName={link.iconClassName}
+											/>
+										))}
+									</div>
+								</div>
+							</>
+						)}
 					</ContextMenuTrigger>
 					<ContextMenuContent>
-						{canDeleteAlbums && !hideAlbumDeletion ? (
+						{showAlbumMenu ? (
 							<ContextMenuItem
 								variant="destructive"
 								onClick={() => albumDeletion.open(album)}
