@@ -2,6 +2,8 @@
 status: accepted
 ---
 
+> [ADR 0042](0042-owner-sign-in-in-the-music-server.md) adds username and password sign-in in the Music Server, superseding the rejection of it below. The signing proxy stays as the alternative.
+
 # Owner access through a signing proxy
 
 Running the Music Server on a VPS leaves the Owner on the far side of an SSH tunnel for every use of the Web Client, and [ADR 0037](0037-listen-together-rooms-on-the-owners-music-server.md) left Owner sign-in to a later decision. This is that decision: the Owner's listener may answer one public host, and only with a token signed by the identity proxy the operator runs in front of it. Which proxy that is stays the operator's business, so nothing in the code names one.
