@@ -6,6 +6,7 @@ use crate::app::AppState;
 use crate::gojson;
 use crate::modules::library::{LibraryService, Track};
 use serde::Serialize;
+use std::collections::HashMap;
 
 pub const DEFAULT_FAVORITES_NAME: &str = "Favorites";
 
@@ -90,13 +91,21 @@ impl Service {
     ) -> Result<PlaylistDetail, ServiceError> {
         self.repo.ensure_default(user_id).await?;
         let playlist = self.repo.get(user_id, playlist_id).await?;
-        let mut tracks = Vec::new();
-        for track_id in self.repo.track_ids(playlist_id).await? {
-            // Hidden or removed Tracks are skipped, not errors.
-            if let Ok(track) = self.tracks.get_track(&track_id).await {
-                tracks.push(track);
-            }
-        }
+        let track_ids = self.repo.track_ids(playlist_id).await?;
+        // Hidden or removed Tracks are skipped, and a failed read leaves the
+        // list empty, as in Go; one read keeps the query count flat.
+        let found: HashMap<String, Track> = self
+            .tracks
+            .get_tracks(&track_ids)
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .map(|track| (track.id.clone(), track))
+            .collect();
+        let tracks = track_ids
+            .iter()
+            .filter_map(|track_id| found.get(track_id).cloned())
+            .collect();
         Ok(PlaylistDetail { playlist, tracks })
     }
 

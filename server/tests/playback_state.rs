@@ -2,7 +2,8 @@
 //! device Active, reports from it land, remote commands raise the revision,
 //! a stray report answers 409 with the state, and the queue event stream
 //! carries `playback-state` frames (ADR 0040). The queue reads past a held
-//! write lock, with as many queries for a long queue as for a short one.
+//! write lock, and the queue and a playlist take as many queries for many
+//! Tracks as for one.
 
 use axum::Router;
 use axum::body::{Body, BodyDataStream};
@@ -503,4 +504,68 @@ fn the_queue_takes_as_many_queries_for_many_tracks_as_for_one() {
     assert_eq!((put.len(), get.len()), (2, 2), "{requests:?}");
     assert_eq!(put[0], put[1], "PUT queries grow with the queue: {put:?}");
     assert_eq!(get[0], get[1], "GET queries grow with the queue: {get:?}");
+}
+
+#[test]
+fn a_playlist_takes_as_many_queries_for_many_tracks_as_for_one() {
+    let requests = database_spans_per_request(async {
+        let harness = harness().await;
+        let mut tracks = vec![TRACK.to_owned()];
+        for n in 1..20 {
+            let id = format!("t{n}");
+            sqlx::query(
+                "INSERT INTO tracks (id, album_id, title, title_sort, artist_name, format, file_path)
+                 VALUES (?1, 'al', 'T', 't', 'A', 'flac', '/' || ?1 || '.flac')",
+            )
+            .bind(&id)
+            .execute(&harness.pool)
+            .await
+            .unwrap();
+            tracks.push(id);
+        }
+        for (name, track_ids) in [("One", &tracks[..1]), ("Many", &tracks[..])] {
+            let (status, playlist) = send(
+                &harness.owner,
+                request(
+                    Method::POST,
+                    "/api/v1/playlists",
+                    Some(json!({ "name": name })),
+                ),
+            )
+            .await;
+            assert_eq!(status, StatusCode::CREATED, "{playlist}");
+            let path = format!("/api/v1/playlists/{}", playlist["id"].as_str().unwrap());
+            for track_id in track_ids {
+                let (status, _) = send(
+                    &harness.owner,
+                    request(
+                        Method::POST,
+                        &format!("{path}/tracks"),
+                        Some(json!({ "trackId": track_id })),
+                    ),
+                )
+                .await;
+                assert_eq!(status, StatusCode::OK);
+            }
+            let (status, detail) = send(&harness.owner, request(Method::GET, &path, None)).await;
+            assert_eq!(status, StatusCode::OK);
+            let ids: Vec<&str> = detail["tracks"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|track| track["id"].as_str().unwrap())
+                .collect();
+            assert_eq!(ids, *track_ids, "Tracks keep the playlist's order");
+        }
+    });
+    let get: Vec<usize> = requests
+        .iter()
+        .filter(|(request, _)| request == "GET /api/v1/playlists/{playlist_id}")
+        .map(|(_, spans)| *spans)
+        .collect();
+    assert_eq!(get.len(), 2, "{requests:?}");
+    assert_eq!(
+        get[0], get[1],
+        "playlist queries grow with its Tracks: {get:?}"
+    );
 }
