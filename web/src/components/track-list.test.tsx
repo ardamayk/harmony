@@ -405,6 +405,37 @@ describe("TrackList", () => {
 		}
 	});
 
+	it("puts a download button where the duration sits on the phone album list", () => {
+		vi.stubGlobal("matchMedia", () => ({
+			matches: true,
+			addEventListener: () => {},
+			removeEventListener: () => {},
+		}));
+		try {
+			const { container } = render(
+				<TrackList tracks={[sampleTrack]} albumId="a1" phoneDownloads />,
+			);
+			expect(container.querySelector("thead")?.className).toContain(
+				"phone:hidden",
+			);
+			expect(screen.getByText("3:32").className).toContain("phone:hidden");
+			fireEvent.click(
+				screen.getByRole("button", { name: `Download ${sampleTrack.title}` }),
+			);
+			expect(playTrack).not.toHaveBeenCalled();
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
+
+	it("keeps the header and duration and adds no download button by default", () => {
+		const { container } = render(<TrackList tracks={[sampleTrack]} />);
+		expect(container.querySelector("thead")?.className ?? "").not.toContain(
+			"phone:hidden",
+		);
+		expect(screen.queryByRole("button", { name: /^Download/ })).toBeNull();
+	});
+
 	it("starts the Queue at the selected Track so no earlier Track counts as played", () => {
 		const second = { ...sampleTrack, id: "t2", title: "Style" };
 		const third = { ...sampleTrack, id: "t3", title: "Blank Space" };

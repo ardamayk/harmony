@@ -78,6 +78,7 @@ export function AlbumDetailContent({ albumId }: { albumId: string }) {
 					showFavorite
 					showMeta
 					compact
+					phoneDownloads
 					playCounts={playCounts}
 				/>
 			</section>

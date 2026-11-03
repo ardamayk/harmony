@@ -11,6 +11,7 @@ import {
 import { useHiddenFromGuest } from "@repo/ui/guest-access";
 import {
 	Clock,
+	Download,
 	Heart,
 	Info,
 	ListMinus,
@@ -70,6 +71,7 @@ export function TrackList({
 	onReplaceTrackSuccess,
 	removeLabel = "Remove",
 	playCounts,
+	phoneDownloads = false,
 }: {
 	tracks: Track[];
 	contextTracks?: Track[];
@@ -87,6 +89,11 @@ export function TrackList({
 	removeLabel?: string;
 	/** Last.fm play counts by Track id; the column shows only when there are any. */
 	playCounts?: Map<string, number>;
+	/**
+	 * On the phone: no header row, and a download button where the duration
+	 * sits. Downloads are not built yet, so the button only says so.
+	 */
+	phoneDownloads?: boolean;
 }) {
 	const {
 		playTrack,
@@ -161,7 +168,9 @@ export function TrackList({
 	const titlePhoneClass = shouldShowAlbumCover
 		? "phone:pr-2 phone:pl-0"
 		: "phone:px-2";
-	const durationPhoneClass = "phone:w-12 phone:px-0";
+	const durationPhoneClass = phoneDownloads
+		? "phone:hidden"
+		: "phone:w-12 phone:px-0";
 
 	return (
 		<>
@@ -170,7 +179,7 @@ export function TrackList({
 				tabIndex={-1}
 				className="w-full text-sm outline-none phone:table-fixed"
 			>
-				<thead>
+				<thead className={cn(phoneDownloads && "phone:hidden")}>
 					<tr className="border-border border-b text-left text-caption text-xs">
 						<th
 							className={cn("w-10 font-medium", rowPadding, numberPhoneClass)}
@@ -209,6 +218,11 @@ export function TrackList({
 							>
 								<span className="sr-only">Favorite</span>
 								<Heart className="mx-auto size-3.5" />
+							</th>
+						) : null}
+						{phoneDownloads ? (
+							<th className="hidden w-11 p-0 phone:table-cell">
+								<span className="sr-only">Download</span>
 							</th>
 						) : null}
 						<th className="hidden w-11 p-0 phone:table-cell">
@@ -365,7 +379,24 @@ export function TrackList({
 											</Button>
 										</td>
 									) : null}
-									<td className="hidden p-0 text-right phone:table-cell">
+									{phoneDownloads ? (
+										<td className="hidden w-11 p-0 text-right phone:table-cell">
+											<Button
+												type="button"
+												variant="ghost"
+												size="icon-sm"
+												aria-label={`Download ${track.title}`}
+												title="Download"
+												onClick={(event) => {
+													event.stopPropagation();
+													toast.info("Downloads are not available yet");
+												}}
+											>
+												<Download className="size-4" />
+											</Button>
+										</td>
+									) : null}
+									<td className="hidden w-11 p-0 text-right phone:table-cell">
 										<RowMenuButton label={`Actions for ${track.title}`} />
 									</td>
 								</ContextMenuTrigger>
