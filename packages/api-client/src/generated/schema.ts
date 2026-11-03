@@ -49,7 +49,7 @@ export interface paths {
         put?: never;
         /**
          * Sign in with a username and password
-         * @description Only when AUTH_USERNAME and AUTH_PASSWORD_HASH are configured (auth.session.v1; ADR 0042); otherwise 404 auth_disabled. Success sets the harmony_session cookie (HttpOnly, SameSite=Lax, Secure on https, 30 days, renewed while in use). Failed attempts slow down per client address and per username: after 5 failures each further attempt waits twice as long, up to 15 minutes, and answers 429 too_many_attempts with Retry-After until then. Accounts are never locked.
+         * @description Only when AUTH_USERNAME and AUTH_PASSWORD_HASH are configured (auth.session.v1; ADR 0042); otherwise 404 auth_disabled. Success sets the harmony_session cookie (HttpOnly, SameSite=Lax, Secure unless the request Host is loopback, 30 days, renewed while in use). Failed attempts slow down per client address and per username: after 5 failures each further attempt waits twice as long, up to 15 minutes, and answers 429 too_many_attempts with Retry-After until then. Accounts are never locked.
          */
         post: operations["login"];
         delete?: never;
@@ -69,7 +69,7 @@ export interface paths {
         put?: never;
         /**
          * End this session
-         * @description Deletes the session behind the harmony_session cookie and clears it. Answers 204 even without a session.
+         * @description Deletes the session behind the harmony_session cookie and clears it. Answers 204 even without a session, so it needs no credentials.
          */
         post: operations["logout"];
         delete?: never;

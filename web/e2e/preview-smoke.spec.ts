@@ -21,6 +21,8 @@ test("signs in to a preview deployment and signs out again", async ({
 		await page.evaluate(async () => (await fetch("/api/v1/me")).status),
 	).toBe(200);
 
+	// Sign out lives in Settings → Account.
+	await page.goto("/settings");
 	await page.getByRole("button", { name: "Sign out", exact: true }).click();
 
 	await expect(
