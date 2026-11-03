@@ -134,7 +134,13 @@ impl Auth {
                 self.attempts.lock().expect("attempts lock").succeed(client);
                 Ok(user.id)
             }
-            None => Err(AuthError::InvalidCredentials),
+            None => {
+                self.attempts
+                    .lock()
+                    .expect("attempts lock")
+                    .fail(client, Instant::now());
+                Err(AuthError::InvalidCredentials)
+            }
         }
     }
 
