@@ -1,3 +1,4 @@
+import ky from "ky";
 import type { components, operations } from "./generated/schema";
 import {
 	type QueueEvent,
@@ -73,6 +74,11 @@ export type ApiClientConfig = {
 	 * runs), off otherwise.
 	 */
 	validateResponses?: boolean;
+	/**
+	 * Called on a 401 that asks for sign-in (auth.session.v1; ADR 0042), so
+	 * the client can show its sign-in screen wherever the session ended.
+	 */
+	onUnauthenticated?: () => void;
 };
 
 type Schemas = components["schemas"];
@@ -143,6 +149,7 @@ export type QueueItemSource = Schemas["QueueItemSource"];
 export type QueueItem = Omit<WireQueueItem, "track"> & { track: Track };
 export type Queue = Omit<WireQueue, "items"> & { items: QueueItem[] };
 export type ErrorResponse = Schemas["ErrorResponse"];
+export type LoginRequest = Schemas["LoginRequest"];
 export type ManagedImportJob = Schemas["ManagedImportJob"];
 export type ManagedImportAlbumDecision = Schemas["ManagedImportAlbumDecision"];
 export type ManagedImportAlbumPreview = Schemas["ManagedImportAlbumPreview"];
@@ -191,11 +198,16 @@ export class ApiError extends Error {
 	constructor(
 		public readonly status: number,
 		public readonly body: ErrorResponse | QueueConflictResponse,
+		/** From Retry-After, as on 429 too_many_attempts. */
+		public readonly retryAfterSeconds?: number,
 	) {
 		super(body.message);
 		this.name = "ApiError";
 	}
 }
+
+/** Codes a 401 carries when the Music Server wants this client signed in. */
+const SIGN_IN_CODES = new Set(["unauthenticated", "invalid_credentials"]);
 
 export type ListParams = NonNullable<
 	operations["listAlbums"]["parameters"]["query"]
@@ -300,6 +312,19 @@ function normalizeApiErrorBody(
 	return body;
 }
 
+/**
+ * fetch with ky's retries: a request that hits a dropped connection (a
+ * tunnel, a dead zone) is tried again, for the idempotent methods only. HTTP
+ * errors come back as responses, so `request` still reads their bodies.
+ */
+const retryingFetch: typeof fetch = (input, init) =>
+	ky(input, {
+		...init,
+		// Library scans and imports can take longer than ky's 10 s default.
+		timeout: false,
+		throwHttpErrors: false,
+	});
+
 export function createApiClient(config: ApiClientConfig) {
 	const {
 		baseUrl,
@@ -307,12 +332,21 @@ export function createApiClient(config: ApiClientConfig) {
 		streamBaseUrl = mediaBaseUrl,
 		queueEventsBaseUrl = baseUrl,
 		getToken,
-		transport = globalThis.fetch,
-		eventSourceFactory = (url) => new EventSource(url) as QueueEventSource,
+		transport = retryingFetch,
+		// A Web Client on another origin (VITE_API_URL) still sends the
+		// session cookie; same-origin requests behave as before.
+		eventSourceFactory = (url) =>
+			new EventSource(url, { withCredentials: true }) as QueueEventSource,
 		queueEventSubscriber,
 		roomEventsMode = getToken ? "poll" : "stream",
 		validateResponses = isDevelopmentBuild(),
+		onUnauthenticated,
 	} = config;
+	function noticeUnauthenticated(status: number, body?: ErrorResponse) {
+		if (status === 401 && body && SIGN_IN_CODES.has(body.code)) {
+			onUnauthenticated?.();
+		}
+	}
 	const getMediaBaseUrl = () =>
 		typeof mediaBaseUrl === "function" ? mediaBaseUrl() : mediaBaseUrl;
 	const getStreamBaseUrl = () =>
@@ -370,6 +404,7 @@ export function createApiClient(config: ApiClientConfig) {
 				signal?.removeEventListener("abort", handleSignalAbort);
 			const handleSignalAbort = () => upload.abort();
 			upload.open("PUT", `${baseUrl}/api/v1/imports/${importId}/file`);
+			upload.withCredentials = true;
 			upload.responseType = "json";
 			upload.setRequestHeader("Accept", "application/json");
 			upload.setRequestHeader(
@@ -409,6 +444,7 @@ export function createApiClient(config: ApiClientConfig) {
 					return;
 				}
 				const body = upload.response as ErrorResponse | undefined;
+				noticeUnauthenticated(upload.status, body ?? undefined);
 				reject(
 					body
 						? new ApiError(upload.status, body)
@@ -513,6 +549,7 @@ export function createApiClient(config: ApiClientConfig) {
 		}
 
 		const response = await transport(`${baseUrl}${path}`, {
+			credentials: "include",
 			...init,
 			headers,
 		});
@@ -525,7 +562,13 @@ export function createApiClient(config: ApiClientConfig) {
 					message: response.statusText,
 				}))) as ErrorResponse | Schemas["QueueConflictResponse"],
 			);
-			throw new ApiError(response.status, body);
+			noticeUnauthenticated(response.status, body);
+			const retryAfter = Number(response.headers.get("Retry-After"));
+			throw new ApiError(
+				response.status,
+				body,
+				retryAfter > 0 ? retryAfter : undefined,
+			);
 		}
 
 		if (response.status === 204) {
@@ -542,6 +585,13 @@ export function createApiClient(config: ApiClientConfig) {
 	return {
 		getHealth: () => request<HealthResponse>("getHealth", "/api/v1/health"),
 		getMe: () => request<User>("getMe", "/api/v1/me"),
+		login: (body: LoginRequest) =>
+			request<void>("login", "/api/v1/auth/login", {
+				method: "POST",
+				body: JSON.stringify(body),
+			}),
+		logout: () =>
+			request<void>("logout", "/api/v1/auth/logout", { method: "POST" }),
 		getPreferences: () =>
 			request<UserPreferences>("getPreferences", "/api/v1/preferences"),
 		patchPreferences: (body: UserPreferencesPatch) =>
@@ -978,6 +1028,7 @@ export function createApiClient(config: ApiClientConfig) {
 				`${baseUrl}/api/v1/tracks/${trackId}/stream`,
 				{
 					method: "HEAD",
+					credentials: "include",
 					headers,
 				},
 			);

@@ -1,6 +1,6 @@
 use earthly_music_server::app::{self, AppState};
 use earthly_music_server::config::{self, Config};
-use earthly_music_server::{db, dependencies, observability};
+use earthly_music_server::{db, dependencies, modules, observability};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use tracing_subscriber::EnvFilter;
@@ -8,6 +8,9 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
 fn main() {
+    if std::env::args().nth(1).as_deref() == Some("hash-password") {
+        std::process::exit(hash_password());
+    }
     let config = Config::from_env().map_err(|error| format!("configuration failed: {error}"));
     // Sentry starts before the runtime and only with SENTRY_DSN (ADR 0033).
     let sentry = config
@@ -41,8 +44,33 @@ fn main() {
     }
 }
 
+/// `hash-password`: one line from stdin in, its `AUTH_PASSWORD_HASH` out.
+fn hash_password() -> i32 {
+    let mut line = String::new();
+    if let Err(error) = std::io::stdin().read_line(&mut line) {
+        eprintln!("read password: {error}");
+        return 1;
+    }
+    let password = line.strip_suffix('\n').unwrap_or(&line);
+    let password = password.strip_suffix('\r').unwrap_or(password);
+    if password.is_empty() {
+        eprintln!("usage: echo 'password' | earthly-music-server hash-password");
+        return 1;
+    }
+    match modules::auth::hash_password(password) {
+        Ok(hash) => {
+            println!("{hash}");
+            0
+        }
+        Err(error) => {
+            eprintln!("hash password: {error}");
+            1
+        }
+    }
+}
+
 async fn run(config: Config) -> Result<(), String> {
-    config::validate_server_address(&config.addr)
+    config::validate_server_address(&config.addr, config.auth.is_some())
         .map_err(|error| format!("unsafe server address: {error}"))?;
     let address = config::bind_address(&config.addr)
         .ok_or_else(|| format!("unsafe server address: {}", config.addr))?;
@@ -73,6 +101,12 @@ async fn run(config: Config) -> Result<(), String> {
     }
 
     let state = AppState::new(config, report, pool.clone());
+    if let Some(auth) = &state.auth {
+        auth.start()
+            .await
+            .map_err(|error| format!("sign-in setup failed: {error}"))?;
+        tracing::info!("sign-in required: AUTH_USERNAME is set");
+    }
     if let Err(error) = state.managed_import.start().await {
         tracing::error!(%error, "Managed Import startup cleanup failed");
     }
@@ -92,7 +126,8 @@ async fn run(config: Config) -> Result<(), String> {
 }
 
 /// The Guest Listener's socket and router, when Listen Together is
-/// configured. Config has already checked that the address is loopback.
+/// configured. Config has already checked the address: loopback, or any
+/// address once sign-in is on (ADR 0042).
 fn guest_listener(
     state: &AppState,
 ) -> Result<Option<(tokio::net::TcpListener, axum::Router)>, String> {
@@ -131,14 +166,18 @@ async fn serve(
     router: axum::Router,
     state: AppState,
 ) -> Result<(), String> {
-    axum::serve(listener, router)
-        .with_graceful_shutdown(async move {
-            shutdown_signal().await;
-            // A Room's event streams would otherwise hold the shutdown open.
-            let _ = state.listen_together.close();
-        })
-        .await
-        .map_err(|error| format!("server error: {error}"))
+    // The peer address feeds sign-in's attempt limits.
+    axum::serve(
+        listener,
+        router.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .with_graceful_shutdown(async move {
+        shutdown_signal().await;
+        // A Room's event streams would otherwise hold the shutdown open.
+        let _ = state.listen_together.close();
+    })
+    .await
+    .map_err(|error| format!("server error: {error}"))
 }
 
 async fn shutdown_signal() {

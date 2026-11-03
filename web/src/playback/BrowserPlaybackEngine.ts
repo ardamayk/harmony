@@ -10,6 +10,8 @@ import { recordClientMetric } from "#/lib/client-metrics";
 
 export interface BrowserPlaybackMedia extends EventTarget {
 	currentTime: number;
+	/** Optional: MediaError-like; `code` 3 is MEDIA_ERR_DECODE. */
+	error?: { code: number } | null;
 	duration: number;
 	paused: boolean;
 	src: string;
@@ -85,9 +87,13 @@ const LOOP_WRAP_MIN_JUMP_SECONDS = 1;
 // How far an ended Track may replay while it waits for the next source.
 const ENDED_REPLAY_LIMIT_SECONDS = 1;
 
-const LIVE_RECONNECT_DELAYS_MS = [1000, 2000, 4000, 8000, 15000] as const;
-const LIVE_STALL_TIMEOUT_MS = 10000;
-const LIVE_STABILITY_RESET_MS = 30000;
+const RECONNECT_DELAYS_MS = [1000, 2000, 4000, 8000, 15000] as const;
+const STALL_TIMEOUT_MS = 10000;
+const STABILITY_RESET_MS = 30000;
+// About two minutes of backoff while the browser says it is online; a Track
+// that still fails then is broken, not out of signal.
+const TRACK_RECONNECT_ATTEMPT_LIMIT = 12;
+const MEDIA_ERR_DECODE = 3;
 
 let defaultHlsFactoryPromise: Promise<BrowserHlsFactory> | null = null;
 
@@ -128,7 +134,7 @@ export class BrowserPlaybackEngine implements PlaybackEngine {
 	private stabilityTimer: ReturnType<typeof setTimeout> | null = null;
 	private reconnectAttempt = 0;
 	private sourceRevision = 0;
-	private hasStartedLivePlayback = false;
+	private hasStartedPlayback = false;
 	private isReconnectAttemptRunning = false;
 	private readonly mediaSession: BrowserMediaSession | null;
 	private readonly isIos: boolean;
@@ -147,6 +153,7 @@ export class BrowserPlaybackEngine implements PlaybackEngine {
 		this.media.volume = this.state.volume;
 		if (this.isIos) declareAudioPlayback();
 		this.addMediaListeners();
+		globalThis.addEventListener?.("online", this.handleOnline);
 		this.registerMediaSessionHandlers();
 	}
 
@@ -177,9 +184,9 @@ export class BrowserPlaybackEngine implements PlaybackEngine {
 		if (!nextSource) return;
 
 		if (source) {
-			this.cancelLiveReconnect();
+			this.cancelReconnect();
 			this.sourceRevision += 1;
-			this.hasStartedLivePlayback = false;
+			this.hasStartedPlayback = false;
 			const startSeconds = trackStartSeconds(source);
 			this.update({
 				source,
@@ -231,14 +238,14 @@ export class BrowserPlaybackEngine implements PlaybackEngine {
 	}
 
 	pause() {
-		this.cancelLiveReconnect();
+		this.cancelReconnect();
 		this.sourceRevision += 1;
 		this.media.pause();
 		if (this.state.source) this.update({ status: "paused" });
 	}
 
 	stop() {
-		this.cancelLiveReconnect();
+		this.cancelReconnect();
 		this.sourceRevision += 1;
 		this.media.pause();
 		this.destroyHls();
@@ -305,11 +312,12 @@ export class BrowserPlaybackEngine implements PlaybackEngine {
 	}
 
 	destroy() {
-		this.cancelLiveReconnect();
+		this.cancelReconnect();
 		this.sourceRevision += 1;
 		this.media.pause();
 		this.destroyHls();
 		this.removeMediaListeners();
+		globalThis.removeEventListener?.("online", this.handleOnline);
 		this.unregisterMediaSessionHandlers();
 		this.media.removeAttribute("src");
 		this.media.load();
@@ -416,7 +424,9 @@ export class BrowserPlaybackEngine implements PlaybackEngine {
 	}
 
 	private readonly handleTimeUpdate = () => {
-		if (isLiveSource(this.state.source)) this.clearStallTimer();
+		this.clearStallTimer();
+		// A reload reports 0 before it seeks; keep the position to resume at.
+		if (this.state.status === "reconnecting") return;
 		const previousTime = this.lastMediaTime;
 		const currentTime = this.media.currentTime;
 		this.lastMediaTime = currentTime;
@@ -452,7 +462,7 @@ export class BrowserPlaybackEngine implements PlaybackEngine {
 	};
 	private readonly handlePlaying = () => {
 		this.clearStallTimer();
-		if (isLiveSource(this.state.source)) this.hasStartedLivePlayback = true;
+		this.hasStartedPlayback = true;
 		// iOS ignores handlers registered before the element is Now Playing.
 		if (this.isIos) this.registerMediaSessionHandlers();
 		// A wrap can rebuffer, and the replaying element is not a resumed Track.
@@ -464,7 +474,7 @@ export class BrowserPlaybackEngine implements PlaybackEngine {
 			this.stabilityTimer = setTimeout(() => {
 				this.stabilityTimer = null;
 				this.reconnectAttempt = 0;
-			}, LIVE_STABILITY_RESET_MS);
+			}, STABILITY_RESET_MS);
 		}
 	};
 	private readonly handlePause = () => {
@@ -497,8 +507,8 @@ export class BrowserPlaybackEngine implements PlaybackEngine {
 	}
 
 	private finishSource() {
-		if (isLiveSource(this.state.source) && this.hasStartedLivePlayback) {
-			this.scheduleLiveReconnect();
+		if (isLiveSource(this.state.source) && this.hasStartedPlayback) {
+			this.scheduleReconnect();
 			return;
 		}
 		if (this.state.stopAfterCurrent) {
@@ -525,10 +535,24 @@ export class BrowserPlaybackEngine implements PlaybackEngine {
 
 	private readonly handleMediaError = () => {
 		if (this.isReconnectAttemptRunning) return;
-		if (isLiveSource(this.state.source) && this.hasStartedLivePlayback) {
-			this.scheduleLiveReconnect();
+		// Once a source has played, a failure is the network dropping (a
+		// tunnel, a dead zone): retry until it returns instead of stopping.
+		// An undecodable Track fails the same way on every reload.
+		const isBrokenTrack =
+			!isLiveSource(this.state.source) &&
+			this.media.error?.code === MEDIA_ERR_DECODE;
+		if (
+			this.hasStartedPlayback &&
+			!isBrokenTrack &&
+			(this.state.status === "playing" || this.state.status === "reconnecting")
+		) {
+			this.scheduleReconnect();
 			return;
 		}
+		this.failPlayback();
+	};
+	private failPlayback() {
+		this.cancelReconnect();
 		this.update({
 			status: "error",
 			error: {
@@ -536,19 +560,28 @@ export class BrowserPlaybackEngine implements PlaybackEngine {
 				message: "Playback failed",
 			},
 		});
-	};
+	}
 	private readonly handleStalled = () => {
+		// A paused element stalls too, once it stops buffering; that is fine.
 		if (
 			this.stallTimer ||
-			!isLiveSource(this.state.source) ||
-			!this.hasStartedLivePlayback
+			!this.hasStartedPlayback ||
+			this.state.status !== "playing"
 		) {
 			return;
 		}
 		this.stallTimer = setTimeout(() => {
 			this.stallTimer = null;
-			this.scheduleLiveReconnect();
-		}, LIVE_STALL_TIMEOUT_MS);
+			if (this.state.status === "playing") this.scheduleReconnect();
+		}, STALL_TIMEOUT_MS);
+	};
+	private readonly handleOnline = () => {
+		const source = this.state.source;
+		if (!this.reconnectTimer || !source) return;
+		// The network is back: skip the rest of the backoff wait.
+		clearTimeout(this.reconnectTimer);
+		this.reconnectTimer = null;
+		void this.reconnectSource(source, this.sourceRevision);
 	};
 
 	private addMediaListeners() {
@@ -622,31 +655,41 @@ export class BrowserPlaybackEngine implements PlaybackEngine {
 		this.hls = null;
 	}
 
-	private scheduleLiveReconnect() {
+	private scheduleReconnect() {
 		if (
 			this.reconnectTimer ||
 			this.isReconnectAttemptRunning ||
-			!isLiveSource(this.state.source)
+			!this.state.source
 		) {
+			return;
+		}
+		// Offline time does not count toward the limit: wait at the longest
+		// delay, and the `online` event retries at once.
+		const isOffline = globalThis.navigator?.onLine === false;
+		if (
+			!isLiveSource(this.state.source) &&
+			!isOffline &&
+			this.reconnectAttempt >= TRACK_RECONNECT_ATTEMPT_LIMIT
+		) {
+			this.failPlayback();
 			return;
 		}
 		this.clearStabilityTimer();
 		const source = this.state.source;
 		const sourceRevision = this.sourceRevision;
-		const delayIndex = Math.min(
-			this.reconnectAttempt,
-			LIVE_RECONNECT_DELAYS_MS.length - 1,
-		);
-		const delay = LIVE_RECONNECT_DELAYS_MS[delayIndex];
-		this.reconnectAttempt += 1;
+		const delayIndex = isOffline
+			? RECONNECT_DELAYS_MS.length - 1
+			: Math.min(this.reconnectAttempt, RECONNECT_DELAYS_MS.length - 1);
+		const delay = RECONNECT_DELAYS_MS[delayIndex];
+		if (!isOffline) this.reconnectAttempt += 1;
 		this.update({ status: "reconnecting", error: null });
 		this.reconnectTimer = setTimeout(() => {
 			this.reconnectTimer = null;
-			void this.reconnectLiveSource(source, sourceRevision);
+			void this.reconnectSource(source, sourceRevision);
 		}, delay);
 	}
 
-	private async reconnectLiveSource(
+	private async reconnectSource(
 		source: PlaybackSource,
 		sourceRevision: number,
 	) {
@@ -668,9 +711,13 @@ export class BrowserPlaybackEngine implements PlaybackEngine {
 			) {
 				return;
 			}
+			// A Track picks up where the network dropped it; live audio has
+			// no position to return to.
+			if (!isLiveSource(source))
+				this.media.currentTime = this.state.currentTime;
 			await this.media.play();
 		} catch (error) {
-			console.warn("Live playback reconnect attempt failed", {
+			console.warn("Playback reconnect attempt failed", {
 				sourceType: source.type,
 				attempt: this.reconnectAttempt,
 				errorType: error instanceof Error ? error.name : typeof error,
@@ -683,10 +730,10 @@ export class BrowserPlaybackEngine implements PlaybackEngine {
 		} finally {
 			this.isReconnectAttemptRunning = false;
 		}
-		if (shouldRetry) this.scheduleLiveReconnect();
+		if (shouldRetry) this.scheduleReconnect();
 	}
 
-	private cancelLiveReconnect() {
+	private cancelReconnect() {
 		if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
 		this.reconnectTimer = null;
 		this.clearStallTimer();

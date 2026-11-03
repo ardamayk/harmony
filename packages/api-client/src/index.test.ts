@@ -80,6 +80,38 @@ describe("Managed Import media contracts", () => {
 });
 
 describe("createApiClient", () => {
+	it("retries a read after a dropped connection but not a write, and returns HTTP errors", async () => {
+		const fetchMock = vi
+			.fn<typeof fetch>()
+			.mockRejectedValueOnce(new TypeError("Failed to fetch"))
+			.mockResolvedValueOnce(Response.json({ id: "user-1" }))
+			.mockRejectedValueOnce(new TypeError("Failed to fetch"))
+			.mockResolvedValueOnce(
+				Response.json(
+					{ error: "not_found", code: "not_found", message: "gone" },
+					{ status: 404 },
+				),
+			);
+		vi.stubGlobal("fetch", fetchMock);
+		try {
+			const client = createApiClient({
+				baseUrl: "http://music.test",
+				validateResponses: false,
+			});
+
+			await expect(client.getMe()).resolves.toEqual({ id: "user-1" });
+			expect(fetchMock).toHaveBeenCalledTimes(2);
+			await expect(client.patchPreferences({})).rejects.toThrow(
+				"network error",
+			);
+			expect(fetchMock).toHaveBeenCalledTimes(3);
+			await expect(client.getMe()).rejects.toMatchObject({ status: 404 });
+			expect(fetchMock).toHaveBeenCalledTimes(4);
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
+
 	it("keeps Library Search total optional and expands only on request", async () => {
 		type SearchResponse = components["schemas"]["LibrarySearchResponse"];
 		expectTypeOf<SearchResponse["total"]>().toEqualTypeOf<number | undefined>();
@@ -1126,6 +1158,63 @@ describe("createApiClient", () => {
 				body: conflict,
 			});
 		}
+	});
+});
+
+describe("sign-in", () => {
+	const error = (status: number, code: string, headers?: HeadersInit) =>
+		Response.json({ error: code, code, message: code }, { status, headers });
+
+	it("posts the credentials and reports the Retry-After of a 429", async () => {
+		const transport = vi
+			.fn<typeof fetch>()
+			.mockResolvedValueOnce(new Response(null, { status: 204 }))
+			.mockResolvedValueOnce(
+				error(429, "too_many_attempts", { "Retry-After": "120" }),
+			);
+		const client = createApiClient({ baseUrl: "http://music.test", transport });
+
+		await expect(
+			client.login({ username: "owner", password: "secret" }),
+		).resolves.toBeUndefined();
+		expect(transport).toHaveBeenCalledWith(
+			"http://music.test/api/v1/auth/login",
+			expect.objectContaining({
+				method: "POST",
+				// A Web Client on another origin (VITE_API_URL) keeps the cookie.
+				credentials: "include",
+				body: JSON.stringify({ username: "owner", password: "secret" }),
+			}),
+		);
+		await expect(
+			client.login({ username: "owner", password: "wrong" }),
+		).rejects.toMatchObject({ status: 429, retryAfterSeconds: 120 });
+	});
+
+	it("calls onUnauthenticated only for a 401 that asks for sign-in", async () => {
+		const onUnauthenticated = vi.fn();
+		const transport = vi
+			.fn<typeof fetch>()
+			.mockResolvedValueOnce(error(401, "unauthorized"))
+			.mockResolvedValueOnce(error(404, "not_found"))
+			.mockResolvedValueOnce(error(401, "unauthenticated"));
+		const client = createApiClient({
+			baseUrl: "http://music.test",
+			transport,
+			onUnauthenticated,
+		});
+
+		await expect(client.getPreferences()).rejects.toMatchObject({
+			status: 401,
+		});
+		await expect(client.getPreferences()).rejects.toMatchObject({
+			status: 404,
+		});
+		expect(onUnauthenticated).not.toHaveBeenCalled();
+		await expect(client.getPreferences()).rejects.toMatchObject({
+			status: 401,
+		});
+		expect(onUnauthenticated).toHaveBeenCalledOnce();
 	});
 });
 

@@ -28,6 +28,11 @@ export const EXTERNAL_SOURCE_CAPABILITY = "external-source.v1";
  * operator configured GUEST_ADDR and PUBLIC_URL.
  */
 export const LISTEN_TOGETHER_CAPABILITY = "listen-together.v1";
+/**
+ * Username and password sign-in (ADR 0042); only advertised when the
+ * operator configured AUTH_USERNAME and AUTH_PASSWORD_HASH.
+ */
+export const AUTH_SESSION_CAPABILITY = "auth.session.v1";
 
 export type ServerCapabilities =
 	| HealthResponse

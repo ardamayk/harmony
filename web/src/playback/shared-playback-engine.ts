@@ -14,6 +14,15 @@ export function getSharedPlaybackEngine(
 	return sharedPlaybackEngine;
 }
 
+/**
+ * Stops what is playing, then disposes the engine. Disposing alone leaves
+ * the Desktop core's mpv playing, since it keeps background playback.
+ */
+export function stopSharedPlaybackEngine(): void {
+	sharedPlaybackEngine?.stop();
+	disposeSharedPlaybackEngine();
+}
+
 export function disposeSharedPlaybackEngine(): void {
 	sharedPlaybackEngine?.destroy();
 	sharedPlaybackEngine = null;

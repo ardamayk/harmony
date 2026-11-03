@@ -43,6 +43,9 @@ pub struct Config {
     /// The Owner's address behind a signing proxy, off unless all of its
     /// settings are set (ADR 0038).
     pub owner_access: Option<OwnerAccessConfig>,
+    /// Username and password sign-in, off unless `AUTH_USERNAME` and
+    /// `AUTH_PASSWORD_HASH` are both set (ADR 0042).
+    pub auth: Option<AuthConfig>,
     /// `LISTEN_TOGETHER_MAX_GUESTS`: at most this many Guests in a Room.
     pub listen_together_max_guests: usize,
     /// `LISTEN_TOGETHER_ROOM_HOURS`: how long a Room lasts.
@@ -52,7 +55,7 @@ pub struct Config {
 /// The Guest Listener and the public address that reaches it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ListenTogetherConfig {
-    /// The Guest Listener's loopback address.
+    /// The Guest Listener's address: loopback unless sign-in is on.
     pub guest_addr: String,
     /// `PUBLIC_URL`'s origin, such as `https://music.example.com`.
     pub public_origin: String,
@@ -96,6 +99,66 @@ impl OwnerAccessConfig {
         self.hosts
             .iter()
             .any(|accepted| accepted.eq_ignore_ascii_case(host))
+    }
+}
+
+/// The one user who may sign in, and whose forwarded addresses to believe.
+#[derive(Clone, PartialEq)]
+pub struct AuthConfig {
+    /// `AUTH_USERNAME`.
+    pub username: String,
+    /// `AUTH_PASSWORD_HASH`, an argon2id PHC string.
+    pub password_hash: String,
+    /// `TRUSTED_PROXIES`: peers whose `X-Forwarded-For` names the client.
+    pub trusted_proxies: Vec<IpNet>,
+}
+
+/// Leaves the password hash out of debug output.
+impl std::fmt::Debug for AuthConfig {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("AuthConfig")
+            .field("username", &self.username)
+            .field("password_hash", &"<set>")
+            .field("trusted_proxies", &self.trusted_proxies)
+            .finish()
+    }
+}
+
+/// An address or CIDR block from `TRUSTED_PROXIES`, such as `10.0.0.0/8`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct IpNet {
+    address: IpAddr,
+    prefix: u8,
+}
+
+impl IpNet {
+    pub fn parse(value: &str) -> Option<Self> {
+        let (address, prefix) = match value.split_once('/') {
+            Some((address, prefix)) => (address, Some(prefix)),
+            None => (value, None),
+        };
+        let address = address.parse::<IpAddr>().ok()?.to_canonical();
+        let bits = if address.is_ipv4() { 32 } else { 128 };
+        let prefix = match prefix {
+            Some(prefix) => prefix.parse::<u8>().ok().filter(|prefix| *prefix <= bits)?,
+            None => bits,
+        };
+        Some(Self { address, prefix })
+    }
+
+    pub fn contains(&self, address: IpAddr) -> bool {
+        // The network's bits only; a shift by the full width leaves nothing.
+        let network = |bits: u128, width: u32| bits.checked_shr(width - u32::from(self.prefix));
+        match (self.address, address.to_canonical()) {
+            (IpAddr::V4(net), IpAddr::V4(address)) => {
+                network(u32::from(net).into(), 32) == network(u32::from(address).into(), 32)
+            }
+            (IpAddr::V6(net), IpAddr::V6(address)) => {
+                network(net.into(), 128) == network(address.into(), 128)
+            }
+            _ => false,
+        }
     }
 }
 
@@ -198,7 +261,7 @@ pub enum ConfigError {
     #[error("invalid GUEST_ADDR {0:?}: {1}")]
     InvalidGuestAddress(String, String),
     #[error(
-        "GUEST_ADDR {0:?} must bind to a loopback address; a reverse proxy or tunnel carries Guests to it"
+        "GUEST_ADDR {0:?} must bind to a loopback address while sign-in is off; a reverse proxy or tunnel carries Guests to it"
     )]
     GuestAddressNotLoopback(String),
     #[error("GUEST_ADDR {0:?} must differ from SERVER_ADDR")]
@@ -217,6 +280,21 @@ pub enum ConfigError {
     InvalidOwnerJwtHeader(String),
     #[error("OWNER_JWKS_URL {0:?} must be an https URL, or http on loopback")]
     InvalidOwnerJwksUrl(String),
+    #[error("AUTH_USERNAME and AUTH_PASSWORD_HASH must be set together: {0} is missing")]
+    IncompleteAuth(&'static str),
+    #[error("AUTH_USERNAME {0:?} must be 1 to 256 characters without ':' or control characters")]
+    InvalidAuthUsername(String),
+    // The hash is a secret too, so the message does not repeat it.
+    #[error(
+        "AUTH_PASSWORD_HASH must be an argon2id PHC string ($argon2id$v=19$...); make one with `earthly-music-server hash-password`"
+    )]
+    InvalidAuthPasswordHash,
+    #[error(
+        "AUTH_USERNAME and AUTH_PASSWORD_HASH cannot be combined with {0}: choose sign-in or Owner access through a signing proxy"
+    )]
+    AuthWithOwnerAccess(&'static str),
+    #[error("TRUSTED_PROXIES item {0:?} must be an IP address or CIDR block such as 10.0.0.0/8")]
+    InvalidTrustedProxy(String),
     #[error("LISTEN_TOGETHER_MAX_GUESTS {0:?} must be a whole number from 1 to 8")]
     InvalidMaxGuests(String),
     #[error("LISTEN_TOGETHER_ROOM_HOURS {0:?} must be a whole number from 1 to 168")]
@@ -304,7 +382,8 @@ impl Config {
         };
         let sentry = sentry_config(&lookup)?;
         let addr = get("SERVER_ADDR", "127.0.0.1:8090");
-        let listen_together = listen_together_config(&lookup, &addr)?;
+        let auth = auth_config(&lookup)?;
+        let listen_together = listen_together_config(&lookup, &addr, auth.is_some())?;
         let owner_access = owner_access_config(&lookup, listen_together.as_ref())?;
         let listen_together_max_guests = max_guests(&lookup)?;
         let listen_together_room_hours = room_hours(&lookup)?;
@@ -364,6 +443,7 @@ impl Config {
             sentry,
             listen_together,
             owner_access,
+            auth,
             listen_together_max_guests,
             listen_together_room_hours,
         })
@@ -372,9 +452,13 @@ impl Config {
 
 /// Listen Together needs both a Guest Listener and the public address that
 /// reaches it; one without the other would produce a link nobody can open.
+/// With sign-in on, `GUEST_ADDR` may bind any address like `SERVER_ADDR`:
+/// in a container the reverse proxy cannot reach loopback, and the Guest
+/// Listener answers only `PUBLIC_URL`'s host and Guest routes anyway.
 fn listen_together_config(
     lookup: &impl Fn(&str) -> Option<String>,
     server_addr: &str,
+    sign_in: bool,
 ) -> Result<Option<ListenTogetherConfig>, ConfigError> {
     let value = |key: &str| {
         lookup(key)
@@ -387,12 +471,21 @@ fn listen_together_config(
         (None, Some(_)) => return Err(ConfigError::IncompleteListenTogether("GUEST_ADDR")),
         (Some(guest_addr), Some(public_url)) => (guest_addr, public_url),
     };
-    check_loopback(&guest_addr).map_err(|problem| match problem {
-        AddressProblem::Invalid(reason) => {
-            ConfigError::InvalidGuestAddress(guest_addr.clone(), reason)
-        }
-        AddressProblem::NotLoopback => ConfigError::GuestAddressNotLoopback(guest_addr.clone()),
-    })?;
+    check_loopback(&guest_addr)
+        .map_err(|problem| match problem {
+            AddressProblem::Invalid(reason) => {
+                ConfigError::InvalidGuestAddress(guest_addr.clone(), reason)
+            }
+            AddressProblem::NotLoopback => ConfigError::GuestAddressNotLoopback(guest_addr.clone()),
+        })
+        .or_else(|error| match error {
+            ConfigError::GuestAddressNotLoopback(_)
+                if sign_in && bind_address(&guest_addr).is_some() =>
+            {
+                Ok(())
+            }
+            error => Err(error),
+        })?;
     if guest_addr.eq_ignore_ascii_case(server_addr)
         || bind_address(&guest_addr).is_some_and(|guest| bind_address(server_addr) == Some(guest))
     {
@@ -435,19 +528,69 @@ fn listen_together_config(
     }))
 }
 
+const OWNER_ACCESS_SETTINGS: [&str; 5] = [
+    "OWNER_PUBLIC_URL",
+    "OWNER_JWT_HEADER",
+    "OWNER_JWKS_URL",
+    "OWNER_JWT_ISSUER",
+    "OWNER_JWT_AUDIENCE",
+];
+
+/// Sign-in needs both its settings and replaces Owner access rather than
+/// joining it: one way in keeps the trust rules simple. `TRUSTED_PROXIES` is
+/// checked even while sign-in is off.
+fn auth_config(
+    lookup: &impl Fn(&str) -> Option<String>,
+) -> Result<Option<AuthConfig>, ConfigError> {
+    let value = |key: &str| {
+        lookup(key)
+            .map(|value| value.trim().to_owned())
+            .filter(|value| !value.is_empty())
+    };
+    let trusted_proxies = value("TRUSTED_PROXIES")
+        .unwrap_or_default()
+        .split(',')
+        .map(str::trim)
+        .filter(|item| !item.is_empty())
+        .map(|item| {
+            IpNet::parse(item).ok_or_else(|| ConfigError::InvalidTrustedProxy(item.to_owned()))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let (username, password_hash) = match (value("AUTH_USERNAME"), value("AUTH_PASSWORD_HASH")) {
+        (None, None) => return Ok(None),
+        (Some(_), None) => return Err(ConfigError::IncompleteAuth("AUTH_PASSWORD_HASH")),
+        (None, Some(_)) => return Err(ConfigError::IncompleteAuth("AUTH_USERNAME")),
+        (Some(username), Some(hash)) => (username, hash),
+    };
+    if let Some(owner) = OWNER_ACCESS_SETTINGS
+        .into_iter()
+        .find(|key| value(key).is_some())
+    {
+        return Err(ConfigError::AuthWithOwnerAccess(owner));
+    }
+    // Basic splits its credentials at the first ':'.
+    if username.chars().count() > 256 || username.chars().any(|c| c == ':' || c.is_control()) {
+        return Err(ConfigError::InvalidAuthUsername(username));
+    }
+    let is_argon2id = argon2::PasswordHash::new(&password_hash)
+        .is_ok_and(|hash| hash.algorithm == argon2::ARGON2ID_IDENT && hash.hash.is_some());
+    if !is_argon2id {
+        return Err(ConfigError::InvalidAuthPasswordHash);
+    }
+    Ok(Some(AuthConfig {
+        username,
+        password_hash,
+        trusted_proxies,
+    }))
+}
+
 /// Opening the Owner's listener to a public host needs every setting: a host
 /// without a checked token in front of it would be the whole server, unprotected.
 fn owner_access_config(
     lookup: &impl Fn(&str) -> Option<String>,
     listen_together: Option<&ListenTogetherConfig>,
 ) -> Result<Option<OwnerAccessConfig>, ConfigError> {
-    const SETTINGS: [&str; 5] = [
-        "OWNER_PUBLIC_URL",
-        "OWNER_JWT_HEADER",
-        "OWNER_JWKS_URL",
-        "OWNER_JWT_ISSUER",
-        "OWNER_JWT_AUDIENCE",
-    ];
+    const SETTINGS: [&str; 5] = OWNER_ACCESS_SETTINGS;
     let values = SETTINGS.map(|key| {
         lookup(key)
             .map(|value| value.trim().to_owned())
@@ -622,12 +765,17 @@ fn is_search_prefix(value: &str) -> bool {
         && characters.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
 }
 
-/// The server has no authentication yet, so it only binds to loopback.
-pub fn validate_server_address(address: &str) -> Result<(), ConfigError> {
-    check_loopback(address).map_err(|problem| match problem {
-        AddressProblem::Invalid(reason) => ConfigError::InvalidAddress(address.to_owned(), reason),
-        AddressProblem::NotLoopback => ConfigError::NotLoopback(address.to_owned()),
-    })
+/// Without sign-in the server trusts whoever reaches it, so it only binds to
+/// loopback. With sign-in any address will do.
+pub fn validate_server_address(address: &str, sign_in: bool) -> Result<(), ConfigError> {
+    match check_loopback(address) {
+        Ok(()) => Ok(()),
+        Err(AddressProblem::Invalid(reason)) => {
+            Err(ConfigError::InvalidAddress(address.to_owned(), reason))
+        }
+        Err(AddressProblem::NotLoopback) if sign_in && bind_address(address).is_some() => Ok(()),
+        Err(AddressProblem::NotLoopback) => Err(ConfigError::NotLoopback(address.to_owned())),
+    }
 }
 
 enum AddressProblem {
@@ -1066,7 +1214,7 @@ mod tests {
             "[::1]:8090",
             "127.5.5.5:1",
         ] {
-            assert_eq!(validate_server_address(address), Ok(()), "{address}");
+            assert_eq!(validate_server_address(address, false), Ok(()), "{address}");
         }
         for address in [
             "0.0.0.0:8090",
@@ -1075,11 +1223,45 @@ mod tests {
             "nope",
             ":8090",
         ] {
-            assert!(validate_server_address(address).is_err(), "{address}");
+            assert!(
+                validate_server_address(address, false).is_err(),
+                "{address}"
+            );
+        }
+        // Sign-in lets the server bind any address, still a valid one.
+        for address in ["0.0.0.0:8090", "[::]:8090", "192.168.1.2:8090"] {
+            assert_eq!(validate_server_address(address, true), Ok(()), "{address}");
+        }
+        for address in ["example.com:80", "nope", ":8090"] {
+            assert!(validate_server_address(address, true).is_err(), "{address}");
         }
         assert_eq!(
             bind_address("localhost:8090"),
             Some("127.0.0.1:8090".parse().expect("socket address"))
+        );
+    }
+
+    #[test]
+    fn trusted_proxies_are_addresses_or_cidr_blocks() {
+        let net = |value| IpNet::parse(value).expect(value);
+        let ip = |value: &str| value.parse::<IpAddr>().expect("address");
+        assert!(net("10.0.0.0/8").contains(ip("10.200.3.4")));
+        assert!(!net("10.0.0.0/8").contains(ip("11.0.0.1")));
+        assert!(net("172.18.0.0/16").contains(ip("::ffff:172.18.0.5")));
+        assert!(net("192.168.1.7").contains(ip("192.168.1.7")));
+        assert!(!net("192.168.1.7").contains(ip("192.168.1.8")));
+        assert!(net("0.0.0.0/0").contains(ip("8.8.8.8")));
+        assert!(!net("0.0.0.0/0").contains(ip("::1")));
+        assert!(net("fd00::/8").contains(ip("fd12::1")));
+        assert!(net("::/0").contains(ip("2001:db8::1")));
+        for invalid in ["10.0.0.0/33", "::/129", "10.0.0", "proxy", "10.0.0.0/"] {
+            assert_eq!(IpNet::parse(invalid), None, "{invalid}");
+        }
+        let on = config(&[("TRUSTED_PROXIES", " 10.0.0.0/8, ::1 ")]);
+        assert!(on.is_ok());
+        assert_eq!(
+            config(&[("TRUSTED_PROXIES", "10.0.0.0/8,traefik")]).err(),
+            Some(ConfigError::InvalidTrustedProxy("traefik".to_owned()))
         );
     }
 
@@ -1130,6 +1312,30 @@ mod tests {
                 Err(ConfigError::GuestAddressIsServerAddress(address.to_owned()))
             );
         }
+    }
+
+    #[test]
+    fn with_sign_in_on_the_guest_address_may_bind_any_address() {
+        let signed_in = |guest_addr| {
+            config(&[
+                ("GUEST_ADDR", guest_addr),
+                ("PUBLIC_URL", "https://listen.example.com"),
+                ("SERVER_ADDR", "0.0.0.0:8090"),
+                ("AUTH_USERNAME", "owner"),
+                ("AUTH_PASSWORD_HASH", "$argon2id$v=19$m=19456,t=2,p=1$mIcd8xlG+pG8nZT24EVUTA$1RZAlejBqFT2iCz+Kp4Z4gW54hoA3Fq8tlN83rMWI9s"),
+            ])
+            .map(|config| config.listen_together.map(|guest| guest.guest_addr))
+        };
+        assert_eq!(
+            signed_in("0.0.0.0:8091"),
+            Ok(Some("0.0.0.0:8091".to_owned()))
+        );
+        assert_eq!(
+            signed_in("0.0.0.0:8090"),
+            Err(ConfigError::GuestAddressIsServerAddress(
+                "0.0.0.0:8090".to_owned()
+            ))
+        );
     }
 
     #[test]

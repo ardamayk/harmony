@@ -3,8 +3,10 @@
 use crate::app::AppState;
 use crate::auth;
 use crate::dependencies::{self, Dependency};
-use axum::Json;
+use crate::modules;
+use crate::respond::{ApiError, ApiResult};
 use axum::extract::State;
+use axum::{Extension, Json};
 use serde::Serialize;
 
 /// The named behaviors this release advertises to separately released
@@ -33,10 +35,15 @@ pub const EXTERNAL_SOURCE_CAPABILITY: &str = "external-source.v1";
 /// (ADR 0037).
 pub const LISTEN_TOGETHER_CAPABILITY: &str = "listen-together.v1";
 
+/// Advertised only when `AUTH_USERNAME` and `AUTH_PASSWORD_HASH` turn sign-in
+/// on (ADR 0042).
+pub const AUTH_SESSION_CAPABILITY: &str = "auth.session.v1";
+
 pub fn server_capabilities(
     report: &dependencies::Report,
     external_source: bool,
     listen_together: bool,
+    sign_in: bool,
 ) -> Vec<String> {
     let mut capabilities: Vec<String> = SERVER_CAPABILITIES
         .iter()
@@ -50,6 +57,9 @@ pub fn server_capabilities(
     }
     if listen_together {
         capabilities.push(LISTEN_TOGETHER_CAPABILITY.to_owned());
+    }
+    if sign_in {
+        capabilities.push(AUTH_SESSION_CAPABILITY.to_owned());
     }
     capabilities
 }
@@ -91,6 +101,7 @@ pub async fn get_health(State(state): State<AppState>) -> Json<HealthResponse> {
             &state.dependencies,
             external_source_enabled,
             state.config.listen_together.is_some(),
+            state.auth.is_some(),
         ),
         dependencies: state.dependencies.0.clone(),
         external_source: state
@@ -119,19 +130,34 @@ pub async fn get_guest_health(State(state): State<AppState>) -> Json<HealthRespo
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UserResponse {
-    id: &'static str,
-    username: &'static str,
-    #[serde(skip_serializing_if = "str::is_empty")]
-    display_name: &'static str,
+    id: String,
+    username: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    display_name: String,
 }
 
-pub async fn get_me() -> Json<UserResponse> {
+/// With sign-in, the signed-in user as stored; without it, the default user.
+pub async fn get_me(
+    State(state): State<AppState>,
+    signed_in: Option<Extension<modules::auth::SignedIn>>,
+) -> ApiResult<Json<UserResponse>> {
+    if let (Some(auth), Some(Extension(signed_in))) = (&state.auth, signed_in) {
+        let user = auth
+            .user(&signed_in.user_id)
+            .await?
+            .ok_or_else(|| ApiError::internal("signed-in user is missing"))?;
+        return Ok(Json(UserResponse {
+            id: user.id,
+            username: user.username,
+            display_name: String::new(),
+        }));
+    }
     let user = auth::current_user();
-    Json(UserResponse {
-        id: user.id,
-        username: user.username,
-        display_name: user.display_name,
-    })
+    Ok(Json(UserResponse {
+        id: user.id.to_owned(),
+        username: user.username.to_owned(),
+        display_name: user.display_name.to_owned(),
+    }))
 }
 
 #[cfg(test)]
@@ -143,7 +169,8 @@ mod tests {
     /// Listener's gate refuses both routes (see `listen_together::gate`).
     #[test]
     fn the_shared_session_capability_stays_away_from_guests() {
-        let capabilities = server_capabilities(&dependencies::Report(Vec::new()), false, false);
+        let capabilities =
+            server_capabilities(&dependencies::Report(Vec::new()), false, false, false);
         assert!(capabilities.contains(&"playback.shared-session.v1".to_owned()));
         let guests = guest_capabilities(&dependencies::Report(Vec::new()));
         assert!(!guests.contains(&"playback.shared-session.v1".to_owned()));

@@ -14,6 +14,7 @@ import {
 
 class MemoryMedia extends EventTarget implements BrowserPlaybackMedia {
 	buffered?: BrowserPlaybackMedia["buffered"];
+	error: BrowserPlaybackMedia["error"] = null;
 	currentTime = 0;
 	duration = 0;
 	loop = false;
@@ -465,6 +466,118 @@ describe("BrowserPlaybackEngine", () => {
 		engine.destroy();
 	});
 
+	it("reconnects a started Track after a network failure and resumes its position", async () => {
+		vi.useFakeTimers();
+		const engine = new BrowserPlaybackEngine({
+			createMedia: () => media,
+			mediaSession: null,
+		});
+		await engine.play(trackSource);
+		media.currentTime = 42;
+		media.dispatchEvent(new Event("timeupdate"));
+
+		media.paused = true;
+		media.dispatchEvent(new Event("error"));
+		expect(engine.getState().status).toBe("reconnecting");
+		// The reload reports the element's reset playhead before it seeks.
+		media.currentTime = 0;
+		media.dispatchEvent(new Event("timeupdate"));
+		await vi.advanceTimersByTimeAsync(1000);
+
+		expect(media.play).toHaveBeenCalledTimes(2);
+		expect(media.currentTime).toBe(42);
+		expect(engine.getState()).toMatchObject({
+			status: "playing",
+			currentTime: 42,
+			error: null,
+		});
+		engine.destroy();
+	});
+
+	it("retries at once when the browser comes back online", async () => {
+		vi.useFakeTimers();
+		const engine = new BrowserPlaybackEngine({
+			createMedia: () => media,
+			mediaSession: null,
+		});
+		await engine.play(trackSource);
+		media.paused = true;
+		media.dispatchEvent(new Event("error"));
+
+		window.dispatchEvent(new Event("online"));
+		await vi.advanceTimersByTimeAsync(0);
+
+		expect(media.play).toHaveBeenCalledTimes(2);
+		expect(engine.getState().status).toBe("playing");
+		engine.destroy();
+	});
+
+	it("reports an undecodable Track instead of reconnecting", async () => {
+		const engine = new BrowserPlaybackEngine({
+			createMedia: () => media,
+			mediaSession: null,
+		});
+		await engine.play(trackSource);
+
+		media.error = { code: 3 };
+		media.dispatchEvent(new Event("error"));
+
+		expect(engine.getState()).toMatchObject({
+			status: "error",
+			error: { code: "playback-failed" },
+		});
+		engine.destroy();
+	});
+
+	it("gives up on a Track that keeps failing online, but waits while offline", async () => {
+		vi.useFakeTimers();
+		vi.spyOn(console, "warn").mockImplementation(() => undefined);
+		const online = vi.spyOn(navigator, "onLine", "get");
+		const engine = new BrowserPlaybackEngine({
+			createMedia: () => media,
+			mediaSession: null,
+		});
+		await engine.play(trackSource);
+		media.play.mockRejectedValue(new Error("stream gone"));
+
+		online.mockReturnValue(false);
+		media.dispatchEvent(new Event("error"));
+		await vi.advanceTimersByTimeAsync(600000);
+		expect(engine.getState().status).toBe("reconnecting");
+
+		// Back online, the Track still gets its full retry budget.
+		online.mockReturnValue(true);
+		window.dispatchEvent(new Event("online"));
+		await vi.advanceTimersByTimeAsync(60000);
+		expect(engine.getState().status).toBe("reconnecting");
+		await vi.advanceTimersByTimeAsync(120000);
+		expect(engine.getState()).toMatchObject({
+			status: "error",
+			error: { code: "playback-failed" },
+		});
+		const attempts = media.play.mock.calls.length;
+		await vi.advanceTimersByTimeAsync(60000);
+		expect(media.play).toHaveBeenCalledTimes(attempts);
+		engine.destroy();
+	});
+
+	it("leaves a paused Track alone when its download stalls", async () => {
+		vi.useFakeTimers();
+		const engine = new BrowserPlaybackEngine({
+			createMedia: () => media,
+			mediaSession: null,
+		});
+		await engine.play(trackSource);
+		engine.pause();
+
+		media.dispatchEvent(new Event("stalled"));
+		await vi.advanceTimersByTimeAsync(30000);
+
+		expect(engine.getState().status).toBe("paused");
+		expect(media.play).toHaveBeenCalledOnce();
+		engine.destroy();
+	});
+
 	it("caps persistent live reconnect backoff at fifteen seconds", async () => {
 		vi.useFakeTimers();
 		const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
@@ -484,15 +597,12 @@ describe("BrowserPlaybackEngine", () => {
 
 		expect(media.play).toHaveBeenCalledTimes(7);
 		expect(engine.getState().status).toBe("reconnecting");
-		expect(warn).toHaveBeenCalledWith(
-			"Live playback reconnect attempt failed",
-			{
-				sourceType: "catalog-preview",
-				attempt: expect.any(Number),
-				errorType: "Error",
-				errorMessage: "stream unavailable at [redacted-url]",
-			},
-		);
+		expect(warn).toHaveBeenCalledWith("Playback reconnect attempt failed", {
+			sourceType: "catalog-preview",
+			attempt: expect.any(Number),
+			errorType: "Error",
+			errorMessage: "stream unavailable at [redacted-url]",
+		});
 		engine.destroy();
 	});
 
