@@ -86,7 +86,9 @@ The Music Server reads its settings from environment variables only; it does not
 
 | Variable | Default | Meaning |
 |----------|---------|---------|
-| `SERVER_ADDR` | `127.0.0.1:8090` | Listen address. Must be a loopback address: the server has no authentication yet. |
+| `SERVER_ADDR` | `127.0.0.1:8090` | Listen address. Must be a loopback address unless sign-in is on. |
+| `AUTH_USERNAME`, `AUTH_PASSWORD_HASH` | none | Turn on the Music Server's own sign-in, together; the hash comes from `earthly-music-server hash-password` ([ADR 0042](docs/adr/0042-owner-sign-in-in-the-music-server.md)). |
+| `TRUSTED_PROXIES` | none | Addresses or CIDR ranges of reverse proxies whose `X-Forwarded-For` is believed. |
 | `DATABASE_PATH` | `./data/app.db` | SQLite database. |
 | `MANAGED_STORAGE_PATH` | `./data/managed` | Where imported music is kept. |
 | `MANAGED_STORAGE_RESERVE_BYTES` | 2 GiB | Free space an import must leave on the storage disk. |
@@ -136,6 +138,10 @@ docker compose up -d --build                  # your own build
 ```
 
 Open http://localhost:8090. The container uses the host's network and binds to `127.0.0.1:8090`, because the server accepts only loopback addresses. The database and imported music live in the `app-data` volume (`/data`); add any variable from [Configuration](#configuration) under `environment:`. The image has no yt-dlp; to use the External Source, install yours into the `app-data` volume, where updating the image leaves it, see [server/README.md](server/README.md#docker). Docker Compose runs only the Music Server; the Desktop Client runs on the host and connects to it.
+
+### Deploy with Dokploy
+
+To run the Music Server on [Dokploy](https://docs.dokploy.com/) with its own sign-in, a separate dev application and a preview for every pull request, follow [docs/deploy-dokploy.md](docs/deploy-dokploy.md).
 
 ### Back up and roll back
 

@@ -141,12 +141,20 @@ The Desktop Client's configured relationship to one Music Server URL. The initia
 _Avoid_: Server Profile, local server, offline library
 
 **Local-only Deployment**:
-A Music Server deployment bound to the local machine's loopback interface. The initial product does not authenticate Playback Clients and cannot be reached from other devices.
+A Music Server deployment bound to the local machine's loopback interface. It does not authenticate Playback Clients and cannot be reached from other devices.
 _Avoid_: LAN deployment, internet-ready deployment, trusted client identity
 
 **Guest Listener**:
 A second loopback address of a Music Server that exposes only what a Guest may use, and that an operator-chosen reverse proxy or tunnel carries to the internet over HTTPS.
 _Avoid_: Public music server, port forwarding, LAN deployment
+
+**Owner Sign-in**:
+The Music Server's own check of the Owner's username and password, which lets the Owner reach their Music Server from other devices without a signing proxy. A successful one starts an Owner Session.
+_Avoid_: Account, login provider, Guest join
+
+**Owner Session**:
+The record that one browser is signed in as the Owner, kept by the Music Server so that signing out ends it.
+_Avoid_: Playback Session, Guest session, token
 
 **Server Capability**:
 A named behavior advertised by a Music Server so a Playback Client can adapt when their release versions differ.

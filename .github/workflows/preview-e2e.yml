@@ -1,0 +1,119 @@
+name: Preview E2E
+
+# Signs in to the pull request's Dokploy preview deployment and out again
+# (docs/deploy-dokploy.md). Without previews set up it ends with a notice.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+
+concurrency:
+  group: preview-e2e-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  preview:
+    name: Preview deployment (sign in, sign out)
+    # Dokploy builds previews only for pull requests from this repository.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    # The Rust build on the Dokploy server is slow.
+    timeout-minutes: 45
+    steps:
+      - name: Wait for Dokploy's preview comment
+        id: preview
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          # GitHub's own time of this push or label, so a deployment that Dokploy
+          # finished before this job started still counts, and an older one never does.
+          SINCE: ${{ github.event.pull_request.updated_at }}
+        run: |
+          started=$(date +%s)
+          # Dokploy edits one comment per preview: "### Dokploy Preview Deployment"
+          # and a table row "| <app> | 🔄 Building / ✅ Done / ❌ Failed | [Preview URL](<url>) | <time> |".
+          while :; do
+            comment=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
+              --jq '.[] | select(.user.type == "Bot" and (.body | contains("Dokploy Preview Deployment")))' \
+              | jq -s --arg since "$SINCE" '[.[] | select(.updated_at >= $since)] | sort_by(.updated_at) | last // empty')
+            elapsed=$(( $(date +%s) - started ))
+            if [ -z "$comment" ]; then
+              if [ "$elapsed" -ge 600 ]; then
+                echo "::notice::No Dokploy preview deployment for this push within 10 minutes; skipping the preview test."
+                echo "found=false" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+              sleep 20
+              continue
+            fi
+            status=$(jq -r '.body | if contains("✅ Done") then "done" elif contains("❌ Failed") then "failed" else "building" end' <<<"$comment")
+            case "$status" in
+              done) break ;;
+              failed)
+                echo "::error::Dokploy reports that the preview deployment failed; see its build log in Dokploy."
+                exit 1
+                ;;
+            esac
+            if [ "$elapsed" -ge 2400 ]; then
+              echo "::error::The preview deployment did not finish within 40 minutes."
+              exit 1
+            fi
+            sleep 30
+          done
+          url=$(jq -r '.body | capture("\\[Preview URL\\]\\((?<url>[^)]+)\\)").url // empty' <<<"$comment")
+          if [ -z "$url" ]; then
+            echo "::error::Dokploy's comment has no preview URL."
+            exit 1
+          fi
+          # TLS ends at Cloudflare, so Dokploy's domain says http; the session
+          # cookie is Secure and needs https.
+          url="https://${url#*://}"
+          url="${url%/}"
+          echo "Preview: $url"
+          echo "found=true" >> "$GITHUB_OUTPUT"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for the preview's Music Server
+        if: steps.preview.outputs.found == 'true'
+        env:
+          PREVIEW_URL: ${{ steps.preview.outputs.url }}
+        run: |
+          for _ in $(seq 60); do
+            if curl -fsS --max-time 10 "$PREVIEW_URL/api/v1/health" \
+              | jq -e '.capabilities | index("auth.session.v1")' > /dev/null; then
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::$PREVIEW_URL/api/v1/health did not answer with auth.session.v1 within 10 minutes."
+          exit 1
+
+      - if: steps.preview.outputs.found == 'true'
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - if: steps.preview.outputs.found == 'true'
+        uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2
+      - if: steps.preview.outputs.found == 'true'
+        run: pnpm install --frozen-lockfile
+      - if: steps.preview.outputs.found == 'true'
+        run: cd web && pnpm exec playwright install chromium --with-deps
+      - name: Sign in and out on the preview
+        if: steps.preview.outputs.found == 'true'
+        env:
+          PREVIEW_URL: ${{ steps.preview.outputs.url }}
+          PREVIEW_USERNAME: ${{ secrets.PREVIEW_USERNAME }}
+          PREVIEW_PASSWORD: ${{ secrets.PREVIEW_PASSWORD }}
+        run: cd web && pnpm exec playwright test --config playwright.preview.config.ts
+      - if: failure() && steps.preview.outputs.found == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: preview-playwright-report
+          path: web/playwright-report
+          retention-days: 14
