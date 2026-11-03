@@ -61,6 +61,8 @@ In `harmony-dev` → Preview Deployments, enable them and set:
 - **Labels:** optional. With labels set, only pull requests carrying one of them get a preview.
 - **Preview limit:** the default of 3 previews at a time is enough.
 
+To keep `harmony-dev` and its previews out of sight, add basic auth in `harmony-dev` → Advanced → Security with the same username and password as the preview sign-in. Previews inherit it from their next deploy. Traefik checks it and removes the `Authorization` header before the Music Server sees it, so the browser asks twice: Traefik's dialog, then the Music Server's sign-in. The Desktop Client cannot connect to such a server, because its Basic header never reaches the Music Server.
+
 Then add the repository secrets `PREVIEW_USERNAME` and `PREVIEW_PASSWORD` (the preview password in clear text, not its hash) under Settings → Secrets and variables → Actions. The Preview E2E workflow waits for Dokploy's comment, signs in to the preview and signs out again. Until previews are set up it finds no comment and ends with a notice, so it never blocks a pull request.
 
 ## Networking
