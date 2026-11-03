@@ -37,6 +37,10 @@ run = [
 	"cd server && exec cargo run --quiet -p earthly-music-server",
 ]
 
+[tasks."seed:demo"]
+description = "Import the synthesized demo library into SEED_URL (SEED_USERNAME, SEED_PASSWORD; needs ffmpeg); skips Albums already there"
+run = "node --no-warnings scripts/seed-demo-library.ts"
+
 [tasks."desktop:dev"]
 description = "Run the development Desktop Client alone (debug core, Vite HMR) against a running Music Server"
 run = "bash scripts/desktop.sh dev"

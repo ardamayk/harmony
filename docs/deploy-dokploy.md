@@ -17,6 +17,8 @@ Production runs the image CI publishes, which exists only once CI has passed on 
 
 `harmony-dev` has no mount for `/data` on purpose. Each of its containers, and each preview's, gets a fresh anonymous volume from the Dockerfile's `VOLUME /data` and starts with an empty library. The consequence: **everything in `harmony-dev` and in a preview is thrown away on every redeploy**, imports included. Use them to try changes, never to keep music. Old anonymous volumes stay on disk until you remove them; `docker volume prune` deletes the unused ones.
 
+So there is something to play, CI imports a small demo library after each deploy: two Albums of synthesized melodies with covers and synced lyrics (`scripts/seed-demo-library.ts`). The Preview E2E workflow seeds the preview before its test; the Seed dev workflow waits for `harmony-dev` to come back empty after a push to `main`, then seeds it, and can be run by hand. From your machine: `SEED_URL=https://dev.aneomol.uk SEED_USERNAME=preview SEED_PASSWORD=… mise run seed:demo` (needs ffmpeg). Albums already there are skipped.
+
 ## Both applications
 
 1. Create the application in its environment. `harmony`: provider Docker, image `ghcr.io/ardamayk/harmony-server:main`. `harmony-dev`: provider GitHub, this repository, branch `main`, build type Dockerfile, Dockerfile path `server/Dockerfile`, build context the repository root; it builds the Rust Music Server and the Web Client on the Dokploy server, and the first build takes a long time.
