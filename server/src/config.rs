@@ -55,7 +55,7 @@ pub struct Config {
 /// The Guest Listener and the public address that reaches it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ListenTogetherConfig {
-    /// The Guest Listener's loopback address.
+    /// The Guest Listener's address: loopback unless sign-in is on.
     pub guest_addr: String,
     /// `PUBLIC_URL`'s origin, such as `https://music.example.com`.
     pub public_origin: String,
@@ -261,7 +261,7 @@ pub enum ConfigError {
     #[error("invalid GUEST_ADDR {0:?}: {1}")]
     InvalidGuestAddress(String, String),
     #[error(
-        "GUEST_ADDR {0:?} must bind to a loopback address; a reverse proxy or tunnel carries Guests to it"
+        "GUEST_ADDR {0:?} must bind to a loopback address while sign-in is off; a reverse proxy or tunnel carries Guests to it"
     )]
     GuestAddressNotLoopback(String),
     #[error("GUEST_ADDR {0:?} must differ from SERVER_ADDR")]
@@ -382,8 +382,8 @@ impl Config {
         };
         let sentry = sentry_config(&lookup)?;
         let addr = get("SERVER_ADDR", "127.0.0.1:8090");
-        let listen_together = listen_together_config(&lookup, &addr)?;
         let auth = auth_config(&lookup)?;
+        let listen_together = listen_together_config(&lookup, &addr, auth.is_some())?;
         let owner_access = owner_access_config(&lookup, listen_together.as_ref())?;
         let listen_together_max_guests = max_guests(&lookup)?;
         let listen_together_room_hours = room_hours(&lookup)?;
@@ -452,9 +452,13 @@ impl Config {
 
 /// Listen Together needs both a Guest Listener and the public address that
 /// reaches it; one without the other would produce a link nobody can open.
+/// With sign-in on, `GUEST_ADDR` may bind any address like `SERVER_ADDR`:
+/// in a container the reverse proxy cannot reach loopback, and the Guest
+/// Listener answers only `PUBLIC_URL`'s host and Guest routes anyway.
 fn listen_together_config(
     lookup: &impl Fn(&str) -> Option<String>,
     server_addr: &str,
+    sign_in: bool,
 ) -> Result<Option<ListenTogetherConfig>, ConfigError> {
     let value = |key: &str| {
         lookup(key)
@@ -467,12 +471,21 @@ fn listen_together_config(
         (None, Some(_)) => return Err(ConfigError::IncompleteListenTogether("GUEST_ADDR")),
         (Some(guest_addr), Some(public_url)) => (guest_addr, public_url),
     };
-    check_loopback(&guest_addr).map_err(|problem| match problem {
-        AddressProblem::Invalid(reason) => {
-            ConfigError::InvalidGuestAddress(guest_addr.clone(), reason)
-        }
-        AddressProblem::NotLoopback => ConfigError::GuestAddressNotLoopback(guest_addr.clone()),
-    })?;
+    check_loopback(&guest_addr)
+        .map_err(|problem| match problem {
+            AddressProblem::Invalid(reason) => {
+                ConfigError::InvalidGuestAddress(guest_addr.clone(), reason)
+            }
+            AddressProblem::NotLoopback => ConfigError::GuestAddressNotLoopback(guest_addr.clone()),
+        })
+        .or_else(|error| match error {
+            ConfigError::GuestAddressNotLoopback(_)
+                if sign_in && bind_address(&guest_addr).is_some() =>
+            {
+                Ok(())
+            }
+            error => Err(error),
+        })?;
     if guest_addr.eq_ignore_ascii_case(server_addr)
         || bind_address(&guest_addr).is_some_and(|guest| bind_address(server_addr) == Some(guest))
     {
@@ -1299,6 +1312,30 @@ mod tests {
                 Err(ConfigError::GuestAddressIsServerAddress(address.to_owned()))
             );
         }
+    }
+
+    #[test]
+    fn with_sign_in_on_the_guest_address_may_bind_any_address() {
+        let signed_in = |guest_addr| {
+            config(&[
+                ("GUEST_ADDR", guest_addr),
+                ("PUBLIC_URL", "https://listen.example.com"),
+                ("SERVER_ADDR", "0.0.0.0:8090"),
+                ("AUTH_USERNAME", "owner"),
+                ("AUTH_PASSWORD_HASH", "$argon2id$v=19$m=19456,t=2,p=1$mIcd8xlG+pG8nZT24EVUTA$1RZAlejBqFT2iCz+Kp4Z4gW54hoA3Fq8tlN83rMWI9s"),
+            ])
+            .map(|config| config.listen_together.map(|guest| guest.guest_addr))
+        };
+        assert_eq!(
+            signed_in("0.0.0.0:8091"),
+            Ok(Some("0.0.0.0:8091".to_owned()))
+        );
+        assert_eq!(
+            signed_in("0.0.0.0:8090"),
+            Err(ConfigError::GuestAddressIsServerAddress(
+                "0.0.0.0:8090".to_owned()
+            ))
+        );
     }
 
     #[test]
