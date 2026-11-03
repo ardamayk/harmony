@@ -365,6 +365,15 @@ export function createApiClient(config: ApiClientConfig) {
 			: createSharedQueueEventStream({
 					getBaseUrl: getQueueEventsBaseUrl,
 					eventSourceFactory,
+					// `request` reports a sign-in 401 through onUnauthenticated.
+					isSignedOut: () =>
+						request("getPlaybackQueue", "/api/v1/playback/queue").then(
+							() => false,
+							(error) =>
+								error instanceof ApiError &&
+								error.status === 401 &&
+								SIGN_IN_CODES.has(error.body.code),
+						),
 				});
 
 	function uploadManagedImportFile(

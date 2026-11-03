@@ -227,6 +227,39 @@ describe("subscribePlaybackState", () => {
 		unsubscribeQueue();
 		expect(source.closed).toBe(true);
 	});
+
+	it("stops reconnecting and asks for sign-in once the session has ended", async () => {
+		vi.useFakeTimers();
+		const onUnauthenticated = vi.fn();
+		const client = createApiClient({
+			baseUrl: "http://server",
+			transport: vi.fn(async () =>
+				jsonResponse(
+					{ error: "unauthorized", code: "unauthenticated", message: "x" },
+					401,
+				),
+			) as never,
+			eventSourceFactory: (url) => new FakeEventSource(url),
+			validateResponses: false,
+			onUnauthenticated,
+		});
+		const unsubscribe = client.subscribePlaybackState(() => undefined);
+		await vi.advanceTimersByTimeAsync(0);
+
+		// EventSource ends for good on a 401, hiding the status.
+		for (let attempt = 0; attempt < 5; attempt += 1) {
+			const source = FakeEventSource.instances.at(-1);
+			if (source && !source.closed && source.readyState !== 2) {
+				source.readyState = 2;
+				source.onerror?.(new Event("error"));
+			}
+			await vi.advanceTimersByTimeAsync(1000);
+		}
+
+		expect(FakeEventSource.instances).toHaveLength(1);
+		expect(onUnauthenticated).toHaveBeenCalledTimes(1);
+		unsubscribe();
+	});
 });
 
 describe("shared stream hub", () => {

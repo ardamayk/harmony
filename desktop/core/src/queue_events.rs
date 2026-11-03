@@ -1,4 +1,4 @@
-use crate::connection::{HttpBridge, ServerOrigin};
+use crate::connection::{ConnectionErrorCode, HttpBridge, ServerOrigin};
 use crate::shared_playback::SharedPlaybackSnapshot;
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
@@ -148,8 +148,9 @@ async fn run_queue_event_stream(
             continue;
         };
         if let Err(error) = bridge.test_server(&current_origin).await {
+            let refused = error.code == ConnectionErrorCode::AccessDenied;
             on_error(error.message);
-            if wait_to_reconnect(&mut reconnect).await {
+            if wait_to_reconnect(&mut reconnect, refused).await {
                 return;
             }
             continue;
@@ -157,6 +158,7 @@ async fn run_queue_event_stream(
         let response = bridge
             .open_queue_event_stream(&current_origin, last_event_id.as_deref())
             .await;
+        let mut refused = false;
         match response {
             Ok(response) => {
                 if consume_queue_event_stream(
@@ -171,9 +173,12 @@ async fn run_queue_event_stream(
                     return;
                 }
             }
-            Err(error) => on_error(error.message),
+            Err(error) => {
+                refused = error.code == ConnectionErrorCode::AccessDenied;
+                on_error(error.message);
+            }
         }
-        if wait_to_reconnect(&mut reconnect).await {
+        if wait_to_reconnect(&mut reconnect, refused).await {
             return;
         }
     }
@@ -221,7 +226,12 @@ async fn consume_queue_event_stream(
     }
 }
 
-async fn wait_to_reconnect(reconnect: &mut watch::Receiver<u64>) -> bool {
+/// A refusal (401/403) waits for new headers or the renderer instead of a
+/// timer: retrying a missing sign-in every second never heals it.
+async fn wait_to_reconnect(reconnect: &mut watch::Receiver<u64>, refused: bool) -> bool {
+    if refused {
+        return reconnect.changed().await.is_err();
+    }
     tokio::select! {
         changed = reconnect.changed() => changed.is_err(),
         () = tokio::time::sleep(RECONNECT_DELAY) => false,
@@ -448,6 +458,40 @@ mod tests {
         drop(service);
     }
 
+    #[tokio::test]
+    async fn a_refused_stream_waits_for_a_reconnect_instead_of_retrying() {
+        let (origin, requests) = serve_refused_queue_events();
+        let origin = ServerOrigin::parse(&origin).expect("test origin");
+        let (errors_tx, mut errors_rx) = tokio::sync::mpsc::unbounded_channel();
+        let service = QueueEventService::start(
+            Arc::new(HttpBridge::new().expect("HTTP bridge")),
+            Arc::new(RwLock::new(Some(origin))),
+            |_| {},
+            move |error| {
+                let _ = errors_tx.send(error);
+            },
+        );
+
+        requests
+            .recv_timeout(Duration::from_secs(3))
+            .expect("first stream request");
+        tokio::time::timeout(Duration::from_secs(3), errors_rx.recv())
+            .await
+            .expect("refusal error timeout")
+            .expect("refusal error");
+        // A retry would come after RECONNECT_DELAY; a 401 waits for new headers.
+        assert!(
+            requests.recv_timeout(Duration::from_millis(2500)).is_err(),
+            "a refused stream must not reconnect on its own"
+        );
+
+        service.reconnect();
+        requests
+            .recv_timeout(Duration::from_secs(3))
+            .expect("stream request after reconnect");
+        drop(service);
+    }
+
     /// The next API request. Whatever probes local ports on a developer's
     /// machine reaches these servers too, and must not take a request's place.
     fn accept_api(listener: &TcpListener) -> TcpStream {
@@ -465,6 +509,53 @@ mod tests {
                 return stream;
             }
         }
+    }
+
+    /// Health answers; the stream refuses with 401 as a server with sign-in
+    /// does without a session. Records each stream request.
+    fn serve_refused_queue_events() -> (String, mpsc::Receiver<String>) {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind refusing server");
+        let address = listener.local_addr().expect("refusing server address");
+        let (requests_tx, requests_rx) = mpsc::channel();
+        thread::spawn(move || {
+            loop {
+                let mut stream = accept_api(&listener);
+                let mut request = [0_u8; 4096];
+                let size = stream.read(&mut request).expect("read request");
+                let request = String::from_utf8_lossy(&request[..size]).into_owned();
+                let (status, body) = if request.starts_with("GET /api/v1/health ") {
+                    (
+                        "200 OK",
+                        serde_json::json!({
+                            "status": "ok",
+                            "version": "0.1.0-test",
+                            "capabilities": [
+                                "api.v1",
+                                "playback.queue-events.v1",
+                                "managed-import-batches.v1",
+                                "managed-track-deletion.v1",
+                                "managed-track-replacement.v1"
+                            ],
+                        })
+                        .to_string(),
+                    )
+                } else {
+                    if requests_tx.send(request).is_err() {
+                        return;
+                    }
+                    (
+                        "401 Unauthorized",
+                        r#"{"error":"unauthorized","code":"unauthenticated","message":"sign in to use the Music Server"}"#.to_owned(),
+                    )
+                };
+                let _ = write!(
+                    stream,
+                    "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+            }
+        });
+        (format!("http://{address}"), requests_rx)
     }
 
     fn serve_mixed_event_stream() -> (String, mpsc::Receiver<String>) {

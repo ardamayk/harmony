@@ -56,6 +56,11 @@ export type SharedQueueEventStream = {
 export function createSharedQueueEventStream(config: {
 	getBaseUrl: () => string | Promise<string>;
 	eventSourceFactory: (url: string) => QueueEventSource;
+	/**
+	 * Whether the Music Server wants this client signed in. EventSource hides
+	 * a refusal's status, so an ended stream asks before it reconnects.
+	 */
+	isSignedOut?: () => Promise<boolean>;
 }): SharedQueueEventStream {
 	const listeners = new Map<string, Set<SharedStreamListener>>();
 	const errorHandlers = new Set<(error: Error) => void>();
@@ -93,7 +98,13 @@ export function createSharedQueueEventStream(config: {
 					if (source?.readyState === EVENT_SOURCE_CLOSED) {
 						source = null;
 						attached.clear();
-						setTimeout(open, QUEUE_EVENT_RECONNECT_DELAY_MS);
+						void (config.isSignedOut?.() ?? Promise.resolve(false))
+							.catch(() => false)
+							.then((signedOut) => {
+								// The sign-in screen takes over; signing in subscribes again.
+								if (!signedOut)
+									setTimeout(open, QUEUE_EVENT_RECONNECT_DELAY_MS);
+							});
 					}
 				};
 			})

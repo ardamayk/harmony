@@ -635,6 +635,15 @@ impl HttpBridge {
                 "Music Server Queue event stream is unreachable.",
             )
         })?;
+        if matches!(
+            response.status(),
+            reqwest::StatusCode::UNAUTHORIZED | reqwest::StatusCode::FORBIDDEN
+        ) {
+            return Err(ConnectionError::new(
+                ConnectionErrorCode::AccessDenied,
+                "Music Server refused the Queue event stream. Sign in again.",
+            ));
+        }
         let is_event_stream = response
             .headers()
             .get(reqwest::header::CONTENT_TYPE)
