@@ -1,4 +1,5 @@
 pub mod artist_info;
+pub mod auth;
 pub mod client_metrics;
 pub mod docs;
 pub mod external_source;

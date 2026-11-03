@@ -67,6 +67,8 @@ pub struct AppState {
     pub external_source: Arc<modules::external_source::ExternalSource>,
     pub listen_together: Arc<modules::listen_together::ListenTogether>,
     pub owner_access: Option<Arc<OwnerAccess>>,
+    /// Username and password sign-in, when configured (ADR 0042).
+    pub auth: Option<Arc<modules::auth::Auth>>,
 }
 
 impl AppState {
@@ -104,6 +106,10 @@ impl AppState {
             .owner_access
             .clone()
             .map(|settings| Arc::new(OwnerAccess::new(settings)));
+        let auth = config
+            .auth
+            .clone()
+            .map(|settings| Arc::new(modules::auth::Auth::new(db.clone(), settings)));
         Self {
             config: Arc::new(config),
             dependencies: Arc::new(dependencies),
@@ -119,6 +125,7 @@ impl AppState {
             external_source: Arc::new(external_source),
             listen_together: Arc::new(listen_together),
             owner_access,
+            auth,
         }
     }
 }
@@ -134,9 +141,11 @@ pub fn router(state: AppState) -> Router {
             .map(|access| access.public_origin.clone()),
     );
     let origins = Arc::new(origins);
+    let sign_in = state.auth.is_some();
     Router::new()
         .route("/api/v1/health", get(api::get_health))
         .route("/api/v1/me", get(api::get_me))
+        .merge(modules::auth::routes())
         .merge(modules::docs::routes())
         .merge(modules::preferences::routes())
         .merge(modules::client_metrics::routes())
@@ -155,7 +164,7 @@ pub fn router(state: AppState) -> Router {
         .layer(middleware::from_fn(no_simple_writes))
         .layer(middleware::from_fn(move |request: Request, next: Next| {
             let origins = origins.clone();
-            async move { trusted_origin(&origins, request, next).await }
+            async move { trusted_origin(&origins, sign_in, request, next).await }
         }))
         .layer(middleware::from_fn_with_state(state.clone(), loopback_host))
         .layer(cors)
@@ -303,7 +312,15 @@ fn cors(origins: &[String]) -> CorsLayer {
 /// domain to 127.0.0.1 (DNS rebinding) cannot use the API as its own origin.
 /// A request without a Host does not come from a browser. The one other Host
 /// is `OWNER_PUBLIC_URL`'s, and it needs a token its proxy signed.
+///
+/// With sign-in configured none of this applies: other containers on a
+/// Docker network reach the server under any name, loopback included, so
+/// every Host gets the browser hardening and the API needs credentials.
 async fn loopback_host(State(state): State<AppState>, request: Request, next: Next) -> Response {
+    if let Some(auth) = &state.auth {
+        let path = request.uri().path().to_owned();
+        return harden(&path, modules::auth::gate(auth, request, next).await);
+    }
     let host = request
         .headers()
         .get(header::HOST)
@@ -343,11 +360,16 @@ async fn through_access(access: &OwnerAccess, request: Request, next: Next) -> R
             OWNER_DOCS_CSP,
         );
     }
-    let path = request.uri().path();
+    let path = request.uri().path().to_owned();
+    harden(&path, next.run(request).await)
+}
+
+/// The headers an internet-facing answer carries, by the path it answers.
+fn harden(path: &str, response: Response) -> Response {
     let docs = path.starts_with("/docs") || path.starts_with("/api/docs");
     let api = path.starts_with("/api/") && !docs;
     let csp = if docs { OWNER_DOCS_CSP } else { OWNER_CSP };
-    let response = browser_headers(next.run(request).await, csp);
+    let response = browser_headers(response, csp);
     if api { no_store(response) } else { response }
 }
 
@@ -363,7 +385,7 @@ fn no_store(mut response: Response) -> Response {
     response
 }
 
-fn is_loopback_host(host: &str) -> bool {
+pub(crate) fn is_loopback_host(host: &str) -> bool {
     let name = match host.strip_prefix('[') {
         Some(bracketed) => bracketed.split(']').next().unwrap_or_default(),
         None => host.rsplit_once(':').map_or(host, |(name, _)| name),
@@ -423,8 +445,15 @@ async fn public_origin(settings: &ListenTogetherConfig, request: Request, next: 
 /// allowlist may change state. Requests without Origin (the desktop core,
 /// scripts) are not from a browser page and pass. `origins` holds
 /// `OWNER_PUBLIC_URL`'s origin too, so that host's pages match scheme and all.
-async fn trusted_origin(origins: &[String], request: Request, next: Next) -> Response {
-    if is_untrusted_write(origins, request.method(), request.headers()) {
+/// A page whose origin names the request's own Host is this server's: only
+/// on loopback without sign-in, on any Host with it (`any_host`).
+async fn trusted_origin(
+    origins: &[String],
+    any_host: bool,
+    request: Request,
+    next: Next,
+) -> Response {
+    if is_untrusted_write(origins, any_host, request.method(), request.headers()) {
         return ApiError::new(
             StatusCode::FORBIDDEN,
             "forbidden_origin",
@@ -435,7 +464,12 @@ async fn trusted_origin(origins: &[String], request: Request, next: Next) -> Res
     next.run(request).await
 }
 
-fn is_untrusted_write(origins: &[String], method: &Method, headers: &HeaderMap) -> bool {
+fn is_untrusted_write(
+    origins: &[String],
+    any_host: bool,
+    method: &Method,
+    headers: &HeaderMap,
+) -> bool {
     if matches!(*method, Method::GET | Method::HEAD | Method::OPTIONS) {
         return false;
     }
@@ -459,7 +493,7 @@ fn is_untrusted_write(origins: &[String], method: &Method, headers: &HeaderMap) 
                 .and_then(|host| host.to_str().ok()),
         )
         .is_some_and(|((_, authority), host)| {
-            is_loopback_host(host) && authority.eq_ignore_ascii_case(host)
+            (any_host || is_loopback_host(host)) && authority.eq_ignore_ascii_case(host)
         });
     !same_origin
 }
