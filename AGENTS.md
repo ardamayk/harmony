@@ -35,6 +35,16 @@ repository.rs  the module's only database access; maps rows to domain types
 - sqlx infers SQLite column nullability conservatively; override with `AS "name!"` / `AS "name?"` / `AS "name!: Type"` instead of unwrapping.
 - Responses keep the JSON the Web and Desktop Clients expect: `gojson` holds the encoding rules (HTML-escaped JSON written to the database, whole floats without `.0`, RFC 3339 times) inherited from the original Go server (ADR 0025).
 
+## Reporting changes
+
+When you report finished work, give each fix its own entry, headed by its commit:
+
+- **Problem**: what was wrong and the evidence that showed it (production numbers, a test that went red, `file:line`).
+- **Fix**: what changed, plus any behaviour change it brings.
+- **Expected improvement**: which metric should move, from what value toward what, and whether that is measured or inferred (from query counts, a test).
+
+Close with what was left unchanged and how to verify the improvement: which metric, where, and after what (a deploy, a week of traffic).
+
 ## Agent skills
 
 ### Issue tracker
