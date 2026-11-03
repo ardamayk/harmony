@@ -54,33 +54,36 @@ async fn login(
     peer: Option<Extension<ConnectInfo<SocketAddr>>>,
     headers: HeaderMap,
     body: Bytes,
-) -> Result<Response, Response> {
+) -> Response {
     let Some(auth) = &state.auth else {
-        return Err(disabled().into_response());
+        return disabled().into_response();
     };
-    let request: LoginRequest = serde_json::from_slice(&body).map_err(|_| {
-        ApiError::bad_request("send {\"username\", \"password\"} as JSON").into_response()
-    })?;
+    let Ok(request) = serde_json::from_slice::<LoginRequest>(&body) else {
+        return ApiError::bad_request("send {\"username\", \"password\"} as JSON").into_response();
+    };
     if !(1..=256).contains(&request.username.chars().count())
         || !(1..=1024).contains(&request.password.chars().count())
     {
-        return Err(ApiError::bad_request(
+        return ApiError::bad_request(
             "username must be 1 to 256 characters and password 1 to 1024",
         )
-        .into_response());
+        .into_response();
     }
     let peer = peer_ip(peer.as_ref().map(|Extension(info)| info));
     let client = client_ip(peer, &headers, auth.trusted_proxies());
-    let token = auth
+    let token = match auth
         .login(client, &request.username, &request.password)
         .await
-        .map_err(refusal)?;
+    {
+        Ok(token) => token,
+        Err(error) => return refusal(error),
+    };
     let mut response = StatusCode::NO_CONTENT.into_response();
     response.headers_mut().insert(
         header::SET_COOKIE,
         session_cookie(&token, SESSION_LIFETIME.as_secs(), &headers),
     );
-    Ok(response)
+    response
 }
 
 async fn logout(State(state): State<AppState>, headers: HeaderMap) -> ApiResult<Response> {
