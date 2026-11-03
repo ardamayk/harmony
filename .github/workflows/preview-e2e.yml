@@ -85,9 +85,11 @@ jobs:
         if: steps.preview.outputs.found == 'true'
         env:
           PREVIEW_URL: ${{ steps.preview.outputs.url }}
+          PREVIEW_AUTH: ${{ secrets.PREVIEW_USERNAME }}:${{ secrets.PREVIEW_PASSWORD }}
         run: |
           for _ in $(seq 60); do
-            if curl -fsS --max-time 10 "$PREVIEW_URL/api/v1/health" \
+            # -u passes Traefik's basic auth in front of the preview.
+            if curl -fsS --max-time 10 -u "$PREVIEW_AUTH" "$PREVIEW_URL/api/v1/health" \
               | jq -e '.capabilities | index("auth.session.v1")' > /dev/null; then
               exit 0
             fi

@@ -32,7 +32,7 @@ Listen Together lets friends join a Room on your Music Server through an Invite 
 
 | Variable | Meaning |
 | --- | --- |
-| `GUEST_ADDR` | The Guest Listener's address, for example `127.0.0.1:8091`. It must be a loopback address and differ from `SERVER_ADDR`. |
+| `GUEST_ADDR` | The Guest Listener's address, for example `127.0.0.1:8091`. It must differ from `SERVER_ADDR`, and be a loopback address unless sign-in is on (in a container, `0.0.0.0:8091`). |
 | `PUBLIC_URL` | The public origin your reverse proxy or tunnel serves, for example `https://music.example.com`, with no path. It must be `https` unless its host is loopback. The Invite Link is built from it, and the Guest Listener answers only this host and origin. |
 | `LISTEN_TOGETHER_MAX_GUESTS` | How many Guests a Room admits, 1 to 8. Unset, 8. |
 | `LISTEN_TOGETHER_ROOM_HOURS` | How many hours a Room lasts, 1 to 168. Unset, 24. |

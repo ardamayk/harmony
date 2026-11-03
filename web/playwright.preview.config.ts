@@ -15,6 +15,12 @@ export default defineConfig({
 	reporter: process.env.CI ? [["list"], ["html", { open: "never" }]] : "list",
 	use: {
 		baseURL: process.env.PREVIEW_URL,
+		// Dokploy's Security tab puts Traefik basic auth in front of previews,
+		// with the same credentials as the Music Server's sign-in.
+		httpCredentials: {
+			username: process.env.PREVIEW_USERNAME ?? "",
+			password: process.env.PREVIEW_PASSWORD ?? "",
+		},
 		trace: "on-first-retry",
 		screenshot: "only-on-failure",
 	},

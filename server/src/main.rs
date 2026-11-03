@@ -126,7 +126,8 @@ async fn run(config: Config) -> Result<(), String> {
 }
 
 /// The Guest Listener's socket and router, when Listen Together is
-/// configured. Config has already checked that the address is loopback.
+/// configured. Config has already checked the address: loopback, or any
+/// address once sign-in is on (ADR 0042).
 fn guest_listener(
     state: &AppState,
 ) -> Result<Option<(tokio::net::TcpListener, axum::Router)>, String> {
