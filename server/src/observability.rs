@@ -188,6 +188,7 @@ impl Finish {
     fn respond(&mut self, status: StatusCode) {
         if let Some(transaction) = self.0.take() {
             transaction.set_data("http.response.status_code", status.as_u16().into());
+            transaction.set_tag("http.status_code", status.as_u16());
             transaction.set_status(span_status(status));
             transaction.finish();
         }
@@ -205,6 +206,7 @@ impl Drop for Finish {
 
 fn span_status(status: StatusCode) -> SpanStatus {
     match status {
+        StatusCode::UNAUTHORIZED => SpanStatus::Unauthenticated,
         StatusCode::NOT_FOUND => SpanStatus::NotFound,
         StatusCode::FORBIDDEN => SpanStatus::PermissionDenied,
         StatusCode::TOO_MANY_REQUESTS => SpanStatus::ResourceExhausted,
@@ -1160,11 +1162,28 @@ mod tests {
             trace.data.get("http.response.status_code"),
             Some(&Value::from(502))
         );
+        // A tag, so stored transactions can be grouped by status.
+        assert_eq!(
+            transaction.tags.get("http.status_code").map(String::as_str),
+            Some("502")
+        );
         // The error belongs to the request's trace.
         let Some(Context::Trace(event_trace)) = event.contexts.get("trace") else {
             panic!("event trace context");
         };
         assert_eq!(event_trace.trace_id, trace.trace_id);
+    }
+
+    #[test]
+    fn a_missing_sign_in_is_unauthenticated_not_invalid() {
+        assert_eq!(
+            span_status(StatusCode::UNAUTHORIZED),
+            SpanStatus::Unauthenticated
+        );
+        assert_eq!(
+            span_status(StatusCode::BAD_REQUEST),
+            SpanStatus::InvalidArgument
+        );
     }
 
     #[test]
