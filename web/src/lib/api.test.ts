@@ -15,6 +15,8 @@ vi.mock("#/desktop/bridge", () => ({
 }));
 
 import { apiClient } from "./api";
+import { markSignedIn, useSignedOut } from "./sign-in";
+import { renderHook, waitFor } from "@testing-library/react";
 
 describe("desktop API client", () => {
 	beforeEach(() => {
@@ -47,6 +49,28 @@ describe("desktop API client", () => {
 			"playback.queue-events.v1",
 		);
 		expect(listenForQueueEventsMock).not.toHaveBeenCalled();
+	});
+
+	it("shows the sign-in screen when a request answers 401 unauthenticated", async () => {
+		desktopFetchMock.mockResolvedValue(
+			Response.json(
+				{
+					error: "unauthenticated",
+					code: "unauthenticated",
+					message: "Sign in",
+				},
+				{ status: 401 },
+			),
+		);
+		const { result } = renderHook(useSignedOut);
+		expect(result.current).toBe(false);
+
+		await expect(apiClient.getPreferences()).rejects.toMatchObject({
+			status: 401,
+		});
+
+		await waitFor(() => expect(result.current).toBe(true));
+		markSignedIn();
 	});
 
 	it("routes covers and streams through the media proxy", () => {

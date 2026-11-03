@@ -28,7 +28,12 @@ const playbackApi: Omit<PlaybackApi, "getExternalTrackPlayback"> = {
 	clearQueue: (afterItemId, revision) =>
 		apiClient.clearPlaybackQueue(afterItemId, revision),
 	subscribeQueueEvents: (onEvent, onError) =>
-		apiClient.subscribePlaybackQueueEvents(onEvent, onError),
+		apiClient.subscribePlaybackQueueEvents(onEvent, (error) => {
+			// EventSource hides a 401: a Queue read tells whether the session
+			// ended, and the API client then shows the sign-in screen.
+			void apiClient.getPlaybackQueue().catch(() => undefined);
+			onError?.(error);
+		}),
 	getStreamUrl: (trackId) => apiClient.getTrackStreamUrl(trackId),
 	headTrackStream: (trackId) => apiClient.headTrackStream(trackId),
 	getAlbumCoverUrl: (albumId, size) =>
