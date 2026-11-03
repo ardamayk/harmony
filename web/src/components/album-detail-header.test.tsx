@@ -142,7 +142,7 @@ describe("AlbumDetailHeader", () => {
 		expect(listAlbumOnlineGenres).not.toHaveBeenCalled();
 	});
 
-	it("lays the phone header on the cover with one genre and no external links", () => {
+	it("lays the phone header and short-label actions on the cover, with one genre and no external links", () => {
 		vi.stubGlobal("matchMedia", () => ({
 			matches: true,
 			addEventListener: () => {},
@@ -164,7 +164,10 @@ describe("AlbumDetailHeader", () => {
 			expect(screen.queryByText("Metal, Rock")).toBeNull();
 			expect(screen.queryByRole("link", { name: /Spotify/ })).toBeNull();
 			const queue = screen.getByRole("button", { name: "Queue album" });
-			expect(queue.textContent).toBe("");
+			expect(queue.textContent).toBe("Queue");
+			expect(
+				screen.getByRole("button", { name: "Album radio" }).textContent,
+			).toBe("Radio");
 			fireEvent.click(queue);
 			expect(onQueueAlbum).toHaveBeenCalledOnce();
 		} finally {

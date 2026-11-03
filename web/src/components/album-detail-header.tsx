@@ -151,78 +151,85 @@ export function AlbumDetailHeader({
 					<ContextMenuTrigger render={<div className="@container" />}>
 						{isPhone ? (
 							<>
+								{/* The cover is the header: title, artist, one genre and the
+								    actions sit centered on its foot, Play in the middle. */}
 								<div className="relative">
 									<AlbumArt
 										coverUrl={apiClient.getAlbumCoverUrl(album.id, 1024)}
 										title={album.title}
 										className="aspect-square w-full text-3xl"
 									/>
-									{/* Title, artist and one genre on the cover's foot. */}
-									<div className="absolute inset-x-0 bottom-0 bg-linear-to-t from-background via-background/80 to-background/0 px-(--shell-inset) pt-16">
-										<h1 className="break-words font-semibold text-2xl text-heading tracking-tight">
-											{album.title}
-										</h1>
-										<div className="flex min-w-0 items-center gap-2 text-sm">
-											<Link
-												to="/library/artists/$artistId"
-												params={{ artistId: album.artistId }}
-												className="flex min-h-11 min-w-0 items-center truncate font-medium text-foreground hover:text-heading"
-											>
-												{artistName}
-											</Link>
-											{genres[0] ? (
-												<>
-													<span aria-hidden className="text-foreground">
-														·
-													</span>
-													<span
-														className="min-w-0 truncate text-foreground"
-														title={genres.join(", ")}
+									<div className="absolute inset-x-0 bottom-0 flex flex-col gap-4 bg-linear-to-t from-background via-background/80 to-background/0 px-(--shell-inset) pt-24 pb-4 text-center">
+										<div className="flex min-w-0 flex-col items-center">
+											<h1 className="max-w-full break-words font-semibold text-2xl text-heading tracking-tight">
+												{album.title}
+											</h1>
+											<div className="flex min-w-0 max-w-full items-center justify-center gap-2 text-sm">
+												<Link
+													to="/library/artists/$artistId"
+													params={{ artistId: album.artistId }}
+													className="flex min-h-11 min-w-0 items-center truncate font-medium text-foreground hover:text-heading"
+												>
+													{artistName}
+												</Link>
+												{genres[0] ? (
+													<>
+														<span aria-hidden className="text-foreground">
+															·
+														</span>
+														<span
+															className="min-w-0 truncate text-foreground"
+															title={genres.join(", ")}
+														>
+															{genres[0]}
+														</span>
+													</>
+												) : null}
+											</div>
+										</div>
+
+										{/* Side columns share the width, so Play stays centered
+										    whichever side buttons a guest is shown. */}
+										<div ref={setActionRow} className="flex items-center gap-3">
+											<div className="flex flex-1 basis-0 justify-end">
+												{hideQueueEditing ? null : (
+													<Button
+														type="button"
+														size="sm"
+														variant="outline"
+														aria-label="Queue album"
+														title="Queue album"
+														onClick={onQueueAlbum}
 													>
-														{genres[0]}
-													</span>
-												</>
-											) : null}
+														<SkipForward className="size-4" />
+														Queue
+													</Button>
+												)}
+											</div>
+											<Button type="button" size="lg" onClick={onPlayAlbum}>
+												<Play className="size-4" />
+												Play
+											</Button>
+											<div className="flex flex-1 basis-0 items-center justify-start gap-2">
+												{hideAlbumRadio ? null : (
+													<Button
+														type="button"
+														size="sm"
+														variant="outline"
+														aria-label="Album radio"
+														disabled
+														title={ALBUM_RADIO_HINT}
+													>
+														<Disc3 className="size-4" />
+														Radio
+													</Button>
+												)}
+												{showAlbumMenu ? (
+													<RowMenuButton label="Album actions" />
+												) : null}
+											</div>
 										</div>
 									</div>
-								</div>
-
-								{/* Icon-only actions besides Play; no external links. */}
-								<div
-									ref={setActionRow}
-									className="flex items-center gap-2 px-(--shell-inset) pt-2 pb-4"
-								>
-									<Button type="button" size="sm" onClick={onPlayAlbum}>
-										<Play className="size-4" />
-										Play
-									</Button>
-									{hideQueueEditing ? null : (
-										<Button
-											type="button"
-											size="icon-sm"
-											variant="outline"
-											aria-label="Queue album"
-											title="Queue album"
-											onClick={onQueueAlbum}
-										>
-											<SkipForward className="size-4" />
-										</Button>
-									)}
-									{hideAlbumRadio ? null : (
-										<Button
-											type="button"
-											size="icon-sm"
-											variant="outline"
-											aria-label="Album radio"
-											disabled
-											title={ALBUM_RADIO_HINT}
-										>
-											<Disc3 className="size-4" />
-										</Button>
-									)}
-									{showAlbumMenu ? (
-										<RowMenuButton label="Album actions" />
-									) : null}
 								</div>
 							</>
 						) : (
