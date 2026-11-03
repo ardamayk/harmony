@@ -80,6 +80,38 @@ describe("Managed Import media contracts", () => {
 });
 
 describe("createApiClient", () => {
+	it("retries a read after a dropped connection but not a write, and returns HTTP errors", async () => {
+		const fetchMock = vi
+			.fn<typeof fetch>()
+			.mockRejectedValueOnce(new TypeError("Failed to fetch"))
+			.mockResolvedValueOnce(Response.json({ id: "user-1" }))
+			.mockRejectedValueOnce(new TypeError("Failed to fetch"))
+			.mockResolvedValueOnce(
+				Response.json(
+					{ error: "not_found", code: "not_found", message: "gone" },
+					{ status: 404 },
+				),
+			);
+		vi.stubGlobal("fetch", fetchMock);
+		try {
+			const client = createApiClient({
+				baseUrl: "http://music.test",
+				validateResponses: false,
+			});
+
+			await expect(client.getMe()).resolves.toEqual({ id: "user-1" });
+			expect(fetchMock).toHaveBeenCalledTimes(2);
+			await expect(client.patchPreferences({})).rejects.toThrow(
+				"network error",
+			);
+			expect(fetchMock).toHaveBeenCalledTimes(3);
+			await expect(client.getMe()).rejects.toMatchObject({ status: 404 });
+			expect(fetchMock).toHaveBeenCalledTimes(4);
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
+
 	it("keeps Library Search total optional and expands only on request", async () => {
 		type SearchResponse = components["schemas"]["LibrarySearchResponse"];
 		expectTypeOf<SearchResponse["total"]>().toEqualTypeOf<number | undefined>();

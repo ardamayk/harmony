@@ -1,3 +1,4 @@
+import ky from "ky";
 import type { components, operations } from "./generated/schema";
 import {
 	type QueueEvent,
@@ -311,6 +312,19 @@ function normalizeApiErrorBody(
 	return body;
 }
 
+/**
+ * fetch with ky's retries: a request that hits a dropped connection (a
+ * tunnel, a dead zone) is tried again, for the idempotent methods only. HTTP
+ * errors come back as responses, so `request` still reads their bodies.
+ */
+const retryingFetch: typeof fetch = (input, init) =>
+	ky(input, {
+		...init,
+		// Library scans and imports can take longer than ky's 10 s default.
+		timeout: false,
+		throwHttpErrors: false,
+	});
+
 export function createApiClient(config: ApiClientConfig) {
 	const {
 		baseUrl,
@@ -318,7 +332,7 @@ export function createApiClient(config: ApiClientConfig) {
 		streamBaseUrl = mediaBaseUrl,
 		queueEventsBaseUrl = baseUrl,
 		getToken,
-		transport = globalThis.fetch,
+		transport = retryingFetch,
 		// A Web Client on another origin (VITE_API_URL) still sends the
 		// session cookie; same-origin requests behave as before.
 		eventSourceFactory = (url) =>
