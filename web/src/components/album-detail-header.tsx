@@ -190,7 +190,10 @@ export function AlbumDetailHeader({
 
 										{/* Side columns share the width, so Play stays centered
 										    whichever side buttons a guest is shown. */}
-										<div ref={setActionRow} className="flex items-center gap-3">
+										<div
+											ref={setActionRow}
+											className="relative flex items-center gap-3"
+										>
 											<div className="flex flex-1 basis-0 justify-end">
 												{hideQueueEditing ? null : (
 													<Button
@@ -210,7 +213,7 @@ export function AlbumDetailHeader({
 												<Play className="size-4" />
 												Play
 											</Button>
-											<div className="flex flex-1 basis-0 items-center justify-start gap-2">
+											<div className="flex flex-1 basis-0 justify-start">
 												{hideAlbumRadio ? null : (
 													<Button
 														type="button"
@@ -224,10 +227,13 @@ export function AlbumDetailHeader({
 														Radio
 													</Button>
 												)}
-												{showAlbumMenu ? (
-													<RowMenuButton label="Album actions" />
-												) : null}
 											</div>
+											{/* At the row's edge, outside the columns, so Play stays centered. */}
+											{showAlbumMenu ? (
+												<div className="absolute right-0">
+													<RowMenuButton label="Album actions" />
+												</div>
+											) : null}
 										</div>
 									</div>
 								</div>
