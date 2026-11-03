@@ -1,3 +1,4 @@
+import { AUTH_SESSION_CAPABILITY } from "@repo/api-client";
 import { type FormEvent, useState } from "react";
 import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
@@ -14,11 +15,27 @@ type HeaderRow = { name: string; value: string };
 const EMPTY_HEADER: HeaderRow = { name: "", value: "" };
 const MAX_HEADER_ROWS = 8;
 
-/** The rows the user filled in, or undefined to leave saved headers alone. */
-function serverHeaders(rows: HeaderRow[]): ServerHeaders | undefined {
+/**
+ * The rows the user filled in, plus Basic credentials for a Music Server
+ * with sign-in (ADR 0042), or undefined to leave saved headers alone.
+ */
+function serverHeaders(
+	rows: HeaderRow[],
+	username: string,
+	password: string,
+): ServerHeaders | undefined {
 	const filled = rows.filter((row) => row.name.trim() !== "");
-	if (filled.length === 0) return undefined;
-	return Object.fromEntries(filled.map((row) => [row.name.trim(), row.value]));
+	const headers = Object.fromEntries(
+		filled.map((row) => [row.name.trim(), row.value]),
+	);
+	if (username) headers.Authorization = basicAuthorization(username, password);
+	return Object.keys(headers).length > 0 ? headers : undefined;
+}
+
+function basicAuthorization(username: string, password: string) {
+	// btoa takes Latin-1 only; the credentials go as UTF-8.
+	const bytes = new TextEncoder().encode(`${username}:${password}`);
+	return `Basic ${btoa(String.fromCharCode(...bytes))}`;
 }
 
 export function connectionErrorMessage(error: unknown): string {
@@ -35,12 +52,15 @@ export function ServerConnectionForm({
 	initialOrigin,
 	initialError = null,
 	savedHeaderNames = [],
+	asksForSignIn: initialAsksForSignIn = false,
 	onConnected,
 }: {
 	initialOrigin: string;
 	initialError?: string | null;
 	/** The saved server's headers, which empty rows keep. */
 	savedHeaderNames?: string[];
+	/** Show Username and Password before a test finds the server needs them. */
+	asksForSignIn?: boolean;
 	onConnected: () => Promise<void> | void;
 }) {
 	const [origin, setOrigin] = useState(initialOrigin);
@@ -50,7 +70,12 @@ export function ServerConnectionForm({
 	const [error, setError] = useState(initialError);
 	const [isTesting, setIsTesting] = useState(false);
 	const [isSaving, setIsSaving] = useState(false);
-	const headers = serverHeaders(headerRows) ?? (removeSaved ? {} : undefined);
+	const [asksForSignIn, setAsksForSignIn] = useState(initialAsksForSignIn);
+	const [username, setUsername] = useState("");
+	const [password, setPassword] = useState("");
+	const headers =
+		serverHeaders(headerRows, username, password) ??
+		(removeSaved ? {} : undefined);
 
 	async function handleTest(event: FormEvent) {
 		event.preventDefault();
@@ -61,6 +86,9 @@ export function ServerConnectionForm({
 			const check = await testServerConnection(origin, headers);
 			setOrigin(check.origin);
 			setVerified(check);
+			if (check.capabilities.includes(AUTH_SESSION_CAPABILITY)) {
+				setAsksForSignIn(true);
+			}
 		} catch (connectionError) {
 			setError(connectionErrorMessage(connectionError));
 		} finally {
@@ -98,6 +126,31 @@ export function ServerConnectionForm({
 					required
 				/>
 			</div>
+			{asksForSignIn ? (
+				// Health needs no sign-in, so a test cannot check these.
+				<div className="grid grid-cols-2 gap-3">
+					<div className="flex flex-col gap-2">
+						<Label htmlFor="music-server-username">Username</Label>
+						<Input
+							id="music-server-username"
+							value={username}
+							autoComplete="username"
+							spellCheck={false}
+							onChange={(event) => setUsername(event.target.value)}
+						/>
+					</div>
+					<div className="flex flex-col gap-2">
+						<Label htmlFor="music-server-password">Password</Label>
+						<Input
+							id="music-server-password"
+							type="password"
+							value={password}
+							autoComplete="current-password"
+							onChange={(event) => setPassword(event.target.value)}
+						/>
+					</div>
+				</div>
+			) : null}
 			{origin.startsWith("https://") ? (
 				<HeaderFields
 					rows={headerRows}
