@@ -187,22 +187,13 @@ impl Auth {
             .entry(key)
             .or_default()
             .clone();
-        let result = {
-            let _turn = check.lock().await;
-            match self.basic_cached(&key) {
-                Some(known) => known.ok_or(AuthError::InvalidCredentials),
-                None => self.check_password(client, username, password).await,
-            }
-        };
-        {
-            let mut checks = self.basic_checks.lock().expect("basic checks lock");
-            if checks
-                .get(&key)
-                .is_some_and(|stored| Arc::ptr_eq(stored, &check))
-            {
-                checks.remove(&key);
-            }
+        let _turn = check.lock().await;
+        if let Some(known) = self.basic_cached(&key) {
+            return known.ok_or(AuthError::InvalidCredentials);
         }
+        let result = self.check_password(client, username, password).await;
+        // Stored while this header's turn is still held, so a request waiting
+        // for the turn finds the answer instead of checking the password again.
         let known = match &result {
             Ok(user_id) => Some(Some(user_id.clone())),
             Err(AuthError::InvalidCredentials) => Some(None),
@@ -218,6 +209,13 @@ impl Auth {
                 checked.clear();
             }
             checked.insert(key, (known, Instant::now()));
+        }
+        let mut checks = self.basic_checks.lock().expect("basic checks lock");
+        if checks
+            .get(&key)
+            .is_some_and(|stored| Arc::ptr_eq(stored, &check))
+        {
+            checks.remove(&key);
         }
         result
     }
