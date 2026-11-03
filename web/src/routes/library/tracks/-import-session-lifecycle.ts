@@ -1,4 +1,4 @@
-import type { ManagedImportBatch } from "@repo/api-client";
+import { ApiError, type ManagedImportBatch } from "@repo/api-client";
 import { useEffect, useRef } from "react";
 import { apiClient } from "#/lib/api";
 
@@ -39,6 +39,12 @@ function observeImport(batchId: string, current: () => ImportSessionObserver) {
 	let isPolling = false;
 	let lastHeartbeat = 0;
 	let isHeartbeating = false;
+	function fail(error: unknown) {
+		if (isDisposed) return;
+		current().onError(error);
+		// A cancelled, expired or restart-reaped Batch never comes back.
+		if (error instanceof ApiError && error.status === 404) dispose();
+	}
 	async function heartbeat() {
 		if (isHeartbeating || Date.now() - lastHeartbeat < HEARTBEAT_INTERVAL_MS)
 			return;
@@ -47,7 +53,7 @@ function observeImport(batchId: string, current: () => ImportSessionObserver) {
 		try {
 			await apiClient.heartbeatManagedImportBatch(batchId);
 		} catch (error) {
-			if (!isDisposed) current().onError(error);
+			fail(error);
 		} finally {
 			isHeartbeating = false;
 		}
@@ -62,14 +68,15 @@ function observeImport(batchId: string, current: () => ImportSessionObserver) {
 				if (!isDisposed) await current().onBatch(batch);
 			}
 		} catch (error) {
-			if (!isDisposed) current().onError(error);
+			fail(error);
 		} finally {
 			isPolling = false;
 		}
 	}
 	const timer = setInterval(() => void poll(), POLL_INTERVAL_MS);
-	return () => {
+	function dispose() {
 		isDisposed = true;
 		clearInterval(timer);
-	};
+	}
+	return dispose;
 }

@@ -40,8 +40,32 @@ pub(super) fn now() -> String {
     crate::gojson::sqlite_time(std::time::SystemTime::now())
 }
 
+/// One `managed_import_jobs` row, as both job reads select it.
+struct JobRow {
+    id: String,
+    status: String,
+    revision: i64,
+    validation_progress: i64,
+    batch_id: Option<String>,
+    client_file_id: Option<String>,
+    original_filename: Option<String>,
+    staged_file_path: Option<String>,
+    content_sha256: Option<String>,
+    error_code: Option<String>,
+    track_id: Option<String>,
+    preview_json: Option<String>,
+    error_field: Option<String>,
+    error_reason: Option<String>,
+    outcome: Option<String>,
+    selected: i64,
+    replace_track_id: Option<String>,
+    validation_issues: String,
+    import_plan_json: Option<String>,
+}
+
 pub(super) async fn get_import_job(conn: &mut SqliteConnection, job_id: &str) -> Result<ImportJob> {
-    let row = sqlx::query!(
+    let row = sqlx::query_as!(
+        JobRow,
         r#"SELECT id AS "id!", status, revision, validation_progress, batch_id, client_file_id,
             original_filename, staged_file_path, content_sha256, error_code, track_id, preview_json,
             error_field, error_reason, outcome, selected, replace_track_id, validation_issues,
@@ -55,8 +79,12 @@ pub(super) async fn get_import_job(conn: &mut SqliteConnection, job_id: &str) ->
     let Some(row) = row else {
         return Err(Error::sentinel(Sentinel::NotFound));
     };
+    import_job(row)
+}
+
+fn import_job(row: JobRow) -> Result<ImportJob> {
     let issues = decode_issues(&row.validation_issues)
-        .map_err(|error| error.context(format!("get Managed Import Job {job_id:?}")))?;
+        .map_err(|error| error.context(format!("get Managed Import Job {:?}", row.id)))?;
     Ok(ImportJob {
         job: Job {
             id: row.id,
@@ -255,21 +283,24 @@ impl Repository {
         .ok_or_else(|| Error::sentinel(Sentinel::NotFound))
     }
 
-    /// The IDs are read in full before each file loads, so no read cursor
-    /// stays open while a writer waits.
+    /// One query for every file, read in full so no cursor stays open
+    /// while a writer waits.
     pub async fn list_batch_jobs(&self, batch_id: &str) -> Result<Vec<ImportJob>> {
-        let ids = sqlx::query_scalar!(
-            r#"SELECT id AS "id!" FROM managed_import_jobs WHERE batch_id = ? ORDER BY batch_position"#,
+        sqlx::query_as!(
+            JobRow,
+            r#"SELECT id AS "id!", status, revision, validation_progress, batch_id, client_file_id,
+                original_filename, staged_file_path, content_sha256, error_code, track_id, preview_json,
+                error_field, error_reason, outcome, selected, replace_track_id, validation_issues,
+                import_plan_json
+            FROM managed_import_jobs WHERE batch_id = ? ORDER BY batch_position"#,
             batch_id
         )
         .fetch_all(&self.pool)
         .await
-        .map_err(context("list Managed Import Batch files"))?;
-        let mut jobs = Vec::with_capacity(ids.len());
-        for id in ids {
-            jobs.push(self.get_job(&id).await?);
-        }
-        Ok(jobs)
+        .map_err(context("list Managed Import Batch files"))?
+        .into_iter()
+        .map(import_job)
+        .collect()
     }
 
     pub async fn heartbeat_batch(&self, batch_id: &str) -> Result<()> {

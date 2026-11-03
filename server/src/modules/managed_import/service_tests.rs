@@ -288,6 +288,52 @@ async fn confirms_a_batch_with_album_previews() {
     assert_eq!(history.items[0].files[0].file_id, client_file_id);
 }
 
+/// Database spans one status poll of a Batch with `files` files records.
+fn batch_poll_spans(files: usize) -> usize {
+    let options = sentry::ClientOptions::new().traces_sample_rate(1.0);
+    let envelopes = sentry::test::with_captured_envelopes_options(
+        || {
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap();
+            let (h, batch_id) = runtime.block_on(async {
+                let h = harness().await;
+                let batch = h.service.create_batch().await.unwrap();
+                for _ in 0..files {
+                    let file_id = uuid::Uuid::new_v4().to_string();
+                    h.service.create_job(&batch.id, &file_id).await.unwrap();
+                }
+                (h, batch.id)
+            });
+            let transaction = sentry::start_transaction(sentry::TransactionContext::new(
+                "GET /api/v1/import-batches/{batch_id}",
+                "http.server",
+            ));
+            sentry::configure_scope(|scope| scope.set_span(Some(transaction.clone().into())));
+            let batch = runtime.block_on(h.service.get_batch(&batch_id)).unwrap();
+            assert_eq!(batch.files.len(), files);
+            transaction.finish();
+        },
+        options,
+    );
+    envelopes
+        .iter()
+        .flat_map(|envelope| envelope.items())
+        .find_map(|item| match item {
+            sentry::protocol::EnvelopeItem::Transaction(transaction) => {
+                Some(transaction.spans.len())
+            }
+            _ => None,
+        })
+        .unwrap()
+}
+
+#[test]
+fn polling_a_batch_reads_its_files_in_one_query() {
+    assert_eq!(batch_poll_spans(1), batch_poll_spans(5));
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn canceling_a_batch_removes_staging_and_archives_it() {
     let h = harness().await;
