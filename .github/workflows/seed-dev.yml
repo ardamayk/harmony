@@ -1,0 +1,64 @@
+name: Seed dev
+
+# Dokploy redeploys dev on every push to main with an empty database
+# (docs/deploy-dokploy.md); this waits for the new build and imports the demo
+# library (scripts/seed-demo-library.ts). Run it by hand to seed dev now.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# The newest push's redeploy is the one that counts.
+concurrency:
+  group: seed-dev
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  seed:
+    name: Seed dev.aneomol.uk after its redeploy
+    runs-on: ubuntu-latest
+    # The Rust build on the Dokploy server is slow.
+    timeout-minutes: 45
+    env:
+      SEED_URL: https://dev.aneomol.uk
+      SEED_USERNAME: ${{ secrets.PREVIEW_USERNAME }}
+      SEED_PASSWORD: ${{ secrets.PREVIEW_PASSWORD }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2
+      - run: sudo apt-get update -q && sudo apt-get install -yq --no-install-recommends ffmpeg
+      - name: Seed now
+        if: github.event_name == 'workflow_dispatch'
+        run: mise run seed:demo
+      - name: Wait for the redeploy, then seed
+        if: github.event_name == 'push'
+        run: |
+          # Health carries no build revision, so the new build is the first empty
+          # library after the old build was seen (seeded or unreachable). Seeding
+          # is idempotent, so an unseeded old build is simply seeded on the way.
+          started=$(date +%s)
+          old_build_seen=false
+          while [ $(( $(date +%s) - started )) -lt 2400 ]; do
+            if out=$(mise run seed:demo 2>&1); then
+              case "$out" in
+                *"already present"*) old_build_seen=true ;;
+                *Seeded*)
+                  echo "$out"
+                  if $old_build_seen; then exit 0; fi
+                  ;;
+              esac
+            else
+              old_build_seen=true
+            fi
+            sleep 30
+          done
+          echo "$out"
+          echo "::error::dev did not come back empty within 40 minutes of this push; seeded it only if the output above says so."
+          exit 1
