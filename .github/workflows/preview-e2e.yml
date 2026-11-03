@@ -110,8 +110,7 @@ jobs:
         if: steps.preview.outputs.found == 'true'
         env:
           SEED_URL: ${{ steps.preview.outputs.url }}
-          SEED_USERNAME: ${{ secrets.PREVIEW_USERNAME }}
-          SEED_PASSWORD: ${{ secrets.PREVIEW_PASSWORD }}
+          SEED_BASIC_AUTH: ${{ secrets.PREVIEW_USERNAME }}:${{ secrets.PREVIEW_PASSWORD }}
         run: |
           command -v ffmpeg > /dev/null || { sudo apt-get update -q && sudo apt-get install -yq --no-install-recommends ffmpeg; }
           mise run seed:demo

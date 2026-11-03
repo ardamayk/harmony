@@ -17,7 +17,7 @@ Production runs the image CI publishes, which exists only once CI has passed on 
 
 `harmony-dev` has no mount for `/data` on purpose. Each of its containers, and each preview's, gets a fresh anonymous volume from the Dockerfile's `VOLUME /data` and starts with an empty library. The consequence: **everything in `harmony-dev` and in a preview is thrown away on every redeploy**, imports included. Use them to try changes, never to keep music. Old anonymous volumes stay on disk until you remove them; `docker volume prune` deletes the unused ones.
 
-So there is something to play, CI imports a small demo library after each deploy: two Albums of synthesized melodies with covers and synced lyrics (`scripts/seed-demo-library.ts`). The Preview E2E workflow seeds the preview before its test; the Seed dev workflow waits for `harmony-dev` to come back empty after a push to `main`, then seeds it, and can be run by hand. From your machine: `SEED_URL=https://dev.aneomol.uk SEED_USERNAME=preview SEED_PASSWORD=… mise run seed:demo` (needs ffmpeg). Albums already there are skipped.
+So there is something to play, CI imports a small demo library after each deploy: two Albums of synthesized melodies with covers and synced lyrics (`scripts/seed-demo-library.ts`). The Preview E2E workflow seeds the preview before its test; the Seed dev workflow waits for `harmony-dev` to come back empty after a push to `main`, then seeds it, and can be run by hand. From your machine: `SEED_URL=https://dev.aneomol.uk SEED_BASIC_AUTH=preview:… mise run seed:demo` (needs ffmpeg). Albums already there are skipped.
 
 ## Both applications
 
@@ -58,14 +58,21 @@ In `harmony-dev` → Preview Deployments, enable them and set:
 - **Wildcard domain:** `*.example.com`. A preview of `harmony-dev` becomes `preview-<appName>-<random>.example.com`.
 - **Port:** `8090`. Dokploy's default is 3000, where nothing listens.
 - **HTTPS:** as for the domains under [Networking](#networking).
-- **Environment:** the same as `harmony-dev`, but with a preview-only `AUTH_USERNAME` and `AUTH_PASSWORD_HASH`. Never reuse the production password: a preview runs a pull request's unreviewed code with this environment, and its address is posted publicly on the pull request.
+- **Environment:** the same as `harmony-dev`. Both sign in with the public demo account, username `demo` and password `demo`:
+
+  ```sh
+  AUTH_USERNAME=demo
+  AUTH_PASSWORD_HASH='$argon2id$v=19$m=19456,t=2,p=1$R1avyoy9xsdAbZgOG5/GAg$JCsXrWjoCMGEaVf7t5WPin4cQpX21Ulrkz2Qm0nBGa0'
+  ```
+
+  Anyone can read this password, so keep Traefik basic auth (below) in front of `harmony-dev` and its previews, and never use the demo account on a server you keep: make your own hash before deploying one.
 - **Require collaborator permissions:** keep it on. This repository is public, and Dokploy warns that previews on a public repository let others run builds on your server; with this on, only authors with write access trigger one.
 - **Labels:** optional. With labels set, only pull requests carrying one of them get a preview.
 - **Preview limit:** the default of 3 previews at a time is enough.
 
-To keep `harmony-dev` and its previews out of sight, add basic auth in `harmony-dev` → Advanced → Security with the same username and password as the preview sign-in. Previews inherit it from their next deploy. Traefik checks it and removes the `Authorization` header before the Music Server sees it, so the browser asks twice: Traefik's dialog, then the Music Server's sign-in. The Desktop Client cannot connect to such a server, because its Basic header never reaches the Music Server.
+To keep `harmony-dev` and its previews out of sight, add basic auth in `harmony-dev` → Advanced → Security with a username and a secret password of your own. Previews inherit it from their next deploy. Traefik checks it and removes the `Authorization` header before the Music Server sees it, so the browser asks twice: Traefik's dialog, then the Music Server's sign-in. The Desktop Client cannot connect to such a server, because its Basic header never reaches the Music Server.
 
-Then add the repository secrets `PREVIEW_USERNAME` and `PREVIEW_PASSWORD` (the preview password in clear text, not its hash) under Settings → Secrets and variables → Actions. The Preview E2E workflow waits for Dokploy's comment, signs in to the preview and signs out again. Until previews are set up it finds no comment and ends with a notice, so it never blocks a pull request.
+Then add the repository secrets `PREVIEW_USERNAME` and `PREVIEW_PASSWORD`: the Traefik basic auth username and password from the Security tab, in clear text under Settings → Secrets and variables → Actions. The Preview E2E workflow waits for Dokploy's comment, signs in to the preview and signs out again. Until previews are set up it finds no comment and ends with a notice, so it never blocks a pull request.
 
 ## Networking
 

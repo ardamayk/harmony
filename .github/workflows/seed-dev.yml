@@ -28,8 +28,7 @@ jobs:
     timeout-minutes: 45
     env:
       SEED_URL: https://dev.aneomol.uk
-      SEED_USERNAME: ${{ secrets.PREVIEW_USERNAME }}
-      SEED_PASSWORD: ${{ secrets.PREVIEW_PASSWORD }}
+      SEED_BASIC_AUTH: ${{ secrets.PREVIEW_USERNAME }}:${{ secrets.PREVIEW_PASSWORD }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2

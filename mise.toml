@@ -38,7 +38,7 @@ run = [
 ]
 
 [tasks."seed:demo"]
-description = "Import the synthesized demo library into SEED_URL (SEED_USERNAME, SEED_PASSWORD; needs ffmpeg); skips Albums already there"
+description = "Import the synthesized demo library into SEED_URL (SEED_BASIC_AUTH for Traefik; SEED_USERNAME, SEED_PASSWORD default demo; needs ffmpeg); skips Albums already there"
 run = "node --no-warnings scripts/seed-demo-library.ts"
 
 [tasks."desktop:dev"]

@@ -3,10 +3,12 @@
 // fully tagged, with an embedded front cover and synced LRC lyrics. Albums
 // already in the library are skipped, so running it again changes nothing.
 //
-//   SEED_URL=https://dev.aneomol.uk SEED_USERNAME=… SEED_PASSWORD=… mise run seed:demo
+//   SEED_URL=https://dev.aneomol.uk SEED_BASIC_AUTH=preview:… mise run seed:demo
 //
-// With credentials it sends them as basic auth (for Traefik in front of dev
-// and previews) and signs in to the Music Server. Needs ffmpeg on PATH.
+// SEED_USERNAME and SEED_PASSWORD sign in to the Music Server (default: the
+// public demo account demo / demo of dev and previews). SEED_BASIC_AUTH
+// (user:password) is sent as basic auth for Traefik in front of dev and
+// previews. Needs ffmpeg on PATH.
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
@@ -272,12 +274,17 @@ type BatchFile = {
 };
 type Batch = { id: string; revision: number; files: BatchFile[] };
 
-function client(baseUrl: string, username: string, password: string) {
+function client(
+	baseUrl: string,
+	username: string,
+	password: string,
+	basicAuth: string,
+) {
 	const headers: Record<string, string> = {};
 	// Traefik strips Authorization before the Music Server, so dev and previews
 	// need both basic auth and a session.
-	if (username)
-		headers.authorization = `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`;
+	if (basicAuth)
+		headers.authorization = `Basic ${Buffer.from(basicAuth).toString("base64")}`;
 	const call = async (path: string, init: RequestInit = {}) => {
 		const response = await fetch(`${baseUrl}${path}`, {
 			...init,
@@ -403,8 +410,9 @@ async function main(): Promise<void> {
 	if (!baseUrl) throw new Error("Set SEED_URL to the Music Server's address.");
 	const api = client(
 		baseUrl,
-		process.env.SEED_USERNAME ?? "",
-		process.env.SEED_PASSWORD ?? "",
+		process.env.SEED_USERNAME || "demo",
+		process.env.SEED_PASSWORD || "demo",
+		process.env.SEED_BASIC_AUTH ?? "",
 	);
 	await api.signIn();
 	const missing: DemoAlbum[] = [];
