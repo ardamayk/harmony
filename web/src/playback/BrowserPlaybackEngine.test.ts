@@ -545,8 +545,12 @@ describe("BrowserPlaybackEngine", () => {
 		await vi.advanceTimersByTimeAsync(600000);
 		expect(engine.getState().status).toBe("reconnecting");
 
+		// Back online, the Track still gets its full retry budget.
 		online.mockReturnValue(true);
-		await vi.advanceTimersByTimeAsync(15000);
+		window.dispatchEvent(new Event("online"));
+		await vi.advanceTimersByTimeAsync(60000);
+		expect(engine.getState().status).toBe("reconnecting");
+		await vi.advanceTimersByTimeAsync(120000);
 		expect(engine.getState()).toMatchObject({
 			status: "error",
 			error: { code: "playback-failed" },

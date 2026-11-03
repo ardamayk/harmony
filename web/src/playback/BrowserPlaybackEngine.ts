@@ -663,11 +663,13 @@ export class BrowserPlaybackEngine implements PlaybackEngine {
 		) {
 			return;
 		}
-		// Offline, keep waiting: the `online` event retries at once.
+		// Offline time does not count toward the limit: wait at the longest
+		// delay, and the `online` event retries at once.
+		const isOffline = globalThis.navigator?.onLine === false;
 		if (
 			!isLiveSource(this.state.source) &&
-			this.reconnectAttempt >= TRACK_RECONNECT_ATTEMPT_LIMIT &&
-			globalThis.navigator?.onLine !== false
+			!isOffline &&
+			this.reconnectAttempt >= TRACK_RECONNECT_ATTEMPT_LIMIT
 		) {
 			this.failPlayback();
 			return;
@@ -675,12 +677,11 @@ export class BrowserPlaybackEngine implements PlaybackEngine {
 		this.clearStabilityTimer();
 		const source = this.state.source;
 		const sourceRevision = this.sourceRevision;
-		const delayIndex = Math.min(
-			this.reconnectAttempt,
-			RECONNECT_DELAYS_MS.length - 1,
-		);
+		const delayIndex = isOffline
+			? RECONNECT_DELAYS_MS.length - 1
+			: Math.min(this.reconnectAttempt, RECONNECT_DELAYS_MS.length - 1);
 		const delay = RECONNECT_DELAYS_MS[delayIndex];
-		this.reconnectAttempt += 1;
+		if (!isOffline) this.reconnectAttempt += 1;
 		this.update({ status: "reconnecting", error: null });
 		this.reconnectTimer = setTimeout(() => {
 			this.reconnectTimer = null;
