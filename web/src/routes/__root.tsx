@@ -27,6 +27,7 @@ import { LibrarySearchDialog } from "#/components/library-search-dialog";
 import { ListenTogetherGate } from "#/components/listen-together-gate";
 import { QueueTrackMenu } from "#/components/queue-track-menu";
 import { RootErrorComponent } from "#/components/root-error";
+import { SignInGate } from "#/components/sign-in-gate";
 import { ThemeSync } from "#/components/theme-sync";
 import { isDesktopClient } from "#/desktop/bridge";
 import { SidebarPlaylists } from "#/components/sidebar-playlists";
@@ -92,7 +93,9 @@ function RootLayout() {
 		<>
 			<DesktopWindowFrame />
 			<DesktopConnectionGate>
-				<ConnectedRootLayout />
+				<SignInGate>
+					<ConnectedRootLayout />
+				</SignInGate>
 			</DesktopConnectionGate>
 		</>
 	);

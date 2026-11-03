@@ -1,5 +1,7 @@
-//! The current user. Authentication does not exist yet, so every request is
-//! the single default user (server/internal/auth).
+//! The current user. There is one: every request acts as the default user,
+//! whether sign-in is off (the loopback listener trusts its caller) or on
+//! (`modules::auth` checks who it is first; ADR 0042). Libraries per user
+//! come later.
 
 pub const DEFAULT_USER_ID: &str = "00000000-0000-0000-0000-000000000001";
 

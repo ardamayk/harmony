@@ -6,6 +6,7 @@ import {
 	listenForQueueEvents,
 } from "#/desktop/bridge";
 import { getApiBaseUrl } from "#/env";
+import { markSignedOut } from "#/lib/sign-in";
 
 const isDesktop = isDesktopClient();
 export const apiClient = createApiClient({
@@ -19,4 +20,5 @@ export const apiClient = createApiClient({
 	// Contract checks in development and tests only; production builds skip
 	// them (library lists can hold thousands of items). See ADR 0034.
 	validateResponses: import.meta.env.DEV,
+	onUnauthenticated: markSignedOut,
 });

@@ -37,13 +37,40 @@ Listen Together lets friends join a Room on your Music Server through an Invite 
 | `LISTEN_TOGETHER_MAX_GUESTS` | How many Guests a Room admits, 1 to 8. Unset, 8. |
 | `LISTEN_TOGETHER_ROOM_HOURS` | How many hours a Room lasts, 1 to 168. Unset, 24. |
 
-**Point your tunnel or reverse proxy at `GUEST_ADDR`, never at `SERVER_ADDR`.** `SERVER_ADDR` has no authentication: it trusts every request because only your own machine can reach it. Exposing it hands your whole Music Server to the internet, including deleting your library. `GUEST_ADDR` serves only the Web Client, joining, and what a Guest may use, and it refuses everything else.
+**Point your tunnel or reverse proxy at `GUEST_ADDR`, never at `SERVER_ADDR`.** Unless sign-in is on (below), `SERVER_ADDR` has no authentication: it trusts every request because only your own machine can reach it. Exposing it hands your whole Music Server to the internet, including deleting your library. `GUEST_ADDR` serves only the Web Client, joining, and what a Guest may use, and it refuses everything else.
 
 The proxy must terminate HTTPS and pass the public host through in the `Host` header; the Guest Listener refuses any other host. With nginx that means `proxy_set_header Host $http_host;`, which keeps a non-default port (`$host` drops it, and nginx's default sends the upstream's name instead), and it needs `proxy_buffering off` for the Room's event stream. Caddy and `cloudflared` keep the host unless you configure them otherwise.
 
 A Room lives in memory for at most `LISTEN_TOGETHER_ROOM_HOURS`, and a restart ends it. Anyone holding the Invite Link can join until the Room closes, so share it like a password. Each Guest streams from your connection, at the Track's own bitrate.
 
 The Guest Listener answers `429 rate_limited` when a Guest passes a limit; the budgets are constants, listed in ADR 0037, and normal listening stays within them. Reads that run ffmpeg or call an outside service are the strictest, a Guest holds at most 4 audio streams, and a seek is never refused. `POST /api/v1/listen-together/join` has one limit shared by everyone, because the server cannot trust a client address behind a proxy: repeated attempts can delay your friends' joins until they stop.
+
+## Sign-in with a username and password
+
+Sign-in lets the Music Server face a network on its own, for example in a Docker container behind Traefik (ADR 0042). It is off by default. Set `AUTH_USERNAME` and `AUTH_PASSWORD_HASH` together, or leave both unset; setting only one stops the server at startup, and so does combining them with any `OWNER_*` variable: choose sign-in or Owner access through a signing proxy.
+
+| Variable | Meaning |
+| --- | --- |
+| `AUTH_USERNAME` | The user who signs in, up to 256 characters, without `:`. |
+| `AUTH_PASSWORD_HASH` | That user's password as an argon2id PHC string (`$argon2id$v=19$...`). Make one with `hash-password`, below. |
+| `TRUSTED_PROXIES` | Comma-separated addresses or CIDR blocks of your reverse proxies, for example `172.18.0.0/16`. Only from these peers does the server read `X-Forwarded-For`. |
+
+```bash
+echo 'your password' | earthly-music-server hash-password       # prints AUTH_PASSWORD_HASH
+docker run --rm -i <image> hash-password <<<'your password'     # the same from the image
+```
+
+`hash-password` reads one line from stdin and prints its hash; put the hash in your environment, never the password. At startup the server stores the user in its database; a changed `AUTH_PASSWORD_HASH` signs out every session.
+
+With sign-in on:
+
+- `SERVER_ADDR` may bind any address, such as `0.0.0.0:8090`.
+- **Host-based trust is off.** A request to a loopback Host no longer passes on its own: another container on the Docker network can send any Host. Every `/api/` request except `GET /api/v1/health`, `POST /api/v1/auth/login` and `POST /api/v1/auth/logout` needs the `harmony_session` cookie or `Authorization: Basic`, and answers `401 unauthenticated` without either. The Web Client's files, `/docs` and the API reference (`/api/docs`, `/api/openapi.yaml`) stay public.
+- `POST /api/v1/auth/login` with `{"username", "password"}` sets the session cookie (HttpOnly, SameSite=Lax, 30 days, renewed daily while in use, `Secure` unless the Host is loopback). The Desktop Client and scripts can send Basic credentials on every request instead.
+- After 5 failed attempts from one client address (for IPv6, one /64 prefix), each further attempt waits twice as long, from 1 second up to 15 minutes, and answers `429 too_many_attempts` with `Retry-After`. Accounts are never locked and there is no per-username limit, so nobody can keep you out by failing with your username. A Basic header that was already refused is not counted again for 5 minutes. A successful sign-in clears the count.
+- **`TRUSTED_PROXIES` must list your reverse proxy**, such as Traefik's Docker network, or every attempt looks like it came from the proxy: one client's failures would make everyone wait. List only proxies you run; a listed peer can claim any client address.
+
+The Guest Listener (`GUEST_ADDR`) is unchanged.
 
 ## Owner access through a signing proxy
 

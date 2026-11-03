@@ -2,7 +2,11 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
 	testDir: "./e2e",
-	testIgnore: ["radio-hls-proxy.spec.ts", "production-smoke.spec.ts"],
+	testIgnore: [
+		"radio-hls-proxy.spec.ts",
+		"production-smoke.spec.ts",
+		"preview-smoke.spec.ts",
+	],
 	fullyParallel: true,
 	forbidOnly: !!process.env.CI,
 	// CI diagnostics for the Integration Gate: one retry, and on failure an

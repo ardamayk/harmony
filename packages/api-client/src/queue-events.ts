@@ -305,6 +305,7 @@ async function runFetchLoop(
 			const response = await config.transport(
 				buildQueueEventsUrl(await config.getBaseUrl()),
 				{
+					credentials: "include",
 					headers,
 					signal,
 				},
