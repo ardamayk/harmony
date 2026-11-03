@@ -38,6 +38,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sign in with a username and password
+         * @description Only when AUTH_USERNAME and AUTH_PASSWORD_HASH are configured (auth.session.v1; ADR 0042); otherwise 404 auth_disabled. Success sets the harmony_session cookie (HttpOnly, SameSite=Lax, Secure on https, 30 days, renewed while in use). Failed attempts slow down per client address and per username: after 5 failures each further attempt waits twice as long, up to 15 minutes, and answers 429 too_many_attempts with Retry-After until then. Accounts are never locked.
+         */
+        post: operations["login"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * End this session
+         * @description Deletes the session behind the harmony_session cookie and clears it. Answers 204 even without a session.
+         */
+        post: operations["logout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/client-metrics": {
         parameters: {
             query?: never;
@@ -1475,7 +1515,7 @@ export interface components {
             /** @enum {string} */
             status: "ok";
             version: string;
-            /** @description Named server behaviors supported by this release. The versioned /api/v1 surface itself is advertised as api.v1. The Shared Playback State is advertised as playback.shared-session.v1. Queue event streaming is advertised as playback.queue-events.v1 and the first strict FLAC Managed Import tracer bullet as managed-import.v1. Multi-file Managed Import Batches are advertised as managed-import-batches.v1, Permanent Track Deletion as managed-track-deletion.v1, explicit Track Replacement as managed-track-replacement.v1, Album deletion (one Permanent Track Deletion per Track, previewed once) as managed-album-deletion.v1, lazily generated waveform peaks as track-waveform.v1 (only when ffmpeg is installed), and External Source search and playback through yt-dlp as external-source.v1 (only when EXTERNAL_SOURCE_SEARCH is configured; a missing yt-dlp shows in dependencies and answers 503), and Rooms as listen-together.v1 (only when GUEST_ADDR and PUBLIC_URL are configured). On the Guest Listener, health lists only api.v1, listen-together.v1 and track-waveform.v1, with empty dependencies and no externalSource. Clients gate optional behavior on the exact capability name and must ignore unknown entries so newer servers stay compatible with older clients. */
+            /** @description Named server behaviors supported by this release. The versioned /api/v1 surface itself is advertised as api.v1. The Shared Playback State is advertised as playback.shared-session.v1. Queue event streaming is advertised as playback.queue-events.v1 and the first strict FLAC Managed Import tracer bullet as managed-import.v1. Multi-file Managed Import Batches are advertised as managed-import-batches.v1, Permanent Track Deletion as managed-track-deletion.v1, explicit Track Replacement as managed-track-replacement.v1, Album deletion (one Permanent Track Deletion per Track, previewed once) as managed-album-deletion.v1, lazily generated waveform peaks as track-waveform.v1 (only when ffmpeg is installed), and External Source search and playback through yt-dlp as external-source.v1 (only when EXTERNAL_SOURCE_SEARCH is configured; a missing yt-dlp shows in dependencies and answers 503), and Rooms as listen-together.v1 (only when GUEST_ADDR and PUBLIC_URL are configured), and username and password sign-in as auth.session.v1 (only when AUTH_USERNAME and AUTH_PASSWORD_HASH are configured). On the Guest Listener, health lists only api.v1, listen-together.v1 and track-waveform.v1, with empty dependencies and no externalSource. Clients gate optional behavior on the exact capability name and must ignore unknown entries so newer servers stay compatible with older clients. */
             capabilities: string[];
             /** @description Server Dependencies probed once at startup, in a stable order (ffmpeg, ffprobe, then the optional yt-dlp only when EXTERNAL_SOURCE_SEARCH is configured). They describe the deployment environment so an operator can see what the installation supports. */
             dependencies: components["schemas"]["ServerDependency"][];
@@ -1495,6 +1535,10 @@ export interface components {
             available: boolean;
             /** @description Version parsed from the program's own version output. Absent when the program is missing or its output could not be parsed. */
             version?: string;
+        };
+        LoginRequest: {
+            username: string;
+            password: string;
         };
         User: {
             /** Format: uuid */
@@ -2661,6 +2705,85 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             429: components["responses"]["RateLimited"];
+        };
+    };
+    login: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LoginRequest"];
+            };
+        };
+        responses: {
+            /** @description Signed in; the response sets the session cookie */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            /** @description Wrong username or password (invalid_credentials) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Authentication is not configured (auth_disabled) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too many failed attempts (too_many_attempts); see Retry-After */
+            429: {
+                headers: {
+                    /** @description Seconds until the next attempt is accepted */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    logout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Signed out; the response clears the session cookie */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication is not configured (auth_disabled) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
         };
     };
     reportClientMetrics: {

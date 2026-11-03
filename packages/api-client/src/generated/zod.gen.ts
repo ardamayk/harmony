@@ -182,6 +182,11 @@ export const zHealthResponse = z.object({
     externalSource: zExternalSourceInfo.optional()
 });
 
+export const zLoginRequest = z.object({
+    username: z.string().min(1).max(256),
+    password: z.string().min(1).max(1024)
+});
+
 export const zUser = z.object({
     id: z.guid(),
     username: z.string(),
@@ -1183,6 +1188,16 @@ export const zGetHealthResponse = zHealthResponse;
  * Current user
  */
 export const zGetMeResponse = zUser;
+
+/**
+ * Signed in; the response sets the session cookie
+ */
+export const zLoginResponse = z.void();
+
+/**
+ * Signed out; the response clears the session cookie
+ */
+export const zLogoutResponse = z.void();
 
 /**
  * Accepted
