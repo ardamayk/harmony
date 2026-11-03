@@ -7,6 +7,7 @@ import { DesktopPlaybackEngine } from "./DesktopPlaybackEngine";
 import {
 	disposeSharedPlaybackEngine,
 	getSharedPlaybackEngine,
+	stopSharedPlaybackEngine,
 } from "./shared-playback-engine";
 
 const source: PlaybackSource = {
@@ -28,6 +29,19 @@ const source: PlaybackSource = {
 afterEach(() => disposeSharedPlaybackEngine());
 
 describe("shared playback engine", () => {
+	it("stops playback before it disposes the engine on sign-out", () => {
+		const engine = { stop: vi.fn(), destroy: vi.fn() };
+		getSharedPlaybackEngine(() => engine as never);
+
+		stopSharedPlaybackEngine();
+
+		expect(engine.stop).toHaveBeenCalledOnce();
+		expect(engine.destroy).toHaveBeenCalledOnce();
+		expect(engine.stop.mock.invocationCallOrder[0]).toBeLessThan(
+			engine.destroy.mock.invocationCallOrder[0],
+		);
+	});
+
 	it("hydrates one native session across development StrictMode render replay", async () => {
 		const restored: PlaybackSessionState = {
 			...DEFAULT_PLAYBACK_SESSION_STATE,

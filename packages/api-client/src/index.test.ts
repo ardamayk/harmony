@@ -1149,6 +1149,8 @@ describe("sign-in", () => {
 			"http://music.test/api/v1/auth/login",
 			expect.objectContaining({
 				method: "POST",
+				// A Web Client on another origin (VITE_API_URL) keeps the cookie.
+				credentials: "include",
 				body: JSON.stringify({ username: "owner", password: "secret" }),
 			}),
 		);

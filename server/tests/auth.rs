@@ -219,8 +219,16 @@ async fn with_sign_in_on_the_api_needs_credentials_on_every_host() {
             .unwrap()
             .contains(&json!("auth.session.v1"))
     );
-    // The Web Client's files and the docs are no API.
-    for path in ["/", "/library/albums", "/docs"] {
+    // The Web Client's files and the docs are no API, and the API
+    // reference is public like them.
+    for path in [
+        "/",
+        "/library/albums",
+        "/docs",
+        "/api/docs",
+        "/api/openapi.yaml",
+        "/api/docs/api-reference.js",
+    ] {
         let page = send(
             &harness,
             get(path, PUBLIC_HOST).body(Body::empty()).unwrap(),
@@ -439,6 +447,46 @@ async fn five_failures_then_attempts_wait_without_checking_the_password() {
     .await;
     assert_eq!(basic_limited.status, StatusCode::TOO_MANY_REQUESTS);
     assert!(basic_limited.headers.contains_key(header::RETRY_AFTER));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn failures_from_one_address_do_not_keep_the_owner_out_elsewhere() {
+    let harness = signed_in_harness(&[]).await;
+    for _ in 0..8 {
+        send(
+            &harness,
+            login_request(PUBLIC_HOST, "203.0.113.66:4000", USERNAME, "wrong"),
+        )
+        .await;
+    }
+    let owner = send(
+        &harness,
+        login_request(PUBLIC_HOST, "198.51.100.9:4000", USERNAME, PASSWORD),
+    )
+    .await;
+    assert_eq!(owner.status, StatusCode::NO_CONTENT);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_repeated_wrong_basic_header_is_not_a_new_attempt() {
+    let harness = signed_in_harness(&[]).await;
+    // A Desktop Client with a stale password keeps polling.
+    for _ in 0..10 {
+        let stale = send(
+            &harness,
+            get("/api/v1/me", PUBLIC_HOST)
+                .header(header::AUTHORIZATION, basic(USERNAME, "old password"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(stale.code(), "invalid_credentials");
+    }
+    // The same address can still sign in.
+    assert_eq!(
+        login(&harness, PUBLIC_HOST, PASSWORD).await.status,
+        StatusCode::NO_CONTENT
+    );
 }
 
 /// Five failures from one client address, each with its own username so

@@ -9,7 +9,7 @@ import { getServerConnection, isDesktopClient } from "#/desktop/bridge";
 import { ServerConnectionForm } from "#/desktop/ServerConnectionForm";
 import { apiClient } from "#/lib/api";
 import { markSignedIn, useSignedOut } from "#/lib/sign-in";
-import { disposeSharedPlaybackEngine } from "#/playback/shared-playback-engine";
+import { stopSharedPlaybackEngine } from "#/playback/shared-playback-engine";
 
 /**
  * Shows the sign-in screen in place of the app once the Music Server answers
@@ -20,7 +20,7 @@ export function SignInGate({ children }: { children: ReactNode }) {
 	const signedOut = useSignedOut();
 	// Nothing the old session started may keep playing.
 	useEffect(() => {
-		if (signedOut) disposeSharedPlaybackEngine();
+		if (signedOut) stopSharedPlaybackEngine();
 	}, [signedOut]);
 	if (!signedOut) return children;
 	if (isDesktopClient()) return <DesktopSignIn />;

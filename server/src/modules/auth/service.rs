@@ -18,8 +18,10 @@ pub const SESSION_LIFETIME: Duration = Duration::from_secs(30 * 24 * 60 * 60);
 /// A session in use gets a new expiry at most this often, so a request is
 /// rarely a write.
 const RENEW_AFTER: Duration = Duration::from_secs(24 * 60 * 60);
-/// Argon2 per request would slow every Track stream, so a Basic header that
-/// passed is believed again for this long.
+/// Argon2 per request would slow every Track stream, so a Basic header's
+/// answer is reused for this long. A wrong one is remembered too: a client
+/// repeating a stale header (say, after a password change) is not guessing,
+/// and must not use up its address's attempts.
 const BASIC_CACHE_TTL: Duration = Duration::from_secs(5 * 60);
 const BASIC_CACHE_MAX: usize = 256;
 
@@ -65,8 +67,9 @@ pub struct Auth {
     repository: Repository,
     config: AuthConfig,
     attempts: Mutex<Attempts>,
-    /// Basic headers that passed, by SHA-256 of the header value.
-    basic_passed: Mutex<HashMap<HeaderKey, (String, Instant)>>,
+    /// Basic headers already checked, by SHA-256 of the header value: the
+    /// user they belong to, or `None` for wrong credentials.
+    basic_checked: Mutex<HashMap<HeaderKey, (Option<String>, Instant)>>,
     /// One check per Basic header at a time: a client's first burst of
     /// requests waits for the first answer instead of each counting as an
     /// attempt.
@@ -79,7 +82,7 @@ impl Auth {
             repository: Repository::new(db),
             config,
             attempts: Mutex::default(),
-            basic_passed: Mutex::default(),
+            basic_checked: Mutex::default(),
             basic_checks: Mutex::default(),
         }
     }
@@ -107,11 +110,11 @@ impl Auth {
         username: &str,
         password: &str,
     ) -> Result<String, AuthError> {
-        if let Some(wait) =
-            self.attempts
-                .lock()
-                .expect("attempts lock")
-                .begin(client, username, Instant::now())
+        if let Some(wait) = self
+            .attempts
+            .lock()
+            .expect("attempts lock")
+            .begin(client, Instant::now())
         {
             return Err(AuthError::TooManyAttempts(whole_seconds(wait)));
         }
@@ -128,10 +131,7 @@ impl Auth {
         .unwrap_or(false);
         match user.filter(|_| matches) {
             Some(user) => {
-                self.attempts
-                    .lock()
-                    .expect("attempts lock")
-                    .succeed(client, username);
+                self.attempts.lock().expect("attempts lock").succeed(client);
                 Ok(user.id)
             }
             None => Err(AuthError::InvalidCredentials),
@@ -171,8 +171,8 @@ impl Auth {
         password: &str,
     ) -> Result<String, AuthError> {
         let key: HeaderKey = Sha256::digest(header.as_bytes()).into();
-        if let Some(user_id) = self.basic_cached(&key) {
-            return Ok(user_id);
+        if let Some(known) = self.basic_cached(&key) {
+            return known.ok_or(AuthError::InvalidCredentials);
         }
         let check = self
             .basic_checks
@@ -184,7 +184,7 @@ impl Auth {
         let result = {
             let _turn = check.lock().await;
             match self.basic_cached(&key) {
-                Some(user_id) => Ok(user_id),
+                Some(known) => known.ok_or(AuthError::InvalidCredentials),
                 None => self.check_password(client, username, password).await,
             }
         };
@@ -197,21 +197,27 @@ impl Auth {
                 checks.remove(&key);
             }
         }
-        if let Ok(user_id) = &result {
-            let mut passed = self.basic_passed.lock().expect("basic cache lock");
-            if passed.len() >= BASIC_CACHE_MAX {
-                passed.retain(|_, (_, at)| at.elapsed() < BASIC_CACHE_TTL);
+        let known = match &result {
+            Ok(user_id) => Some(Some(user_id.clone())),
+            Err(AuthError::InvalidCredentials) => Some(None),
+            // A wait or a database error says nothing about the header.
+            Err(_) => None,
+        };
+        if let Some(known) = known {
+            let mut checked = self.basic_checked.lock().expect("basic cache lock");
+            if checked.len() >= BASIC_CACHE_MAX {
+                checked.retain(|_, (_, at)| at.elapsed() < BASIC_CACHE_TTL);
             }
-            if passed.len() >= BASIC_CACHE_MAX {
-                passed.clear();
+            if checked.len() >= BASIC_CACHE_MAX {
+                checked.clear();
             }
-            passed.insert(key, (user_id.clone(), Instant::now()));
+            checked.insert(key, (known, Instant::now()));
         }
         result
     }
 
-    fn basic_cached(&self, key: &HeaderKey) -> Option<String> {
-        self.basic_passed
+    fn basic_cached(&self, key: &HeaderKey) -> Option<Option<String>> {
+        self.basic_checked
             .lock()
             .expect("basic cache lock")
             .get(key)

@@ -1,7 +1,7 @@
-//! Failed sign-in attempts, per client address and per username (ADR 0042).
-//! Five failures are free; after that each attempt waits twice as long as
-//! the one before, up to 15 minutes. Nothing locks an account: the wait
-//! ends, and a success clears it.
+//! Failed sign-in attempts, per client address (ADR 0042). Five failures
+//! are free; after that each attempt waits twice as long as the one before,
+//! up to 15 minutes. There is no per-username counter: the username is not
+//! secret, so one would let anyone keep the Owner out of sign-in.
 
 use std::collections::HashMap;
 use std::hash::Hash;
@@ -14,9 +14,6 @@ const MAX_WAIT: Duration = Duration::from_secs(900);
 const IDLE: Duration = Duration::from_secs(24 * 60 * 60);
 /// Per map, so a spray of addresses or usernames cannot exhaust memory.
 const MAX_ENTRIES: usize = 10_000;
-/// Longer usernames cannot match one (config allows 256 characters), so
-/// they share a key instead of growing the map.
-const MAX_USERNAME_KEY_BYTES: usize = 1024;
 
 /// How long after its last failure the next attempt must wait.
 pub fn backoff(failures: u32) -> Duration {
@@ -30,39 +27,24 @@ pub fn backoff(failures: u32) -> Duration {
 #[derive(Default)]
 pub struct Attempts {
     by_client: Counters<IpAddr>,
-    by_username: Counters<String>,
 }
 
 impl Attempts {
     /// Starts an attempt: the time left to wait, or `None` once it may go
     /// ahead. A started attempt counts as a failure until `succeed`, so
     /// concurrent guesses cannot all slip through before any is counted.
-    pub fn begin(&mut self, client: IpAddr, username: &str, now: Instant) -> Option<Duration> {
-        let username = username_key(username);
-        let wait = self
-            .by_client
-            .wait(&client, now)
-            .max(self.by_username.wait(&username, now));
+    pub fn begin(&mut self, client: IpAddr, now: Instant) -> Option<Duration> {
+        let wait = self.by_client.wait(&client, now);
         if !wait.is_zero() {
             return Some(wait);
         }
         self.by_client.fail(client, now);
-        self.by_username.fail(username, now);
         None
     }
 
-    pub fn succeed(&mut self, client: IpAddr, username: &str) {
+    pub fn succeed(&mut self, client: IpAddr) {
         self.by_client.entries.remove(&client);
-        self.by_username.entries.remove(&username_key(username));
     }
-}
-
-fn username_key(username: &str) -> String {
-    let mut end = username.len().min(MAX_USERNAME_KEY_BYTES);
-    while !username.is_char_boundary(end) {
-        end -= 1;
-    }
-    username[..end].to_owned()
 }
 
 struct Counter {
@@ -139,28 +121,22 @@ mod tests {
     }
 
     #[test]
-    fn the_sixth_attempt_waits_and_a_success_clears_the_counters() {
+    fn the_sixth_attempt_from_an_address_waits_and_a_success_clears_it() {
         let mut attempts = Attempts::default();
         let start = Instant::now();
         for _ in 0..5 {
-            assert_eq!(attempts.begin(CLIENT, "owner", start), None);
+            assert_eq!(attempts.begin(CLIENT, start), None);
         }
-        assert_eq!(
-            attempts.begin(CLIENT, "owner", start),
-            Some(Duration::from_secs(1))
-        );
-        // Another address still meets the username's wait.
+        assert_eq!(attempts.begin(CLIENT, start), Some(Duration::from_secs(1)));
+        // Another address, such as the Owner's, is not held up.
         let other = IpAddr::from([198, 51, 100, 1]);
-        assert!(attempts.begin(other, "owner", start).is_some());
+        assert_eq!(attempts.begin(other, start), None);
         // Once the wait is over the attempt goes ahead, and fails again.
         let later = start + Duration::from_secs(1);
-        assert_eq!(attempts.begin(CLIENT, "owner", later), None);
-        assert_eq!(
-            attempts.begin(CLIENT, "owner", later),
-            Some(Duration::from_secs(2))
-        );
-        attempts.succeed(CLIENT, "owner");
-        assert_eq!(attempts.begin(CLIENT, "owner", later), None);
+        assert_eq!(attempts.begin(CLIENT, later), None);
+        assert_eq!(attempts.begin(CLIENT, later), Some(Duration::from_secs(2)));
+        attempts.succeed(CLIENT);
+        assert_eq!(attempts.begin(CLIENT, later), None);
     }
 
     #[test]
@@ -168,13 +144,13 @@ mod tests {
         let mut attempts = Attempts::default();
         let start = Instant::now();
         for _ in 0..20 {
-            attempts.begin(CLIENT, "owner", start + MAX_WAIT * 20);
+            attempts.begin(CLIENT, start + MAX_WAIT * 20);
         }
         let next_day = start + MAX_WAIT * 20 + IDLE;
         for _ in 0..5 {
-            assert_eq!(attempts.begin(CLIENT, "owner", next_day), None);
+            assert_eq!(attempts.begin(CLIENT, next_day), None);
         }
-        assert!(attempts.begin(CLIENT, "owner", next_day).is_some());
+        assert!(attempts.begin(CLIENT, next_day).is_some());
     }
 
     #[test]

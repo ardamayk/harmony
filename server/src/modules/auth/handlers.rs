@@ -100,14 +100,21 @@ async fn logout(State(state): State<AppState>, headers: HeaderMap) -> ApiResult<
     Ok(response)
 }
 
+/// The API reference and the contract it reads (`modules::docs`): public,
+/// like the product docs.
+fn is_api_reference(path: &str) -> bool {
+    path == "/api/openapi.yaml" || path == "/api/docs" || path.starts_with("/api/docs/")
+}
+
 /// Lets an API request through only with a session cookie or Basic
-/// credentials. Health, login and logout stay open, and so does everything
-/// outside `/api/`: the Web Client's files and the docs. No answer carries
+/// credentials. Health, login, logout and the API reference stay open, and
+/// so does everything outside `/api/`: the Web Client's files and the docs. No answer carries
 /// `WWW-Authenticate`, which would open the browser's own password dialog.
 pub async fn gate(auth: &Auth, mut request: Request, next: Next) -> Response {
     let path = request.uri().path();
     let method = request.method();
     let open = !path.starts_with("/api/")
+        || is_api_reference(path)
         || (path == "/api/v1/health" && matches!(*method, Method::GET | Method::HEAD))
         || ((path == LOGIN || path == LOGOUT) && method == Method::POST);
     if open {

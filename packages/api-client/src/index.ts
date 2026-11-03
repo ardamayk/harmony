@@ -319,7 +319,10 @@ export function createApiClient(config: ApiClientConfig) {
 		queueEventsBaseUrl = baseUrl,
 		getToken,
 		transport = globalThis.fetch,
-		eventSourceFactory = (url) => new EventSource(url) as QueueEventSource,
+		// A Web Client on another origin (VITE_API_URL) still sends the
+		// session cookie; same-origin requests behave as before.
+		eventSourceFactory = (url) =>
+			new EventSource(url, { withCredentials: true }) as QueueEventSource,
 		queueEventSubscriber,
 		roomEventsMode = getToken ? "poll" : "stream",
 		validateResponses = isDevelopmentBuild(),
@@ -387,6 +390,7 @@ export function createApiClient(config: ApiClientConfig) {
 				signal?.removeEventListener("abort", handleSignalAbort);
 			const handleSignalAbort = () => upload.abort();
 			upload.open("PUT", `${baseUrl}/api/v1/imports/${importId}/file`);
+			upload.withCredentials = true;
 			upload.responseType = "json";
 			upload.setRequestHeader("Accept", "application/json");
 			upload.setRequestHeader(
@@ -531,6 +535,7 @@ export function createApiClient(config: ApiClientConfig) {
 		}
 
 		const response = await transport(`${baseUrl}${path}`, {
+			credentials: "include",
 			...init,
 			headers,
 		});
@@ -1009,6 +1014,7 @@ export function createApiClient(config: ApiClientConfig) {
 				`${baseUrl}/api/v1/tracks/${trackId}/stream`,
 				{
 					method: "HEAD",
+					credentials: "include",
 					headers,
 				},
 			);

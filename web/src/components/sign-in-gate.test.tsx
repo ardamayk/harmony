@@ -29,7 +29,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("#/lib/api", () => ({ apiClient: { login: mocks.login } }));
 vi.mock("#/playback/shared-playback-engine", () => ({
-	disposeSharedPlaybackEngine: mocks.dispose,
+	stopSharedPlaybackEngine: mocks.dispose,
 }));
 vi.mock("#/desktop/bridge", () => ({
 	isDesktopClient: mocks.isDesktopClient,
