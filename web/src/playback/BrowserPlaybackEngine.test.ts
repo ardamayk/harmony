@@ -14,6 +14,7 @@ import {
 
 class MemoryMedia extends EventTarget implements BrowserPlaybackMedia {
 	buffered?: BrowserPlaybackMedia["buffered"];
+	error: BrowserPlaybackMedia["error"] = null;
 	currentTime = 0;
 	duration = 0;
 	loop = false;
@@ -508,6 +509,51 @@ describe("BrowserPlaybackEngine", () => {
 
 		expect(media.play).toHaveBeenCalledTimes(2);
 		expect(engine.getState().status).toBe("playing");
+		engine.destroy();
+	});
+
+	it("reports an undecodable Track instead of reconnecting", async () => {
+		const engine = new BrowserPlaybackEngine({
+			createMedia: () => media,
+			mediaSession: null,
+		});
+		await engine.play(trackSource);
+
+		media.error = { code: 3 };
+		media.dispatchEvent(new Event("error"));
+
+		expect(engine.getState()).toMatchObject({
+			status: "error",
+			error: { code: "playback-failed" },
+		});
+		engine.destroy();
+	});
+
+	it("gives up on a Track that keeps failing online, but waits while offline", async () => {
+		vi.useFakeTimers();
+		vi.spyOn(console, "warn").mockImplementation(() => undefined);
+		const online = vi.spyOn(navigator, "onLine", "get");
+		const engine = new BrowserPlaybackEngine({
+			createMedia: () => media,
+			mediaSession: null,
+		});
+		await engine.play(trackSource);
+		media.play.mockRejectedValue(new Error("stream gone"));
+
+		online.mockReturnValue(false);
+		media.dispatchEvent(new Event("error"));
+		await vi.advanceTimersByTimeAsync(600000);
+		expect(engine.getState().status).toBe("reconnecting");
+
+		online.mockReturnValue(true);
+		await vi.advanceTimersByTimeAsync(15000);
+		expect(engine.getState()).toMatchObject({
+			status: "error",
+			error: { code: "playback-failed" },
+		});
+		const attempts = media.play.mock.calls.length;
+		await vi.advanceTimersByTimeAsync(60000);
+		expect(media.play).toHaveBeenCalledTimes(attempts);
 		engine.destroy();
 	});
 

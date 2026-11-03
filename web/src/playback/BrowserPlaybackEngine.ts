@@ -10,6 +10,8 @@ import { recordClientMetric } from "#/lib/client-metrics";
 
 export interface BrowserPlaybackMedia extends EventTarget {
 	currentTime: number;
+	/** Optional: MediaError-like; `code` 3 is MEDIA_ERR_DECODE. */
+	error?: { code: number } | null;
 	duration: number;
 	paused: boolean;
 	src: string;
@@ -88,6 +90,10 @@ const ENDED_REPLAY_LIMIT_SECONDS = 1;
 const RECONNECT_DELAYS_MS = [1000, 2000, 4000, 8000, 15000] as const;
 const STALL_TIMEOUT_MS = 10000;
 const STABILITY_RESET_MS = 30000;
+// About two minutes of backoff while the browser says it is online; a Track
+// that still fails then is broken, not out of signal.
+const TRACK_RECONNECT_ATTEMPT_LIMIT = 12;
+const MEDIA_ERR_DECODE = 3;
 
 let defaultHlsFactoryPromise: Promise<BrowserHlsFactory> | null = null;
 
@@ -531,13 +537,22 @@ export class BrowserPlaybackEngine implements PlaybackEngine {
 		if (this.isReconnectAttemptRunning) return;
 		// Once a source has played, a failure is the network dropping (a
 		// tunnel, a dead zone): retry until it returns instead of stopping.
+		// An undecodable Track fails the same way on every reload.
+		const isBrokenTrack =
+			!isLiveSource(this.state.source) &&
+			this.media.error?.code === MEDIA_ERR_DECODE;
 		if (
 			this.hasStartedPlayback &&
+			!isBrokenTrack &&
 			(this.state.status === "playing" || this.state.status === "reconnecting")
 		) {
 			this.scheduleReconnect();
 			return;
 		}
+		this.failPlayback();
+	};
+	private failPlayback() {
+		this.cancelReconnect();
 		this.update({
 			status: "error",
 			error: {
@@ -545,7 +560,7 @@ export class BrowserPlaybackEngine implements PlaybackEngine {
 				message: "Playback failed",
 			},
 		});
-	};
+	}
 	private readonly handleStalled = () => {
 		// A paused element stalls too, once it stops buffering; that is fine.
 		if (
@@ -646,6 +661,15 @@ export class BrowserPlaybackEngine implements PlaybackEngine {
 			this.isReconnectAttemptRunning ||
 			!this.state.source
 		) {
+			return;
+		}
+		// Offline, keep waiting: the `online` event retries at once.
+		if (
+			!isLiveSource(this.state.source) &&
+			this.reconnectAttempt >= TRACK_RECONNECT_ATTEMPT_LIMIT &&
+			globalThis.navigator?.onLine !== false
+		) {
+			this.failPlayback();
 			return;
 		}
 		this.clearStabilityTimer();
