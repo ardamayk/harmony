@@ -8,6 +8,7 @@ use crate::app::AppState;
 use crate::modules::library::{LibraryError, LibraryService, Track};
 use serde::Serialize;
 use serde_json::value::RawValue;
+use std::collections::HashMap;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -62,20 +63,16 @@ impl Service {
     /// The queue, skipping items whose Track no longer exists.
     pub async fn get_queue(&self, user_id: &str) -> Result<Queue, QueueError> {
         let snapshot = self.repo.read(user_id).await?;
+        let tracks = self
+            .tracks_by_id(snapshot.items.iter().map(|row| &row.track_id))
+            .await?;
         let mut items = Vec::with_capacity(snapshot.items.len());
         for row in snapshot.items {
             let source = sources::parse_json(&row.source).map_err(|error| {
                 QueueError::Other(format!("decode queue item {:?} source: {error}", row.id))
             })?;
-            let track = match self.tracks.get_track(&row.track_id).await {
-                Ok(track) => track,
-                Err(LibraryError::NotFound) => continue,
-                Err(error) => {
-                    return Err(QueueError::Other(format!(
-                        "resolve queue track {:?}: {error}",
-                        row.track_id
-                    )));
-                }
+            let Some(track) = tracks.get(&row.track_id).cloned() else {
+                continue;
             };
             items.push(QueueItem {
                 id: row.id,
@@ -103,8 +100,12 @@ impl Service {
             return Err(QueueError::LimitExceeded);
         }
         let encoded = sources::encode(source).map_err(QueueError::InvalidSource)?;
-        for track_id in track_ids {
-            self.require_track(track_id).await?;
+        let found = self.tracks_by_id(track_ids.iter()).await?;
+        if !track_ids
+            .iter()
+            .all(|track_id| found.contains_key(track_id))
+        {
+            return Err(QueueError::TrackNotFound);
         }
         self.repo
             .replace(user_id, revision, track_ids, &encoded)
@@ -254,6 +255,23 @@ impl Service {
             .await
             .map(|_| ())
             .map_err(|_| QueueError::TrackNotFound)
+    }
+
+    /// The existing Tracks among `track_ids`, in one library read.
+    async fn tracks_by_id(
+        &self,
+        track_ids: impl Iterator<Item = &String>,
+    ) -> Result<HashMap<String, Track>, QueueError> {
+        let track_ids: Vec<String> = track_ids.cloned().collect();
+        let tracks = self
+            .tracks
+            .get_tracks(&track_ids)
+            .await
+            .map_err(|error| QueueError::Other(format!("resolve queue tracks: {error}")))?;
+        Ok(tracks
+            .into_iter()
+            .map(|track| (track.id.clone(), track))
+            .collect())
     }
 }
 

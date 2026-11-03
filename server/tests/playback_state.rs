@@ -1,7 +1,8 @@
 //! The Shared Playback State over the assembled router: a claim makes the
 //! device Active, reports from it land, remote commands raise the revision,
 //! a stray report answers 409 with the state, and the queue event stream
-//! carries `playback-state` frames (ADR 0040).
+//! carries `playback-state` frames (ADR 0040). The queue reads past a held
+//! write lock, with as many queries for a long queue as for a short one.
 
 use axum::Router;
 use axum::body::{Body, BodyDataStream};
@@ -24,6 +25,7 @@ const TRACK: &str = "0190c5a0-0000-7000-8000-00000000000a";
 struct Harness {
     owner: Router,
     guest: Router,
+    pool: db::Db,
     _directory: tempfile::TempDir,
 }
 
@@ -62,8 +64,9 @@ async fn harness() -> Harness {
             .await
             .unwrap();
     }
-    let state = AppState::new(config, dependencies::probe_system().await, pool);
+    let state = AppState::new(config, dependencies::probe_system().await, pool.clone());
     Harness {
+        pool,
         owner: app::router(state.clone()),
         guest: app::guest_router(state).expect("configured"),
         _directory: directory,
@@ -380,4 +383,124 @@ async fn the_guest_gate_refuses_both_state_routes() {
         assert_eq!(status, StatusCode::NOT_FOUND, "{label}");
         assert_eq!(body["code"], "not_found");
     }
+}
+
+const QUEUE: &str = "/api/v1/playback/queue";
+
+#[tokio::test]
+async fn the_queue_reads_while_a_write_transaction_holds_the_lock() {
+    let harness = harness().await;
+    let (status, _) = send(
+        &harness.owner,
+        request(
+            Method::PUT,
+            QUEUE,
+            Some(json!({ "trackIds": [TRACK], "revision": "0" })),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    // An import-like writer holds SQLite's write lock, uncommitted.
+    let mut writer = db::begin_write(&harness.pool).await.expect("begin");
+    sqlx::query("UPDATE playback_queue_state SET revision = revision + 100")
+        .execute(&mut *writer)
+        .await
+        .expect("write");
+    // Well inside the 5s busy_timeout: WAL readers do not wait for writers.
+    let (status, queue) = tokio::time::timeout(
+        Duration::from_secs(1),
+        send(&harness.owner, request(Method::GET, QUEUE, None)),
+    )
+    .await
+    .expect("the read does not wait for the writer");
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(queue["revision"], "1");
+    assert_eq!(queue["items"].as_array().map(Vec::len), Some(1));
+    drop(writer);
+}
+
+/// Each request's name and how many database spans it recorded.
+fn database_spans_per_request(work: impl std::future::Future<Output = ()>) -> Vec<(String, usize)> {
+    let options = sentry::ClientOptions::new().traces_sample_rate(1.0);
+    let envelopes = sentry::test::with_captured_envelopes_options(
+        || {
+            tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("runtime")
+                .block_on(work);
+        },
+        options,
+    );
+    envelopes
+        .iter()
+        .flat_map(|envelope| envelope.items())
+        .filter_map(|item| match item {
+            sentry::protocol::EnvelopeItem::Transaction(transaction) => Some((
+                transaction.name.clone().unwrap_or_default(),
+                transaction
+                    .spans
+                    .iter()
+                    .filter(|span| span.op.as_deref().is_some_and(|op| op.starts_with("db.")))
+                    .count(),
+            )),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn the_queue_takes_as_many_queries_for_many_tracks_as_for_one() {
+    let requests = database_spans_per_request(async {
+        let harness = harness().await;
+        let mut tracks = vec![TRACK.to_owned()];
+        for n in 1..20 {
+            let id = format!("t{n}");
+            sqlx::query(
+                "INSERT INTO tracks (id, album_id, title, title_sort, artist_name, format, file_path)
+                 VALUES (?1, 'al', 'T', 't', 'A', 'flac', '/' || ?1 || '.flac')",
+            )
+            .bind(&id)
+            .execute(&harness.pool)
+            .await
+            .unwrap();
+            tracks.push(id);
+        }
+        for (revision, track_ids) in [("0", &tracks[..1]), ("1", &tracks[..])] {
+            let (status, queue) = send(
+                &harness.owner,
+                request(
+                    Method::PUT,
+                    QUEUE,
+                    Some(json!({ "trackIds": track_ids, "revision": revision })),
+                ),
+            )
+            .await;
+            assert_eq!(status, StatusCode::OK);
+            assert_eq!(
+                queue["items"].as_array().map(Vec::len),
+                Some(track_ids.len())
+            );
+            let (status, queue) = send(&harness.owner, request(Method::GET, QUEUE, None)).await;
+            assert_eq!(status, StatusCode::OK);
+            assert_eq!(
+                queue["items"].as_array().map(Vec::len),
+                Some(track_ids.len())
+            );
+        }
+    });
+    let count = |name: &str| -> Vec<usize> {
+        requests
+            .iter()
+            .filter(|(request, _)| request == name)
+            .map(|(_, spans)| *spans)
+            .collect()
+    };
+    let (put, get) = (
+        count("PUT /api/v1/playback/queue"),
+        count("GET /api/v1/playback/queue"),
+    );
+    assert_eq!((put.len(), get.len()), (2, 2), "{requests:?}");
+    assert_eq!(put[0], put[1], "PUT queries grow with the queue: {put:?}");
+    assert_eq!(get[0], get[1], "GET queries grow with the queue: {get:?}");
 }

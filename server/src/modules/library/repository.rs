@@ -425,6 +425,24 @@ impl Repository {
         Ok(tracks.remove(0))
     }
 
+    /// The Tracks among `track_ids` that exist, in no set order, read with
+    /// the same few queries however many there are.
+    pub async fn get_tracks(&self, track_ids: &[String]) -> Result<Vec<Track>, LibraryError> {
+        let track_ids_json = ids_json(track_ids);
+        let rows = select_tracks!(
+            "WHERE t.id IN (SELECT value FROM json_each(?))",
+            track_ids_json
+        )
+        .fetch_all(&self.pool)
+        .await
+        .context(|| format!("get Tracks {track_ids:?}"))?;
+        let mut tracks: Vec<Track> = rows.into_iter().map(to_track).collect();
+        self.enrich_tracks(&mut tracks)
+            .await
+            .map_err(|error| wrap(error, || format!("enrich Tracks {track_ids:?}")))?;
+        Ok(tracks)
+    }
+
     /// The stored lyrics; empty when the file carried none.
     pub async fn get_track_lyrics(&self, track_id: &str) -> Result<String, LibraryError> {
         sqlx::query_scalar!(

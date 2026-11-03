@@ -69,6 +69,10 @@ impl Service {
         self.repo.get_track(track_id).await
     }
 
+    pub async fn get_tracks(&self, track_ids: &[String]) -> Result<Vec<Track>, LibraryError> {
+        self.repo.get_tracks(track_ids).await
+    }
+
     pub async fn get_track_lyrics(&self, track_id: &str) -> Result<String, LibraryError> {
         self.repo.get_track_lyrics(track_id).await
     }
