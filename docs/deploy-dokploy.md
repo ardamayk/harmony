@@ -17,7 +17,7 @@ Production runs the image CI publishes, which exists only once CI has passed on 
 
 `harmony-dev` has no mount for `/data` on purpose. Each of its containers, and each preview's, gets a fresh anonymous volume from the Dockerfile's `VOLUME /data` and starts with an empty library. The consequence: **everything in `harmony-dev` and in a preview is thrown away on every redeploy**, imports included. Use them to try changes, never to keep music. Old anonymous volumes stay on disk until you remove them; `docker volume prune` deletes the unused ones.
 
-So there is something to play, CI imports a small demo library after each deploy: two Albums of synthesized melodies with covers and synced lyrics (`scripts/seed-demo-library.ts`). The Preview E2E workflow seeds the preview before its test; the Seed dev workflow waits for `harmony-dev` to come back empty after a push to `main`, then seeds it, and can be run by hand. From your machine: `SEED_URL=https://dev.aneomol.uk SEED_BASIC_AUTH=preview:… mise run seed:demo` (needs ffmpeg). Albums already there are skipped.
+So there is something to play, CI imports a small demo library after each deploy: two Albums of synthesized melodies with covers and synced lyrics (`scripts/seed-demo-library.ts`). The Preview E2E workflow seeds the preview before its test; the Seed dev workflow waits for `harmony-dev` to come back empty after a push to `main`, then seeds it, and can be run by hand. From your machine: `SEED_URL=https://dev.aneomol.uk SEED_BASIC_AUTH=preview:… SEED_USERNAME=preview SEED_PASSWORD=… mise run seed:demo` (needs ffmpeg). Albums already there are skipped.
 
 ## Both applications
 
@@ -60,7 +60,7 @@ In `harmony-dev` → Preview Deployments, enable them and set:
 - **Wildcard domain:** `*.example.com`. A preview of `harmony-dev` becomes `preview-<appName>-<random>.example.com`.
 - **Port:** `8090`. Dokploy's default is 3000, where nothing listens.
 - **HTTPS:** as for the domains under [Networking](#networking).
-- **Environment:** the same as `harmony-dev`. Both sign in with the public demo account, username `demo` and password `demo`:
+- **Environment:** previews sign in with the public demo account, username `demo` and password `demo`. `harmony-dev` itself reads `AUTH_USERNAME` and `AUTH_PASSWORD` from Infisical's `dev` environment through the secret provider `harmony-dev-vault` (assigned only to Dokploy's `dev` environment; `harmony-prod-vault` reads `prod` and is assigned only to `production`); its account is the Traefik basic auth one, so the Seed dev workflow signs in with `PREVIEW_USERNAME` and `PREVIEW_PASSWORD`. The previews' environment:
 
   ```sh
   AUTH_USERNAME=demo
