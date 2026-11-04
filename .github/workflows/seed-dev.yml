@@ -29,18 +29,29 @@ jobs:
     env:
       SEED_URL: https://dev.aneomol.uk
       SEED_BASIC_AUTH: ${{ secrets.PREVIEW_USERNAME }}:${{ secrets.PREVIEW_PASSWORD }}
-      # harmony-dev's own sign-in uses the same account (from Infisical's dev environment).
-      SEED_USERNAME: ${{ secrets.PREVIEW_USERNAME }}
-      SEED_PASSWORD: ${{ secrets.PREVIEW_PASSWORD }}
+      # harmony-dev's own account (AUTH_USERNAME / AUTH_PASSWORD in its
+      # environment), separate from the Traefik one above. Optional.
+      SEED_USERNAME: ${{ secrets.DEV_SIGN_IN_USERNAME }}
+      SEED_PASSWORD: ${{ secrets.DEV_SIGN_IN_PASSWORD }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2
-      - run: sudo apt-get update -q && sudo apt-get install -yq --no-install-recommends ffmpeg
+      - name: Check dev sign-in secrets
+        id: creds
+        run: |
+          if [ -z "$SEED_USERNAME" ] || [ -z "$SEED_PASSWORD" ]; then
+            echo "::notice::DEV_SIGN_IN_USERNAME and DEV_SIGN_IN_PASSWORD are not set; dev is not seeded."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.creds.outputs.skip != 'true'
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - if: steps.creds.outputs.skip != 'true'
+        uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2
+      - if: steps.creds.outputs.skip != 'true'
+        run: sudo apt-get update -q && sudo apt-get install -yq --no-install-recommends ffmpeg
       - name: Seed now
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' && steps.creds.outputs.skip != 'true'
         run: mise run seed:demo
       - name: Wait for the redeploy, then seed
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && steps.creds.outputs.skip != 'true'
         run: |
           # Health carries no build revision, so the new build is the first empty
           # library after the old build was seen (seeded or unreachable). Seeding
