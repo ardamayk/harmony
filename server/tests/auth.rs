@@ -364,6 +364,48 @@ async fn expired_sessions_are_refused_and_a_new_password_ends_sessions() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn a_plain_password_keeps_sessions_across_restarts_until_it_changes() {
+    let me = |cookie: &str| {
+        get("/api/v1/me", PUBLIC_HOST)
+            .header(header::COOKIE, cookie)
+            .body(Body::empty())
+            .unwrap()
+    };
+    // Starts from a hash of the same password: switching to AUTH_PASSWORD keeps it.
+    let harness = signed_in_harness(&[]).await;
+    let cookie = login(&harness, PUBLIC_HOST, PASSWORD).await.cookie_pair();
+    let mut directory = harness.directory;
+    for _ in 0..2 {
+        let restarted = harness_in(
+            directory,
+            &[("AUTH_USERNAME", USERNAME), ("AUTH_PASSWORD", PASSWORD)],
+        )
+        .await;
+        assert_eq!(send(&restarted, me(&cookie)).await.status, StatusCode::OK);
+        directory = restarted.directory;
+    }
+
+    let changed = harness_in(
+        directory,
+        &[
+            ("AUTH_USERNAME", USERNAME),
+            ("AUTH_PASSWORD", "another password"),
+        ],
+    )
+    .await;
+    assert_eq!(
+        send(&changed, me(&cookie)).await.status,
+        StatusCode::UNAUTHORIZED
+    );
+    assert_eq!(
+        login(&changed, PUBLIC_HOST, "another password")
+            .await
+            .status,
+        StatusCode::NO_CONTENT
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn basic_credentials_work_on_any_request() {
     let harness = signed_in_harness(&[]).await;
     for _ in 0..2 {
@@ -591,7 +633,20 @@ fn sign_in_settings_come_together_and_alone() {
     assert_eq!(on.auth.unwrap().username, USERNAME);
     assert_eq!(
         config(&[("AUTH_USERNAME", USERNAME)]).err(),
-        Some(ConfigError::IncompleteAuth("AUTH_PASSWORD_HASH"))
+        Some(ConfigError::IncompleteAuth(
+            "AUTH_PASSWORD or AUTH_PASSWORD_HASH"
+        ))
+    );
+    let plain = config(&[("AUTH_USERNAME", USERNAME), ("AUTH_PASSWORD", PASSWORD)]).unwrap();
+    assert_eq!(plain.auth.unwrap().username, USERNAME);
+    assert_eq!(
+        config(&[
+            ("AUTH_USERNAME", USERNAME),
+            ("AUTH_PASSWORD", PASSWORD),
+            ("AUTH_PASSWORD_HASH", hash),
+        ])
+        .err(),
+        Some(ConfigError::TwoAuthPasswords)
     );
     assert_eq!(
         config(&[("AUTH_PASSWORD_HASH", hash)]).err(),

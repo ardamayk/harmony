@@ -3,7 +3,7 @@
 use super::limits::Attempts;
 use super::repository::Repository;
 use crate::auth::DEFAULT_USER_ID;
-use crate::config::{AuthConfig, IpNet};
+use crate::config::{AuthConfig, AuthPassword, IpNet};
 use crate::db::Db;
 use argon2::{Argon2, PasswordHasher, PasswordVerifier};
 use base64::Engine;
@@ -93,11 +93,33 @@ impl Auth {
 
     /// Brings the stored user in line with the configuration.
     pub async fn start(&self) -> Result<(), sqlx::Error> {
+        let password_hash = match &self.config.password {
+            AuthPassword::Hash(hash) => hash.clone(),
+            AuthPassword::Plain(password) => {
+                // A fresh hash has a new salt and would end every session, so
+                // the stored one stays while the password still matches it.
+                let stored = self.repository.user(DEFAULT_USER_ID).await?;
+                let stored = stored.map(|user| user.password_hash);
+                let password = password.clone();
+                tokio::task::spawn_blocking(move || match stored {
+                    Some(stored)
+                        if Argon2::default()
+                            .verify_password(password.as_bytes(), stored.as_str())
+                            .is_ok() =>
+                    {
+                        stored
+                    }
+                    _ => hash_password(&password).expect("AUTH_PASSWORD hash"),
+                })
+                .await
+                .expect("AUTH_PASSWORD hashing task")
+            }
+        };
         self.repository
             .sync_user(
                 DEFAULT_USER_ID,
                 &self.config.username,
-                &self.config.password_hash,
+                &password_hash,
                 unix_now(),
             )
             .await

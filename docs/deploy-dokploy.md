@@ -22,7 +22,7 @@ So there is something to play, CI imports a small demo library after each deploy
 ## Both applications
 
 1. Create the application in its environment. `harmony`: provider Docker, image `ghcr.io/ardamayk/harmony-server:main`. `harmony-dev`: provider GitHub, this repository, branch `main`, build type Dockerfile, Dockerfile path `server/Dockerfile`, build context the repository root; it builds the Rust Music Server and the Web Client on the Dokploy server, and the first build takes a long time.
-2. Make a password hash. The command reads the password from stdin, so it stays out of your shell history:
+2. Choose how the password reaches the server. With a secret manager under Dokploy → Settings → Secrets (Infisical, Vault and others), put `AUTH_USERNAME` and `AUTH_PASSWORD` in it and reference them in step 4; Dokploy fetches them at each deploy. Otherwise, or to keep the clear password out of the container's environment, make a hash instead. The command reads the password from stdin, so it stays out of your shell history:
 
    ```sh
    docker run --rm -i ghcr.io/ardamayk/harmony-server:main hash-password
@@ -39,12 +39,14 @@ So there is something to play, CI imports a small demo library after each deploy
 
    ```sh
    SERVER_ADDR=0.0.0.0:8090
-   AUTH_USERNAME=owner
-   AUTH_PASSWORD_HASH='$argon2id$v=19$...'
+   AUTH_USERNAME=${{vault.<provider>.AUTH_USERNAME}}
+   AUTH_PASSWORD=${{vault.<provider>.AUTH_PASSWORD}}
    TRUSTED_PROXIES=10.0.1.0/24   # the subnet from step 3
    ```
 
-   Keep the hash in single quotes. Add any optional setting from the [Configuration](../README.md#configuration) table or `docker-compose.yml` that you use, such as `LASTFM_API_KEY`, `SENTRY_DSN` or the External Source. `DATABASE_PATH` and `MANAGED_STORAGE_PATH` already point into `/data` in the image. For Listen Together add `GUEST_ADDR=0.0.0.0:8091` and `PUBLIC_URL=https://<guest domain>`; with sign-in on, the Guest Listener may bind a non-loopback address so Traefik can reach it.
+   `<provider>` is the secret provider's name in Dokploy. With a hash instead, set `AUTH_USERNAME=owner` and `AUTH_PASSWORD_HASH='$argon2id$v=19$...'`, the hash in single quotes.
+
+   Add any optional setting from the [Configuration](../README.md#configuration) table or `docker-compose.yml` that you use, such as `LASTFM_API_KEY`, `SENTRY_DSN` or the External Source. `DATABASE_PATH` and `MANAGED_STORAGE_PATH` already point into `/data` in the image. For Listen Together add `GUEST_ADDR=0.0.0.0:8091` and `PUBLIC_URL=https://<guest domain>`; with sign-in on, the Guest Listener may bind a non-loopback address so Traefik can reach it.
 5. Production only: under Advanced → Volumes, add a volume mount with a name such as `harmony-data` and mount path `/data`. `harmony-dev` gets none. Also set the Swarm update order to `stop-first`: Dokploy runs applications as Swarm services, and a `start-first` update would briefly run two servers on one SQLite database.
 6. Add the domain with container port `8090`, path `/`, and HTTPS on or off as described under [Networking](#networking). With Listen Together, add the guest domain with container port `8091`.
 7. Deploy, and check `https://<domain>/api/v1/health`: `capabilities` should include `auth.session.v1`. Then sign in from the Web Client.

@@ -87,7 +87,7 @@ The Music Server reads its settings from environment variables only; it does not
 | Variable | Default | Meaning |
 |----------|---------|---------|
 | `SERVER_ADDR` | `127.0.0.1:8090` | Listen address. Must be a loopback address unless sign-in is on. |
-| `AUTH_USERNAME`, `AUTH_PASSWORD_HASH` | none | Turn on the Music Server's own sign-in, together; the hash comes from `earthly-music-server hash-password` ([ADR 0042](docs/adr/0042-owner-sign-in-in-the-music-server.md)). |
+| `AUTH_USERNAME`, `AUTH_PASSWORD` or `AUTH_PASSWORD_HASH` | none | Turn on the Music Server's own sign-in, together; give the password in clear text or as a hash from `earthly-music-server hash-password` ([ADR 0042](docs/adr/0042-owner-sign-in-in-the-music-server.md)). |
 | `TRUSTED_PROXIES` | none | Addresses or CIDR ranges of reverse proxies whose `X-Forwarded-For` is believed. |
 | `DATABASE_PATH` | `./data/app.db` | SQLite database. |
 | `MANAGED_STORAGE_PATH` | `./data/managed` | Where imported music is kept. |

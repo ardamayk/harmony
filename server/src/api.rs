@@ -35,7 +35,7 @@ pub const EXTERNAL_SOURCE_CAPABILITY: &str = "external-source.v1";
 /// (ADR 0037).
 pub const LISTEN_TOGETHER_CAPABILITY: &str = "listen-together.v1";
 
-/// Advertised only when `AUTH_USERNAME` and `AUTH_PASSWORD_HASH` turn sign-in
+/// Advertised only when `AUTH_USERNAME` and a password setting turn sign-in
 /// on (ADR 0042).
 pub const AUTH_SESSION_CAPABILITY: &str = "auth.session.v1";
 

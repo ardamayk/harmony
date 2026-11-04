@@ -47,12 +47,13 @@ The Guest Listener answers `429 rate_limited` when a Guest passes a limit; the b
 
 ## Sign-in with a username and password
 
-Sign-in lets the Music Server face a network on its own, for example in a Docker container behind Traefik (ADR 0042). It is off by default. Set `AUTH_USERNAME` and `AUTH_PASSWORD_HASH` together, or leave both unset; setting only one stops the server at startup, and so does combining them with any `OWNER_*` variable: choose sign-in or Owner access through a signing proxy.
+Sign-in lets the Music Server face a network on its own, for example in a Docker container behind Traefik (ADR 0042). It is off by default. Set `AUTH_USERNAME` together with either `AUTH_PASSWORD` or `AUTH_PASSWORD_HASH`, or leave them all unset; a username without a password, a password without a username, or both password settings stop the server at startup, and so does combining them with any `OWNER_*` variable: choose sign-in or Owner access through a signing proxy.
 
 | Variable | Meaning |
 | --- | --- |
 | `AUTH_USERNAME` | The user who signs in, up to 256 characters, without `:`. |
-| `AUTH_PASSWORD_HASH` | That user's password as an argon2id PHC string (`$argon2id$v=19$...`). Make one with `hash-password`, below. |
+| `AUTH_PASSWORD` | That user's password in clear text, for example from a secret manager. The server stores only its argon2id hash. |
+| `AUTH_PASSWORD_HASH` | Instead of `AUTH_PASSWORD`: the password as an argon2id PHC string (`$argon2id$v=19$...`), so the clear password is never in the server's environment. Make one with `hash-password`, below. |
 | `TRUSTED_PROXIES` | Comma-separated addresses or CIDR blocks of your reverse proxies, for example `172.18.0.0/16`. Only from these peers does the server read `X-Forwarded-For`. |
 
 ```bash
@@ -60,7 +61,7 @@ echo 'your password' | earthly-music-server hash-password       # prints AUTH_PA
 docker run --rm -i <image> hash-password <<<'your password'     # the same from the image
 ```
 
-`hash-password` reads one line from stdin and prints its hash; put the hash in your environment, never the password. At startup the server stores the user in its database; a changed `AUTH_PASSWORD_HASH` signs out every session.
+`hash-password` reads one line from stdin and prints its hash. At startup the server stores the user in its database. A changed password signs out every session; with `AUTH_PASSWORD` the server keeps the stored hash while the password still matches it, so a restart signs no one out. `AUTH_PASSWORD` keeps any spaces at its ends.
 
 With sign-in on:
 

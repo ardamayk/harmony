@@ -44,7 +44,7 @@ pub struct Config {
     /// settings are set (ADR 0038).
     pub owner_access: Option<OwnerAccessConfig>,
     /// Username and password sign-in, off unless `AUTH_USERNAME` and
-    /// `AUTH_PASSWORD_HASH` are both set (ADR 0042).
+    /// `AUTH_PASSWORD` (or `AUTH_PASSWORD_HASH`) are both set (ADR 0042).
     pub auth: Option<AuthConfig>,
     /// `LISTEN_TOGETHER_MAX_GUESTS`: at most this many Guests in a Room.
     pub listen_together_max_guests: usize,
@@ -107,19 +107,27 @@ impl OwnerAccessConfig {
 pub struct AuthConfig {
     /// `AUTH_USERNAME`.
     pub username: String,
-    /// `AUTH_PASSWORD_HASH`, an argon2id PHC string.
-    pub password_hash: String,
+    pub password: AuthPassword,
     /// `TRUSTED_PROXIES`: peers whose `X-Forwarded-For` names the client.
     pub trusted_proxies: Vec<IpNet>,
 }
 
-/// Leaves the password hash out of debug output.
+/// The user's password, as the operator gave it.
+#[derive(Clone, PartialEq)]
+pub enum AuthPassword {
+    /// `AUTH_PASSWORD_HASH`, an argon2id PHC string.
+    Hash(String),
+    /// `AUTH_PASSWORD`, hashed by the server at startup.
+    Plain(String),
+}
+
+/// Leaves the password out of debug output.
 impl std::fmt::Debug for AuthConfig {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter
             .debug_struct("AuthConfig")
             .field("username", &self.username)
-            .field("password_hash", &"<set>")
+            .field("password", &"<set>")
             .field("trusted_proxies", &self.trusted_proxies)
             .finish()
     }
@@ -280,8 +288,10 @@ pub enum ConfigError {
     InvalidOwnerJwtHeader(String),
     #[error("OWNER_JWKS_URL {0:?} must be an https URL, or http on loopback")]
     InvalidOwnerJwksUrl(String),
-    #[error("AUTH_USERNAME and AUTH_PASSWORD_HASH must be set together: {0} is missing")]
+    #[error("sign-in needs AUTH_USERNAME and a password: {0} is missing")]
     IncompleteAuth(&'static str),
+    #[error("set AUTH_PASSWORD or AUTH_PASSWORD_HASH, not both")]
+    TwoAuthPasswords,
     #[error("AUTH_USERNAME {0:?} must be 1 to 256 characters without ':' or control characters")]
     InvalidAuthUsername(String),
     // The hash is a secret too, so the message does not repeat it.
@@ -556,11 +566,23 @@ fn auth_config(
             IpNet::parse(item).ok_or_else(|| ConfigError::InvalidTrustedProxy(item.to_owned()))
         })
         .collect::<Result<Vec<_>, _>>()?;
-    let (username, password_hash) = match (value("AUTH_USERNAME"), value("AUTH_PASSWORD_HASH")) {
+    // Unlike the other settings, the password keeps its surrounding spaces.
+    let plain = lookup("AUTH_PASSWORD").filter(|password| !password.is_empty());
+    let password = match (plain, value("AUTH_PASSWORD_HASH")) {
+        (Some(_), Some(_)) => return Err(ConfigError::TwoAuthPasswords),
+        (Some(password), None) => Some(AuthPassword::Plain(password)),
+        (None, Some(hash)) => Some(AuthPassword::Hash(hash)),
+        (None, None) => None,
+    };
+    let (username, password) = match (value("AUTH_USERNAME"), password) {
         (None, None) => return Ok(None),
-        (Some(_), None) => return Err(ConfigError::IncompleteAuth("AUTH_PASSWORD_HASH")),
+        (Some(_), None) => {
+            return Err(ConfigError::IncompleteAuth(
+                "AUTH_PASSWORD or AUTH_PASSWORD_HASH",
+            ));
+        }
         (None, Some(_)) => return Err(ConfigError::IncompleteAuth("AUTH_USERNAME")),
-        (Some(username), Some(hash)) => (username, hash),
+        (Some(username), Some(password)) => (username, password),
     };
     if let Some(owner) = OWNER_ACCESS_SETTINGS
         .into_iter()
@@ -572,14 +594,16 @@ fn auth_config(
     if username.chars().count() > 256 || username.chars().any(|c| c == ':' || c.is_control()) {
         return Err(ConfigError::InvalidAuthUsername(username));
     }
-    let is_argon2id = argon2::PasswordHash::new(&password_hash)
-        .is_ok_and(|hash| hash.algorithm == argon2::ARGON2ID_IDENT && hash.hash.is_some());
-    if !is_argon2id {
-        return Err(ConfigError::InvalidAuthPasswordHash);
+    if let AuthPassword::Hash(hash) = &password {
+        let is_argon2id = argon2::PasswordHash::new(hash)
+            .is_ok_and(|hash| hash.algorithm == argon2::ARGON2ID_IDENT && hash.hash.is_some());
+        if !is_argon2id {
+            return Err(ConfigError::InvalidAuthPasswordHash);
+        }
     }
     Ok(Some(AuthConfig {
         username,
-        password_hash,
+        password,
         trusted_proxies,
     }))
 }
