@@ -168,4 +168,35 @@ describe("SignInGate", () => {
 			),
 		);
 	});
+
+	it("asks for credentials instead of saving without them", async () => {
+		mocks.isDesktopClient.mockReturnValue(true);
+		mocks.getServerConnection.mockResolvedValue({
+			origin: "https://music.example.com",
+			headerNames: ["cf-access-client-id"],
+		});
+		mocks.testServerConnection.mockResolvedValue({
+			origin: "https://music.example.com",
+			version: "0.1.0",
+			capabilities: ["api.v1", "auth.session.v1"],
+		});
+		markSignedOut();
+		renderGate();
+
+		fireEvent.click(
+			await screen.findByRole("button", { name: "Test connection" }),
+		);
+		const save = await screen.findByRole("button", {
+			name: "Save and connect",
+		});
+		await waitFor(() => expect(save.hasAttribute("disabled")).toBe(false));
+		fireEvent.click(save);
+
+		expect(
+			await screen.findByText(
+				"Enter the username and password set on the Music Server.",
+			),
+		).toBeTruthy();
+		expect(mocks.saveServerConnection).not.toHaveBeenCalled();
+	});
 });

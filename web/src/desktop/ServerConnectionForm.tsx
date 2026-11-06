@@ -100,6 +100,12 @@ export function ServerConnectionForm({
 	}
 
 	async function handleSave() {
+		// The sign-in screen only opens because the saved credentials were refused.
+		if (initialAsksForSignIn && !username) {
+			setVerified(null);
+			setError("Enter the username and password set on the Music Server.");
+			return;
+		}
 		setIsSaving(true);
 		setError(null);
 		try {
