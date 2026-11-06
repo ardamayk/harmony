@@ -96,20 +96,24 @@ export async function getServerConnection(): Promise<SavedServerConnection | nul
 export function testServerConnection(
 	origin: string,
 	headers?: ServerHeaders,
+	keepSavedHeaders = false,
 ): Promise<ConnectionCheck> {
 	return invoke("test_server_connection", {
 		origin,
 		...(headers ? { headers } : {}),
+		...(keepSavedHeaders ? { keepSavedHeaders } : {}),
 	});
 }
 
 export function saveServerConnection(
 	origin: string,
 	headers?: ServerHeaders,
+	keepSavedHeaders = false,
 ): Promise<ConnectionCheck> {
 	return invoke("save_server_connection", {
 		origin,
 		...(headers ? { headers } : {}),
+		...(keepSavedHeaders ? { keepSavedHeaders } : {}),
 	});
 }
 

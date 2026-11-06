@@ -79,10 +79,14 @@ export const DESKTOP_COMMAND_ARGS = {
 	test_server_connection: z.strictObject({
 		origin: z.string(),
 		headers: serverHeaders.optional(),
+		// Add `headers` to the server's saved ones instead of replacing them.
+		keepSavedHeaders: z.boolean().optional(),
 	}),
 	save_server_connection: z.strictObject({
 		origin: z.string(),
 		headers: serverHeaders.optional(),
+		// Add `headers` to the server's saved ones instead of replacing them.
+		keepSavedHeaders: z.boolean().optional(),
 	}),
 	desktop_http_request: z.strictObject({
 		request: z.strictObject({

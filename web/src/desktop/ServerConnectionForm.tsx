@@ -76,6 +76,9 @@ export function ServerConnectionForm({
 	const headers =
 		serverHeaders(headerRows, username, password) ??
 		(removeSaved ? {} : undefined);
+	// Credentials alone add to the saved proxy headers; typed rows replace them.
+	const keepSaved =
+		!removeSaved && headerRows.every((row) => row.name.trim() === "");
 
 	async function handleTest(event: FormEvent) {
 		event.preventDefault();
@@ -83,7 +86,7 @@ export function ServerConnectionForm({
 		setError(null);
 		setVerified(null);
 		try {
-			const check = await testServerConnection(origin, headers);
+			const check = await testServerConnection(origin, headers, keepSaved);
 			setOrigin(check.origin);
 			setVerified(check);
 			if (check.capabilities.includes(AUTH_SESSION_CAPABILITY)) {
@@ -100,7 +103,7 @@ export function ServerConnectionForm({
 		setIsSaving(true);
 		setError(null);
 		try {
-			await saveServerConnection(origin, headers);
+			await saveServerConnection(origin, headers, keepSaved);
 			await onConnected();
 		} catch (connectionError) {
 			setVerified(null);

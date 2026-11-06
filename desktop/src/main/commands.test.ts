@@ -17,7 +17,7 @@ function deps(overrides: Partial<CommandDeps> = {}): CommandDeps {
 			.fn<CommandDeps["pickImportFolder"]>()
 			.mockResolvedValue([]),
 		openExternal: vi.fn<CommandDeps["openExternal"]>().mockResolvedValue(),
-		serverHeaders: { assertAvailable: vi.fn(), sync: vi.fn() },
+		serverHeaders: { assertAvailable: vi.fn(), sync: vi.fn(), load: vi.fn() },
 		updates: {
 			status: vi.fn(),
 			check: vi.fn(),
@@ -77,7 +77,11 @@ describe("handleInvoke", () => {
 		const requestCore = vi
 			.fn<CommandDeps["requestCore"]>()
 			.mockResolvedValue({ origin: "https://music.example.com" });
-		const serverHeaders = { assertAvailable: vi.fn(), sync: vi.fn() };
+		const serverHeaders = {
+			assertAvailable: vi.fn(),
+			sync: vi.fn(),
+			load: vi.fn(),
+		};
 		const headers = { "X-Proxy-Key": "secret" };
 		const result = await handleInvoke(
 			deps({ requestCore, serverHeaders }),
@@ -93,6 +97,39 @@ describe("handleInvoke", () => {
 		);
 	});
 
+	it("adds sign-in credentials to the saved proxy headers", async () => {
+		const requestCore = vi
+			.fn<CommandDeps["requestCore"]>()
+			.mockResolvedValue({ origin: "https://music.example.com" });
+		const serverHeaders = {
+			assertAvailable: vi.fn(),
+			sync: vi.fn(),
+			load: vi.fn(() => ({
+				origin: "https://music.example.com",
+				headers: { "cf-access-client-id": "id", authorization: "Basic old" },
+			})),
+		};
+		await handleInvoke(
+			deps({ requestCore, serverHeaders }),
+			"save_server_connection",
+			{
+				origin: "https://music.example.com/",
+				headers: { Authorization: "Basic new" },
+				keepSavedHeaders: true,
+			},
+		);
+
+		const merged = { "cf-access-client-id": "id", Authorization: "Basic new" };
+		expect(requestCore).toHaveBeenCalledWith("save_server_connection", {
+			origin: "https://music.example.com/",
+			headers: merged,
+		});
+		expect(serverHeaders.sync).toHaveBeenCalledWith(
+			"https://music.example.com",
+			merged,
+		);
+	});
+
 	it("saves nothing when custom headers could not be kept", async () => {
 		const requestCore = vi.fn<CommandDeps["requestCore"]>();
 		const serverHeaders = {
@@ -100,6 +137,7 @@ describe("handleInvoke", () => {
 				throw new CoreCommandError({ code: "storage", message: "no keychain" });
 			}),
 			sync: vi.fn(),
+			load: vi.fn(),
 		};
 		const result = await handleInvoke(
 			deps({ requestCore, serverHeaders }),
@@ -118,7 +156,11 @@ describe("handleInvoke", () => {
 		const requestCore = vi
 			.fn<CommandDeps["requestCore"]>()
 			.mockResolvedValue({ origin: "http://127.0.0.1:8090" });
-		const serverHeaders = { assertAvailable: vi.fn(), sync: vi.fn() };
+		const serverHeaders = {
+			assertAvailable: vi.fn(),
+			sync: vi.fn(),
+			load: vi.fn(),
+		};
 		await handleInvoke(
 			deps({ requestCore, serverHeaders }),
 			"save_server_connection",

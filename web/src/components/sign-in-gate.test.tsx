@@ -163,6 +163,8 @@ describe("SignInGate", () => {
 			expect(mocks.saveServerConnection).toHaveBeenCalledWith(
 				"https://music.example.com",
 				{ Authorization: basic },
+				// Kept beside a proxy's saved headers, not in their place.
+				true,
 			),
 		);
 	});

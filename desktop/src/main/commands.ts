@@ -25,7 +25,7 @@ export type CommandDeps = {
 	pickImportFiles(): Promise<string[]>;
 	pickImportFolder(): Promise<string[]>;
 	openExternal(url: string): Promise<void>;
-	serverHeaders: Pick<ServerHeadersStore, "assertAvailable" | "sync">;
+	serverHeaders: Pick<ServerHeadersStore, "assertAvailable" | "sync" | "load">;
 	updates: Pick<UpdateController, "status" | "check" | "download" | "install">;
 };
 
@@ -47,7 +47,19 @@ export async function handleInvoke(
 		if (!parsed.ok) throw new CoreCommandError(parsed.error);
 		const invoke = parsed.value;
 		if (invoke.command === "save_server_connection") {
-			return { ok: true, value: await saveConnection(deps, invoke.args) };
+			return {
+				ok: true,
+				value: await saveConnection(deps, withSavedHeaders(deps, invoke.args)),
+			};
+		}
+		if (invoke.command === "test_server_connection") {
+			return {
+				ok: true,
+				value: await deps.requestCore(
+					invoke.command,
+					withSavedHeaders(deps, invoke.args),
+				),
+			};
 		}
 		const value = isCoreCommand(invoke.command)
 			? await deps.requestCore(
@@ -61,10 +73,45 @@ export async function handleInvoke(
 	}
 }
 
+type ConnectionArgs = {
+	origin: string;
+	headers?: Record<string, string>;
+	keepSavedHeaders?: boolean;
+};
+
+/**
+ * Sign-in credentials join a proxy's saved headers (Cloudflare Access, say)
+ * rather than dropping them; the renderer never sees saved values.
+ */
+export function withSavedHeaders(
+	deps: Pick<CommandDeps, "serverHeaders">,
+	{ keepSavedHeaders, ...args }: ConnectionArgs,
+): { origin: string; headers?: Record<string, string> } {
+	const saved = keepSavedHeaders ? deps.serverHeaders.load() : null;
+	if (!saved || !args.headers || !sameOrigin(saved.origin, args.origin)) {
+		return args;
+	}
+	const replaced = new Set(
+		Object.keys(args.headers).map((name) => name.toLowerCase()),
+	);
+	const kept = Object.entries(saved.headers).filter(
+		([name]) => !replaced.has(name.toLowerCase()),
+	);
+	return { ...args, headers: { ...Object.fromEntries(kept), ...args.headers } };
+}
+
+function sameOrigin(a: string, b: string): boolean {
+	try {
+		return new URL(a).origin === new URL(b).origin;
+	} catch {
+		return false;
+	}
+}
+
 /** Refuses before saving when the headers could not survive a restart. */
 async function saveConnection(
 	deps: CommandDeps,
-	args: { origin: string; headers?: Record<string, string> },
+	args: Omit<ConnectionArgs, "keepSavedHeaders">,
 ) {
 	if (args.headers && Object.keys(args.headers).length > 0) {
 		deps.serverHeaders.assertAvailable();

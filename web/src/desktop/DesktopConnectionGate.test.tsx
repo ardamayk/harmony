@@ -96,6 +96,7 @@ describe("DesktopConnectionGate", () => {
 		expect(bridge.saveServerConnection).toHaveBeenCalledWith(
 			"http://127.0.0.1:8090",
 			undefined,
+			true,
 		);
 	});
 
@@ -241,8 +242,16 @@ describe("DesktopConnectionGate", () => {
 
 		await screen.findByText("application");
 		const headers = { "X-Proxy-Key": "secret" };
-		expect(bridge.testServerConnection).toHaveBeenCalledWith(origin, headers);
-		expect(bridge.saveServerConnection).toHaveBeenCalledWith(origin, headers);
+		expect(bridge.testServerConnection).toHaveBeenCalledWith(
+			origin,
+			headers,
+			false,
+		);
+		expect(bridge.saveServerConnection).toHaveBeenCalledWith(
+			origin,
+			headers,
+			false,
+		);
 	});
 
 	it("leaves saved headers alone when no row is filled in", async () => {
@@ -260,6 +269,10 @@ describe("DesktopConnectionGate", () => {
 		fireEvent.click(screen.getByRole("button", { name: "Test connection" }));
 
 		await screen.findByText("The server refused this client.");
-		expect(bridge.testServerConnection).toHaveBeenCalledWith(origin, undefined);
+		expect(bridge.testServerConnection).toHaveBeenCalledWith(
+			origin,
+			undefined,
+			true,
+		);
 	});
 });

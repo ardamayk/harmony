@@ -53,6 +53,7 @@ describe("DesktopConnectionSection", () => {
 		expect(bridge.testServerConnection).toHaveBeenLastCalledWith(
 			ORIGIN,
 			undefined,
+			true,
 		);
 
 		fireEvent.click(
@@ -60,6 +61,10 @@ describe("DesktopConnectionSection", () => {
 		);
 		fireEvent.click(screen.getByRole("button", { name: "Test connection" }));
 		await screen.findByText(/Connected to Music Server/);
-		expect(bridge.testServerConnection).toHaveBeenLastCalledWith(ORIGIN, {});
+		expect(bridge.testServerConnection).toHaveBeenLastCalledWith(
+			ORIGIN,
+			{},
+			false,
+		);
 	});
 });
