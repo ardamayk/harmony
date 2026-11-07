@@ -44,12 +44,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
       - run: |
           tags=(--tag "$IMAGE:sha-${SHA::12}")
+          version="sha-${SHA::12}"
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             tags+=(--tag "$IMAGE:${GITHUB_REF_NAME#v}" --tag "$IMAGE:latest")
+            version="${GITHUB_REF_NAME#v}"
           else
             tags+=(--tag "$IMAGE:main")
           fi
           docker build --file server/Dockerfile \
+            --build-arg "APP_VERSION=$version" \
             --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
             --label "org.opencontainers.image.revision=$SHA" \
             --label "org.opencontainers.image.licenses=AGPL-3.0-or-later" \

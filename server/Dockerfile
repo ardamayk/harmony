@@ -54,6 +54,9 @@ ENV SERVER_ADDR=127.0.0.1:8090
 ENV DATABASE_PATH=/data/app.db
 # Imported music lives in the data volume, next to the database.
 ENV MANAGED_STORAGE_PATH=/data/managed
+# The release Sentry and /api/v1/health report; server-image.yml passes the tag or commit.
+ARG APP_VERSION=0.1.0
+ENV APP_VERSION=$APP_VERSION
 EXPOSE 8090
 VOLUME ["/data", "/music"]
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s \
