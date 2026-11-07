@@ -54,6 +54,7 @@ const ROUTE_WORDS: &[&str] = &[
     "auth",
     "biography",
     "catalog",
+    "client-errors",
     "client-metrics",
     "clock",
     "commands",

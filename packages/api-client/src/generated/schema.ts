@@ -98,6 +98,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/client-errors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pass a client's errors to the owner's Sentry
+         * @description A Sentry SDK envelope from the Web or Desktop Client (ADR 0043). Only its error events go on, scrubbed like the Music Server's own and sent with the Music Server's DSN; its headers and every other item are dropped. Advertised as client-errors.v1 only when SENTRY_DSN is set; otherwise accepted and dropped. Owner's listener only.
+         */
+        post: operations["reportClientErrors"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/preferences": {
         parameters: {
             query?: never;
@@ -1515,7 +1535,7 @@ export interface components {
             /** @enum {string} */
             status: "ok";
             version: string;
-            /** @description Named server behaviors supported by this release. The versioned /api/v1 surface itself is advertised as api.v1. The Shared Playback State is advertised as playback.shared-session.v1. Queue event streaming is advertised as playback.queue-events.v1 and the first strict FLAC Managed Import tracer bullet as managed-import.v1. Multi-file Managed Import Batches are advertised as managed-import-batches.v1, Permanent Track Deletion as managed-track-deletion.v1, explicit Track Replacement as managed-track-replacement.v1, Album deletion (one Permanent Track Deletion per Track, previewed once) as managed-album-deletion.v1, lazily generated waveform peaks as track-waveform.v1 (only when ffmpeg is installed), and External Source search and playback through yt-dlp as external-source.v1 (only when EXTERNAL_SOURCE_SEARCH is configured; a missing yt-dlp shows in dependencies and answers 503), and Rooms as listen-together.v1 (only when GUEST_ADDR and PUBLIC_URL are configured), and username and password sign-in as auth.session.v1 (only when AUTH_USERNAME and AUTH_PASSWORD_HASH are configured). On the Guest Listener, health lists only api.v1, listen-together.v1 and track-waveform.v1, with empty dependencies and no externalSource. Clients gate optional behavior on the exact capability name and must ignore unknown entries so newer servers stay compatible with older clients. */
+            /** @description Named server behaviors supported by this release. The versioned /api/v1 surface itself is advertised as api.v1. The Shared Playback State is advertised as playback.shared-session.v1. Queue event streaming is advertised as playback.queue-events.v1 and the first strict FLAC Managed Import tracer bullet as managed-import.v1. Multi-file Managed Import Batches are advertised as managed-import-batches.v1, Permanent Track Deletion as managed-track-deletion.v1, explicit Track Replacement as managed-track-replacement.v1, Album deletion (one Permanent Track Deletion per Track, previewed once) as managed-album-deletion.v1, lazily generated waveform peaks as track-waveform.v1 (only when ffmpeg is installed), and External Source search and playback through yt-dlp as external-source.v1 (only when EXTERNAL_SOURCE_SEARCH is configured; a missing yt-dlp shows in dependencies and answers 503), and Rooms as listen-together.v1 (only when GUEST_ADDR and PUBLIC_URL are configured), and username and password sign-in as auth.session.v1 (only when AUTH_USERNAME and AUTH_PASSWORD_HASH are configured), and passing the clients' errors to the owner's Sentry as client-errors.v1 (only when SENTRY_DSN is set). On the Guest Listener, health lists only api.v1, listen-together.v1 and track-waveform.v1, with empty dependencies and no externalSource. Clients gate optional behavior on the exact capability name and must ignore unknown entries so newer servers stay compatible with older clients. */
             capabilities: string[];
             /** @description Server Dependencies probed once at startup, in a stable order (ffmpeg, ffprobe, then the optional yt-dlp only when EXTERNAL_SOURCE_SEARCH is configured). They describe the deployment environment so an operator can see what the installation supports. */
             dependencies: components["schemas"]["ServerDependency"][];
@@ -2808,6 +2828,46 @@ export interface operations {
             };
             /** @description Invalid report */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    reportClientErrors: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/x-sentry-envelope": string;
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not a Sentry envelope */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Larger than 256 KiB */
+            413: {
                 headers: {
                     [name: string]: unknown;
                 };

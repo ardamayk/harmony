@@ -593,6 +593,12 @@ export function createApiClient(config: ApiClientConfig) {
 
 	return {
 		getHealth: () => request<HealthResponse>("getHealth", "/api/v1/health"),
+		reportClientErrors: (envelope: string | Uint8Array<ArrayBuffer>) =>
+			request<void>("reportClientErrors", "/api/v1/client-errors", {
+				method: "POST",
+				headers: { "Content-Type": "application/x-sentry-envelope" },
+				body: envelope,
+			}),
 		getMe: () => request<User>("getMe", "/api/v1/me"),
 		login: (body: LoginRequest) =>
 			request<void>("login", "/api/v1/auth/login", {

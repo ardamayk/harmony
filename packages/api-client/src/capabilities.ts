@@ -33,6 +33,11 @@ export const LISTEN_TOGETHER_CAPABILITY = "listen-together.v1";
  * operator configured AUTH_USERNAME and AUTH_PASSWORD_HASH.
  */
 export const AUTH_SESSION_CAPABILITY = "auth.session.v1";
+/**
+ * Passing the clients' errors to the owner's Sentry (ADR 0043); only
+ * advertised when the operator set SENTRY_DSN.
+ */
+export const CLIENT_ERRORS_CAPABILITY = "client-errors.v1";
 
 export type ServerCapabilities =
 	| HealthResponse

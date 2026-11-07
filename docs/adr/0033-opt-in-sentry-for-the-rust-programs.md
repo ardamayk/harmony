@@ -35,7 +35,7 @@ The request transaction ends when the response starts, so a stream's transaction
 
 ## The Web and Desktop Clients
 
-Neither client talks to Sentry. Their renderer measures the page with the browser's own Performance API (`client.page.{ttfb,fcp,lcp,cls}`, the longest interaction as `client.interaction.inp`, `client.playback.start` in the browser, and `client.playback.takeover` in both: the time from pressing Play on a Following client until its playhead moves, labelled with the client the sound moved to) and posts the numbers to `POST /api/v1/client-metrics` on the Owner's listener, which passes known names on as metrics. So there is no browser SDK, no DSN in a client and no third party, and a server without `SENTRY_DSN` drops them. Guests have no such route and stop reporting at the first refusal.
+Neither client talks to Sentry. Their renderer measures the page with the browser's own Performance API (`client.page.{ttfb,fcp,lcp,cls}`, the longest interaction as `client.interaction.inp`, `client.playback.start` in the browser, and `client.playback.takeover` in both: the time from pressing Play on a Following client until its playhead moves, labelled with the client the sound moved to) and posts the numbers to `POST /api/v1/client-metrics` on the Owner's listener, which passes known names on as metrics. So there is no browser SDK, no DSN in a client and no third party, and a server without `SENTRY_DSN` drops them. Guests have no such route and stop reporting at the first refusal. Their errors go through the Music Server too, since [ADR 0043](0043-client-errors-through-the-music-server.md).
 
 ## What is never sent
 
@@ -53,4 +53,4 @@ The Rust SDK has no `before_send_transaction`, so transactions are kept clean at
 
 - `sentry-tower`'s `SentryHttpLayer`: rejected, it attaches the full URL with its query and the request headers to the transaction, and no hook can strip them.
 - OpenTelemetry to Sentry: rejected, more moving parts for one owner's server; the SDK's own tracing layer covers it.
-- Sentry in the Electron shell and the Web Client: out of scope here; the JavaScript SDKs would need their own opt-in.
+- Sentry in the Electron shell and the Web Client: out of scope here; the JavaScript SDKs would need their own opt-in. The Web Client's, and so the Electron renderer's, came with [ADR 0043](0043-client-errors-through-the-music-server.md).

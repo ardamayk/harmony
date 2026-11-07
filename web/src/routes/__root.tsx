@@ -42,6 +42,7 @@ import {
 } from "#/hooks/use-server-capability";
 import { useFirstLoad } from "#/hooks/use-first-load";
 import { apiClient } from "#/lib/api";
+import { useClientErrors } from "#/lib/client-errors";
 import {
 	readGuestPreferences,
 	writeGuestPreferences,
@@ -102,6 +103,7 @@ function RootLayout() {
 }
 
 function ConnectedRootLayout() {
+	useClientErrors();
 	return (
 		<ListenTogetherProvider
 			api={apiClient}

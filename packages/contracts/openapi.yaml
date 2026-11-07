@@ -153,6 +153,38 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/client-errors:
+    post:
+      tags: [system]
+      operationId: reportClientErrors
+      summary: Pass a client's errors to the owner's Sentry
+      description: >-
+        A Sentry SDK envelope from the Web or Desktop Client (ADR 0043). Only
+        its error events go on, scrubbed like the Music Server's own and sent
+        with the Music Server's DSN; its headers and every other item are
+        dropped. Advertised as client-errors.v1 only when SENTRY_DSN is set;
+        otherwise accepted and dropped. Owner's listener only.
+      requestBody:
+        required: true
+        content:
+          application/x-sentry-envelope:
+            schema:
+              type: string
+      responses:
+        "204":
+          description: Accepted
+        "400":
+          description: Not a Sentry envelope
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "413":
+          description: Larger than 256 KiB
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /api/v1/preferences:
     get:
       tags: [preferences]
@@ -2897,7 +2929,7 @@ components:
             shows in dependencies and answers 503), and Rooms as
             listen-together.v1 (only when GUEST_ADDR and PUBLIC_URL are
             configured), and username and password sign-in as auth.session.v1
-            (only when AUTH_USERNAME and AUTH_PASSWORD_HASH are configured). On the Guest Listener, health lists only api.v1,
+            (only when AUTH_USERNAME and AUTH_PASSWORD_HASH are configured), and passing the clients' errors to the owner's Sentry as client-errors.v1 (only when SENTRY_DSN is set). On the Guest Listener, health lists only api.v1,
             listen-together.v1 and track-waveform.v1, with empty dependencies
             and no externalSource. Clients gate optional
             behavior on the exact capability name and must ignore unknown

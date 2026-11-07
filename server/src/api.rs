@@ -39,6 +39,10 @@ pub const LISTEN_TOGETHER_CAPABILITY: &str = "listen-together.v1";
 /// on (ADR 0042).
 pub const AUTH_SESSION_CAPABILITY: &str = "auth.session.v1";
 
+/// Advertised on the Owner's listener only when `SENTRY_DSN` is set: the
+/// clients may then pass their errors through the Music Server (ADR 0043).
+pub const CLIENT_ERRORS_CAPABILITY: &str = "client-errors.v1";
+
 pub fn server_capabilities(
     report: &dependencies::Report,
     external_source: bool,
@@ -94,15 +98,19 @@ pub struct ExternalSourceInfo {
 
 pub async fn get_health(State(state): State<AppState>) -> Json<HealthResponse> {
     let external_source_enabled = state.external_source.is_enabled();
+    let mut capabilities = server_capabilities(
+        &state.dependencies,
+        external_source_enabled,
+        state.config.listen_together.is_some(),
+        state.auth.is_some(),
+    );
+    if state.config.sentry.is_some() {
+        capabilities.push(CLIENT_ERRORS_CAPABILITY.to_owned());
+    }
     Json(HealthResponse {
         status: "ok",
         version: state.config.version.clone(),
-        capabilities: server_capabilities(
-            &state.dependencies,
-            external_source_enabled,
-            state.config.listen_together.is_some(),
-            state.auth.is_some(),
-        ),
+        capabilities,
         dependencies: state.dependencies.0.clone(),
         external_source: state
             .config

@@ -1205,6 +1205,11 @@ export const zLogoutResponse = z.void();
 export const zReportClientMetricsResponse = z.void();
 
 /**
+ * Accepted
+ */
+export const zReportClientErrorsResponse = z.void();
+
+/**
  * User preferences
  */
 export const zGetPreferencesResponse = zUserPreferences;

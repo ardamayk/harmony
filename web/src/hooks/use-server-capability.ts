@@ -11,7 +11,7 @@ import { apiClient } from "#/lib/api";
  */
 export type ServerCapabilityState = "unknown" | "available" | "missing";
 
-function useHealth() {
+export function useHealth() {
 	return useQuery({
 		queryKey: ["health"],
 		queryFn: () => apiClient.getHealth(),
