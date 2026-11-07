@@ -9,11 +9,14 @@ use super::{RADIO_BROWSER_SOURCE, Radio};
 use crate::app::AppState;
 use crate::auth;
 use crate::gojson;
+use crate::observability;
 use crate::query::GoQuery;
 use crate::respond::{ApiError, ApiResult};
 use axum::body::Bytes;
 use axum::extract::{OriginalUri, Path, State};
+use axum::handler::Handler;
 use axum::http::{HeaderMap, StatusCode, header};
+use axum::middleware;
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
@@ -23,16 +26,28 @@ pub fn routes() -> Router<AppState> {
     Router::new()
         .route(
             "/api/v1/radio/stations",
-            get(list_stations).post(create_station),
+            get(list_stations).post(create_station.layer(middleware::from_fn(|request, next| {
+                observability::timed("radio.create.duration", request, next)
+            }))),
         )
         .route(
             "/api/v1/radio/stations/{station_id}",
             get(get_station).patch(patch_station).delete(delete_station),
         )
-        .route("/api/v1/radio/search", get(search_stations))
+        .route(
+            "/api/v1/radio/search",
+            get(search_stations).layer(middleware::from_fn(|request, next| {
+                observability::timed("radio.search.duration", request, next)
+            })),
+        )
         .route("/api/v1/radio/catalog/countries", get(list_countries))
         .route("/api/v1/radio/catalog/tags", get(list_tags))
-        .route("/api/v1/radio/import", post(import_station))
+        .route(
+            "/api/v1/radio/import",
+            post(import_station).layer(middleware::from_fn(|request, next| {
+                observability::timed("radio.import.duration", request, next)
+            })),
+        )
         .route("/api/v1/radio/preview", post(preview_station_stream))
         .route(
             "/api/v1/radio/preview/{station_uuid}/stream",

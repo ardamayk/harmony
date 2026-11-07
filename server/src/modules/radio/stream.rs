@@ -499,15 +499,19 @@ impl SafeUpstream {
         Box::pin(async move {
             let started = Instant::now();
             let response = request.send().await;
+            let outcome = if response.is_ok() { "ok" } else { "failed" };
+            let total = started.elapsed();
             // No host: unlike the fixed services, a station's names what is playing.
+            observability::distribution_ms(
+                "radio.upstream.duration",
+                total,
+                &[("outcome", outcome)],
+            );
             observability::record_span(
                 started,
                 "radio.upstream",
-                started.elapsed(),
-                &[(
-                    "outcome",
-                    if response.is_ok() { "ok" } else { "failed" }.into(),
-                )],
+                total,
+                &[("outcome", outcome.into())],
                 &[],
             );
             let response = response.map_err(|error| describe_request_error(&url, &error))?;
