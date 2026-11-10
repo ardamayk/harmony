@@ -733,3 +733,26 @@ async fn repairs_artist_credits_offline_after_a_backup() {
     // A second apply on the same preview is refused.
     assert!(report.apply(backup.to_str().unwrap()).await.is_err());
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_larger_track_total_joins_the_existing_album() {
+    use crate::inspect::metadata::{MediaPosition, NormalizedMetadata};
+    let h = harness().await;
+    // The fixture is Track 3 of 9 on disc 1 of 1.
+    h.import("strict-import.flac", FLAC).await;
+    let repo = Repository::new(h.pool.clone());
+    let file = |number, total| NormalizedMetadata {
+        album: "Strict Import Tests".into(),
+        album_artists: vec!["Test Album Artist".into()],
+        track_position: MediaPosition { number, total },
+        disc_position: MediaPosition {
+            number: 1,
+            total: 1,
+        },
+        ..NormalizedMetadata::default()
+    };
+    let deluxe = repo.album_position_total_conflict(&file(12, 12), "").await;
+    assert_eq!(deluxe.unwrap(), "");
+    let too_short = repo.album_position_total_conflict(&file(1, 2), "").await;
+    assert_eq!(too_short.unwrap(), "TOTALTRACKS");
+}

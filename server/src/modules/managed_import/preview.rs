@@ -164,7 +164,9 @@ impl Repository {
         .map_err(context("inspect existing Album disc positions"))
     }
 
-    /// The tag whose total disagrees with the Album's existing Tracks.
+    /// The tag whose total disagrees with the Album's existing Tracks. A
+    /// different track total alone is no conflict (a deluxe Track joining the
+    /// standard Tracks); only a total below an existing Track number is.
     pub async fn album_position_total_conflict(
         &self,
         metadata: &NormalizedMetadata,
@@ -191,7 +193,7 @@ impl Repository {
                 EXISTS (
                     SELECT 1 FROM matching_tracks m, params p
                     WHERE m.disc_no = p.wanted_disc_number AND p.wanted_track_total > 0
-                        AND ((m.track_total IS NOT NULL AND m.track_total != p.wanted_track_total) OR m.track_no > p.wanted_track_total)
+                        AND m.track_no > p.wanted_track_total
                 ) AS "has_track_conflict!: bool""#,
             metadata.disc_position.total,
             metadata.disc_position.number,
